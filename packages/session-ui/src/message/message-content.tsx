@@ -86,7 +86,7 @@ function modelLabel(
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "arrow-down-to-line" | "outline-trash"
+    icon: "check" | "copy" | "reset" | "branch" | "arrow-down-to-line" | "outline-trash"
     label: JSX.Element
   },
 ) {
@@ -272,7 +272,7 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const [state, setState] = createStore({ copied: false, reverting: false, updating: false })
+  const [state, setState] = createStore({ copied: false, reverting: false, forking: false, updating: false })
 
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
   const pending = createMemo(() => status() !== undefined && status() !== "queued")
@@ -315,6 +315,17 @@ export function CurrentUserMessageDisplay(props: {
       await props.actions.revert({ sessionID: props.sessionID, messageID: props.message.id })
     } finally {
       setState("reverting", false)
+    }
+  }
+
+  const fork = async () => {
+    if (!props.actions?.fork || state.forking) return
+    setState("forking", true)
+
+    try {
+      await props.actions.fork({ sessionID: props.sessionID, messageID: props.message.id })
+    } finally {
+      setState("forking", false)
     }
   }
 
@@ -462,6 +473,19 @@ export function CurrentUserMessageDisplay(props: {
                 void revert()
               }}
               aria-label={i18n.t("ui.message.revertMessage")}
+            />
+          </Show>
+          <Show when={props.actions?.fork && !pending()}>
+            <MessageActionButton
+              icon="branch"
+              label={i18n.t("ui.message.forkMessage")}
+              disabled={state.forking}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void fork()
+              }}
+              aria-label={i18n.t("ui.message.forkMessage")}
             />
           </Show>
           {/* Like the iOS app, a Voice message's copy also offers the full prompt the session received, on right click. */}

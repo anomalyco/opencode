@@ -28,6 +28,7 @@ export type SessionUserAttachmentReference = {
 export type SessionUserActions = {
   openAttachment?: (file: PromptFileAttachment) => void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+  fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   /**
    * An input the server has not delivered yet. Like the TUI, a pending steer can move to the queue or be deleted;
    * it shows as waiting only while `steering` behind delivered work or `stranded` by an execution that ended.

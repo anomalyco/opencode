@@ -1,9 +1,13 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
+import { base64Encode } from "@opencode/util/encode"
+import { useNavigate } from "@solidjs/router"
 import { useComposerState } from "@/composer/persistence"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
+import { sessionHref } from "@/shell/routes/session"
+import type { ServerConnection } from "@/runtime/server/registry"
 
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { promptLength } from "@/composer/prompt-parts"
@@ -122,3 +126,52 @@ export function createSessionRevert(input: {
 }
 
 export type SessionRevert = ReturnType<typeof createSessionRevert>
+
+export function createSessionFork() {
+  const prompt = useComposerState()
+  const server = useServerSDK()
+  const data = useData()
+  const location = useWorkspaceLocation()
+  const language = useLanguage()
+  const navigate = useNavigate()
+  const current = useServer()
+
+  const forkSessionAt = async (
+    sessionID: string,
+    messageID: string,
+    opts?: { serverKey?: ServerConnection.Key; onForked?: (sessionID: string) => void },
+  ) => {
+    const message = data.session.message.get(sessionID, messageID)
+
+    if (!message || message.type !== "user") {
+      showToast({ title: language.t("common.requestFailed") })
+
+      return
+    }
+    const restored = extractPromptFromMessage(message, {
+      directory: location().directory,
+      attachmentName: language.t("common.attachment"),
+    })
+    const context = extractPromptContext(message, { directory: location().directory })
+    const dir = base64Encode(location().directory)
+
+    await server.api.session
+      .fork({ sessionID, before: messageID })
+      .then((forked) => {
+        data.session.remember(forked)
+        opts?.onForked?.(forked.id)
+        const target = prompt.capture({ dir, id: forked.id })
+        target.set(restored)
+        target.context.replace([...context.comments, ...context.files])
+        navigate(sessionHref(opts?.serverKey ?? current.key, forked.id))
+      })
+      .catch((cause: unknown) => {
+        const description = cause instanceof Error ? cause.message : String(cause)
+        showToast({ title: language.t("common.requestFailed"), description })
+      })
+  }
+
+  return { forkSessionAt }
+}
+
+export type SessionFork = ReturnType<typeof createSessionFork>
