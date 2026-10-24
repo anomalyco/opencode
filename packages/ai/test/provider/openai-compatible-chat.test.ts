@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -41,6 +41,46 @@ const usageChunk = (usage: object) => ({
 })
 
 describe("OpenAI-compatible Chat route", () => {
+  it.effect("serializes user and tool video for unknown compatible providers", () =>
+    Effect.gen(function* () {
+      const inline = "data:video/mp4;base64,AAEC"
+      const url = "https://example.com/clip.mp4"
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatibleChat.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+            .model({ id: "video-model" }),
+          messages: [
+            Message.user([
+              Message.media(Media.fromDataUrl(inline)),
+              Message.media(Media.url(url, { mediaType: "video/mp4" })),
+            ]),
+            Message.assistant(ToolCallPart.make({ id: "call_video", name: "read", input: {} })),
+            Message.tool({
+              id: "call_video",
+              name: "read",
+              result: { type: "content", value: [{ type: "file", uri: url, mime: "video/mp4" }] },
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages[0]).toEqual({
+        role: "user",
+        content: [
+          { type: "video_url", video_url: { url: inline } },
+          { type: "video_url", video_url: { url } },
+        ],
+      })
+      expect(prepared.body.messages.slice(-2)).toEqual([
+        { role: "tool", tool_call_id: "call_video", content: "" },
+        {
+          role: "user",
+          content: [{ type: "video_url", video_url: { url } }],
+        },
+      ])
+    }),
+  )
+
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

@@ -129,6 +129,10 @@ const OpenAIChatUserContent = Schema.Union([
     image_url: Schema.Struct({ url: Schema.String }),
   }),
   Schema.Struct({
+    type: Schema.Literal("video_url"),
+    video_url: Schema.Struct({ url: Schema.String }),
+  }),
+  Schema.Struct({
     type: Schema.Literal("file"),
     file: Schema.Struct({ filename: Schema.String, file_data: Schema.String }),
   }),
@@ -373,10 +377,11 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
         file_data: (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl,
       },
     }
-  if (part.media.kind !== "image")
+  if (part.media.kind !== "image" && part.media.kind !== "video")
     return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.media.mediaType}`)
   const url =
     ProviderShared.mediaUrl(part.media) ?? (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl
+  if (part.media.kind === "video") return { type: "video_url" as const, video_url: { url } }
   return { type: "image_url" as const, image_url: { url } }
 })
 
