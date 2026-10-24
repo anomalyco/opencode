@@ -9,6 +9,7 @@ import { DialogFork } from "./dialog-fork"
 import type { PromptInfo } from "../../prompt/history"
 import { projectedPromptInput } from "../../prompt/codec"
 import { useNewDesigns } from "../../config"
+import { revertMessage } from "./revert"
 
 export function DialogMessage(props: {
   messageID: string
@@ -39,15 +40,13 @@ export function DialogMessage(props: {
           description: "undo messages and file changes",
           onSelect: (dialog) => {
             const value = message()
-            if (value?.type === "user") {
-              props.setPrompt?.({
-                ...projectedPromptInput(value),
-                pasted: [],
-              })
-            }
-            void client.api.session.revert
-              .stage({ sessionID: props.sessionID, messageID: props.messageID })
-              .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+            void revertMessage({
+              client,
+              sessionID: props.sessionID,
+              messageID: props.messageID,
+              prompt: value?.type === "user" ? { ...projectedPromptInput(value), pasted: [] } : undefined,
+              setPrompt: props.setPrompt,
+            }).catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },
         },
