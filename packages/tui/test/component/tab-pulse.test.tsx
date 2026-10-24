@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 /** @jsxImportSource @opentui/solid */
 import { RGBA } from "@opentui/core"
+import { ManualClock } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import {
@@ -33,19 +34,56 @@ test("a disabled pulse stays idle when it becomes active", async () => {
   }
 })
 
-test("an attention glow becomes idle after ignition", async () => {
+test("an attention glow animates without pinning the renderer, then goes idle", async () => {
   const background = RGBA.fromHex("#101010")
+  const clock = new ManualClock()
   const app = await testRender(
     () => <TabPulse active={false} glow color={RGBA.fromHex("#ffcc00")} backgroundColor={background} />,
-    { width: 8, height: 1 },
+    { width: 8, height: 1, clock },
   )
 
   try {
     await app.renderOnce()
-    expect(app.renderer.root.liveCount).toBe(1)
-    await Bun.sleep(650)
+    expect(app.renderer.root.liveCount).toBe(0)
+    expect(clock.pendingTimerCount).toBe(1)
+
+    for (let frame = 0; frame < 6; frame++) {
+      clock.advance(100)
+      await app.renderOnce()
+    }
+    expect(clock.pendingTimerCount).toBe(0)
+    expect(app.renderer.root.liveCount).toBe(0)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a running tab sweep keeps moving without a live renderer", async () => {
+  const background = RGBA.fromHex("#101010")
+  const clock = new ManualClock()
+  const app = await testRender(
+    () => <TabPulse active color={RGBA.fromHex("#c8d3f5")} backgroundColor={background} />,
+    { width: 24, height: 1, clock },
+  )
+
+  try {
     await app.renderOnce()
     expect(app.renderer.root.liveCount).toBe(0)
+    expect(clock.pendingTimerCount).toBe(1)
+
+    const sample = async () => {
+      clock.advance(100)
+      await app.renderOnce()
+      return app.captureSpans().lines[0]?.spans.map((span) => Array.from(span.bg.buffer)) ?? []
+    }
+    for (let frame = 0; frame < 5; frame++) await sample()
+    const early = await sample()
+    for (let frame = 0; frame < 8; frame++) await sample()
+    const later = await sample()
+
+    expect(app.renderer.root.liveCount).toBe(0)
+    expect(clock.pendingTimerCount).toBe(1)
+    expect(later).not.toEqual(early)
   } finally {
     app.renderer.destroy()
   }

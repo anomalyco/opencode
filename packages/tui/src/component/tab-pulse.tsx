@@ -1,4 +1,13 @@
-import { OptimizedBuffer, Renderable, RGBA, type RenderableOptions, type RenderContext } from "@opentui/core"
+import {
+  CliRenderer,
+  OptimizedBuffer,
+  Renderable,
+  RGBA,
+  type Clock,
+  type RenderableOptions,
+  type RenderContext,
+  type TimerHandle,
+} from "@opentui/core"
 import { extend } from "@opentui/solid"
 
 type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
@@ -418,7 +427,15 @@ class PulseState {
   }
 }
 
+// A live node keeps the renderer at frame rate, and each of those frames redraws the session
+// under the tab strip. Step the sweep from a timer instead, the same way the spinner does.
+const PULSE_FRAME = 100
+
 class TabPulseRenderable extends Renderable {
+  private readonly clock: Clock
+  private timer: TimerHandle | undefined
+  private elapsed = 0
+  private updatedFrame = -1
   private _enabled: boolean
   private inner: PulseState
   private outer: PulseState
@@ -442,6 +459,7 @@ class TabPulseRenderable extends Renderable {
   private lastLevel = 0
 
   constructor(ctx: RenderContext, options: TabPulseOptions = {}) {
+    if (!(ctx instanceof CliRenderer)) throw new Error("Tab pulse requires a renderer clock")
     const enabled = options.enabled ?? true
     const active = options.active ?? false
     const glow = options.glow ?? false
@@ -451,8 +469,9 @@ class TabPulseRenderable extends Renderable {
     super(ctx, {
       ...options,
       height: 1,
-      live: enabled && (active || (edge !== undefined && outerActive)),
+      live: false,
     })
+    this.clock = ctx.clock
     this._enabled = enabled
     this.inner = new PulseState({
       enabled,
@@ -502,45 +521,39 @@ class TabPulseRenderable extends Renderable {
     this._enabled = value
     this.inner.setEnabled(value)
     this.outer.setEnabled(value && this._edge !== undefined)
-    this.live = this.inner.live || this.outer.live
     this.requestRender()
   }
 
   set active(value: boolean) {
-    if (this.inner.setActive(value)) this.changed()
+    if (this.inner.setActive(value)) this.requestRender()
   }
 
   set outerActive(value: boolean) {
-    if (this.outer.setActive(value)) this.changed()
+    if (this.outer.setActive(value)) this.requestRender()
   }
 
   set promptPulse(value: number) {
-    if (this.inner.setPromptPulse(value)) this.changed()
+    if (this.inner.setPromptPulse(value)) this.requestRender()
   }
 
   set outerPromptPulse(value: number) {
-    if (this.outer.setPromptPulse(value)) this.changed()
+    if (this.outer.setPromptPulse(value)) this.requestRender()
   }
 
   set complete(value: boolean) {
-    if (this.inner.setComplete(value)) this.changed()
+    if (this.inner.setComplete(value)) this.requestRender()
   }
 
   set outerComplete(value: boolean) {
-    if (this.outer.setComplete(value)) this.changed()
+    if (this.outer.setComplete(value)) this.requestRender()
   }
 
   set glow(value: boolean) {
-    if (this.inner.setGlow(value)) this.changed()
+    if (this.inner.setGlow(value)) this.requestRender()
   }
 
   set outerGlow(value: boolean) {
-    if (this.outer.setGlow(value)) this.changed()
-  }
-
-  private changed() {
-    this.live = this.inner.live || this.outer.live
-    this.requestRender()
+    if (this.outer.setGlow(value)) this.requestRender()
   }
 
   set color(value: RGBA) {
@@ -583,7 +596,6 @@ class TabPulseRenderable extends Renderable {
     if (value === this._edge) return
     this._edge = value
     this.outer.setEnabled(this._enabled && value !== undefined)
-    this.live = this.inner.live || this.outer.live
     this.requestRender()
   }
 
@@ -629,11 +641,46 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
+  private stop() {
+    if (this.timer === undefined) return
+    this.clock.clearTimeout(this.timer)
+    this.timer = undefined
+  }
+
+  protected override destroySelf() {
+    this.stop()
+    super.destroySelf()
+  }
+
   protected override onUpdate(deltaTime: number): void {
-    if (!this.live) return
-    this.inner.advance(deltaTime)
-    this.outer.advance(deltaTime)
-    this.live = this.inner.live || this.outer.live
+    const animating = this.inner.live || this.outer.live
+    if (!animating) {
+      this.stop()
+      this.elapsed = 0
+      this.updatedFrame = -1
+      return
+    }
+    // Count time only across consecutive frames, not the renderer's idle gap before this pulse resumed.
+    if (this.updatedFrame === this._ctx.frameId - 1) this.elapsed += deltaTime
+    this.updatedFrame = this._ctx.frameId
+    const step = Math.floor(this.elapsed / PULSE_FRAME)
+    if (step > 0) {
+      const delta = step * PULSE_FRAME
+      this.inner.advance(delta)
+      this.outer.advance(delta)
+      this.elapsed -= delta
+    }
+    if (!(this.inner.live || this.outer.live)) {
+      this.stop()
+      this.elapsed = 0
+      this.updatedFrame = -1
+      return
+    }
+    if (this.timer !== undefined) return
+    this.timer = this.clock.setTimeout(() => {
+      this.timer = undefined
+      this.requestRender()
+    }, PULSE_FRAME - this.elapsed)
   }
 
   protected override renderSelf(buffer: OptimizedBuffer): void {
