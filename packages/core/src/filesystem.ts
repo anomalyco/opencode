@@ -99,6 +99,7 @@ export interface Interface {
   /** Fails with `NotFoundError` when the path is missing or is not a directory. */
   readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
+  readonly findWithStatus: (input: FindInput) => Effect.Effect<FileSystemSearch.Result>
   /** Writes a file at an absolute path or one relative to the location; not confined to it. */
   readonly write: (input: WriteInput) => Effect.Effect<Write>
 }
@@ -147,6 +148,7 @@ const baseLayer = Layer.effect(
     })
     return Service.of({
       find: search.find,
+      findWithStatus: search.findWithStatus,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(

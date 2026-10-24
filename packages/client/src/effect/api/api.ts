@@ -1836,7 +1836,11 @@ export type FileFindInput = {
   readonly type?: "file" | "directory" | undefined
   readonly limit?: number | undefined
 }
-export type FileFindOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileSystem.Entry> }
+export type FileFindOutput = {
+  readonly location: Location.PublicRef
+  readonly data: ReadonlyArray<FileSystem.Entry>
+  readonly indexTruncated?: boolean
+}
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
 
 export interface FileApi<E = never> {

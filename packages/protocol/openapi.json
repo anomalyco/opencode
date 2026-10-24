@@ -9508,6 +9508,10 @@
                       "items": {
                         "$ref": "#/components/schemas/FileSystem.Entry"
                       }
+                    },
+                    "indexTruncated": {
+                      "type": "boolean",
+                      "description": "Whether the location index exceeded its scan limit, independently of the requested result limit. Absent on older servers."
                     }
                   },
                   "required": ["location", "data"],

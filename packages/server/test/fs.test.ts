@@ -335,3 +335,28 @@ it.live("opens no file for HEAD and closes it when a download is aborted", () =>
     ).toBe(0)
   }),
 )
+
+it.live(
+  "reports index completeness without changing the file search data shape",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const current = path.join(tmp.path, "project")
+      yield* Effect.promise(() => fs.mkdir(path.join(current, "src"), { recursive: true }))
+      yield* Effect.promise(() => fs.writeFile(path.join(current, "src", "small.txt"), ""))
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const url = new URL("/api/fs/find", server.base)
+      url.searchParams.set("location[directory]", current)
+      url.searchParams.set("query", "small")
+      url.searchParams.set("limit", "1")
+      const response = yield* Effect.promise(() => fetch(url, { headers: server.headers })).pipe(
+        Effect.timeout("10 seconds"),
+      )
+      expect(response.status).toBe(200)
+      const result = yield* Effect.promise(() => response.json())
+      expect(result.location.directory).toBe(current)
+      expect(result.data).toEqual([{ path: "src/small.txt", type: "file" }])
+      expect(result.indexTruncated).toBe(false)
+    }),
+  20_000,
+)

@@ -64,7 +64,13 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
   .add(
     HttpApiEndpoint.get("fs.find", "/api/fs/find", {
       query: FindQuery,
-      success: Location.response(Schema.Array(FileSystem.Entry)),
+      success: Schema.Struct({
+        ...Location.response(Schema.Array(FileSystem.Entry)).fields,
+        indexTruncated: Schema.optionalKey(Schema.Boolean).annotate({
+          description:
+            "Whether the location index exceeded its scan limit, independently of the requested result limit. Absent on older servers.",
+        }),
+      }),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

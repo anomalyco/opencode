@@ -24,6 +24,7 @@ const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) 
       find: (input) =>
         Effect.gen(function* () {
           onFind(input)
+          if (input.exclude?.includes("src/**")) return []
           if (input.onEntry)
             yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make(entry), type: "file" }))
           return []
@@ -34,6 +35,37 @@ const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) 
   )
 
 describe("FileSystemSearch", () => {
+  it.live("indexes source trees and the remaining files without admitting hidden source trees", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-source-")))).path
+      yield* Effect.promise(() =>
+        Promise.all(
+          ["src/PackageAlpha/src/wanted.rs", "src/ignored.rs", "build/artifact.txt", ".hidden/src/private.rs"].map(
+            (file) => Bun.write(path.join(directory, file), ""),
+          ),
+        ),
+      )
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".ignore"), "src/ignored.rs\n"))
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ),
+      ])
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        const result = yield* search.findWithStatus({ query: "/", type: "file", limit: 100 })
+        expect(result.indexTruncated).toBe(false)
+        expect(result.entries.map((entry) => entry.path).sort()).toEqual([
+          RelativePath.make("build/artifact.txt"),
+          RelativePath.make("src/PackageAlpha/src/wanted.rs"),
+        ])
+        expect((yield* search.find({ query: "wanted", type: "file" }))[0]?.path).toBe(
+          RelativePath.make("src/PackageAlpha/src/wanted.rs"),
+        )
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
   it.live("honors wildcard directory rules from .gitignore", () =>
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-ignore-")))).path
@@ -99,7 +131,7 @@ describe("FileSystemSearch", () => {
 
   it.live("bounds a home scan even when home is detected as a repository", () =>
     Effect.gen(function* () {
-      let observed: Ripgrep.FindInput | undefined
+      const observed: Ripgrep.FindInput[] = []
       const home = AbsolutePath.make(os.homedir())
       const layer = AppNodeBuilder.build(FileSystemSearch.node, [
         Location.node.replace(
@@ -113,15 +145,19 @@ describe("FileSystemSearch", () => {
             ),
           ),
         ),
-        Ripgrep.node.replace(ripgrepStub("src/index.ts", (input) => (observed = input))),
+        Ripgrep.node.replace(ripgrepStub("src/index.ts", (input) => observed.push(input))),
       ])
       yield* Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
         yield* Effect.sleep("10 millis")
-        expect(observed).toBeUndefined()
+        expect(observed).toEqual([])
         yield* search.find({ query: "src", type: "directory" })
-        expect(observed?.limit).toBe(100_000)
-        expect(observed?.exclude).toEqual([...Protected.names()].map((name) => `${name}/**`))
+        expect(observed[0]?.limit).toBe(100_000)
+        expect(observed[0]?.sort).toBe(true)
+        expect(observed[0]?.paths).toEqual(["./src"])
+        expect(observed[0]?.exclude).toEqual([...Protected.names()].map((name) => `${name}/**`))
+        expect(observed[1]?.limit).toBe(99_999)
+        expect(observed[1]?.exclude).toEqual([...Protected.names()].map((name) => `${name}/**`).concat("src/**"))
         expect((yield* search.find({ query: "src", type: "directory" }))[0]?.path).toBe(
           RelativePath.make(`src${path.sep}`),
         )
@@ -149,6 +185,7 @@ describe("FileSystemSearch", () => {
             Ripgrep.Service.of({
               find: (input) =>
                 Effect.gen(function* () {
+                  if (input.exclude?.includes("src/**")) return []
                   scans++
                   if (scans > 1) {
                     yield* Deferred.succeed(started, undefined)
@@ -159,6 +196,7 @@ describe("FileSystemSearch", () => {
                     type: "file",
                   })
                   if (input.onEntry) yield* input.onEntry(entry)
+                  if (scans === 1 && input.onTruncated) yield* input.onTruncated()
                   return [entry]
                 }),
               glob: () => Effect.succeed([]),
@@ -173,6 +211,7 @@ describe("FileSystemSearch", () => {
         yield* search.find({ query: "old", type: "file" })
         expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
         expect(scans).toBe(1)
+        expect((yield* search.findWithStatus({ query: "old", type: "file" })).indexTruncated).toBe(true)
 
         yield* TestClock.adjust("10 seconds")
         yield* search.find({ query: "old", type: "file" })
@@ -180,12 +219,14 @@ describe("FileSystemSearch", () => {
 
         expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
         expect(scans).toBe(2)
+        expect((yield* search.findWithStatus({ query: "old", type: "file" })).indexTruncated).toBe(true)
         yield* Deferred.succeed(release, undefined)
         const refreshed = yield* Effect.gen(function* () {
           yield* Effect.yieldNow
           return yield* search.find({ query: "new", type: "file" })
         }).pipe(Effect.repeat({ until: (entries) => entries.length > 0 }))
         expect(refreshed[0]?.path).toBe(RelativePath.make("src/new.ts"))
+        expect((yield* search.findWithStatus({ query: "new", type: "file" })).indexTruncated).toBe(false)
         expect(scans).toBe(2)
       }).pipe(Effect.provide(layer))
     }),
@@ -218,6 +259,7 @@ describe("FileSystemSearch", () => {
             Ripgrep.Service.of({
               find: (input) =>
                 Effect.gen(function* () {
+                  if (input.exclude?.includes("src/**")) return []
                   scans++
                   const entry = FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" })
                   if (input.onEntry) yield* input.onEntry(entry)

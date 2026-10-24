@@ -114,6 +114,7 @@ const fileSystemLayer = Layer.succeed(
     read: () => unavailable("FileSystem.read"),
     list: () => unavailable("FileSystem.list"),
     find: () => unavailable("FileSystem.find"),
+    findWithStatus: () => unavailable("FileSystem.findWithStatus"),
     write: () => unavailable("FileSystem.write"),
   }),
 )
@@ -122,6 +123,7 @@ const fileSystemSearchLayer = Layer.succeed(
   FileSystemSearch.Service,
   FileSystemSearch.Service.of({
     find: () => unavailable("FileSystemSearch.find"),
+    findWithStatus: () => unavailable("FileSystemSearch.findWithStatus"),
   }),
 )
 
