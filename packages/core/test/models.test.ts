@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
-import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
+import { Effect, Fiber, Layer, Logger, Ref, References, Scope, Stream } from "effect"
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -203,6 +203,38 @@ const makeFailingWriteKV = (cache: MockCache) =>
   })
 
 const makeCache = (): MockCache => ({ values: new Map() })
+
+const makeTransportFailureClient = (cause: unknown) =>
+  HttpClient.make((request) =>
+    Effect.fail(new HttpClientError.HttpClientError({ reason: new HttpClientError.TransportError({ request, cause }) })),
+  )
+
+// Mirrors a KV read that dies on the state directory, the EACCES half of #56742.
+const makeDyingReadKV = (error: unknown) =>
+  Layer.mock(KV.Service, {
+    get: () => Effect.die(error),
+    set: () => Effect.void,
+    remove: () => Effect.void,
+  })
+
+const buildFailingLayer = (client: HttpClient.HttpClient, kv: Layer.Layer<KV.Service>) =>
+  Layer.fresh(
+    AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node]), [
+      ModelsDev.node.replace(ModelsDev.configured({ fetch: false })),
+      LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, client)),
+      KV.node.replace(kv),
+    ]),
+  )
+
+const captureRefreshLogs = () => {
+  const entries: Array<{ level: string; message: [string, Record<string, unknown>] }> = []
+  const logger = Logger.map(Logger.formatStructured, (entry) => {
+    if (!Array.isArray(entry.message) || typeof entry.message[0] !== "string") return
+    if (!entry.message[0].startsWith("Failed to refresh models.dev")) return
+    entries.push({ level: entry.level, message: entry.message as [string, Record<string, unknown>] })
+  })
+  return { entries, layer: Logger.layer([logger], { mergeWithExisting: false }) }
+}
 
 const writeCacheText = (cache: MockCache, text: string, updatedAt = Date.now()) =>
   cache.values.set(cacheKey, { updatedAt, digest: bodyDigest(text), body: text })
@@ -647,6 +679,59 @@ describe("ModelsDev Service", () => {
       // retryTransient retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  it.live("refresh classifies a transport failure and logs the endpoint, remedy and fallback once", () =>
+    Effect.gen(function* () {
+      const logs = captureRefreshLogs()
+      const cache = makeCache()
+      writeCache(cache, fixture)
+      const client = makeTransportFailureClient(
+        Object.assign(new Error("Unable to connect. Is the computer able to access the url?"), {
+          code: "ConnectionRefused",
+        }),
+      )
+      yield* Effect.gen(function* () {
+        const svc = yield* ModelsDev.Service
+        yield* svc.refresh(true)
+        yield* svc.refresh(true)
+      }).pipe(
+        Effect.provide(buildFailingLayer(client, makeMockKV(cache))),
+        Effect.provide(logs.layer),
+        Effect.provideService(References.MinimumLogLevel, "Debug"),
+      )
+      // The identical second failure is demoted, so the default Info threshold
+      // shows one line per distinct failure instead of one per refresh.
+      expect(logs.entries.map((entry) => entry.level)).toEqual(["ERROR", "DEBUG"])
+      const [message, fields] = logs.entries[0].message
+      expect(message).toContain("the current catalog is still in use, retrying in 5m")
+      expect(fields.reason).toBe("transport")
+      expect(fields.detail).toBe("cannot reach https://models.opencode.ai/api.json (ConnectionRefused)")
+      expect(fields.next).toContain("HTTP_PROXY/HTTPS_PROXY")
+    }),
+  )
+
+  it.live("refresh classifies a filesystem failure apart from a transport failure", () =>
+    Effect.gen(function* () {
+      const logs = captureRefreshLogs()
+      const state = yield* Ref.make(initialState)
+      const denied = Object.assign(
+        new Error("EACCES: permission denied, mkdir '/home/user/.local/state/opencode/locks'"),
+        { code: "EACCES", errno: -13 },
+      )
+      yield* ModelsDev.Service.use((svc) => svc.refresh(true)).pipe(
+        Effect.provide(buildFailingLayer(makeMockClient(state), makeDyingReadKV(denied))),
+        Effect.provide(logs.layer),
+      )
+      expect(logs.entries.length).toBe(1)
+      const [, fields] = logs.entries[0].message
+      expect(fields.reason).toBe("filesystem")
+      expect(fields.detail).toContain("/.local/state/opencode/locks")
+      expect(fields.next).toContain("permissions")
+      expect(fields.errors).toEqual([
+        { type: "Error", message: denied.message, code: "EACCES", errno: -13 },
+      ])
     }),
   )
 })

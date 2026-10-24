@@ -1,5 +1,5 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
@@ -13,6 +13,7 @@ import { AISDKNative } from "./aisdk-native.js"
 import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
+import { ErrorSummary } from "./util/error-summary.js"
 import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
@@ -326,6 +327,43 @@ export function bodyDigest(text: string) {
   return Hash.sha256(text)
 }
 
+const FILESYSTEM_ERROR_CODES = new Set(["EACCES", "EPERM", "EROFS", "ENOSPC", "ENOTDIR"])
+const NETWORK_NEXT_STEP = "check this machine's access to the host, and HTTP_PROXY/HTTPS_PROXY if it needs a proxy"
+const FILESYSTEM_NEXT_STEP = "check ownership and permissions on the opencode state and data directories"
+
+// A refresh failure used to be logged as the raw Cause alone, which left a
+// transport failure and a permission error on the state directory reading
+// identically and suggested nothing to try. Classify it instead, so the line
+// names the class of failure, what could not be reached or written, and the
+// remedy for that class.
+function refreshFailure(error: unknown, errors: ReturnType<typeof ErrorSummary.from>, endpoint: string) {
+  if (Cause.isTimeoutError(error))
+    return { reason: "transport", detail: `timed out fetching ${endpoint}`, next: NETWORK_NEXT_STEP }
+  if (HttpClientError.isHttpClientError(error)) {
+    const status = error.response?.status
+    if (status !== undefined)
+      return {
+        reason: "http",
+        detail: `${endpoint} answered HTTP ${status}`,
+        next: "nothing to change locally; the catalog service is returning an error",
+      }
+    const code = errors.find((entry) => entry.code !== undefined)?.code
+    return {
+      reason: "transport",
+      detail: `cannot reach ${endpoint}${code === undefined ? "" : ` (${code})`}`,
+      next: NETWORK_NEXT_STEP,
+    }
+  }
+  const filesystem = errors.find((entry) => typeof entry.code === "string" && FILESYSTEM_ERROR_CODES.has(entry.code))
+  if (filesystem)
+    return {
+      reason: "filesystem",
+      detail: filesystem.message ?? String(filesystem.code),
+      next: FILESYSTEM_NEXT_STEP,
+    }
+  return { reason: "unknown", detail: errors[0]?.message ?? "no error details", next: undefined }
+}
+
 export const layer = (options?: Options) =>
   Layer.effect(
     Service,
@@ -345,11 +383,34 @@ export const layer = (options?: Options) =>
       )
 
       const source = options?.url || defaultSource
+      const endpoint = `${source}/api.json`
       const fetch = options?.fetch ?? true
       const userAgent = App.useragent(app)
       const key = cacheKey(source)
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
+
+      // One ERROR line per distinct failure, not one per cycle: the refresh
+      // repeats on the TTL and an unreachable host or an unwritable state
+      // directory stays broken for hours, so the old line arrived every five
+      // minutes unchanged. Repeats drop to Debug, and a success clears the key
+      // so a failure that returns is reported again.
+      let lastFailure: string | undefined
+      const logRefreshFailure = (cause: Cause.Cause<unknown>) =>
+        Effect.suspend(() => {
+          const error = Cause.squash(cause)
+          // An HttpClientError keeps the underlying network error on its
+          // reason, not on its own cause, so summarize from the reason.
+          const errors = ErrorSummary.from(HttpClientError.isHttpClientError(error) ? error.reason : error)
+          const failure = refreshFailure(error, errors, endpoint)
+          const failureKey = `${failure.reason}:${failure.detail}`
+          const log = failureKey === lastFailure ? Effect.logDebug : Effect.logError
+          lastFailure = failureKey
+          return log(
+            `Failed to refresh models.dev; the current catalog is still in use, retrying in ${Duration.format(ttl)}`,
+            { reason: failure.reason, detail: failure.detail, next: failure.next, errors },
+          )
+        })
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)
@@ -364,7 +425,7 @@ export const layer = (options?: Options) =>
       })
 
       const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
-        return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
+        return yield* HttpClientRequest.get(endpoint).pipe(
           HttpClientRequest.setHeader("User-Agent", userAgent),
           http.execute,
           Effect.flatMap((res) => res.text),
@@ -444,7 +505,12 @@ export const layer = (options?: Options) =>
             }),
           )
           .pipe(
-            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
+            Effect.tap(() => Effect.sync(() => (lastFailure = undefined))),
+            // As in writeCache: a failed refresh must not take the periodic
+            // refresh with it, so recover from defects too (a KV read that dies
+            // on the state directory is the EACCES half of this) and leave
+            // interrupts to tear the fiber down.
+            Effect.catchCauseIf((cause) => !Cause.hasInterruptsOnly(cause), logRefreshFailure),
             Effect.ignore,
           )
       })
