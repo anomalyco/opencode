@@ -152,6 +152,16 @@ export const settings: Setting[] = [
     keywords: ["approve", "accept", "permission requests"],
   },
   {
+    title: "Stop on exit",
+    category: "Session",
+    path: ["session", "stop_on_exit"],
+    description: "Action when exiting with active sessions",
+    default: "prompt",
+    values: ["prompt", "interrupt", "detach"],
+    labels: ["prompt", "stop active agents", "keep running"],
+    keywords: ["exit", "quit", "stop", "background", "disconnect", "interrupt"],
+  },
+  {
     title: "Mode",
     category: "Tabs",
     path: ["tabs", "mode"],

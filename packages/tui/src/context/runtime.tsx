@@ -32,6 +32,7 @@ export type TuiStartup = Readonly<{
 
 export type TuiLifecycle = Readonly<{
   add(finalizer: () => Promise<void>): () => void
+  isHangup?(): boolean
 }>
 
 const PathsContext = createContext<TuiPaths>()

@@ -41,6 +41,7 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
+  useTuiLifecycle,
   useTuiPaths,
   useTuiStartup,
   useTuiTerminalEnvironment,
@@ -103,6 +104,7 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogSelect } from "./ui/dialog-select"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -303,10 +305,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             .forEach((result) => log("error", "Failed to dispose TUI resource", { error: result.reason }))
         }),
       )
+      let hangup = false
       const shutdown = yield* Latch.make()
-      const onSighup = () => destroyRenderer(renderer)
+      const onSighup = () => {
+        hangup = true
+        destroyRenderer(renderer)
+      }
       yield* Effect.acquireRelease(
-        Effect.sync(() => process.on("SIGHUP", onSighup)),
+        Effect.sync(() => process.prependListener("SIGHUP", onSighup)),
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
       renderer.once("destroy", () => shutdown.openUnsafe())
@@ -353,6 +359,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                 finalizers.add(finalizer)
                                 return () => finalizers.delete(finalizer)
                               },
+                              isHangup: () => hangup,
                             }}
                           >
                             <TuiTerminalEnvironmentProvider
@@ -508,6 +515,44 @@ function App() {
   const data = useData()
   const location = useLocation()
   const exit = useExit()
+  const lifecycle = useTuiLifecycle()
+  let detachOnExit = false
+  const localSessionIDs = new Set<string>()
+  createEffect(() => {
+    if (route.data.type === "session" && route.data.sessionID && route.data.sessionID !== "dummy") {
+      localSessionIDs.add(data.session.root(route.data.sessionID))
+    }
+  })
+  const clientActiveSessions = () => {
+    const openRoots = new Set<string>()
+    if (route.data.type === "session" && route.data.sessionID && route.data.sessionID !== "dummy") {
+      openRoots.add(data.session.root(route.data.sessionID))
+    }
+    for (const tab of sessionTabs.tabs()) {
+      if (localSessionIDs.has(tab.sessionID)) {
+        openRoots.add(tab.sessionID)
+      }
+    }
+    if (openRoots.size === 0) return []
+    const clientFamily = new Set<string>()
+    for (const rootID of openRoots) {
+      clientFamily.add(rootID)
+      for (const member of data.session.family(rootID)) {
+        clientFamily.add(member)
+      }
+    }
+    return data.session.active().filter((sessionID) => clientFamily.has(sessionID))
+  }
+  lifecycle.add(async () => {
+    if (detachOnExit) return
+    const mode = config.data.session.stop_on_exit
+    if (mode === "detach") return
+    const isHangup = lifecycle.isHangup?.() ?? false
+    if (!isHangup && mode !== "interrupt") return
+    const active = clientActiveSessions()
+    if (active.length === 0) return
+    await Promise.allSettled(active.map((sessionID) => client.api.session.interrupt({ sessionID })))
+  })
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
@@ -1165,7 +1210,52 @@ function App() {
         name: "app.exit",
         title: "Exit the app",
         slash: { name: "exit", aliases: ["quit", "q"] },
-        run: () => exit(),
+        run: () => {
+          const mode = config.data.session.stop_on_exit
+          const active = clientActiveSessions()
+          if (active.length === 0 || mode === "detach") {
+            detachOnExit = true
+            exit()
+            return
+          }
+          if (mode === "interrupt") {
+            detachOnExit = false
+            void (async () => {
+              await Promise.allSettled(active.map((sessionID) => client.api.session.interrupt({ sessionID })))
+              exit()
+            })()
+            return
+          }
+          dialog.replace(() => (
+            <DialogSelect
+              title={active.length === 1 ? "1 session still running" : `${active.length} sessions still running`}
+              renderFilter={false}
+              options={[
+                {
+                  title: "Stop and exit",
+                  value: "stop",
+                  description: "Interrupt running agents and exit",
+                  onSelect: async (d) => {
+                    d.clear()
+                    detachOnExit = false
+                    await Promise.allSettled(active.map((sessionID) => client.api.session.interrupt({ sessionID })))
+                    exit()
+                  },
+                },
+                {
+                  title: "Exit and keep running",
+                  value: "detach",
+                  description: "Leave agents running in background service",
+                  onSelect: (d) => {
+                    d.clear()
+                    detachOnExit = true
+                    exit()
+                  },
+                },
+              ]}
+            />
+          ))
+        },
         category: "System",
       },
       {

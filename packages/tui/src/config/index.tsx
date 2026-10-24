@@ -180,6 +180,10 @@ export const Info = Schema.Struct({
       permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
         description: "Prompt for permission requests or accept them automatically",
       }),
+      stop_on_exit: Schema.optional(Schema.Literals(["prompt", "interrupt", "detach"])).annotate({
+        description:
+          "Action when exiting with active sessions: 'prompt' to ask, 'interrupt' to stop them, or 'detach' to leave them running",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
@@ -271,9 +275,10 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
+  session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "stop_on_exit" | "tps"> & {
     new_location: "launch" | "inherit"
     permissions: "prompt" | "autoaccept"
+    stop_on_exit: "prompt" | "interrupt" | "detach"
     tps: boolean
   }
   tabs: {
@@ -325,6 +330,7 @@ export function resolve(
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
+      stop_on_exit: input.session?.stop_on_exit ?? "prompt",
       tps: input.session?.tps ?? true,
     },
     tabs: {

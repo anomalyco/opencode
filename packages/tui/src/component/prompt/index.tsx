@@ -26,7 +26,6 @@ import { useSessionTabs } from "../../context/session-tabs"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
-import { useExit } from "../../context/exit"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
 import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -214,7 +213,6 @@ export function Prompt(props: PromptProps) {
   const keymap = Keymap.use()
   const renderer = useRenderer()
   const measure = (text: string) => measureEditText(text, { widthMethod: renderer.widthMethod })
-  const exit = useExit()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -1142,7 +1140,7 @@ export function Prompt(props: PromptProps) {
       return false
     }
     if (exitWord) {
-      void exit()
+      keymap.dispatch("app.exit")
       return true
     }
     if (slash) {

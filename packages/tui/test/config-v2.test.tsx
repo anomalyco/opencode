@@ -45,6 +45,10 @@ test("validates the session tabs setting", () => {
   expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
+  expect(decode({ session: { stop_on_exit: "interrupt" } })).toEqual({ session: { stop_on_exit: "interrupt" } })
+  expect(decode({ session: { stop_on_exit: "detach" } })).toEqual({ session: { stop_on_exit: "detach" } })
+  expect(decode({ session: { stop_on_exit: "prompt" } })).toEqual({ session: { stop_on_exit: "prompt" } })
+  expect(() => decode({ session: { stop_on_exit: "unknown" } })).toThrow()
 })
 
 test("resolves nested config and keybind defaults", () => {
@@ -106,6 +110,15 @@ test("shows resolved tab defaults in settings", () => {
 
 test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
+})
+
+test("shows the stop_on_exit default in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.stop_on_exit")).toMatchObject({
+    title: "Stop on exit",
+    category: "Session",
+    default: "prompt",
+    values: ["prompt", "interrupt", "detach"],
+  })
 })
 
 test("shows the TPS default in session settings", () => {
