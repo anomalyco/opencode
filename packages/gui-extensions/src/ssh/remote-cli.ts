@@ -1,6 +1,7 @@
 export * as RemoteCli from "./remote-cli"
 
 import { Effect, Schema } from "effect"
+import { NpmConfig } from "@opencode/util/npm-config"
 import { HttpClient, HttpClientResponse } from "effect/http"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
@@ -76,7 +77,8 @@ export function archiveUrl(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
 
-  return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
+  const registry = (process.env.NPM_CONFIG_REGISTRY || process.env.npm_config_registry || "https://registry.npmjs.org").replace(/\/$/, "")
+  return `${registry}/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
 type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }
@@ -125,12 +127,13 @@ const Beta = Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^0\.
 
 export const latestBeta = Effect.fn("RemoteCli.latestBeta")(function* () {
   const http = yield* HttpClient.HttpClient
+  const registry = (process.env.NPM_CONFIG_REGISTRY || process.env.npm_config_registry || (yield* NpmConfig.registry(process.cwd()))).replace(/\/$/, "")
 
-  const metadata = yield* http.get("https://registry.npmjs.org/@opencode%2fcli/beta").pipe(
+  const metadata = yield* http.get(`${registry}/@opencode%2fcli/beta`).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Beta)),
     Effect.timeout("30 seconds"),
-    Effect.mapError(() => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode%2fcli/beta" })),
+    Effect.mapError(() => new Failure({ code: "install", detail: `${registry}/@opencode%2fcli/beta` })),
   )
 
   return metadata.version

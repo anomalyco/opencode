@@ -69,6 +69,10 @@ done
 INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
 
+# Allow a custom npm registry (e.g. behind a corporate firewall).
+registry="${NPM_CONFIG_REGISTRY:-${npm_config_registry:-https://registry.npmjs.org}}"
+registry="${registry%/}"
+
 # If --binary is provided, skip all download/detection logic
 if [ -n "$binary_path" ]; then
     if [ ! -f "$binary_path" ]; then
@@ -192,11 +196,11 @@ else
     fi
 
     package_name="$package_scope/cli-$target"
-    http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/$package_scope%2fcli-$target/$specific_version" || true)
+    http_status=$(curl -s -o /dev/null -w "%{http_code}" "$registry/$package_scope%2fcli-$target/$specific_version" || true)
     # Older clients install the minimum release before they can migrate package names.
     if [ "$http_status" = "404" ] && [ -n "$requested_version" ]; then
         package_name="@opencode-ai/cli-$target"
-        http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@opencode-ai%2fcli-$target/$specific_version" || true)
+        http_status=$(curl -s -o /dev/null -w "%{http_code}" "$registry/@opencode-ai%2fcli-$target/$specific_version" || true)
     fi
     if [ "$http_status" = "404" ]; then
         echo -e "${RED}Error: Version ${specific_version} is not available for $target${NC}"
@@ -209,7 +213,7 @@ else
     fi
 
     filename="cli-$target-$specific_version.tgz"
-    url="https://registry.npmjs.org/$package_name/-/$filename"
+    url="$registry/$package_name/-/$filename"
     binary_name="$SOURCE_APP"
     if [ "$os" = "windows" ]; then
         binary_name="$SOURCE_APP.exe"
