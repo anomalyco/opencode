@@ -29,7 +29,12 @@ import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, w
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
-import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
+import {
+  claudeVersion,
+  supportsThinkingBlockBinding,
+  THINKING_BINDING_BETA,
+  writesProgressUpdates,
+} from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -1014,6 +1019,13 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
+// The default "omitted" display also empties progress updates, which are written for the user.
+const applyThinkingDisplayDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
+  if (!writesProgressUpdates(model)) return thinking
+  if (thinking !== undefined && (thinking.type !== "adaptive" || thinking.display !== undefined)) return thinking
+  return { ...(thinking ?? { type: "adaptive" as const }), display: "summarized" }
+}
+
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (isThinkingOff(thinking)) return thinking
   if (!supportsThinkingBlockBinding(model)) return thinking
@@ -1080,7 +1092,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
+    thinking: applyThinkingBindingDefault(
+      request.model,
+      applyThinkingDisplayDefault(request.model, fitThinking(options.thinking, maxTokens)),
+    ),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
     cache_control: options.cache_control ?? options.cacheControl,

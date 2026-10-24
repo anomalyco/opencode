@@ -313,6 +313,19 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
 })
 
+test("reasoning signatures that are not base64 never throw while building rows", () => {
+  const narration = Buffer.from("\x12\x01B\tnarration").toString("base64")
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "reasoning", text: "Gateway note", state: { signature: "not base64 -_ signature!" } },
+      { type: "reasoning", text: "Progress note", state: { signature: narration } },
+    ]),
+  ]
+  const rows = reduceSessionRows(messages)
+
+  expect(rows.map((row) => row.type)).toEqual(["group", "part"])
+})
+
 test("assigns stable IDs to tool rows for direct navigation", () => {
   const messages: SessionMessageInfo[] = [
     assistant("assistant-1", [
