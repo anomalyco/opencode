@@ -541,6 +541,22 @@ export interface UI {
   readonly slot: (claim: SlotClaim) => () => void
 }
 
+/**
+ * A tree-sitter language. Sources are http(s) URLs, `file:` URLs, or absolute paths; refer to files shipped with
+ * the plugin through `new URL("./grammar.wasm", import.meta.url).href`.
+ */
+export interface LanguageDefinition {
+  /** Filetype and Markdown code-fence name, such as "elm". Reusing a built-in filetype replaces its parser. */
+  readonly id: string
+  /** File extensions that use this language, including the leading dot. */
+  readonly extensions?: readonly string[]
+  /** Compiled tree-sitter parser. */
+  readonly wasm: string
+  /** Highlight queries, concatenated in order. Captures follow nvim-treesitter names such as `keyword` or `type`. */
+  readonly highlights: readonly string[]
+  readonly injections?: readonly string[]
+}
+
 export interface Context {
   readonly options: Readonly<Record<string, any>>
   readonly location: LocationRef | undefined
@@ -553,6 +569,10 @@ export interface Context {
   readonly themeMode: "dark" | "light"
   readonly markdown: {
     registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
+  }
+  readonly languages: {
+    /** Highlights files and Markdown fences in a tree-sitter language; the returned function unregisters it. */
+    register(definition: LanguageDefinition): () => void
   }
   readonly keymap: Keymap
   readonly storage: Storage
