@@ -3,7 +3,8 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { useLocal } from "../context/local"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
-import { DialogIntegration } from "./dialog-integration"
+import * as Open from "@opencode/util/open"
+import { credentialConnections, DialogIntegration } from "./dialog-integration"
 import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
@@ -13,6 +14,10 @@ import { useLocation } from "../context/location"
 import { useNewDesigns } from "../config"
 import { DialogFreeModels } from "./dialog-model-free"
 import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
+
+const GO_URL = "https://opencode.ai/go"
+// Stands in for the Go models a Console account without a Go subscription doesn't get.
+const NO_GO_SUBSCRIPTION = { providerID: "opencode-go", modelID: "" }
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -83,6 +88,15 @@ function DialogConnectedModels(props: {
   const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
   const showExtra = createMemo(() => connected() && !props.providerID)
+
+  const noGoSubscription = createMemo(() => {
+    const scoped = props.providerID ? providers().get(props.providerID) : undefined
+    if (props.providerID && scoped?.integrationID !== "opencode" && props.providerID !== "opencode") return false
+    if (models().some((model) => model.providerID === "opencode-go")) return false
+    const consoleIntegration = data.location.integration.list(location.ref)?.find((item) => item.id === "opencode")
+    const active = consoleIntegration ? credentialConnections(consoleIntegration)[0] : undefined
+    return Boolean(active && !active.status)
+  })
 
   const options = createMemo(() => {
     const needle = query().trim()
@@ -178,10 +192,26 @@ function DialogConnectedModels(props: {
       return results.map((option) => ({ ...option, description: option.providerName, category: undefined }))
     }
 
+    const noGoOptions = noGoSubscription()
+      ? [
+          {
+            value: NO_GO_SUBSCRIPTION,
+            title: "No Go subscription",
+            description: "$10/month",
+            category: connected() ? "OpenCode Go" : undefined,
+            footer: newDesigns() ? "subscribe" : "Subscribe",
+            onSelect() {
+              Open.openUrl(GO_URL).catch(() => {})
+            },
+          },
+        ]
+      : []
+
     return [
       ...favoriteOptions,
       ...recentOptions,
       ...modelOptions.filter((option) => option.category !== "Free"),
+      ...noGoOptions,
       ...modelOptions.filter((option) => option.category === "Free"),
     ]
   })
@@ -217,6 +247,7 @@ function DialogConnectedModels(props: {
           title: newDesigns() ? (option) => (isFavorite(option?.value) ? "unfavorite" : "favorite") : "Favorite",
           hidden: !connected(),
           onTrigger: (option) => {
+            if (option.value === NO_GO_SUBSCRIPTION) return
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
         },

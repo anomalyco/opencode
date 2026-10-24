@@ -1,0 +1,72 @@
+[data-component="go-invite"] {
+  --go-invite-g: var(--v2-text-text-muted);
+  --go-invite-o: var(--v2-text-text-base);
+  --go-invite-counter: var(--v2-background-bg-layer-03);
+  --go-invite-shine: white;
+  --go-invite-shine-blend: screen;
+  --go-invite-shine-opacity: 0.6;
+
+  background-color: var(--v2-background-bg-layer-02);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+
+  [data-slot="go-invite-mark"] {
+    background-color: var(--v2-background-bg-layer-01);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  }
+
+  .go-invite-cells {
+    [data-kind="0"] {
+      fill: var(--go-invite-g);
+    }
+
+    [data-kind="1"] {
+      fill: var(--go-invite-o);
+    }
+
+    [data-kind="2"] {
+      fill: var(--go-invite-counter);
+    }
+  }
+
+  /* The wordmark's sweep (new-session/wordmark.css): a masked copy of GO passes over it, then rests. */
+  .go-invite-shimmer {
+    fill: var(--go-invite-shine);
+    mix-blend-mode: var(--go-invite-shine-blend);
+    opacity: 0;
+    mask-image: linear-gradient(to right, transparent 40%, black 50%, transparent 60%);
+    mask-size: 300% 100%;
+    mask-repeat: no-repeat;
+    animation: go-invite-shimmer 4s linear 600ms infinite both;
+  }
+}
+
+[data-color-scheme="light"] [data-component="go-invite"] {
+  --go-invite-g: var(--v2-text-text-faint);
+  --go-invite-counter: var(--v2-background-bg-layer-04);
+  --go-invite-shine: var(--v2-text-text-base);
+  --go-invite-shine-blend: multiply;
+  --go-invite-shine-opacity: 0.35;
+}
+
+/* The sweep takes the first second of each cycle; the rest of the cycle is still. */
+@keyframes go-invite-shimmer {
+  0% {
+    mask-position: 100% 0;
+    opacity: 0;
+  }
+  5%,
+  20% {
+    opacity: var(--go-invite-shine-opacity);
+  }
+  25%,
+  100% {
+    mask-position: 0% 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="go-invite"] .go-invite-shimmer {
+    animation: none;
+  }
+}

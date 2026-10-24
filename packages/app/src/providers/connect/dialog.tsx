@@ -57,9 +57,14 @@ import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { GoInviteCard } from "./go-invite"
 import "./models.css"
 
 const CUSTOM_ID = "_custom"
+
+const GO_URL = "https://opencode.ai/go"
+
+const OPENCODE_PROVIDER = { id: "opencode", name: "OpenCode" }
 
 type IntegrationForm = NonNullable<ProviderConnectMethod["form"]>[number]
 
@@ -500,7 +505,10 @@ function ProviderConnection(props: {
 
         if (first) {
           setState({ models: true, selectedModel: modelKey(first) })
-          props.onFirstConnection({ id: props.provider, name: provider().name })
+          // Without a Go subscription the account only reaches OpenCode's own models, so don't title it as Go.
+          props.onFirstConnection(
+            goWithoutSubscription() ? OPENCODE_PROVIDER : { id: props.provider, name: provider().name },
+          )
 
           return
         }
@@ -514,11 +522,19 @@ function ProviderConnection(props: {
       }
 
       dialog.close()
+      const withoutGo = goWithoutSubscription()
       showToast({
         variant: "success",
         icon: "circle-check",
-        title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-        description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+        title: language.t("provider.connect.toast.connected.title", {
+          provider: withoutGo ? OPENCODE_PROVIDER.name : provider().name,
+        }),
+        description: withoutGo
+          ? language.t("provider.connect.goInvite.noSubscription")
+          : language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+        actions: withoutGo
+          ? [{ label: language.t("provider.connect.models.subscribe"), onClick: subscribeToGo }]
+          : undefined,
       })
     },
   })
@@ -555,6 +571,15 @@ function ProviderConnection(props: {
   })
 
   const managedProviders = createMemo(() => (isConsole ? consoleProviderGroup(connectionProviders()) : undefined))
+
+  // The Console only grants `opencode-go` to accounts with a Go subscription, so a signed-in account without one gets no
+  // Go models and nothing else would say why.
+  const noGoSubscription = () =>
+    isConsole && !(data.location.model.list(location()) ?? []).some((model) => model.providerID === "opencode-go")
+
+  const goWithoutSubscription = () => props.provider === "opencode-go" && noGoSubscription()
+
+  const subscribeToGo = () => platform.openExternal(GO_URL)
 
   // The server loads the Console workspace's providers after the grant lands, so the first refresh
   // can still show only the free catalog. Poll briefly for the workspace providers before moving on.
@@ -1435,6 +1460,11 @@ function ProviderConnection(props: {
         <p class="shrink-0 pb-5 text-[13px] leading-5 text-v2-text-text-muted">
           {language.t("provider.connect.models.description")}
         </p>
+        <Show when={noGoSubscription()}>
+          <div class="shrink-0 pb-5">
+            <GoInviteCard onSubscribe={subscribeToGo} />
+          </div>
+        </Show>
         <div
           data-component="first-provider-model-scroll"
           class="settings-panel settings-models min-h-0 flex-1 overflow-y-auto pb-4"
