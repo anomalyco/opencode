@@ -66,6 +66,7 @@ import {
 } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
+import { usePromptDrafts } from "../../prompt/drafts"
 import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
@@ -98,6 +99,9 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+// Long enough that a burst of typing produces one write, short enough that a crash
+// costs at most this much of an unsent prompt. Matches the desktop draft write-behind.
+const DRAFT_SAVE_DELAY = 500
 const revealedPromptMetadata = new WeakSet<object>()
 
 function randomIndex(count: number) {
@@ -202,6 +206,7 @@ export function Prompt(props: PromptProps) {
   const sessionTabs = useSessionTabs()
   const data = useData()
   const directoryRecents = useDirectoryRecents()
+  const promptDrafts = usePromptDrafts()
   const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
   const args = useArgs()
@@ -714,9 +719,10 @@ export function Prompt(props: PromptProps) {
   // instance belongs to exactly one tab. Reading props.sessionID lazily would
   // observe the *next* route during onCleanup and stash under the wrong tab.
   const stashSessionID = props.sessionID
+  const draftTab = stashSessionID ?? "home"
 
   onMount(() => {
-    const saved = takeDraft(stashSessionID)
+    const saved = takeDraft(stashSessionID) ?? promptDrafts.read(paths.cwd, draftTab)
     if (store.prompt.text) return
     if (saved && saved.prompt.text) {
       input.setText(saved.prompt.text)
@@ -725,6 +731,27 @@ export function Prompt(props: PromptProps) {
       input.cursorOffset = Math.min(saved.cursor, measure(saved.prompt.text))
     }
   })
+
+  // The stash above only survives a remount, so mirror the composer to storage while it
+  // is typed: a crash, or a suspend that turns into a kill, would otherwise take an
+  // unsent prompt with it. Submitting clears the text, which clears the stored draft.
+  let draftTimer: ReturnType<typeof setTimeout> | undefined
+  function persistDraft() {
+    clearTimeout(draftTimer)
+    if (!input || input.isDestroyed) return
+    const prompt = unwrap(store.prompt)
+    void promptDrafts.write(paths.cwd, draftTab, prompt.text ? { prompt, cursor: input.cursorOffset } : undefined)
+  }
+  createEffect(
+    on(
+      () => JSON.stringify(store.prompt),
+      () => {
+        clearTimeout(draftTimer)
+        draftTimer = setTimeout(persistDraft, DRAFT_SAVE_DELAY)
+      },
+    ),
+  )
+  onCleanup(persistDraft)
 
   onCleanup(() => {
     disposed = true
