@@ -12,12 +12,60 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const FILE_COMMANDS = new Set([
+  "add-content",
+  "cat",
+  "chmod",
+  "chown",
+  "clear-content",
+  "copy",
+  "copy-item",
+  "cp",
+  "cpi",
+  "del",
+  "dir",
+  "erase",
+  "gc",
+  "gci",
+  "get-childitem",
+  "get-content",
+  "get-item",
+  "gi",
+  "head",
+  "ln",
+  "ls",
+  "mi",
+  "mkdir",
+  "move",
+  "move-item",
+  "mv",
+  "new-item",
+  "ni",
+  "out-file",
+  "remove-item",
+  "ri",
+  "rm",
+  "rmdir",
+  "sc",
+  "set-content",
+  "set-item",
+  "si",
+  "tail",
+  "tee",
+  "test-path",
+  "touch",
+  "truncate",
+  "type",
+])
 const POWERSHELL_PATH_FLAG_RE =
   /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
+const DEVICE_PATH_RE =
+  /^(?:\/dev\/(?:null|zero|stdin|stdout|stderr|urandom|random|tty|pts(?:\/\w+)?|fd(?:\/\w+)?|tcp\/.*|udp\/.*)|(?:\\\\\.?\\)?(?:nul|con|prn|aux|com[1-9]|lpt[1-9])(?::)?|\$null)$/i
 
 export type Result = {
   commands: Array<{ resource: string; save: string }>
   directories: string[]
+  paths?: string[]
 }
 
 const ARITY: Record<string, number> = {
@@ -181,8 +229,28 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
   return yield* Effect.acquireUseRelease(
     Effect.succeed(tree),
     (tree) =>
-      Effect.sync(() =>
-        tree.rootNode.descendantsOfType("command").reduce(
+      Effect.sync(() => {
+        const paths: string[] = []
+        const redirectNodes = powershell
+          ? tree.rootNode.descendantsOfType("redirection")
+          : tree.rootNode.descendantsOfType("file_redirect")
+        for (const redirectNode of redirectNodes) {
+          if (!redirectNode) continue
+          const children = Array.from({ length: redirectNode.childCount }, (_, i) => redirectNode.child(i))
+          const target = powershell
+            ? children.find((c) => c?.type === "redirected_file_name")?.text.trim()
+            : children.find(
+                (c) =>
+                  c !== null &&
+                  !["<", ">", ">>", "&>", "&>>", "<&", ">&", ">|", "<>", "file_descriptor"].includes(c.type),
+              )?.text
+          if (target) {
+            const value = directoryArgument(target, powershell, cwd, shell)
+            if (value && isCandidatePath(value)) paths.push(value)
+          }
+        }
+
+        const result = tree.rootNode.descendantsOfType("command").reduce(
           (result, node) => {
             if (!node) return result
             const command = parts(node)
@@ -193,6 +261,12 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
               result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
+            const candidatePaths = FILE_COMMANDS.has(name)
+              ? directoryArgs(command, powershell, cwd, shell).filter(isCandidatePath)
+              : powershell
+                ? flaggedPathArgs(command, cwd, shell).filter(isCandidatePath)
+                : []
+            if (candidatePaths.length > 0) paths.push(...candidatePaths)
             result.commands.push({
               resource: (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim(),
               save: `${prefix(tokens).join(" ")} *`,
@@ -200,8 +274,13 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
             return result
           },
           { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[] },
-        ),
-      ),
+        )
+
+        return {
+          ...result,
+          ...(paths.length > 0 ? { paths: Array.from(new Set(paths)) } : {}),
+        }
+      }),
     (tree) => Effect.sync(() => tree.delete()),
   )
 })
@@ -220,9 +299,14 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     return yield* Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${result.reason}`))
 
   const output: Result = { commands: [], directories: [] }
+  const paths: string[] = []
   for (const item of result.commands) {
     // The legacy command walk skips declarations, not the substitutions within them.
     if (item.declaration) continue
+    for (const target of item.redirectTargets ?? []) {
+      const value = directoryArgument(target, powershell, cwd, shell)
+      if (value && isCandidatePath(value)) paths.push(value)
+    }
     const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
     // The shipped PowerShell grammar treats bare statement-head foreach blocks as control flow.
     if (
@@ -234,36 +318,17 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     )
       continue
     const name = powershell ? words[0]?.toLowerCase() : words[0]
+    const cmdParts = commandParts(words, item.rawWords, item.words, powershell)
     if (CWD.has(name)) {
-      output.directories.push(
-        ...directoryArgs(
-          powershell
-            ? words.flatMap((raw, index): Part[] => {
-                const text =
-                  !raw.includes("`$") && /['"`]/.test(raw) ? (item.words[index] ?? raw) : raw.replaceAll("`$", "\0")
-                if (!/^-[A-Za-z_?][\w?-]*(?::|$)/.test(raw)) return [{ type: "word", text }]
-                const colon = text.indexOf(":")
-                if (colon >= 0)
-                  return colon + 1 < text.length
-                    ? [
-                        { type: "command_parameter", text: text.slice(0, colon) },
-                        { type: "word", text: text.slice(colon + 1) },
-                      ]
-                    : [{ type: "command_parameter", text: text.slice(0, colon) }]
-                return [{ type: "command_parameter", text }]
-              })
-            : item.rawWords.map((text, index) => ({
-                type: "word",
-                // Only literal quoting resolves to a static directory.
-                text: text.startsWith("$'") || (!/[$`~\\]/.test(text) && /['"]/.test(text)) ? item.words[index] : text,
-              })),
-          powershell,
-          cwd,
-          shell,
-        ),
-      )
+      output.directories.push(...directoryArgs(cmdParts, powershell, cwd, shell))
       continue
     }
+    const candidatePaths = FILE_COMMANDS.has(name)
+      ? directoryArgs(cmdParts, powershell, cwd, shell).filter(isCandidatePath)
+      : powershell
+        ? flaggedPathArgs(cmdParts, cwd, shell).filter(isCandidatePath)
+        : []
+    if (candidatePaths.length > 0) paths.push(...candidatePaths)
     const selected = prefix(words.slice(0, PREFIX_LENGTH))
     const conventional = `${selected.join(" ")} *`
     const end = item.wordEnds?.[selected.length - 1]
@@ -284,8 +349,65 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
       save,
     })
   }
+  if (paths.length > 0) output.paths = Array.from(new Set(paths))
   return output
 })
+
+function commandParts(words: string[], rawWords: string[], decodedWords: string[], powershell: boolean): Part[] {
+  if (!powershell) {
+    return rawWords.map((text, index) => ({
+      type: "word",
+      text: text.startsWith("$'") || (!/[$`~\\]/.test(text) && /['"]/.test(text)) ? (decodedWords[index] ?? text) : text,
+    }))
+  }
+  return words.flatMap((raw, index): Part[] => {
+    const text =
+      !raw.includes("`$") && /['"`]/.test(raw) ? (decodedWords[index] ?? raw) : raw.replaceAll("`$", "\0")
+    if (!/^-[A-Za-z_?][\w?-]*(?::|$)/.test(raw)) return [{ type: "word", text }]
+    const colon = text.indexOf(":")
+    if (colon >= 0)
+      return colon + 1 < text.length
+        ? [
+            { type: "command_parameter", text: text.slice(0, colon) },
+            { type: "word", text: text.slice(colon + 1) },
+          ]
+        : [{ type: "command_parameter", text: text.slice(0, colon) }]
+    return [{ type: "command_parameter", text }]
+  })
+}
+
+function isCandidatePath(text: string) {
+  if (DEVICE_PATH_RE.test(text)) return false
+  return (
+    text.startsWith("/") ||
+    text.startsWith("\\") ||
+    text.startsWith("~") ||
+    /^[A-Za-z]:[/\\]/.test(text) ||
+    /(?:^|[/\\])\.\.(?:[/\\]|$)/.test(text)
+  )
+}
+
+function flaggedPathArgs(command: Part[], cwd: string, shell: string) {
+  const paths: string[] = []
+  let path = false
+  let endOfParameters = false
+  for (const part of command.slice(1)) {
+    if (!endOfParameters && part.text === "--") {
+      endOfParameters = true
+      continue
+    }
+    if (path) {
+      const value = directoryArgument(part.text, true, cwd, shell)
+      if (value) paths.push(value)
+      path = false
+      continue
+    }
+    if (!endOfParameters && part.type === "command_parameter") {
+      path = POWERSHELL_PATH_FLAG_RE.test(part.text)
+    }
+  }
+  return paths
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {
