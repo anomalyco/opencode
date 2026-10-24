@@ -6,7 +6,7 @@ import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode/client/solid"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useSettings } from "@/settings/model"
+import { useSettings, projectSettingsKey } from "@/settings/model"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { playSoundById } from "@/shell/notifications/sound"
@@ -14,6 +14,8 @@ import type { createNotificationCoordinator } from "@/shell/notifications/coordi
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
+import { createServerPush } from "@/shell/notifications/push-state"
+import { sessionHref } from "@/shell/routes/session"
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
@@ -63,6 +65,7 @@ export function createServerNotificationState(input: {
   const settings = useSettings()
   const language = useLanguage()
   const tabs = useTabs()
+  const push = createServerPush({ sdk: input.sdk, key: input.key })
   const disposed = { value: false }
   // Idle watermarks already reported per root session, so reactive re-runs don't re-post them.
   const acknowledged = new Map<string, number>()
@@ -231,9 +234,13 @@ export function createServerNotificationState(input: {
       }
 
       if (hasOpenTab && settings.notifications.agent()) {
+        if (push?.state.enabled) return
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.responseReady.title"),
+            session.title ?? sessionID,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            sessionHref(input.key, sessionID),
           ),
         )
       }
@@ -255,12 +262,42 @@ export function createServerNotificationState(input: {
       const description = session?.title ?? language.t("notification.session.error.fallbackDescription")
 
       if (hasOpenTab && settings.notifications.errors()) {
+        if (push?.state.enabled) return
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.error.title"),
+            description,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            sessionHref(input.key, sessionID),
           ),
         )
       }
+    })
+  }
+
+  const handleRequest = (kind: "permissions" | "questions", sessionID: string, eventID: string) => {
+    void lookup(sessionID).then((session) => {
+      if (disposed.value) return
+
+      if (!session || session.parentID) return
+
+      if (kind === "permissions" && settings.permissions.autoApproves(projectSettingsKey(input.sdk.scope, session.projectID)))
+        return
+
+      if (!sessionIDHasOpenTab(tabs.store, input.key, sessionID)) return
+
+      const enabled = kind === "permissions" ? settings.notifications.permissions() : settings.notifications.questions()
+
+      if (!enabled || push?.state.enabled) return
+
+      const title =
+        kind === "permissions"
+          ? language.t("notification.permission.title")
+          : language.t("notification.session.question.title")
+
+      void input.coordinator.system(`${input.key}\0${eventID}`, () =>
+        platform.notify(title, session.title ?? sessionID, () => openNotificationSession(tabs, input.key, sessionID), sessionHref(input.key, sessionID)),
+      )
     })
   }
 
@@ -272,6 +309,11 @@ export function createServerNotificationState(input: {
     }
 
     if (event.type === "session.execution.succeeded") handleSessionIdle(event.data.sessionID, event.id)
+
+    if (event.type === "permission.asked") handleRequest("permissions", event.data.sessionID, event.id)
+
+    if (event.type === "form.created" && event.data.form.metadata?.kind === "question")
+      handleRequest("questions", event.data.form.sessionID, event.id)
   })
 
   onCleanup(() => {
@@ -280,6 +322,7 @@ export function createServerNotificationState(input: {
   })
 
   return {
+    push,
     session: {
       /**
        * Whether the session's root has an execution result no client has viewed yet. `snapshot` stands in for a root

@@ -53,8 +53,8 @@ type PlatformBase = {
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Send a system notification */
-  notify(title: string, description?: string, onClick?: () => void): Promise<void>
+  /** Send a system notification. `href` lets a service-worker notification reopen its destination. */
+  notify(title: string, description?: string, onClick?: () => void, href?: string): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(

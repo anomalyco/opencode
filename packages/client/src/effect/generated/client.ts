@@ -252,6 +252,11 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  PushGetOutput,
+  PushSubscribeInput,
+  PushSubscribeOutput,
+  PushUnsubscribeInput,
+  PushUnsubscribeOutput,
   VcsInitInput,
   VcsInitOutput,
   VcsGetInput,
@@ -1570,6 +1575,34 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
+const EndpointPushGet = (raw: RawClient["server.push"]) => () =>
+  preserveEffect<PushGetOutput>()(raw["push.get"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointPushSubscribe = (raw: RawClient["server.push"]) => (input: PushSubscribeInput) =>
+  preserveEffect<PushSubscribeOutput>()(
+    raw["push.subscribe"]({
+      payload: {
+        id: input["id"],
+        endpoint: input["endpoint"],
+        keys: input["keys"],
+        url: input["url"],
+        preferences: input["preferences"],
+        titles: input["titles"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPushUnsubscribe = (raw: RawClient["server.push"]) => (input: PushUnsubscribeInput) =>
+  preserveEffect<PushUnsubscribeOutput>()(
+    raw["push.unsubscribe"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupPush = (raw: RawClient["server.push"]) => ({
+  get: EndpointPushGet(raw),
+  subscribe: EndpointPushSubscribe(raw),
+  unsubscribe: EndpointPushUnsubscribe(raw),
+})
+
 const EndpointVcsInit = (raw: RawClient["server.vcs"]) => (input?: VcsInitInput) =>
   preserveEffect<VcsInitOutput>()(
     raw["vcs.init"]({ query: { location: input?.["location"], provider: input?.["provider"] } }).pipe(
@@ -1702,6 +1735,7 @@ const adaptClient = (raw: RawClient) => ({
   shell: adaptGroupShell(raw["server.shell"]),
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
+  push: adaptGroupPush(raw["server.push"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),

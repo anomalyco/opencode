@@ -33,7 +33,8 @@
     "@opencode/schema": "workspace:*",
     "@opencode/simulation": "workspace:*",
     "@opencode/util": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@opencode-ai/pty": "0.3.1",
@@ -41,7 +42,9 @@
     "@opencode/plugin": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
+    "@types/web-push": "3.6.4",
     "@typescript/native": "catalog:",
-    "fast-check": "catalog:"
+    "fast-check": "catalog:",
+    "http_ece": "1.2.0"
   }
 }

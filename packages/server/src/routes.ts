@@ -47,6 +47,7 @@ import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
+import { Push } from "./push"
 import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
@@ -75,6 +76,7 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Workspace.node,
+  Push.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -102,7 +104,14 @@ export function createEmbeddedRoutes(
   overrides: LayerNode.Replacements = [],
   instances?: InstanceNode,
 ) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
+  return makeRoutes(
+    ServerAuth.Config.configLayer({ password: Option.none() }),
+    options,
+    () => [],
+    overrides,
+    instances,
+    false,
+  )
 }
 
 function makeRoutes<AuthError, AuthServices>(
@@ -112,11 +121,15 @@ function makeRoutes<AuthError, AuthServices>(
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
+  push = true,
 ) {
   const standard: LayerNode.Replacements = [
     Database.node.replace(Database.configured(options.database)),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
+    // Embedded hosts have no owner password and often share the user's data directory.
+    // Running Web Push there could revoke the managed service's subscriptions.
+    Push.node.replace(push ? Push.configured({ password: options.password }) : Push.disabled),
     App.node.replace(App.configured(options.app)),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),

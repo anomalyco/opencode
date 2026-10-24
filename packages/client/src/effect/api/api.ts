@@ -2217,6 +2217,42 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type PushGetOutput = { readonly publicKey: string }
+export type PushGetOperation<E = never> = () => Effect.Effect<PushGetOutput, E>
+
+export type PushSubscribeInput = {
+  readonly id: string
+  readonly endpoint: string
+  readonly keys: { readonly p256dh: string; readonly auth: string }
+  readonly url: string
+  readonly preferences: {
+    readonly agent: boolean
+    readonly permissions: boolean
+    readonly questions: boolean
+    readonly errors: boolean
+  }
+  readonly titles: {
+    readonly agent: string
+    readonly permissions: string
+    readonly questions: string
+    readonly errors: string
+  }
+}
+export type PushSubscribeOutput = string
+export type PushSubscribeOperation<E = never> = (input: PushSubscribeInput) => Effect.Effect<PushSubscribeOutput, E>
+
+export type PushUnsubscribeInput = { readonly id: string }
+export type PushUnsubscribeOutput = void
+export type PushUnsubscribeOperation<E = never> = (
+  input: PushUnsubscribeInput,
+) => Effect.Effect<PushUnsubscribeOutput, E>
+
+export interface PushApi<E = never> {
+  readonly get: PushGetOperation<E>
+  readonly subscribe: PushSubscribeOperation<E>
+  readonly unsubscribe: PushUnsubscribeOperation<E>
+}
+
 export type VcsInitInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly provider?: string | undefined
@@ -2377,6 +2413,7 @@ export interface AppApi<E = never> {
   readonly shell: ShellApi<E>
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
+  readonly push: PushApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>

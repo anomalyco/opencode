@@ -291,6 +291,10 @@ export type PersistentPtyHandoff = { directory: string; instanceID: string; tick
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
+export type PushKey = { publicKey: string }
+
+export type PushSubscriptionID = string
+
 export type VcsBranch = { current?: string; default?: string }
 
 export type VcsBase = { name: string; ref: string; source: "reflog" | "default" }
@@ -5937,6 +5941,125 @@ export type WorktreeRemoveOutput = void
 export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
 export type WorktreeRefreshOutput = void
+
+export type PushGetOutput = PushKey
+
+export type PushSubscribeInput = {
+  readonly id: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly preferences: {
+      readonly agent: boolean
+      readonly permissions: boolean
+      readonly questions: boolean
+      readonly errors: boolean
+    }
+    readonly titles: {
+      readonly agent: string
+      readonly permissions: string
+      readonly questions: string
+      readonly errors: string
+    }
+  }["id"]
+  readonly endpoint: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly preferences: {
+      readonly agent: boolean
+      readonly permissions: boolean
+      readonly questions: boolean
+      readonly errors: boolean
+    }
+    readonly titles: {
+      readonly agent: string
+      readonly permissions: string
+      readonly questions: string
+      readonly errors: string
+    }
+  }["endpoint"]
+  readonly keys: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly preferences: {
+      readonly agent: boolean
+      readonly permissions: boolean
+      readonly questions: boolean
+      readonly errors: boolean
+    }
+    readonly titles: {
+      readonly agent: string
+      readonly permissions: string
+      readonly questions: string
+      readonly errors: string
+    }
+  }["keys"]
+  readonly url: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly preferences: {
+      readonly agent: boolean
+      readonly permissions: boolean
+      readonly questions: boolean
+      readonly errors: boolean
+    }
+    readonly titles: {
+      readonly agent: string
+      readonly permissions: string
+      readonly questions: string
+      readonly errors: string
+    }
+  }["url"]
+  readonly preferences: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly preferences: {
+      readonly agent: boolean
+      readonly permissions: boolean
+      readonly questions: boolean
+      readonly errors: boolean
+    }
+    readonly titles: {
+      readonly agent: string
+      readonly permissions: string
+      readonly questions: string
+      readonly errors: string
+    }
+  }["preferences"]
+  readonly titles: {
+    readonly id: string
+    readonly endpoint: string
+    readonly keys: { readonly p256dh: string; readonly auth: string }
+    readonly url: string
+    readonly preferences: {
+      readonly agent: boolean
+      readonly permissions: boolean
+      readonly questions: boolean
+      readonly errors: boolean
+    }
+    readonly titles: {
+      readonly agent: string
+      readonly permissions: string
+      readonly questions: string
+      readonly errors: string
+    }
+  }["titles"]
+}
+
+export type PushSubscribeOutput = PushSubscriptionID
+
+export type PushUnsubscribeInput = { readonly id: { readonly id: string }["id"] }
+
+export type PushUnsubscribeOutput = void
 
 export type VcsInitInput = {
   readonly location?: {

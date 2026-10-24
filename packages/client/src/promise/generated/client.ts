@@ -250,6 +250,11 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  PushGetOutput,
+  PushSubscribeInput,
+  PushSubscribeOutput,
+  PushUnsubscribeInput,
+  PushUnsubscribeOutput,
   VcsInitInput,
   VcsInitOutput,
   VcsGetInput,
@@ -2126,6 +2131,43 @@ export function make(options: ClientOptions) {
             body: { projectID: input["projectID"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    push: {
+      get: (requestOptions?: RequestOptions) =>
+        request<PushGetOutput>(
+          { method: "GET", path: `/api/push`, successStatus: 200, declaredStatuses: [400, 401, 503], empty: false },
+          requestOptions,
+        ),
+      subscribe: (input: PushSubscribeInput, requestOptions?: RequestOptions) =>
+        request<PushSubscribeOutput>(
+          {
+            method: "PUT",
+            path: `/api/push/subscription`,
+            body: {
+              id: input["id"],
+              endpoint: input["endpoint"],
+              keys: input["keys"],
+              url: input["url"],
+              preferences: input["preferences"],
+              titles: input["titles"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      unsubscribe: (input: PushUnsubscribeInput, requestOptions?: RequestOptions) =>
+        request<PushUnsubscribeOutput>(
+          {
+            method: "DELETE",
+            path: `/api/push/subscription/${encodeURIComponent(input.id)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 403, 503],
             empty: true,
           },
           requestOptions,
