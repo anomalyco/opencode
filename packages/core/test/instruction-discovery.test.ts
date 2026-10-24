@@ -74,6 +74,19 @@ const start = Effect.fnUntraced(function* (ctx = host()) {
   return yield* InstructionDiscovery.Service
 })
 
+// Activation publishes once registering the discovery transform, and the forked URL fetch
+// publishes once more through reload; await both so tests observe settled remote state.
+const startRemote = Effect.fnUntraced(function* (ctx = host()) {
+  const bus = yield* Bus.Service
+  const settled = yield* bus
+    .subscribe(InstructionDiscovery.Event.Updated)
+    .pipe(Stream.take(2), Stream.runDrain, Effect.forkScoped)
+  yield* Effect.yieldNow
+  const discovery = yield* start(ctx)
+  yield* Fiber.join(settled).pipe(Effect.timeout("5 seconds"))
+  return discovery
+})
+
 const configured = (instructions: string[]) => new Document({ type: "document", info: new Info({ instructions }) })
 
 const readFailure = (tag: "NotFound" | "Unknown", code: string, file: string) =>
@@ -317,7 +330,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
             ])
           })
 
-          const discovery = yield* start()
+          const discovery = yield* startRemote()
           const initialized = yield* readInitial(yield* discovery.load())
           // The unreachable URL and missing file are skipped without making AGENTS.md unavailable.
           expect(initialized.text).toBe(
@@ -388,7 +401,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           })
           const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
           const config = yield* Config.Test
-          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          const discovery = yield* startRemote(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
           const initialized = yield* readInitial(yield* discovery.load())
           expect(initialized.text).toBe(
             [`Instructions from: ${first}\nfirst`, `Instructions from: ${remote}\nremote`].join("\n\n"),

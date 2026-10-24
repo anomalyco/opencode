@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Duration, Effect } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
@@ -102,6 +102,30 @@ async function createRegistryFixture(directory: string) {
       await Bun.write(
         path.join(root, ".npmrc"),
         `registry=${server.url}\n@fixture:registry=${server.url}\ncache=${path.join(directory, "npm-cache")}\nfetch-retries=0\naudit=true\n`,
+      )
+      return root
+    },
+    async [Symbol.asyncDispose]() {
+      await server.stop(true)
+    },
+  }
+}
+
+function createHungRegistry() {
+  // Accepts requests and never answers, like a black-holed or firewalled registry.
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Promise<Response>(() => {}),
+  })
+  return {
+    url: server.url,
+    async configure(cache: string, spec: string) {
+      const root = path.join(cache, "npm", await Npm.cacheKey(spec))
+      await fs.mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, ".npmrc"),
+        `registry=${server.url}\n@fixture:registry=${server.url}\ncache=${path.join(cache, "npm-cache")}\nfetch-retries=0\n`,
       )
       return root
     },
@@ -310,6 +334,29 @@ describe("Npm.add", () => {
     expect(result.current).toBeFalse()
   }, 30_000)
 
+  test("fails within the configured bound when the registry never responds", async () => {
+    await using tmp = await tmpdir()
+    await using registry = createHungRegistry()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/hung-plugin@latest"
+    const root = await registry.configure(cache, spec)
+
+    const error = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec).pipe(Effect.flip)
+    }).pipe(
+      Effect.provideService(Npm.Timeouts, { install: Duration.millis(500), check: Duration.millis(500) }),
+      Effect.scoped,
+      Effect.provide(npmLayer(cache)),
+      Effect.runPromise,
+    )
+
+    expect(error).toBeInstanceOf(Npm.InstallFailedError)
+    if (error instanceof Npm.InstallFailedError) expect(String(error.cause)).toContain("did not finish")
+    // The timed-out install must leave no staging directory behind.
+    expect((await fs.readdir(root)).filter((entry) => entry.startsWith(".staging-"))).toEqual([])
+  })
+
   // Symlink creation needs elevated privileges on Windows.
   test.skipIf(win)("records Git revisions when the cache directory is reached through a symlink", async () => {
     await using tmp = await tmpdir()
@@ -442,5 +489,29 @@ describe("Npm.check and Npm.update", () => {
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
 
     expect(outdated).toBeFalse()
+  })
+
+  test("fails checks within the configured bound when the registry never responds", async () => {
+    await using tmp = await tmpdir()
+    await using registry = createHungRegistry()
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/hung-plugin@latest"
+    const root = await registry.configure(cache, spec)
+    const directory = path.join(root, "1000", "node_modules", "@fixture", "hung-plugin")
+    await fs.mkdir(directory, { recursive: true })
+    await writePackage(directory, { name: "@fixture/hung-plugin" })
+
+    const error = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.check(spec).pipe(Effect.flip)
+    }).pipe(
+      Effect.provideService(Npm.Timeouts, { install: Duration.millis(500), check: Duration.millis(500) }),
+      Effect.scoped,
+      Effect.provide(npmLayer(cache)),
+      Effect.runPromise,
+    )
+
+    expect(error).toBeInstanceOf(Npm.InstallFailedError)
+    if (error instanceof Npm.InstallFailedError) expect(String(error.cause)).toContain("did not finish")
   })
 })

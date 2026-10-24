@@ -3,7 +3,8 @@ import path from "path"
 import { createServer } from "node:http"
 import { describe, expect } from "bun:test"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Global } from "@opencode/util/global"
@@ -125,6 +126,39 @@ describe("SkillDiscovery.pull", () => {
         "/catalog/deploy/SKILL.md": "# Ignored",
       })
       expect(third.requests).toEqual([`${catalog.base}index.json`])
+    }),
+  )
+
+  it.effect(
+    "abandons an index fetch that never responds once the bound elapses",
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const server = yield* NodeHttpServer.make(createServer, { host: "127.0.0.1", port: 0 })
+      const base = new URL("/catalog/", HttpServer.formatAddress(server.address)).href
+      // Accept the request and never answer until released, like a black-holed network;
+      // the release lets the server drain its connection so scope teardown completes.
+      const arrived = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      yield* server.serve(
+        Deferred.succeed(arrived, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.as(HttpServerResponse.empty()),
+        ),
+      )
+      const fiber = yield* Effect.gen(function* () {
+        const discovery = yield* SkillDiscovery.Service
+        return yield* discovery.pull(base)
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(SkillDiscovery.node, [Global.node.replace(Global.layerWith({ cache: tmp.path }))]),
+        ),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.await(arrived)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("10 seconds")
+      expect(yield* Fiber.join(fiber)).toEqual([])
+      yield* Deferred.succeed(release, undefined)
     }),
   )
 

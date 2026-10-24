@@ -221,9 +221,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     fetch: noTimeoutFetch,
   }
   const api = OpenCode.make(options)
-  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+  // These run before the renderer exists, so a server that cannot answer (hung DNS, black-holed
+  // network) would freeze a blank terminal; bound them and fall back to the client's directory.
+  const location = yield* Effect.tryPromise(() =>
+    api.file.list({ location: { directory: process.cwd() } }, { signal: AbortSignal.timeout(10_000) }),
+  ).pipe(
     Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get(undefined, { signal: AbortSignal.timeout(10_000) }))),
+    Effect.orElseSucceed(() => ({ directory: process.cwd() })),
   )
   const directory = location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))

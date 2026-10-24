@@ -19,6 +19,7 @@ import { createForeignPackageFilter, ensurePluginRuntime } from "@opencode/plugi
 import { createLoader, discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { tempGlobalLayer } from "../fixture/global"
 import { tmpdirScoped } from "../fixture/tmpdir"
+import { advance } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -422,6 +423,33 @@ it.live("blocks a local plugin before module initialization and honors replaceme
     yield* managed.set({ statements: [] })
     expect(yield* modules.load(operation)).toMatchObject({ id: "policy-fixture" })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
+  }),
+)
+
+it.effect("bounds a package install that never finishes and fails the load", () =>
+  Effect.gen(function* () {
+    const modules = yield* PluginModule.make()
+    const fiber = yield* modules
+      .load({ type: "add", target: "fixture-pkg", options: {} }, { install: true })
+      .pipe(
+        Effect.provideService(
+          Npm.Service,
+          Npm.Service.of({
+            // A black-holed registry: the install never settles on its own.
+            add: () => Effect.never,
+            resolve: (name) => Effect.succeed({ directory: "", name }),
+            check: () => Effect.succeed(false),
+            update: (name) => Effect.succeed({ directory: "", name }),
+            which: () => Effect.undefined,
+          }),
+        ),
+        Effect.flip,
+        Effect.forkChild({ startImmediately: true }),
+      )
+    yield* advance(() => fiber.pollUnsafe() !== undefined)
+    const error = yield* Fiber.join(fiber)
+    expect(error).toBeInstanceOf(PluginModule.LoadError)
+    if (error instanceof PluginModule.LoadError) expect(error.message).toContain("did not finish")
   }),
 )
 

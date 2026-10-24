@@ -5,7 +5,7 @@ import { Plugin } from "@opencode/schema/plugin"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { PersistentPty } from "./persistent-pty.js"
-import { Cause, Context, Effect, Exit, Latch, Layer, Logger, Queue, References, Scope, Semaphore } from "effect"
+import { Cause, Context, Duration, Effect, Exit, Latch, Layer, Logger, Queue, References, Scope, Semaphore } from "effect"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
 import { PluginHost } from "./plugin/host.js"
@@ -13,6 +13,13 @@ import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
 
 export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js"
+
+// Activation (and readiness gated on it) awaits every setup, and a plugin's setup may wait on
+// the network with no deadline of its own. A timed-out setup takes the same failed-slot path
+// as a thrown one, so the rest of the generation still activates.
+export const SetupTimeout = Context.Reference<Duration.Duration>("@opencode/Plugin/SetupTimeout", {
+  defaultValue: () => Duration.seconds(30),
+})
 
 const layer = Layer.effect(
   Service,
@@ -45,6 +52,7 @@ const layer = Layer.effect(
     })
     const host = yield* PluginHost.make({ list })
     const load = Effect.fnUntraced(function* (plugin: Generation) {
+      const timeout = yield* SetupTimeout
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) }
       const inherit = yield* State.inherit()
       const grouped = State.group((failure, refresh) => {
@@ -73,6 +81,10 @@ const layer = Layer.effect(
           ),
         ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
+        Effect.timeoutOrElse({
+          duration: timeout,
+          orElse: () => Effect.fail(new Error(`Plugin setup did not finish within ${Duration.format(timeout)}`)),
+        }),
         Effect.onExit((exit) =>
           Exit.isFailure(exit) && !activation.failure ? Scope.close(activation.scope, exit) : Effect.void,
         ),

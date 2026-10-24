@@ -73,6 +73,9 @@ const layer = Layer.effect(
         schedule: Schedule.exponential(200).pipe(Schedule.jittered),
       }),
       HttpClient.filterStatusOk,
+      // A source that accepts connections but never answers (hung DNS, black-holed network)
+      // must not stall skill loading; the bound covers the retries above.
+      HttpClient.transformResponse(Effect.timeout("10 seconds")),
     )
 
     const download = Effect.fn("SkillDiscovery.download")(function* (url: string, destination: string) {

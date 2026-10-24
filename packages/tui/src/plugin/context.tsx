@@ -529,10 +529,16 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       () => JSON.stringify([serverTuiPlugins(), config.data.plugins ?? []]),
       () => {
         npmFailures.clear()
-        void enqueue(reconcile).then(
-          () => setStore("ready", true),
-          () => setStore("ready", true),
-        )
+        // Cold package installs can hold the first reconcile for minutes on an offline host;
+        // stop gating readiness after a bound while the reconcile keeps running, so plugins
+        // still activate when it finishes.
+        const deadline = setTimeout(() => setStore("ready", true), 10_000)
+        void enqueue(reconcile)
+          .then(
+            () => setStore("ready", true),
+            () => setStore("ready", true),
+          )
+          .finally(() => clearTimeout(deadline))
       },
     ),
   )

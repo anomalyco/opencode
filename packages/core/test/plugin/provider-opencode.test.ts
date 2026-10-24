@@ -1165,6 +1165,48 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("recovers organization policies with the boot re-check when the Console answers late", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { failing: true, requests: 0 }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => {
+            state.requests++
+            if (state.failing) return new Response("Unavailable", { status: 503 })
+            return Response.json({
+              providers: {},
+              experimental: { policies: [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }] },
+            })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const managed = yield* ManagedPolicy.Service
+          const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+          expect(state.requests).toBe(1)
+          expect(managed.current()).toEqual({ statements: [], organization: undefined })
+
+          state.failing = false
+          yield* TestClock.adjust("15 seconds")
+          yield* drain
+          expect(state.requests).toBe(2)
+          expect(managed.current()).toEqual({ statements: [sudo], organization: undefined })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+
   it.effect("explains rejected Console inference from at most one config check per 30 seconds", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

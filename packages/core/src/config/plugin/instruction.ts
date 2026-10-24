@@ -141,11 +141,15 @@ export const Plugin = define({
       // A failed fetch keeps the last good copy or skips the URL, so an unreachable URL
       // never makes the whole instruction set unavailable.
       const reconfigure = Effect.fn("ConfigInstructionPlugin.reconfigure")(
-        function* () {
+        function* (options?: { readonly fetch?: boolean }) {
           const entries = yield* config.entries()
           const sources = Array.from(
             new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
           )
+          if (options?.fetch === false) {
+            configured.sources = sources
+            return
+          }
           const fetched = yield* Effect.forEach(
             sources.filter(isUrl),
             (url) =>
@@ -167,7 +171,7 @@ export const Plugin = define({
             fetched.filter((file) => file !== undefined).map((file) => [file.path, file] as const),
           )
         },
-        (effect) => lock.withPermit(effect),
+        (effect, ..._args: [options?: { readonly fetch?: boolean }]) => lock.withPermit(effect),
       )
 
       const isolate = <A, E, R>(source: string, effect: Effect.Effect<A, E, R>) =>
@@ -214,7 +218,9 @@ export const Plugin = define({
         Stream.runForEach(() => reconfigure().pipe(Effect.andThen(refresh()), Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* reconfigure()
+      // Configured local sources are explicit requests that resolve without the network, so the
+      // first refresh must include them before activation reports ready.
+      yield* reconfigure({ fetch: false })
       yield* refresh()
       yield* discovery.transform((editor) => {
         if (loaded.current.type === "unavailable") {
@@ -223,6 +229,14 @@ export const Plugin = define({
         }
         for (const file of loaded.current.files) editor.add(file)
       })
+      // Configured sources may name remote URLs, whose fetch runs the way a config update does:
+      // forked and publishing through reload, never gating activation on the network.
+      if (configured.sources.some(isUrl))
+        yield* reconfigure().pipe(
+          Effect.andThen(refresh()),
+          Effect.andThen(discovery.reload()),
+          Effect.forkScoped({ startImmediately: true }),
+        )
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to activate instruction source", { cause }).pipe(

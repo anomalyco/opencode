@@ -4,11 +4,49 @@ import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { PluginPromise } from "@opencode/core/plugin/promise"
 import { Rpc } from "@opencode/core/rpc"
+import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+// Both setup shapes must respect the bound: an Effect setup suspends interruptibly on its own,
+// while an npm plugin's setup crosses the promise adapter bridge, which must not pin the fiber.
+const stuckSetups: Record<string, Plugin.Generation["effect"]> = {
+  effect: () => Effect.never,
+  promise: (ctx) => PluginPromise.fromPromise({ id: "stuck", setup: () => new Promise<void>(() => {}) }).effect(ctx),
+}
+
+Object.entries(stuckSetups).forEach(([shape, effect]) =>
+  it.effect(`bounds a ${shape} setup that never settles and keeps activating the rest of the generation`, () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const commands = yield* Command.Service
+      const activation = yield* plugins
+        .activate([
+          { id: "stuck", revision: "1", effect },
+          {
+            id: "healthy",
+            revision: "1",
+            effect: (ctx) =>
+              ctx.command
+                .transform((editor) => editor.add({ name: "healthy", execute: () => Effect.void }))
+                .pipe(Effect.asVoid),
+          },
+        ])
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* advance(() => activation.pollUnsafe() !== undefined)
+      yield* Fiber.join(activation)
+      yield* plugins.awaitActivation
+      const inventory = yield* plugins.list()
+      expect(inventory.map((plugin) => plugin.state.status)).toEqual(["failed", "active"])
+      expect(inventory[0]?.state).toMatchObject({ error: expect.stringContaining("did not finish") })
+      expect(yield* commands.get("healthy")).toBeDefined()
+    }),
+  ),
+)
 
 it.live("removes a failed plugin's hooks and RPC handlers without affecting healthy plugins", () =>
   Effect.gen(function* () {
