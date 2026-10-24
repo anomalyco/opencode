@@ -14721,6 +14721,9 @@
               },
               {
                 "$ref": "#/components/schemas/ConfigWebSearch.InfoEncoded"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigWebSearch.McpInfoEncoded"
               }
             ]
           },
@@ -15300,6 +15303,32 @@
           }
         },
         "required": ["provider"],
+        "additionalProperties": false
+      },
+      "ConfigWebSearch.McpInfoEncoded": {
+        "type": "object",
+        "properties": {
+          "mcp": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string",
+                "description": "Name of a configured MCP server"
+              },
+              "tool": {
+                "type": "string",
+                "description": "Name of the MCP tool that performs the search"
+              },
+              "argument": {
+                "type": "string"
+              }
+            },
+            "required": ["server", "tool"],
+            "additionalProperties": false,
+            "description": "Route web search through a tool exposed by one of your MCP servers"
+          }
+        },
+        "required": ["mcp"],
         "additionalProperties": false
       },
       "ConflictErrorEncoded": {

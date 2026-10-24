@@ -2288,7 +2288,10 @@ export type ConfigEntry =
             | { repository: string; branch?: string; description?: string; hidden?: boolean }
             | { path: string; description?: string; hidden?: boolean }
         }
-        websearch?: false | { provider: "random" | WebSearchID }
+        websearch?:
+          | false
+          | { provider: "random" | WebSearchID }
+          | { mcp: { server: string; tool: string; argument?: string } }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }

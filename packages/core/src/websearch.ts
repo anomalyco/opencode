@@ -29,6 +29,10 @@ export const Response = WebSearch.Response
 export type Response = WebSearch.Response
 
 export const ProviderKey = "websearch:provider"
+
+// MCP-backed providers query the user's own servers, so they are only used when explicitly selected.
+export const mcpID = (server: string, tool: string) => ID.make(`mcp:${server}/${tool}`)
+export const isMcp = (id: ID) => id.startsWith("mcp:")
 export const Selection = Schema.Union([ID, Schema.Literal("random"), Schema.Literal(false)])
 export type Selection = typeof Selection.Type
 
@@ -138,7 +142,7 @@ const layer = Layer.effect(
       const current = affinity.provider === undefined ? undefined : providers.get(affinity.provider)
       if (current && !cooldowns.has(current.id) && !attempted?.has(current.id)) return current
       const available = Array.from(providers.values()).filter(
-        (provider) => !cooldowns.has(provider.id) && !attempted?.has(provider.id),
+        (provider) => !isMcp(provider.id) && !cooldowns.has(provider.id) && !attempted?.has(provider.id),
       )
       const provider = available[Math.floor(Math.random() * available.length)]
       if (provider) affinity.provider = provider.id
@@ -152,7 +156,7 @@ const layer = Layer.effect(
         const active = preferred.get(undefined)?.provider
         return (
           (active === undefined ? undefined : state.get().providers.get(active)) ??
-          state.get().providers.values().next().value
+          Array.from(state.get().providers.values()).find((provider) => !isMcp(provider.id))
         )
       }
       return choice ? state.get().providers.get(choice) : undefined

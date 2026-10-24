@@ -319,6 +319,57 @@ describe("WebSearchTool registration", () => {
     }),
   )
 
+  it.effect("offers MCP search tools in the consent form and keeps them out of random selection", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const mcpID = WebSearch.mcpID("searxng", "search")
+      const mcpQueries: string[] = []
+      yield* fixture.websearch.transform((editor) =>
+        editor.add({
+          id: mcpID,
+          name: "searxng/search",
+          execute: (input) =>
+            Effect.sync(() => {
+              mcpQueries.push(input.query)
+              return [{ url: "https://searx.example", title: "SearXNG", time: {} }]
+            }),
+        }),
+      )
+      fixture.formResponse = { status: "answered", answer: { choice: mcpID } }
+
+      expect(
+        yield* executeTool(fixture.registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-mcp", name: "websearch", input: { query: "effect" } },
+        }),
+      ).toMatchObject({ status: "completed", metadata: { provider: mcpID } })
+      expect(mcpQueries).toEqual(["effect"])
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe(mcpID)
+      expect(fixture.formRequests).toHaveLength(1)
+      expect(fixture.formRequests[0]).toMatchObject({
+        fields: [
+          {
+            options: [
+              { value: "allow", label: "Allow search via Exa, Parallel" },
+              { value: "choose", label: "Choose another provider" },
+              { value: mcpID, label: "Search with MCP tool searxng/search" },
+              { value: "disable", label: "Disable web search" },
+            ],
+          },
+        ],
+      })
+
+      yield* fixture.websearch.select("random")
+      const random = yield* Effect.all(
+        Array.from({ length: 10 }, (_, index) =>
+          fixture.websearch.query({ query: `random ${index}` }, { sessionID: Session.ID.make(`ses_random_${index}`) }),
+        ),
+      )
+      expect(random.map((response) => response.providerID)).not.toContain(mcpID)
+    }),
+  )
+
   it.effect("shares provider consent across concurrent searches", () =>
     Effect.gen(function* () {
       const fixture = yield* setup

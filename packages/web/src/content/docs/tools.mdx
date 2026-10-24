@@ -282,6 +282,25 @@ Performs web searches using Exa or Parallel to find relevant information online.
 
 No API key is required — the tool connects directly to the backend's hosted MCP service without authentication.
 
+The first time the model searches, OpenCode asks which provider to use. Connected [MCP server](/docs/mcp-servers) tools whose name contains `search`, and that only need a `query`, `q`, `search`, or `keywords` string, are listed there as options too. Your choice is remembered, and MCP tools are never picked automatically.
+
+To skip the prompt and always use a specific tool, point `websearch.mcp` at it. OpenCode then sends every `websearch` query to that tool.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "mcp": {
+      "server": "searxng",
+      "tool": "search",
+      "argument": "q"
+    }
+  }
+}
+```
+
+`argument` is the tool input that receives the query and defaults to `query`. If the tool returns a list of `{ url, title, content }` items, as structured content or as JSON text, OpenCode reads them as individual results. Any other text output is passed to the model as a single result.
+
 :::tip
 Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
 :::
