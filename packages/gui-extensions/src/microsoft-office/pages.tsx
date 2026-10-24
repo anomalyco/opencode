@@ -166,30 +166,34 @@ export function OfficePages(props: {
     Math.max(0, Math.min(props.maxScale, (available - padding * 2) / page))
 
   return (
-    <div ref={scroller} data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
-      <div class="flex flex-col items-center gap-4 py-6">
-        {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
-        <Index each={shown()}>
-          {(page, index) => (
-            <div class="flex shrink-0 flex-col items-center gap-3">
-              <OfficePage
-                ref={(element) => (pages[index] = element)}
-                watch={watch}
-                index={index}
-                page={page()}
-                scale={fit(width(), page().width)}
-                rasterScale={fit(settled(), page().width)}
-                ratio={ratio()}
-                paint={props.paint}
-                overlay={props.overlay}
-                text={props.text ?? false}
-                label={props.label(index)}
-              />
-              {props.footer?.(index)}
-            </div>
-          )}
-        </Index>
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scroller} data-slot="artifact-stage" class="peer relative min-h-0 flex-1 overflow-auto outline-none">
+        <div class="flex flex-col items-center gap-4 py-6">
+          {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
+          <Index each={shown()}>
+            {(page, index) => (
+              <div class="flex shrink-0 flex-col items-center gap-3">
+                <OfficePage
+                  ref={(element) => (pages[index] = element)}
+                  watch={watch}
+                  index={index}
+                  page={page()}
+                  scale={fit(width(), page().width)}
+                  rasterScale={fit(settled(), page().width)}
+                  ratio={ratio()}
+                  paint={props.paint}
+                  overlay={props.overlay}
+                  text={props.text ?? false}
+                  label={props.label(index)}
+                />
+                {props.footer?.(index)}
+              </div>
+            )}
+          </Index>
+        </div>
       </div>
+      {/* Pages scrolling past the column's edges would cover its own outline, so the focus ring is laid over it. */}
+      <div class="pointer-events-none absolute inset-0 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-[-2px] peer-focus-visible:outline-v2-border-border-focus" />
     </div>
   )
 }

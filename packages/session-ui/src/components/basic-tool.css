@@ -79,6 +79,12 @@
     gap: 8px;
     min-width: 0;
     overflow: hidden;
+
+    /* Keeps a focused subtitle link's ring visible past the truncation clip. */
+    &:has(:focus-visible) {
+      overflow: clip;
+      overflow-clip-margin: 4px;
+    }
   }
 
   [data-slot="basic-tool-tool-title"] {
@@ -297,8 +303,7 @@
     color: var(--v2-text-text-base);
   }
 
-  &:hover,
-  &:focus-visible {
+  &:hover {
     border-color: var(--border-weak-base, rgba(255, 255, 255, 0.08));
     background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
 
@@ -376,8 +381,7 @@
       color: var(--task-agent-color, light-dark(var(--v2-text-text-base), #ffffff));
     }
 
-    &:hover,
-    &:focus-visible {
+    &:hover {
       border-color: transparent;
       background: transparent;
 
@@ -385,6 +389,16 @@
         background: var(--v2-background-bg-layer-02);
       }
     }
+  }
+}
+
+/* The paint-contained tool trigger covers the link's inset ring, so the card surface draws it. */
+[data-component="collapsible"] [data-slot="collapsible-trigger"]:focus-visible:has([data-component="task-tool-card"]) {
+  outline: none;
+
+  [data-component="task-tool-surface"] {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: -2px;
   }
 }
 
@@ -447,7 +461,7 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-text-text-accent);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
 
     [data-slot="webfetch-link-text"] {
@@ -459,4 +473,9 @@
       display: inline-flex;
     }
   }
+}
+
+/* The trigger's paint containment leaves 2px around a link in a compact row, and an inner ring would cover its text. */
+[data-component="tool-trigger"] [data-slot="basic-tool-tool-subtitle"].webfetch-link:focus-visible {
+  outline-offset: 0;
 }

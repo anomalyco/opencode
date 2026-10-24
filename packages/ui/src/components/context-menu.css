@@ -55,8 +55,9 @@
     transition-timing-function: var(--transition-easing);
     user-select: none;
 
-    &:hover {
-      background-color: var(--surface-raised-base-hover);
+    &:hover,
+    &[data-highlighted] {
+      background-color: var(--v2-overlay-simple-overlay-hover);
     }
 
     &[data-disabled] {

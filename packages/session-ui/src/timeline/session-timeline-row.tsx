@@ -604,7 +604,7 @@ export function createSessionTimelineRowRenderer(input: {
                         <Dynamic
                           component={href() ? "a" : "div"}
                           data-slot="session-timeline-notice"
-                          class={`block w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-text-weak ${inset()}`}
+                          class={`block w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-text-weak focus-visible:outline-offset-[-2px] ${inset()}`}
                           classList={{ "cursor-pointer": clickable() }}
                           href={href()}
                           role={clickable() && !href() ? "link" : undefined}

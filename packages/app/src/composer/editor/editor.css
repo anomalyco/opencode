@@ -25,6 +25,10 @@
   );
 }
 
+[data-slot="composer-controls"] :focus-visible {
+  outline-offset: -2px;
+}
+
 @media (hover: hover) {
   [data-component="composer"]:not(:hover) .composer-variant-default:not(:focus-visible, [data-expanded]) {
     opacity: 0;
@@ -38,6 +42,8 @@
   background: var(--v2-background-bg-layer-01);
 }
 
-[data-color-scheme="dark"] [data-component="composer-suggestions"] [data-active] {
+[data-color-scheme="dark"]
+  [data-component="composer-suggestions"]
+  :is([data-active], [data-suggestion-id]:focus-visible) {
   background: var(--v2-alpha-light-10);
 }

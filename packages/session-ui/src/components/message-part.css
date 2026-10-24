@@ -404,8 +404,17 @@
       display: none;
     }
 
+    &:focus-visible {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: -2px;
+    }
+
     [data-component="markdown"] {
       overflow: visible;
+    }
+
+    img:focus-visible {
+      outline-offset: -2px;
     }
   }
 }
@@ -459,6 +468,12 @@
     scrollbar-width: none;
     &::-webkit-scrollbar {
       display: none;
+    }
+
+    &:focus-visible {
+      border-radius: inherit;
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: -2px;
     }
   }
 
@@ -615,7 +630,7 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-text-text-accent);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
 }
@@ -1160,8 +1175,8 @@
   }
 
   &:focus-visible {
-    outline: none;
-    background-color: var(--surface-raised-base-hover);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
 
   [data-slot="read-tool-group-file"] {

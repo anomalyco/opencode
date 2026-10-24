@@ -293,9 +293,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         button[data-type="item"]:hover {
           background: var(--v2-overlay-simple-overlay-hover) !important;
         }
-        button[data-type="item"]:focus-visible {
-          outline: none !important;
-          box-shadow: none !important;
+        button[data-type="item"]:not(:focus-visible)::before {
+          outline-color: transparent;
         }
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;

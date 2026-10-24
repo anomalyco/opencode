@@ -102,7 +102,7 @@
     ~ [data-slot="radio-v2-item-control-stack"]
     [data-slot="radio-v2-item-control"] {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   &:where(:hover):where(:not([data-disabled], [data-readonly])):where(:not([data-checked]))

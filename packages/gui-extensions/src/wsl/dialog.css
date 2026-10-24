@@ -34,7 +34,9 @@
   min-width: 0;
   align-self: stretch;
   box-sizing: border-box;
-  padding: 16px 16px 1px;
+  /* Room for the last card's focus ring, which the body clips; the negative margin keeps the footer spacing. */
+  padding: 16px 16px 4px;
+  margin-bottom: -3px;
 }
 
 [data-component="dialog-v2"].settings-wsl-dialog [data-slot="dialog-footer"] {

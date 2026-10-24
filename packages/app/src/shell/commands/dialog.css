@@ -45,6 +45,11 @@
     box-shadow 120ms ease-in-out;
 }
 
+/* The palette shows focus through its background, so it drops the field border. */
+.command-palette-search [data-component="text-input-v2"]::after {
+  display: none;
+}
+
 .command-palette-search [data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid]),
 .command-palette-search [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
   background: var(--v2-background-bg-layer-02);

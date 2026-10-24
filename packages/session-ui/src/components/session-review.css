@@ -149,7 +149,9 @@
   }
 
   @media (hover: hover) {
-    [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
+    [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"],
+    [data-slot="accordion-trigger"]:focus-visible [data-slot="session-review-view-button"],
+    [data-slot="session-review-view-button"]:focus-visible {
       opacity: 1;
     }
   }

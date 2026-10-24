@@ -47,9 +47,14 @@
 }
 
 .directory-picker-suggestions button:hover,
+.directory-picker-suggestions button:focus-visible,
 .directory-picker-suggestions button[data-active] {
   color: var(--v2-text-text-base);
   background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.directory-picker-suggestions button:focus-visible {
+  outline: none;
 }
 
 .directory-picker-browser {
@@ -74,10 +79,10 @@
   --trees-bg-muted-override: transparent;
   --trees-selected-bg-override: transparent;
   --trees-selected-fg-override: var(--v2-text-text-base);
-  --trees-selected-focused-border-color-override: transparent;
-  --trees-focus-ring-color-override: transparent;
-  --trees-focus-ring-width-override: 0px;
-  --trees-focus-ring-offset-override: 0px;
+  --trees-selected-focused-border-color-override: var(--v2-border-border-focus);
+  --trees-focus-ring-color-override: var(--v2-border-border-focus);
+  --trees-focus-ring-width-override: 2px;
+  --trees-focus-ring-offset-override: -2px;
   --trees-border-color-override: var(--v2-border-border-base);
   --trees-font-family-override: var(--font-family-sans);
   --trees-font-size-override: 12px;

@@ -224,7 +224,7 @@
     }
 
     &[data-highlighted] {
-      background: var(--surface-raised-base-hover);
+      background: var(--v2-overlay-simple-overlay-hover);
     }
 
     &[data-disabled] {

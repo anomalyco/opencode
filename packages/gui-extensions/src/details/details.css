@@ -69,10 +69,9 @@
 }
 
 .session-summary-row:focus-visible,
-.session-service-config:focus-visible,
-.session-mcp-row:focus-within {
-  outline: none;
-  background: var(--v2-overlay-simple-overlay-hover);
+.session-service-config:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }
 
 @media (hover: hover) {
@@ -220,12 +219,6 @@
   &:is(:hover, :focus-visible) .session-service-config-arrow {
     opacity: 1;
   }
-
-  &:focus-visible {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
 }
 .session-service-dot {
   display: grid;
@@ -298,10 +291,8 @@
   color: var(--v2-icon-icon-muted);
   border-radius: 4px;
 }
-.session-summary-dismiss:hover,
-.session-summary-dismiss:focus-visible {
+.session-summary-dismiss:hover {
   background: var(--v2-overlay-simple-overlay-hover);
-  outline: none;
 }
 
 @media (max-width: 767px) {

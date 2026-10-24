@@ -30,6 +30,8 @@ export function createHoverCommentUtility(props: {
   button.style.position = "relative"
   button.style.left = "30px"
   button.style.top = "calc((var(--diffs-line-height, 24px) - 20px) / 2)"
+  // The code column clips at the first and last line edges, which leave only 2px around the button.
+  button.style.outlineOffset = "0"
 
   let line: HoverCommentLine | undefined
 

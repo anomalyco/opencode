@@ -178,11 +178,22 @@ table {
 }
 
 /*
-  Use the modern Firefox focus style for all focusable elements.
+  Draw the V2 focus ring on any element whose component does not style focus itself, instead of the browser ring.
 */
 
-:-moz-focusring {
-  outline: auto;
+:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+/* An unset outline color is currentColor, so transition-colors would fade the ring in from the text color. */
+:where(:not(:focus-visible)) {
+  outline-color: transparent;
+}
+
+/* Links have no radius of their own, so the ring would draw square corners. */
+:where(a):focus-visible {
+  border-radius: 4px;
 }
 
 /*
