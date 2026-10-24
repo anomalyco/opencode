@@ -129,13 +129,13 @@ const unsupportedMedia = (
 ) => {
   const modality = mimeToModality(mime)
   if (!modality) return
-  const unsupported = !capabilities.input.some((item) => item.startsWith(modality))
-    ? modality
+  const reason = !capabilities.input.some((item) => item.startsWith(modality))
+    ? `this model is not configured to accept ${modality} input in OpenCode`
     : provider === "xai" && modality === "image" && !XAI_IMAGE_MIMES.has(mime.toLowerCase())
-      ? mime
+      ? `this model does not support ${mime} input`
       : undefined
-  if (!unsupported) return
-  return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${unsupported} input). Inform the user.`
+  if (!reason) return
+  return `ERROR: Cannot read ${name ? `"${name}"` : modality} (${reason}). Inform the user.`
 }
 
 // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
