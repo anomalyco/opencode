@@ -17,7 +17,9 @@ import { Npm } from "@opencode/util/npm"
 import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
+import { ensureLoopbackNoProxy } from "@opencode/util/proxy-env"
 
+ensureLoopbackNoProxy()
 ensurePluginRuntime()
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
