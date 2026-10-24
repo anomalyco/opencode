@@ -168,6 +168,28 @@ test("focuses the terminal opened from the command palette", async ({ page }) =>
   await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 })
 
+test("rapid repeated toggles create one terminal and keep focus in it", async ({ page }) => {
+  const { pty, editor } = await openSession(page, workspace)
+  const terminal = page.locator('[data-component="terminal"]')
+  await editor.click()
+  await expect(editor).toBeFocused()
+
+  // Open, close and open again before the first create settles: one terminal, focused, not two.
+  await page.keyboard.press("Control+Backquote")
+  await page.keyboard.press("Control+Backquote")
+  await page.keyboard.press("Control+Backquote")
+
+  await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect
+    .poll(() => page.locator("#terminal-panel").getByRole("tab", { name: "Terminal 1", exact: true }).count())
+    .toBe(1)
+  await expect.poll(() => pty.created.map((item) => item.id)).toEqual(["pty_1"])
+  await expect.poll(() => pty.sockets.length).toBe(1)
+  await expect
+    .poll(() => terminal.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true)
+})
+
 test("closing the last restored terminal does not create a hidden replacement", async ({ page }) => {
   const cached = { id: "pty_cached", title: "Terminal 1" }
 
