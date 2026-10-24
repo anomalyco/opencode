@@ -417,8 +417,12 @@ export interface KeymapCommand {
   readonly group?: string
   /** Enables or disables the command. */
   readonly enabled?: boolean | (() => boolean)
-  /** Configures automatic binding, or disables it for a named command. */
-  readonly bind?: false | string
+  /**
+   * Configures automatic binding, or disables it for a named command.
+   * Release bindings only fire when the terminal reports key releases;
+   * the TUI does not enable release reporting today.
+   */
+  readonly bind?: false | string | { key: string; event?: "press" | "release" }
   /** Adds a named command to the command palette. */
   readonly palette?: true
   /** Adds a named command to prompt slash completion. */

@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
+import { useKeymapSelector } from "@opentui/keymap/solid"
 import { expect, test } from "bun:test"
 import { ConfigProvider } from "../src/config"
 import { Keymap } from "../src/context/keymap"
@@ -138,4 +139,38 @@ test("global commands stay reachable when the mode changes", async () => {
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("layer object bindings carry release events", async () => {
+  let read = () => ""
+
+  function Harness() {
+    const bindings = useKeymapSelector((keymap) =>
+      keymap.getCommandBindings({ visibility: "registered", commands: ["voice.release"] }),
+    )
+    Keymap.createLayer(() => ({
+      commands: [{ id: "voice.release", bind: { key: "f9", event: "release" }, run() {} }],
+    }))
+    read = () => bindings().get("voice.release")?.[0]?.event ?? ""
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    expect(read()).toBe("release")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("object bindings without an ID fail validation", () => {
+  expect(() => Keymap.validateCommands([{ bind: { key: "f9", event: "release" }, run() {} }])).toThrow(
+    "Object keymap bindings require an ID",
+  )
 })
