@@ -5,23 +5,39 @@ import { isRendererUrl } from "./scheme"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
 
+// Permission handlers live on the session, which every app window shares. Registering them per
+// window replaced the previous handler, so only the newest window kept clipboard access.
+const rendererWebContents = new Set<number>()
+
+const wiredSessions = new WeakSet<Electron.Session>()
+
 export function allowRendererPermissions(win: BrowserWindow) {
   const webContentsId = win.webContents.id
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+  rendererWebContents.add(webContentsId)
+  win.once("closed", () => rendererWebContents.delete(webContentsId))
+
+  const session = win.webContents.session
+
+  if (wiredSessions.has(session)) return
+  wiredSessions.add(session)
+
+  session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      rendererPermissions.has(permission) && isRendererUrl(details.requestingUrl) && webContents.id === webContentsId,
+      rendererPermissions.has(permission) &&
+        rendererWebContents.has(webContents.id) &&
+        isRendererUrl(details.requestingUrl),
     )
   })
-  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+  session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     if (!rendererPermissions.has(permission)) return false
 
-    if (webContents && webContents.id !== webContentsId) return false
+    if (webContents && !rendererWebContents.has(webContents.id)) return false
 
     return isRendererUrl(details.requestingUrl) || isRendererUrl(requestingOrigin)
   })
 }
 
-export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => unknown) {
+export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => void) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
 
