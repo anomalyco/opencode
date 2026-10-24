@@ -98,13 +98,17 @@ function repairObject(
   const required = Array.isArray(schema.required) ? schema.required : []
   const patterned = Predicate.isObject(schema.patternProperties)
   const composed = Array.isArray(schema.allOf) || Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf)
+  // Dropping an unknown key only helps a call that can still succeed. When a required key is missing the
+  // call fails anyway, and the dropped key is the evidence the model needs to correct itself: a v1-trained
+  // model sends `filePath`, and validation would otherwise report only `path: Missing key`.
+  const incomplete = required.some((key) => !Object.hasOwn(parsed, key))
 
   return Object.keys(parsed).reduce<Record<string, unknown>>((result, key) => {
     const current = result[key]
     const declared = Object.hasOwn(properties, key)
     const property = declared ? properties[key] : !patterned ? schema.additionalProperties : undefined
 
-    if (!declared && schema.additionalProperties === false && !patterned && !composed) {
+    if (!declared && !incomplete && schema.additionalProperties === false && !patterned && !composed) {
       const next = { ...result }
       delete next[key]
       return next

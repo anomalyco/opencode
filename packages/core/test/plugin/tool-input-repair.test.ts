@@ -124,6 +124,51 @@ describe("tool input repair plugin", () => {
     }),
   )
 
+  // A model trained on v1 sends `filePath` where `path` is required. Deleting it leaves the validation
+  // error naming only the missing key, so the model never learns which key it actually sent.
+  it.effect("keeps unknown keys when a required key is missing", () =>
+    Effect.gen(function* () {
+      const event = yield* run(
+        { filePath: "a.ts", oldString: "before", newString: "after" },
+        {
+          ...object(
+            {
+              path: { type: "string" },
+              oldString: { type: "string" },
+              newString: { type: "string" },
+            },
+            ["path", "oldString", "newString"],
+          ),
+          additionalProperties: false,
+        },
+      )
+
+      expect(event.input).toEqual({ filePath: "a.ts", oldString: "before", newString: "after" })
+    }),
+  )
+
+  it.effect("still removes extras when every required key is present", () =>
+    Effect.gen(function* () {
+      const event = yield* run(
+        { path: "a.ts", oldString: "before", newString: "after", replaceAll: true, extra: true },
+        {
+          ...object(
+            {
+              path: { type: "string" },
+              oldString: { type: "string" },
+              newString: { type: "string" },
+              replaceAll: { type: "boolean" },
+            },
+            ["path", "oldString", "newString"],
+          ),
+          additionalProperties: false,
+        },
+      )
+
+      expect(event.input).toEqual({ path: "a.ts", oldString: "before", newString: "after", replaceAll: true })
+    }),
+  )
+
   it.effect("preserves unknown keys when patterned ownership cannot be determined", () =>
     Effect.gen(function* () {
       const input = { known: 1, match: "2", extra: true }
