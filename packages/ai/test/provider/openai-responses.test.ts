@@ -30,6 +30,8 @@ import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import * as XAI from "../../src/providers/xai.js"
+import { Meta } from "../../src/providers/meta.js"
+import { OpenAICompatibleResponses } from "../../src/protocols/openai-compatible-responses.js"
 import * as OpenAIResponses from "../../src/protocols/openai-responses.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenResponsesContinuation } from "../../src/protocols/open-responses-continuation.js"
@@ -1863,29 +1865,96 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("lowers tool-result videos as input_video", () =>
+  it.effect("lowers Responses video by provider and preserves ordered tool results", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({
-          model,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "record", input: {} })]),
-            Message.tool({
-              id: "call_1",
-              name: "record",
-              resultType: "content",
-              result: [
-                { type: "file", uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" },
-                { type: "file", uri: "https://example.com/demo.mp4", mime: "video/mp4" },
-              ],
-            }),
-          ],
-        }),
-      )
+      const media = Media.url("https://example.com/clip.mp4", { mediaType: "video/mp4" })
+      const videoResult = Message.tool({
+        id: "call_video",
+        name: "record",
+        resultType: "content",
+        result: [{ type: "file", uri: "https://example.com/clip.mp4", mime: "video/mp4" }],
+      })
+      const messages = [
+        Message.user({ type: "media", media }),
+        Message.assistant([ToolCallPart.make({ id: "call_video", name: "record", input: {} })]),
+        videoResult,
+      ]
+      const fileInput = [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_file", filename: "file", file_url: "https://example.com/clip.mp4" }],
+        },
+        { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_video",
+          output: [{ type: "input_file", filename: "file", file_url: "https://example.com/clip.mp4" }],
+        },
+      ]
+      const videoInput = [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_video", video_url: "https://example.com/clip.mp4" }],
+        },
+        { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_video",
+          output: [{ type: "input_video", video_url: "https://example.com/clip.mp4" }],
+        },
+      ]
+      for (const item of [
+        {
+          name: "unknown provider uses input_video for user and tool video",
+          model: OpenAICompatibleResponses.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://provider.example/v1" } })
+            .model({ id: "video-model" }),
+          input: videoInput,
+        },
+        { name: "native OpenAI serialization also uses input_video", model, input: videoInput },
+        { name: "xAI user and tool video", model: xaiModel, input: fileInput },
+      ]) {
+        const prepared = yield* compileRequest(LLM.request({ model: item.model, messages }))
+        expect(prepared.body.input, item.name).toMatchObject(item.input)
+      }
 
-      expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_video", video_url: "data:video/mp4;base64,AAECAw==" },
-        { type: "input_video", video_url: "https://example.com/demo.mp4" },
+      const metaRequest = LLM.request({
+        model: Meta.configure({ apiKey: "test" }).responses("muse-spark-1.3"),
+        messages: [
+          Message.assistant([
+            ToolCallPart.make({ id: "call_video", name: "record", input: {} }),
+            ToolCallPart.make({ id: "call_text", name: "read", input: {} }),
+          ]),
+          videoResult,
+          Message.tool({ id: "call_text", name: "read", resultType: "text", result: "plain result" }),
+        ],
+      })
+      const metaInput = [
+        { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
+        { type: "function_call", call_id: "call_text", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_video",
+          output: "Video attached in the following user message.",
+        },
+        { type: "function_call_output", call_id: "call_text", output: "plain result" },
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_video", video_url: "https://example.com/clip.mp4" }],
+        },
+      ]
+      expect((yield* compileRequest(metaRequest)).body.input, "Meta flushes videos at end of history").toMatchObject(
+        metaInput,
+      )
+      const continued = yield* compileRequest(
+        LLMRequest.update(metaRequest, { messages: [...metaRequest.messages, Message.user("continue")] }),
+      )
+      expect(continued.body.input, "Meta flushes videos before the next user message").toMatchObject([
+        ...metaInput,
+        { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
       ])
     }),
   )

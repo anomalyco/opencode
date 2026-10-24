@@ -60,7 +60,7 @@ const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
   video_url: Schema.String,
 })
-const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
+const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile, OpenResponsesInputVideo])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
 
@@ -513,12 +513,18 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const decodeImageDetail = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))
 const decodeMessageMetadata = ProviderShared.validateWith(Schema.decodeUnknownEffect(MessageMetadata))
 
-const lowerMedia = Effect.fnUntraced(function* (
-  part: MediaPart,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-  target: "message" | "tool-result",
-) {
+const videoProvider = (request: LLMRequest) => {
+  const hostname = URL.parse(request.model.route.endpoint.baseURL ?? "")?.hostname
+  if (hostname === "api.x.ai") return "xai"
+  if (hostname === "api.meta.ai") return "meta"
+  return [request.model.route.id, request.model.route.providerMetadataKey, request.model.provider]
+    .find(
+      (provider) => provider === "xai" || provider === "meta" || provider === "xai-responses" || provider === "meta-responses",
+    )
+    ?.replace("-responses", "")
+}
+
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
   const media = part.media.inline()
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
@@ -528,7 +534,7 @@ const lowerMedia = Effect.fnUntraced(function* (
   const url = ProviderShared.mediaUrl(part.media)
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
   if (part.media.kind !== "image") {
-    if (target === "tool-result" && part.media.kind === "video")
+    if (part.media.kind === "video" && videoProvider(request) !== "xai")
       return { type: "input_video" as const, video_url: location }
     return {
       type: "input_file" as const,
@@ -550,15 +556,8 @@ const lowerUserContent = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  if (part.type === "media") return yield* lowerMedia(part, request, adapter)
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
-})
-
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
-  const lowered = yield* lowerMedia(part, request, adapter, "message")
-  if (lowered.type === "input_video")
-    return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
-  return lowered
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -569,16 +568,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
-})
-
-const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
-  item: Content,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter)
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
@@ -602,8 +592,15 @@ const lowerMessages = Effect.fnUntraced(function* (
 ) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
+  const provider = videoProvider(request)
+  const pendingVideos: Array<Schema.Schema.Type<typeof OpenResponsesInputVideo>> = []
+  const flushVideos = () => {
+    if (pendingVideos.length === 0) return
+    input.push({ type: "message", role: "user", content: pendingVideos.splice(0) })
+  }
 
   for (const message of request.messages) {
+    if (message.role !== "tool") flushVideos()
     const rawMetadata = message.providerMetadata?.[providerMetadataKey]
     const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
@@ -719,7 +716,7 @@ const lowerMessages = Effect.fnUntraced(function* (
           input.push({
             type: "message",
             role: "user",
-            content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
+            content: yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter)),
           })
           continue
         }
@@ -729,7 +726,7 @@ const lowerMessages = Effect.fnUntraced(function* (
           input.push({
             type: "message",
             role: "user",
-            content: [yield* lowerMessageMedia(part, request, adapter)],
+            content: [yield* lowerMedia(part, request, adapter)],
           })
           continue
         }
@@ -748,14 +745,25 @@ const lowerMessages = Effect.fnUntraced(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
+      const output = yield* lowerToolResultOutput(part, request, adapter)
+      // Meta only sees video in ordinary user content, not nested function outputs.
+      const videos =
+        provider === "meta" && typeof output !== "string" ? output.filter((item) => item.type === "input_video") : []
+      const content =
+        videos.length > 0 && typeof output !== "string" ? output.filter((item) => item.type !== "input_video") : output
       input.push({
         type: "function_call_output",
         call_id: part.id,
-        output: yield* lowerToolResultOutput(part, request, adapter),
+        output:
+          videos.length > 0 && typeof content !== "string" && content.length === 0
+            ? "Video attached in the following user message."
+            : content,
       })
+      pendingVideos.push(...videos)
     }
   }
 
+  flushVideos()
   return input
 })
 
