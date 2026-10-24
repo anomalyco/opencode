@@ -3,11 +3,11 @@ export * as Mcp from "./index.js"
 import { Mcp } from "@opencode/schema/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ephemeral } from "@opencode/schema/event"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Option, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -16,6 +16,7 @@ import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Location } from "../location.js"
+import { SessionStore } from "../session/store.js"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
@@ -179,6 +180,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
+      const sessions = Option.getOrUndefined(yield* Effect.serviceOption(SessionStore.Service))
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -725,6 +727,29 @@ export const layer = (options?: Options) =>
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
         ),
       )
+      // Release stdio MCP servers when the last session in this directory is deleted. Without
+      // this, the shared background service accumulates MCP server processes for every visited
+      // directory for the lifetime of the process. SessionStore is optional so narrow layer
+      // compositions (unit tests, embedded servers) keep working without it.
+      if (sessions) {
+        fork(
+          bus.subscribe(Session.Event.Deleted).pipe(
+            Stream.runForEach((event) =>
+              Effect.gen(function* () {
+                const remaining = yield* sessions.list({ directory: location.directory })
+                if (remaining.length > 0) return
+                for (const [name, entry] of entries) {
+                  if (!entry.scope) continue
+                  yield* stopServer(name, entry)
+                }
+                yield* Effect.logInfo("mcp servers released: no remaining sessions", {
+                  directory: location.directory,
+                })
+              }),
+            ),
+          ),
+        )
+      }
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
         initial: () => ({

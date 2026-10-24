@@ -33,6 +33,7 @@ import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionStore } from "@opencode/core/session/store"
 import { State } from "@opencode/core/state"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { McpResourceTools } from "@opencode/core/tool/plugin/mcp-resource"
@@ -333,7 +334,16 @@ function resourceMcpLayer(
             ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(Bus.Service, {
-          subscribe: overrides?.subscribe ?? (() => Stream.never),
+          // The updates source is type-promiscuous, so honor the definition's type filter the
+          // way the real bus does — subscribers must not see events of other types.
+          subscribe: ((input?: { type: string } | readonly { type: string }[]) => {
+            const source = overrides?.subscribe
+            if (!source) return Stream.never
+            if (!input) return source()
+            const requested = (Array.isArray(input) ? input : [input]) as readonly { type: string }[]
+            const types = new Set(requested.map((definition) => definition.type))
+            return source().pipe(Stream.filter((event) => types.has(event.type)))
+          }) as Bus.Interface["subscribe"],
           publish: (definition, data) => {
             const event = {
               id: ID.create(),
@@ -370,6 +380,7 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        Layer.mock(SessionStore.Service, { list: () => Effect.succeed([]) }),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -2048,7 +2059,10 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     yield* Effect.addFinalizer(() =>
       Deferred.succeed(release, undefined).pipe(Effect.andThen(State.shutdown(Scope.close(root, Exit.void)))),
     )
-    const context = yield* Layer.buildWithScope(Mcp.layer(), root)
+    const context = yield* Layer.buildWithScope(
+      Mcp.layer().pipe(Layer.provide(Layer.mock(SessionStore.Service, { list: () => Effect.succeed([]) }))),
+      root,
+    )
     const service = Context.get(context, Mcp.Service)
     const observed: string[] = []
     let block = false
