@@ -156,7 +156,8 @@ Configure the persistent session tab strip:
     "mode": "auto",
     "scope": "cwd",
     "layout": "horizontal",
-    "indicators": "status"
+    "indicators": "status",
+    "marquee": "normal"
   }
 }
 ```
@@ -171,11 +172,23 @@ The legacy boolean `tabs.enabled` setting remains supported: `true` is `on` and 
 | `tabs.scope`      | `cwd` or `global`           | Keeps separate tabs per working directory or shares them globally.            |
 | `tabs.layout`     | `horizontal` or `vertical`  | Places tabs in a horizontal strip or a vertical sidebar.                      |
 | `tabs.indicators` | `status` or `numbers`       | Shows status icons or always shows tab numbers.                               |
+| `tabs.marquee`    | `normal`, `slow`, or `off`  | Scrolls titles that overflow the tab on hover, slower, or not at all.         |
 
 </div>
 
 Number indicators retain status colors and background animations. Ctrl+number shortcuts switch tabs in either indicator
 mode.
+
+Long titles scroll through the tab while the pointer rests on it. Set `tabs.marquee` to `off` to keep them truncated,
+or `slow` for a longer pause before the title starts moving:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "marquee": "slow"
+  }
+}
+```
 
 ## Diffs
 

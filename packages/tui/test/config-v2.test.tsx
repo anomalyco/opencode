@@ -36,6 +36,8 @@ test("validates the session tabs setting", () => {
   expect(decode({ tabs: { mode: "on", layout: "vertical", indicators: "numbers" } })).toEqual({
     tabs: { mode: "on", layout: "vertical", indicators: "numbers" },
   })
+  expect(decode({ tabs: { marquee: "slow" } })).toEqual({ tabs: { marquee: "slow" } })
+  expect(() => decode({ tabs: { marquee: "fast" } })).toThrow()
   expect(() => decode({ tabs: { indicators: "unknown" } })).toThrow()
   expect(() => decode({ tabs: { layout: true } })).toThrow()
   expect(() => decode({ tabs: { mode: true } })).toThrow()
@@ -70,6 +72,7 @@ test("resolves nested config and keybind defaults", () => {
     scope: "cwd",
     layout: "horizontal",
     indicators: "status",
+    marquee: "normal",
   })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
@@ -101,6 +104,10 @@ test("shows resolved tab defaults in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "tabs.indicators")).toMatchObject({
     default: "status",
     values: ["status", "numbers"],
+  })
+  expect(settings.find((setting) => setting.path.join(".") === "tabs.marquee")).toMatchObject({
+    default: "normal",
+    values: ["normal", "slow", "off"],
   })
 })
 

@@ -188,6 +188,16 @@ export const settings: Setting[] = [
     keywords: ["tab numbers", "number mode", "status icons"],
   },
   {
+    title: "Title scrolling",
+    category: "Tabs",
+    path: ["tabs", "marquee"],
+    description: "Whether long tab titles scroll on hover, and how fast",
+    default: "normal",
+    values: ["normal", "slow", "off"],
+    labels: ["normal", "slow", "off"],
+    keywords: ["marquee", "scroll tabs", "tab titles"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

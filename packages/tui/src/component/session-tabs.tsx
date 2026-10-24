@@ -16,6 +16,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   untrack,
 } from "solid-js"
@@ -74,8 +75,12 @@ export type TabUnreadMarker = keyof typeof TAB_UNREAD_MARKERS
 const FADE_WIDTH = 4
 // The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
 const ADD_TAB_WIDTH = 3
-const MARQUEE_DELAY = 600
-const MARQUEE_INTERVAL = 80
+const MARQUEE_TIMING = {
+  normal: { delay: 600, interval: 80 },
+  slow: { delay: 1_200, interval: 160 },
+  off: undefined,
+}
+export type TabMarqueeSpeed = keyof typeof MARQUEE_TIMING
 const CONTEXT_MENU_WIDTH = 20
 const MIDDLE_MOUSE_BUTTON = 1
 const RIGHT_MOUSE_BUTTON = 2
@@ -274,7 +279,7 @@ function heldSessionTabLayout(hold: MouseCloseHold, tabs: readonly SessionTab[])
   }
 }
 
-export function createMarquee(animations: () => boolean) {
+export function createMarquee(animations: () => boolean, speed: () => TabMarqueeSpeed) {
   const [offset, setOffset] = createSignal(0)
   const [active, setActive] = createSignal<string>()
   const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
@@ -288,7 +293,7 @@ export function createMarquee(animations: () => boolean) {
     delay = undefined
     interval = undefined
   }
-  const scroll = () => {
+  const scroll = (intervalMs: number) => {
     interval = setInterval(
       () =>
         setOffset((value) => {
@@ -297,11 +302,12 @@ export function createMarquee(animations: () => boolean) {
           leading.animate({ opacity: 0 })
           return 0
         }),
-      MARQUEE_INTERVAL,
+      intervalMs,
     )
   }
   const enter = (sessionID: string, title: string, width: number) => {
-    if (!marqueeOverflows(title, width)) {
+    const timing = MARQUEE_TIMING[speed()]
+    if (!timing || !marqueeOverflows(title, width)) {
       reset()
       return
     }
@@ -314,8 +320,8 @@ export function createMarquee(animations: () => boolean) {
     delay = setTimeout(() => {
       setOffset(1)
       leading.animate({ opacity: 1 })
-      scroll()
-    }, MARQUEE_DELAY)
+      scroll(timing.interval)
+    }, timing.delay)
   }
   const leave = (sessionID: string) => {
     if (active() !== sessionID) return
@@ -327,14 +333,16 @@ export function createMarquee(animations: () => boolean) {
     setOffset(0)
     leading.jump({ opacity: 0 })
   }
+  // A config reload applies the new preset from a clean state instead of resuming the old scroll.
+  createEffect(on(speed, reset, { defer: true }))
   onCleanup(clear)
 
   return { offset, active, enter, leave, reset, leading: () => leading.value().opacity }
 }
 
-export function createTabMarquee(animations: () => boolean) {
+export function createTabMarquee(animations: () => boolean, speed: () => TabMarqueeSpeed) {
   const [hovered, setHovered] = createSignal<string>()
-  const marquee = createMarquee(animations)
+  const marquee = createMarquee(animations, speed)
   let hoverClear: ReturnType<typeof setTimeout> | undefined
 
   const enter = (sessionID: string, title: string, width: number) => {
@@ -568,7 +576,7 @@ function VerticalSessionTabs(props: {
   const separatorUpperPulseColor = createMemo(() => tint(background(), theme.text.base, 0.04))
   const separatorLowerPulseColor = createMemo(() => tint(background(), theme.text.base, 0.05))
   const [addHovered, setAddHovered] = createSignal(false)
-  const marquee = createTabMarquee(animations)
+  const marquee = createTabMarquee(animations, () => config.tabs.marquee)
   const hovered = marquee.hovered
   createEffect(() => {
     compact()
@@ -1297,7 +1305,7 @@ function HorizontalSessionTabs(props: {
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
   const [addHovered, setAddHovered] = createSignal(false)
-  const marquee = createTabMarquee(animations)
+  const marquee = createTabMarquee(animations, () => config.tabs.marquee)
   const hovered = marquee.hovered
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()

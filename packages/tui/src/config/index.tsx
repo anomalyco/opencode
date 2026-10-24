@@ -199,6 +199,9 @@ export const Info = Schema.Struct({
       indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
         description: "Show status icons or always show tab numbers",
       }),
+      marquee: Schema.optional(Schema.Literals(["normal", "slow", "off"])).annotate({
+        description: "Scroll long tab titles on hover at normal speed, slower, or never",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
@@ -282,6 +285,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
     indicators: "status" | "numbers"
+    marquee: "normal" | "slow" | "off"
   }
 }
 
@@ -334,6 +338,7 @@ export function resolve(
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
+      marquee: input.tabs?.marquee ?? "normal",
     },
   }
 }
