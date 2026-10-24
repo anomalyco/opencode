@@ -114,7 +114,7 @@ export function isRemote(reference: Reference): reference is RemoteReference {
  * percent-encoded because valid branch names may contain `/`.
  */
 export function cachePath(root: string, reference: Reference, branch?: string): string {
-  const base = path.join(root, ...reference.host.split(":"), ...reference.segments)
+  const base = path.join(root, encodeURIComponent(reference.host), ...reference.segments)
   return branch ? `${base}@${encodeURIComponent(branch)}` : base
 }
 
@@ -145,7 +145,7 @@ function parts(input: string) {
     .filter(Boolean)
 }
 
-// cachePath makes each `:`-separated host part a directory.
+// Hosts must not contain relative path segments, even after encoding for the cache directory.
 function safeHost(input: string) {
   return Boolean(input) && !input.startsWith("-") && input.split(":").every(safeSegment)
 }
