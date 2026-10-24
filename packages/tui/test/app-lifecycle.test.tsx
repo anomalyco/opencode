@@ -977,6 +977,37 @@ test("home startup prompt is submitted exactly once", async () => {
   expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
 })
 
+test.each([
+  { agent: "plan", expected: "Plan" },
+  { agent: "missing", expected: "Agent not found: missing" },
+])("startup agent $agent is validated after agents load", async (input) => {
+  await using state = await tmpdir()
+  const requested = Promise.withResolvers<void>()
+  const agents = Promise.withResolvers<void>()
+  await using setup = await createAppFixture({
+    state: state.path,
+    args: { agent: input.agent },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: async (url) => {
+      if (url.pathname !== "/api/agent") return undefined
+      requested.resolve()
+      await agents.promise
+      return json({
+        location: { directory },
+        data: ["build", "plan"].map((id) => ({ id, mode: "primary", hidden: false, permissions: [] })),
+      })
+    },
+  })
+
+  await setup.ready
+  await requested.promise
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  expect(setup.captureCharFrame()).not.toContain("Agent not found")
+  agents.resolve()
+  await setup.waitForFrame((frame) => frame.includes(input.expected))
+  if (input.agent === "plan") expect(setup.captureCharFrame()).not.toContain("Agent not found")
+})
+
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
   await using state = await tmpdir()
   const target = fallback ? directory : process.cwd()

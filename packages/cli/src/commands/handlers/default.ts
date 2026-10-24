@@ -113,6 +113,7 @@ export default Runtime.handler(Commands, (input) =>
         continue: input.continue,
         sessionID: sessionExists ? session : undefined,
         newSessionID: sessionExists ? undefined : session,
+        agent: Option.getOrUndefined(input.agent),
         prompt: Option.getOrUndefined(input.prompt),
         auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       },

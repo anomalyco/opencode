@@ -661,7 +661,6 @@ function App() {
   const startupPrompt = args.prompt ? { text: args.prompt, files: [], agents: [], pasted: [] } : undefined
   onMount(() => {
     batch(() => {
-      if (args.agent) local.agent.set(args.agent)
       if (args.model) {
         const { providerID, modelID } = Model.parse(args.model)
         if (!providerID || !modelID)
