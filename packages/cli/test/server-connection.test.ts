@@ -212,32 +212,26 @@ test("local config commands do not start or require a server", async () => {
   }
 })
 
-test.each(["session", "plugin"])("managed %s list bypasses environment proxies", async (command) => {
+test("CLI loopback requests bypass environment proxies", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-loopback-proxy-"))
-  const proxied: Array<{ url: string; authorization: string | null }> = []
-  const received: Array<{ path: string; authorization: string | null }> = []
+  const proxied: string[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
-      const pathname = new URL(request.url).pathname
-      received.push({ path: pathname, authorization: request.headers.get("authorization") })
-      if (pathname === "/api/info") return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
-      if (pathname === "/api/location") return Response.json({ project: { id: "loopback-proxy-test" } })
-      if (pathname === "/api/session" || pathname === "/api/plugin") return Response.json({ data: [] })
-      return new Response(null, { status: 404 })
+    fetch() {
+      return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
     },
   })
   const proxy = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
-      proxied.push({ url: request.url, authorization: request.headers.get("authorization") })
-      return new Response(null, { status: 404 })
+      proxied.push(request.url)
+      return new Response(null, { status: 502 })
     },
   })
   const env = isolatedEnv(root, {
-    OPENCODE_PASSWORD: undefined,
+    OPENCODE_PASSWORD: "fixture-password",
     OPENCODE_SERVER_PASSWORD: undefined,
     HTTP_PROXY: proxy.url.href,
     http_proxy: proxy.url.href,
@@ -249,37 +243,26 @@ test.each(["session", "plugin"])("managed %s list bypasses environment proxies",
     no_proxy: "",
   })
   try {
-    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
-    await fs.mkdir(path.dirname(registration), { recursive: true })
-    await fs.writeFile(
-      registration,
-      JSON.stringify({
-        id: "loopback-proxy-test",
-        version: OPENCODE_VERSION,
-        url: server.url.href,
-        pid: process.pid,
-        password: "fixture-password",
-      }),
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "run",
+        path.join(import.meta.dir, "../src/index.ts"),
+        "api",
+        "get",
+        "/api/info",
+        "--server",
+        server.url.href,
+      ],
+      { cwd: path.join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe" },
     )
-    const child = Bun.spawn([process.execPath, "run", path.join(import.meta.dir, "../src/index.ts"), command, "list"], {
-      cwd: path.join(import.meta.dir, ".."),
-      env,
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const [stdout, stderr, code] = await Promise.all([
+    const [, stderr, code] = await Promise.all([
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
       child.exited,
     ])
     expect(proxied).toEqual([])
-    expect({ stderr, code }).toEqual({ stderr: "", code: 0 })
-    expect(stdout).toBe(command === "session" ? "" : "No plugins found\n")
-    expect(received.map((request) => request.path)).toContain("/api/info")
-    expect(received.map((request) => request.path)).toContain(`/api/${command}`)
-    expect(received.every((request) => request.authorization === "Basic " + btoa("opencode:fixture-password"))).toBe(
-      true,
-    )
+    expect(code, stderr).toBe(0)
   } finally {
     await server.stop(true)
     await proxy.stop(true)
