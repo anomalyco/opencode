@@ -426,16 +426,17 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
 
 // `legacy` marks a session without idle markers, where a turn ends at the next prompt. Reactive
 // callers should pass it from a shared memo: the default scans every message, which subscribes
-// the footer to the whole history.
+// the footer to the whole history. `forkedAt` is the creation time of a forked session.
 export function turnDuration(
   message: SessionMessageAssistant,
   messages: SessionMessageInfo[],
   position?: number,
   legacy = legacyTurns(messages),
+  forkedAt?: number,
 ) {
   if (message.time.completed === undefined) return 0
   const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const input = messages[inputIndex(messages, index === -1 ? messages.length : index, legacy)]
+  const input = messages[inputIndex(messages, index === -1 ? messages.length : index, legacy, forkedAt)]
   return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
 }
 
@@ -466,7 +467,7 @@ export function legacyTurns(messages: SessionMessageInfo[]) {
   return !messages.some((message) => message.type === "idle")
 }
 
-function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean) {
+function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean, forkedAt?: number) {
   // Reading a sliced prefix subscribes every footer to unrelated historical messages, so walk
   // back only as far as the turn boundary: the nearest input in legacy sessions, otherwise the
   // first input after the previous idle marker.
@@ -475,6 +476,8 @@ function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean
     const message = messages[index]
     if (message.type === "idle") return input
     if (message.type !== "user" && message.type !== "synthetic") continue
+    // A fork copies a prompt still waiting in its parent; the turn starts at the fork's own input.
+    if (forkedAt !== undefined && input !== -1 && message.time.created < forkedAt) return input
     if (legacy) return index
     input = index
   }

@@ -299,6 +299,25 @@ test("measures a marker-era turn from its first prompt across steers", () => {
   expect(turnTokensPerSecond(final, messages, 6, true)).toBe(20)
 })
 
+test("starts a forked turn at the fork's prompt, not at an unanswered prompt copied from the parent", () => {
+  const answer = assistant("answer", [])
+  answer.time = { created: 7_201_000, completed: 7_203_000 }
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "first", text: "First question", time: { created: 0 } },
+    { type: "idle", id: "idle-1", outcome: "succeeded", time: { created: 500 } },
+    // Still unanswered in the parent when the session was forked at 3_600_000.
+    { type: "user", id: "copied", text: "Old question", time: { created: 1_000 } },
+    { type: "user", id: "new", text: "New question", time: { created: 7_200_000 } },
+    { type: "user", id: "steer", text: "Also this", time: { created: 7_200_500 } },
+    answer,
+  ]
+
+  expect(turnDuration(answer, messages)).toBe(7_202_000)
+  expect(turnDuration(answer, messages, 5, false, 3_600_000)).toBe(3_000)
+  // With only the copied prompt, the turn still starts there.
+  expect(turnDuration(answer, [...messages.slice(0, 3), answer], 3, false, 3_600_000)).toBe(7_202_000)
+})
+
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Question", time: { created: 0 } },

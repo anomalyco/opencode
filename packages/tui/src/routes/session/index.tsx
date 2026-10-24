@@ -2019,8 +2019,12 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
   const messages = createMemo(() => data.session.message.list(ctx.sessionID))
+  const forkedAt = createMemo(() => {
+    const session = data.session.get(ctx.sessionID)
+    return session?.fork ? session.time.created : undefined
+  })
   const duration = createMemo(() =>
-    turnDuration(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
+    turnDuration(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns(), forkedAt()),
   )
   const tokensPerSecond = createMemo(() =>
     turnTokensPerSecond(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
