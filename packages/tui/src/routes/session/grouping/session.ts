@@ -75,6 +75,17 @@ function unwrap(node: GroupNode<ProjectionEntry, GroupKind>): GroupNode<SessionE
   return { ...node, children: node.children.map(unwrap) }
 }
 
+/**
+ * A group whose only child is another collapsible group renders that child in its
+ * place, so revealing its contents takes one expansion rather than two. An inner
+ * group that isn't collapsible (`grouped` is false) stays wrapped, or its entries
+ * would spill out of the summary.
+ */
+export function soleGroup(node: Extract<SessionNode, { type: "group" }>, grouped: (kind: GroupKind) => boolean) {
+  const [child] = node.children
+  return node.children.length === 1 && child.type === "group" && grouped(child.kind) ? child : undefined
+}
+
 const explorationTools = new Set(["read", "glob", "grep", "webfetch", "websearch"])
 
 /**

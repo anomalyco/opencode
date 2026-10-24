@@ -8,7 +8,15 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { EntryAnchor, GroupAnchor, visitEntries } from "./anchor-view"
 import { groupID } from "./anchors"
-import { instructionPaths, type PartRef, type SessionEntry, type SessionGroup, type SessionNode } from "./grouping/session"
+import {
+  instructionPaths,
+  soleGroup,
+  type GroupKind,
+  type PartRef,
+  type SessionEntry,
+  type SessionGroup,
+  type SessionNode,
+} from "./grouping/session"
 import { summarizeActivity } from "./activity-summary"
 import { InlineToolRow, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
@@ -43,6 +51,27 @@ export function SessionGroupView(props: Renderers & { row: SessionGroup }) {
 }
 
 function Group(props: GroupProps) {
+  const ctx = use()
+  // The outer group returns once a sibling arrives.
+  const sole = createMemo(() => soleGroup(props.node, (kind) => grouped(ctx, kind)))
+  return (
+    <Show when={sole()} fallback={<GroupKind {...props} />}>
+      {(child) => (
+        <Group
+          {...props}
+          node={child()}
+          // Its real depth, so its disclosure and anchor IDs match the tree.
+          level={props.level + 1}
+          completed={
+            props.completed || (child().kind === "reasoning" && reasoningCompleted(child().children, props.message))
+          }
+        />
+      )}
+    </Show>
+  )
+}
+
+function GroupKind(props: GroupProps) {
   // Keep kind-specific hover/title state isolated during reconciliation.
   return (
     <Show when={props.node.kind} keyed>
@@ -107,7 +136,7 @@ function GroupContent(props: GroupProps) {
       return total + (start === undefined || end === undefined ? 0 : Math.max(0, end - start))
     }, 0),
   )
-  const grouped = () => (props.node.kind === "reasoning" ? ctx.thinkingMode() === "hide" : ctx.groupExploration())
+  const isGrouped = () => grouped(ctx, props.node.kind)
   const completed = () =>
     props.node.kind === "reasoning"
       ? props.completed
@@ -134,12 +163,12 @@ function GroupContent(props: GroupProps) {
   return (
     <GroupAnchor
       groupID={id()}
-      active={grouped() && (props.node.kind === "reasoning" ? thoughts().length > 0 : tools().length > 0)}
+      active={isGrouped() && (props.node.kind === "reasoning" ? thoughts().length > 0 : tools().length > 0)}
     >
       <Show
         when={props.node.kind === "reasoning"}
         fallback={
-          <Show when={grouped()} fallback={children("normal")}>
+          <Show when={isGrouped()} fallback={children("normal")}>
             <Show when={tools().length > 0}>
               <InlineToolRow
                 icon={completed() ? "→" : "✱"}
@@ -160,7 +189,7 @@ function GroupContent(props: GroupProps) {
         }
       >
         <Show when={thoughts().length > 0}>
-          <Show when={grouped()} fallback={children("normal")}>
+          <Show when={isGrouped()} fallback={children("normal")}>
             <InlineToolRow
               icon={expanded() ? "-" : "+"}
               color={
@@ -262,6 +291,13 @@ function InstructionsGroup(props: GroupProps) {
       </Show>
     </GroupAnchor>
   )
+}
+
+/** Whether a group of this kind collapses behind a summary; ungrouped kinds render their entries inline. */
+function grouped(ctx: ReturnType<typeof use>, kind: GroupKind) {
+  if (kind === "reasoning") return ctx.thinkingMode() === "hide"
+  if (kind === "exploration") return ctx.groupExploration()
+  return true
 }
 
 function useDisclosure(props: GroupProps) {

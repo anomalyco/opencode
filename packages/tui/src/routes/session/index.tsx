@@ -126,7 +126,7 @@ import { parseTodos } from "../../util/todo"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
-import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
+import { defaultVerbosity, soleGroup, type GroupKind, type SessionEntry, type SessionNode } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
@@ -1470,7 +1470,14 @@ export function Session(props: {
         setGroupExpanded: (id, expanded, anchor) => {
           // A group that ends the transcript would open off screen while the reader follows the bottom.
           const last = rows.findLast((row) => row.type !== "assistant-footer" && row.type !== "turn-usage")
-          const ending = last?.type === "group" && groupID(last, 0) === id
+          // A lone inner group renders in its parent's place, so compare the group actually shown.
+          let shown: Extract<SessionNode, { type: "group" }> | undefined = last?.type === "group" ? last : undefined
+          let level = 0
+          for (let sole = shown && soleGroup(shown, groupedKind); sole; sole = soleGroup(sole, groupedKind)) {
+            shown = sole
+            level++
+          }
+          const ending = shown !== undefined && groupID(shown, level) === id
           if (anchor && !(ending && !isAwayFromBottom())) {
             const hold = { node: anchor, top: layoutTop(anchor) - scroll.scrollTop }
             held = hold
