@@ -1,8 +1,45 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { NO_PROVIDER, T0, expectPath, provider, sessionHref } from "../utils/app"
 import { openDraft, openSession } from "../utils/workspace"
+import { imageFixture, pasteImage } from "../utils/images"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
+test("uses a bounded attachment thumbnail while restoring and sending the original image", async ({ page }) => {
+  const prompts: unknown[] = []
+
+  const view = await openSession(page, {
+    name: "ImageThumbnail",
+    provider: () => provider({ id: "test", name: "Test", capabilities: { input: ["text", "image"] } }),
+    onPrompt: ({ body }) => void prompts.push(body),
+  })
+
+  const original = await imageFixture(page)
+  await view.editor.focus()
+  await pasteImage(view.editor, original)
+  const thumbnail = page.locator('[data-component="composer-attachments"]').getByRole("img", { name: "artwork.png" })
+  await expect(thumbnail).toHaveJSProperty("naturalWidth", 232)
+  await expect(thumbnail).toHaveJSProperty("naturalHeight", 116)
+  const source = await thumbnail.getAttribute("src")
+  await expect(view.editor).toBeFocused()
+  await view.editor.pressSequentially("Check the artwork")
+  await expect(view.editor).toHaveText("Check the artwork")
+  await expect(thumbnail).toHaveAttribute("src", source!)
+
+  await thumbnail.click()
+  const preview = page.locator('[data-slot="image-preview-image"]')
+  await expect(preview).toHaveJSProperty("naturalWidth", 1024)
+  await expect(preview).toHaveJSProperty("naturalHeight", 512)
+  await page.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(preview).toHaveCount(0)
+
+  await page.reload()
+  await expect(view.editor).toHaveText("Check the artwork")
+  await expect(thumbnail).toHaveJSProperty("naturalWidth", 232)
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]).toMatchObject({ text: "Check the artwork", files: [{ name: "artwork.png", uri: original }] })
+})
 
 test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
   page,
