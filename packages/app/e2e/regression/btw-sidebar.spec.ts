@@ -143,6 +143,40 @@ test("keeps many long-titled side tabs usable at a narrow desktop width", async 
   await page.screenshot({ path: testInfo.outputPath("narrow-many-tabs.png") })
 })
 
+test("the side-question shortcut prepares the composer before sending", async ({ page }, testInfo) => {
+  const prompts: unknown[] = []
+  const generations: { sessionID: string; prompt: string }[] = []
+
+  const { editor, session } = await openSession(page, {
+    name: "BtwShortcut",
+    seed: { settings: { keybinds: { "btw.ask": "alt+a" } } },
+    onPrompt: (input) => prompts.push(input),
+    generate: (input) => {
+      generations.push(input)
+
+      return { text: "A side answer" }
+    },
+  })
+
+  await editor.press("Alt+a")
+  await page.screenshot({ path: testInfo.outputPath("shortcut-composer.png") })
+  await expect(editor).toHaveText("/btw ")
+  await expect(editor).toBeFocused()
+  await page.keyboard.type("hello")
+  await editor.press("Enter")
+  const panel = page.locator('[data-slot="session-btw-panel"]')
+  await expect(panel.getByText("A side answer", { exact: true })).toBeVisible()
+  expect(generations).toHaveLength(1)
+  expect(generations[0]?.sessionID).toBe(session.id)
+  expect(generations[0]?.prompt).toContain("hello")
+  expect(prompts).toEqual([])
+
+  await editor.fill("existing question")
+  await editor.press("Alt+a")
+  await expect(editor).toHaveText("/btw existing question")
+  await expect(editor).toBeFocused()
+})
+
 test("answers /btw in the side panel without admitting a prompt", async ({ page }) => {
   const generations: { sessionID: string; prompt: string }[] = []
   const prompts: unknown[] = []
