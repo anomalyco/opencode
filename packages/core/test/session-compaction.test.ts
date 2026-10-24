@@ -252,6 +252,118 @@ const textUser = (text: string) =>
     time: { created: DateTime.makeUnsafe(0) },
   })
 
+it.effect("compaction summarizes an oversized latest exchange instead of retaining it", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    const session = yield* insertSession(Session.ID.make("ses_oversized_recent"))
+    const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: resolved.ref,
+      content: [
+        { type: "text", text: "Working through the regression. ".repeat(2_500) },
+        { type: "text", text: "The analysis is complete." },
+      ],
+      time: { created: 0, completed: 0 },
+    })
+    const context = {
+      ...loaded(session, [textUser("Earlier question"), textUser("Investigate this regression"), assistant]),
+      model: { ...resolved, limit: { context: 16_000, output: 4_000 } },
+    }
+    expect(yield* compaction.compact({ reason: "overflow", context })).toEqual({ status: "completed" })
+
+    const messages = yield* store.context(session.id)
+    expect(SessionCompaction.estimateContext({ ...context, messages })).toBeLessThan(context.model.limit.context)
+    expect(messages[0]).toMatchObject({ type: "compaction", status: "completed" })
+    expect(messages[0].metadata?.keepID).toBeUndefined()
+    expect(JSON.stringify(requests[0]?.messages)).toContain("Investigate this regression")
+  }),
+)
+
+for (const keep of [0, 50, 15_000]) {
+  it.effect(`compaction keeps complete exchanges within a ${keep} token recent budget`, () =>
+    Effect.gen(function* () {
+      const compaction = yield* SessionCompaction.Service
+      const store = yield* SessionStore.Service
+      yield* compaction.transform((editor) => editor.configure({ keep }))
+      const session = yield* insertSession(Session.ID.make(`ses_recent_budget_${keep}`))
+      const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: resolved.ref,
+        content: [{ type: "text", text: "Recent answer" }],
+        time: { created: 0, completed: 0 },
+      })
+      const messages = [
+        textUser("Earlier question"),
+        textUser("x".repeat(1_000)),
+        assistant,
+        textUser("Newest question"),
+      ]
+      expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+      expect((yield* store.context(session.id))[0].metadata?.keepID).toBe(keep === 0 ? undefined : messages[3].id)
+    }),
+  )
+}
+
+it.effect("compaction counts separators when retaining a whole exchange", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    yield* compaction.transform((editor) => editor.configure({ keep: 7 }))
+    const session = yield* insertSession(Session.ID.make("ses_recent_separators"))
+    const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: resolved.ref,
+      content: [{ type: "text", text: "abcd" }],
+      time: { created: 0, completed: 0 },
+    })
+    // The entries estimate as 3 + 4 tokens separately, but their joined text estimates as 8.
+    expect(yield* compactManually(session, [textUser("Earlier question"), textUser("abcde"), assistant])).toEqual({
+      status: "completed",
+    })
+    expect((yield* store.context(session.id))[0].metadata?.keepID).toBeUndefined()
+  }),
+)
+
+for (const text of ["Recent answer", "Recent answer ".repeat(100)]) {
+  it.effect(`compaction bounds assistant-only history after a checkpoint (${text.length} characters)`, () =>
+    Effect.gen(function* () {
+      requests = []
+      const compaction = yield* SessionCompaction.Service
+      const store = yield* SessionStore.Service
+      yield* compaction.transform((editor) => editor.configure({ keep: 50 }))
+      const session = yield* insertSession(Session.ID.make(`ses_recent_checkpoint_${text.length}`))
+      const checkpoint = SessionMessage.CompactionCompleted.make({
+        id: SessionMessage.ID.create(),
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: "Earlier summary",
+        metadata: { recent: "Earlier exact context" },
+        time: { created: DateTime.makeUnsafe(0) },
+      })
+      const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: resolved.ref,
+        content: [{ type: "text", text }],
+        time: { created: 0, completed: 0 },
+      })
+      expect(yield* compactManually(session, [checkpoint, assistant])).toEqual({ status: "completed" })
+      expect((yield* store.context(session.id))[0].metadata?.keepID).toBe(text.length < 50 ? assistant.id : undefined)
+      expect(JSON.stringify(requests[0]?.messages)).toContain("Earlier exact context")
+    }),
+  )
+}
+
 test("compaction prompt requires the checkpoint headings in order", () => {
   const prompt = SessionCompaction.buildPrompt(false)
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
@@ -704,6 +816,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       requests = []
+      const compaction = yield* SessionCompaction.Service
+      // Large enough to retain the 30k latest exchange.
+      yield* compaction.transform((editor) => editor.configure({ keep: 40_000 }))
       const session = yield* insertSession(Session.ID.make("ses_compaction_older_fallback"))
       // About 190k estimated tokens in total, past the 184k left for the summary. The 160k before the retained
       // 30k latest exchange fits the 170k ceiling.
@@ -747,6 +862,52 @@ it.effect("compaction lowers the output limit when it sends a request it could n
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
     expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 1_024 }))
+  }),
+)
+
+it.effect("compaction sends a newest exchange it cannot shorten enough as text", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_oversized_newest_text"))
+    // A turn that continued after a checkpoint has no user message to shorten it to, and its text alone is past the
+    // target, so it cannot fit. Its reasoning makes the unchanged request larger still.
+    const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: resolved.ref,
+      content: [
+        {
+          type: "reasoning",
+          id: "thought",
+          text: "Weighing the options. ".repeat(2_000),
+          time: { created: 0, completed: 0 },
+        },
+        { type: "text", text: "Step result. ".repeat(4_000) },
+        { type: "text", text: "The task is done." },
+      ],
+      time: { created: 0, completed: 0 },
+    })
+    const checkpoint = SessionMessage.CompactionCompleted.make({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      summary: "## Objective\n- Earlier work",
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+    const context = {
+      ...loaded(session, [checkpoint, assistant]),
+      model: { ...resolved, limit: { context: 16_000, output: 4_000 } },
+    }
+
+    expect(yield* compaction.compact({ reason: "overflow", context })).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    const sent = JSON.stringify(requests[0]?.messages)
+    expect(sent).toContain("[Assistant]: Step result.")
+    expect(sent).toContain("The task is done.")
+    expect(sent).not.toContain("Weighing the options.")
   }),
 )
 
