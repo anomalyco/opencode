@@ -95,7 +95,10 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
   if (Option.isNone(text)) return
-  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option))) return
+  // A registration shares the password field with config, but must never become config.
+  if (Option.isSome(yield* decodeRegistration(text.value).pipe(Effect.option))) return
+  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option)) && Option.isNone(decodeLegacy(text.value)))
+    return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
@@ -119,15 +122,20 @@ const paths = Effect.gen(function* () {
   const name = filename()
   const legacy = legacyFilename()
   const file = path.join(global.state, name)
+  const shared = (yield* fs.realPath(global.config)) === (yield* fs.realPath(global.state))
   return {
     fs,
     file,
-    legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
+    legacyConfigFiles: [
+      ...(shared ? [path.join(global.config, name)] : []),
+      ...(legacy ? [path.join(global.config, legacy)] : []),
+    ],
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
-    configFile: path.join(global.config, name),
+    // Keep the registration path stable for clients discovering an existing service.
+    configFile: path.join(global.config, shared ? name.replace(/\.json$/, "-config.json") : name),
   }
 })
 
@@ -138,17 +146,13 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: (yield* read()).env,
-    command: [
-      ...selfCommand(),
-      "serve",
-      "--service",
-    ],
+    command: [...selfCommand(), "serve", "--service"],
   }
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile, legacyConfigFile } = yield* paths
-  if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
+  const { fs, configFile, legacyConfigFiles } = yield* paths
+  yield* Effect.forEach(legacyConfigFiles, (legacy) => migrateConfig(legacy, configFile))
   const text = yield* fs.readFileString(configFile).pipe(Effect.option)
   if (Option.isNone(text)) return {} as Info
   const info = yield* decodeInfo(text.value).pipe(Effect.option)

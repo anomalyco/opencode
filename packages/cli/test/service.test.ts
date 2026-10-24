@@ -17,6 +17,65 @@ import { testEffect } from "../../core/test/lib/effect"
 
 const it = testEffect(NodeFileSystem.layer)
 
+test.each([true, false])("service configuration survives registration with shared roots: %s", async (shared) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-shared-"))
+  const config = path.join(root, "config")
+  const layer = Global.layerWith({ config, state: shared ? config : path.join(root, "state") })
+  const expected = { hostname: "127.0.0.1", port: 41234, password: "kept" }
+  try {
+    await fs.mkdir(config, { recursive: true })
+    await Bun.write(path.join(config, ServiceConfig.filename()), JSON.stringify(expected))
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem
+          expect(yield* ServiceConfig.read()).toEqual(expected)
+          const options = yield* ServiceConfig.options()
+          const cleanup = yield* ServiceRegistration.register({
+            address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 41234),
+            password: "kept",
+            id: "shared-root-owner",
+            file: options.file,
+            shutdown: Effect.void,
+          })
+          expect(yield* ServiceConfig.read()).toEqual(expected)
+          yield* ServiceConfig.password("updated")
+          expect(JSON.parse(yield* fileSystem.readFileString(options.file)).id).toBe("shared-root-owner")
+          yield* cleanup
+          expect(yield* ServiceConfig.read()).toEqual({ ...expected, password: "updated" })
+        }),
+      ).pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
+    )
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("shared roots do not migrate a running service registration into configuration", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-shared-registration-"))
+  const file = path.join(root, ServiceConfig.filename())
+  const registration = {
+    id: "existing",
+    version: OPENCODE_VERSION,
+    url: "http://127.0.0.1:41234",
+    pid: 123,
+    password: "runtime",
+  }
+  try {
+    await Bun.write(file, JSON.stringify(registration))
+    const config = await Effect.runPromise(
+      ServiceConfig.read().pipe(
+        Effect.provide(Global.layerWith({ config: root, state: root })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(config).toEqual({})
+    expect(await Bun.file(file).json()).toEqual(registration)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)

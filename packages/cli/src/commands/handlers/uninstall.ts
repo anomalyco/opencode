@@ -1,7 +1,7 @@
 import { confirm, intro, log, outro, spinner } from "@clack/prompts"
 import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
-import { Effect, FileSystem, Schedule } from "effect"
+import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import path from "node:path"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -23,9 +23,20 @@ export default Runtime.handler(
     // Data, config, and state hold sessions, credentials, settings, and prompt history; uninstall only removes the cache.
     // All channels share the cache. Stop background services before deleting it.
     // Read registrations directly: ServiceConfig.options() can migrate files even during a dry run.
-    const services = (yield* fs.exists(global.state))
-      ? (yield* fs.readDirectory(global.state)).filter((name) => /^service(?:-.*)?\.json$/.test(name))
-      : []
+    const services = yield* Effect.filter(
+      (yield* fs.exists(global.state))
+        ? (yield* fs.readDirectory(global.state)).filter((name) => /^service(?:-.*)?\.json$/.test(name))
+        : [],
+      (name) => {
+        if (!name.endsWith("-config.json")) return Effect.succeed(true)
+        // Shared-root settings use this suffix, but a custom service channel may also use it.
+        return fs.readFileString(path.join(global.state, name)).pipe(
+          Effect.map(Schema.decodeUnknownOption(Schema.fromJsonString(Service.Info))),
+          Effect.map(Option.isSome),
+          Effect.orElseSucceed(() => false),
+        )
+      },
+    )
     const shell = method === "curl" ? yield* shellConfigs(global.home) : []
 
     log.info(`Installation method: ${method ?? "unknown"}`)
