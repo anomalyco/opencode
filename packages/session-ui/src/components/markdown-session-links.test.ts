@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markSessionLinks, sessionTitleSignature, setupSessionLinks } from "./markdown-session-links"
 
 const first = "ses_0123456789abcdefghijklmnop"
 
@@ -53,4 +53,36 @@ test("delegates keyboard-activated clicks to the latest rendered ID", () => {
   dispose()
   root.querySelector("button")?.click()
   expect(opened).toEqual([first, second])
+})
+
+test("shows resolved titles while keeping the ID for navigation", () => {
+  const root = document.createElement("div")
+  root.innerHTML = `<p>Open ${first} and <code>${second}</code>.</p>`
+  markSessionLinks(root, (id) => (id === first ? "Fix login flow" : undefined))
+
+  const links = root.querySelectorAll<HTMLButtonElement>("button[data-session-id]")
+  expect(links[0]?.textContent).toBe("Fix login flow")
+  expect(links[0]?.dataset.sessionId).toBe(first)
+  expect(links[0]?.title).toBe(first)
+  expect(links[0]?.hasAttribute("data-session-title")).toBe(true)
+  expect(links[1]?.innerHTML).toBe(`<code>${second}</code>`)
+  expect(links[1]?.hasAttribute("data-session-title")).toBe(false)
+})
+
+test("title signature changes only when a referenced session's title does", () => {
+  const titles = new Map<string, string>()
+  const html = `<p>${first} ${first} <code>${second}</code></p>`
+  const before = sessionTitleSignature(html, (id) => titles.get(id))
+  expect(sessionTitleSignature(html, (id) => titles.get(id))).toBe(before)
+  titles.set(second, "Refactor")
+  expect(sessionTitleSignature(html, (id) => titles.get(id))).not.toBe(before)
+  expect(sessionTitleSignature("<p>no sessions</p>", (id) => titles.get(id))).toBe("")
+  expect(sessionTitleSignature(html, undefined)).toBe("")
+})
+
+test("replaces an inline code ID with its resolved title", () => {
+  const root = document.createElement("div")
+  root.innerHTML = `<p><code>${second}</code></p>`
+  markSessionLinks(root, () => "Refactor")
+  expect(root.querySelector("button")?.innerHTML).toBe("Refactor")
 })

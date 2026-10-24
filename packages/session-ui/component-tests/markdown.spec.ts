@@ -811,3 +811,37 @@ story("loads file URLs and Windows paths, and leaves unreadable images as alt te
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })
+
+for (const streaming of [false, true])
+  story(
+    `replaces referenced session IDs with their titles once resolved${streaming ? " while streaming" : ""}`,
+    async ({ page }) => {
+      const id = "ses_0123456789abcdefghijklmnop"
+      await page.evaluate(
+        async (input) => {
+          const { mountMarkdown } = await import(input.fixture)
+
+          const markdown = await mountMarkdown({
+            text: `Continue in ${input.id} and \`${input.id}\`.`,
+            streaming: input.streaming,
+            sessionLinks: true,
+          })
+
+          Object.assign(window, { setSessionTitle: markdown.setSessionTitle })
+        },
+        { fixture, id, streaming },
+      )
+      const links = page.getByTestId("markdown-fixture").locator(`button[data-session-id="${id}"]`)
+      await expect(links).toHaveText([id, id])
+      await page.evaluate(
+        (id) =>
+          (window as unknown as { setSessionTitle: (id: string, title: string) => void }).setSessionTitle(
+            id,
+            "Fix login flow",
+          ),
+        id,
+      )
+      await expect(links).toHaveText(["Fix login flow", "Fix login flow"])
+      await expect(links.first()).toHaveAttribute("title", id)
+    },
+  )

@@ -1,4 +1,5 @@
 import { createSignal, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { Markdown } from "../src/components/markdown"
@@ -28,11 +29,13 @@ export async function mountMarkdown(options: {
   streaming?: boolean
   cached?: boolean
   images?: boolean
+  sessionLinks?: boolean
 }) {
   if (options.cached) await preloadMarkdown(options.text, "markdown-test")
   const host = document.createElement("div")
   host.dataset.testid = "markdown-fixture"
   document.body.appendChild(host)
+  const [titles, setTitles] = createStore<Record<string, string>>({})
   render(() => {
     const api = OpenCode.make({
       baseUrl: location.origin,
@@ -58,6 +61,8 @@ export async function mountMarkdown(options: {
             options.images ? readLocalImage(api, "C:/project", path, signal) : Promise.resolve(undefined)
           }
           localFileExists={(path) => Promise.resolve(existingFiles.has(path))}
+          openSession={options.sessionLinks ? () => undefined : undefined}
+          sessionTitle={options.sessionLinks ? (id) => titles[id] : undefined}
         >
           <Show when={visible()}>
             <Markdown
@@ -71,4 +76,8 @@ export async function mountMarkdown(options: {
       </DialogProvider>
     )
   }, host)
+
+  return {
+    setSessionTitle: (id: string, title: string) => setTitles(id, title),
+  }
 }

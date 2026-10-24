@@ -1,10 +1,21 @@
+import type { MarkdownSessionTitle } from "../context/markdown"
+
 // Generated session IDs have a 26-character alphanumeric suffix. Require a complete token
 // so a partially streamed ID, an identifier suffix, or a path does not become a link.
 const sessionID = /(?<![A-Za-z0-9_])ses_[A-Za-z0-9]{26}(?![A-Za-z0-9_])/g
 
 const exactSessionID = /^ses_[A-Za-z0-9]{26}$/
 
-export function markSessionLinks(root: HTMLElement) {
+/** Titles a block's links would show, so a block re-renders when a referenced session resolves. */
+export function sessionTitleSignature(html: string, title: MarkdownSessionTitle | undefined) {
+  if (!title || !html.includes("ses_")) return ""
+
+  return [...new Set(Array.from(html.matchAll(sessionID), (match) => match[0]))]
+    .map((id) => `${id}=${title(id) ?? ""}`)
+    .join("\n")
+}
+
+export function markSessionLinks(root: HTMLElement, title?: MarkdownSessionTitle) {
   if (!root.textContent?.includes("ses_")) return
 
   // The worker's escaped-raw fallback has no markdown elements; linking its text
@@ -13,9 +24,12 @@ export function markSessionLinks(root: HTMLElement) {
 
   root.querySelectorAll("code").forEach((code) => {
     if (code.closest("pre, a, button") || !exactSessionID.test(code.textContent ?? "")) return
-    const link = sessionButton(code.textContent!)
+    const id = code.textContent!
+    const label = title?.(id)
+    const link = sessionButton(id, label)
     code.replaceWith(link)
-    link.replaceChildren(code)
+
+    if (!label) link.replaceChildren(code)
   })
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -36,7 +50,7 @@ export function markSessionLinks(root: HTMLElement) {
     const fragment = document.createDocumentFragment()
     let start = 0
     matches.forEach((match) => {
-      fragment.append(node.data.slice(start, match.index), sessionButton(match[0]))
+      fragment.append(node.data.slice(start, match.index), sessionButton(match[0], title?.(match[0])))
       start = match.index + match[0].length
     })
     fragment.append(node.data.slice(start))
@@ -44,12 +58,17 @@ export function markSessionLinks(root: HTMLElement) {
   })
 }
 
-function sessionButton(id: string) {
+function sessionButton(id: string, title: string | undefined) {
   const button = document.createElement("button")
   button.type = "button"
   button.className = "markdown-session-link"
   button.dataset.sessionId = id
-  button.textContent = id
+  button.textContent = title || id
+
+  if (title) {
+    button.dataset.sessionTitle = ""
+    button.title = id
+  }
 
   return button
 }

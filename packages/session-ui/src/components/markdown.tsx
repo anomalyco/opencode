@@ -39,13 +39,14 @@ import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
   useMarkdown,
+  type MarkdownSessionTitle,
   type OpenMarkdownLocalFile,
   type ReadMarkdownImage,
   type MarkdownLocalFileExists,
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
-import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markSessionLinks, sessionTitleSignature, setupSessionLinks } from "./markdown-session-links"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -756,8 +757,9 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
+    const sessionLinks = markdown?.openSession ? { title: markdown.sessionTitle } : undefined
     content.forEach((block, index) =>
-      updateBlock(container, index, block, labels, !!markdown?.openSession, markdown?.localFileExists),
+      updateBlock(container, index, block, labels, sessionLinks, markdown?.localFileExists),
     )
 
     while (container.children.length > content.length) {
@@ -877,7 +879,7 @@ function updateBlock(
   index: number,
   block: RenderedBlock,
   labels: CopyLabels,
-  sessionLinks: boolean,
+  sessionLinks: { title?: MarkdownSessionTitle } | undefined,
   localFileExists?: MarkdownLocalFileExists,
 ) {
   const current = container.children[index]
@@ -888,26 +890,32 @@ function updateBlock(
     return
   }
 
-  const existing =
+  const matched =
     current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && !renderedCodeTokens.has(current)
       ? current
       : undefined
 
-  if (existing?.dataset.markdownHash === block.hash) {
+  const titles = sessionLinks ? sessionTitleSignature(block.html, sessionLinks.title) : ""
+  const titlesChanged = !!matched && (matched.dataset.sessionTitles ?? "") !== titles
+
+  if (matched?.dataset.markdownHash === block.hash && !titlesChanged) {
     // A block that finishes streaming keeps its DOM and the user's selection; only its file paths get checked now.
-    if (existing.dataset.markdownMode === "live" && block.mode !== "live") {
-      existing.dataset.markdownMode = block.mode
-      markInlineCode(existing, existing, false, localFileExists)
+    if (matched.dataset.markdownMode === "live" && block.mode !== "live") {
+      matched.dataset.markdownMode = block.mode
+      markInlineCode(matched, matched, false, localFileExists)
     }
 
     return
   }
 
+  // Live renderers reconcile by node position, which cannot swap a link's ID for its title in place.
+  const existing = matched && titlesChanged && renderedMarkdown.has(matched) ? undefined : matched
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
   next.dataset.markdownMode = block.mode
+  next.dataset.sessionTitles = titles
   next.style.display = "contents"
   const rendered = renderedMarkdown.get(next)
   // Keep live renderers in control of their DOM, including after completion.
@@ -918,7 +926,7 @@ function updateBlock(
   markInlineCode(source, next, block.mode === "live", localFileExists)
   markCodeLinks(source)
 
-  if (sessionLinks) markSessionLinks(source)
+  if (sessionLinks) markSessionLinks(source, sessionLinks.title)
   markExternalLinkFavicons(source)
 
   if (rendered) {
