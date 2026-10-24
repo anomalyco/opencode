@@ -8,6 +8,7 @@ import { HttpClientError } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
+import { Location } from "./location.js"
 import { State } from "./state.js"
 
 export const ID = WebSearch.ID
@@ -87,6 +88,10 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const kv = yield* KV.Service
+    const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+    const locationOption = location
+      ? { location: { directory: location.directory, workspaceID: location.workspaceID } }
+      : undefined
     const decodeResults = Schema.decodeUnknownEffect(Schema.Array(Result))
     const cooldowns = new Map<ID, { until: number; error: RequestError }>()
     const preferred = new Map<Session.ID | undefined, { provider?: ID }>()
@@ -108,7 +113,7 @@ const layer = Layer.effect(
           set: (selection) => (editor.selection = selection),
         },
       }),
-      notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(WebSearch.Event.Updated, {}, locationOption).pipe(Effect.asVoid),
     })
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {

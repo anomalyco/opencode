@@ -3,9 +3,10 @@ export * as Skill from "./skill.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Context, Effect, Layer, Types } from "effect"
+import { Context, Effect, Layer, Option, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
 import { Permission } from "./permission.js"
 import { State } from "./state.js"
 
@@ -96,6 +97,10 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+    const locationOption = location
+      ? { location: { directory: location.directory, workspaceID: location.workspaceID } }
+      : undefined
 
     const state = State.create<Data, Editor>({
       name: "skill",
@@ -117,7 +122,7 @@ const layer = Layer.effect(
           editor.skills.delete(ID.make(id))
         },
       }),
-      notify: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Skill.Event.Updated, {}, locationOption).pipe(Effect.asVoid),
     })
 
     return Service.of({

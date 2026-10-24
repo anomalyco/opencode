@@ -1,10 +1,11 @@
 export * as Reference from "./reference.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Effect, Layer, Option, Scope } from "effect"
 import { Reference } from "@opencode/schema/reference"
 import { Global } from "@opencode/util/global"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
 import { Repository } from "./repository.js"
 import { RepositoryCache } from "./repository-cache.js"
 import { AbsolutePath } from "./schema.js"
@@ -48,6 +49,10 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
+    const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+    const locationOption = location
+      ? { location: { directory: location.directory, workspaceID: location.workspaceID } }
+      : undefined
     const list = (): Info[] =>
       Array.from(state.get().sources).flatMap(([name, source]) => {
         const info = {
@@ -104,7 +109,7 @@ const layer = Layer.effect(
       notify: () =>
         Effect.gen(function* () {
           yield* refresh().pipe(Effect.forkIn(scope))
-          yield* bus.publish(Reference.Event.Updated, {})
+          yield* bus.publish(Reference.Event.Updated, {}, locationOption)
         }),
     })
 

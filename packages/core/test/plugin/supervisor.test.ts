@@ -5,6 +5,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
+import { Agent } from "@opencode/core/agent"
 import { Command } from "@opencode/core/command"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Instance } from "@opencode/core/instance"
@@ -13,6 +14,7 @@ import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
+import { WorkspaceID } from "@opencode/schema/workspace-id"
 import { Database } from "../../src/database/database"
 import { Bus } from "../../src/bus"
 import { tempGlobalLayer } from "../fixture/global"
@@ -296,6 +298,103 @@ describe("PluginSupervisor", () => {
         }).pipe(Effect.provide(locations.get(ref)))
         expect(command).toBeDefined()
       }
+    }),
+  )
+
+  it.effect("scopes external plugin event subscriptions and async catalog reloads to the plugin's location", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      const bus = yield* Bus.Service
+      const dirA = yield* tmpdirScoped()
+      const dirB = yield* tmpdirScoped()
+      const refA = Location.Ref.make({
+        directory: AbsolutePath.make(dirA.path),
+        workspaceID: WorkspaceID.make("wrk_a"),
+      })
+      const refSameDirOtherWorkspace = Location.Ref.make({
+        directory: AbsolutePath.make(dirA.path),
+        workspaceID: WorkspaceID.make("wrk_b"),
+      })
+      const refB = Location.Ref.make({ directory: AbsolutePath.make(dirB.path) })
+      const locations = yield* LocationServiceMap.Service
+      const observedByA: Array<string> = []
+      const observedBySameDirOtherWorkspace: Array<string> = []
+      const publishedLocations: Array<Location.Ref | undefined> = []
+      let step = 0
+
+      yield* bus
+        .subscribe(Command.Event.Updated)
+        .pipe(
+          Stream.runForEach((event) => Effect.sync(() => publishedLocations.push(event.location))),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+      yield* sdk.register(
+        define({
+          id: "location-scoped-observer",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* ctx.command.transform((editor) => {
+                editor.add({ name: `cmd-${++step}`, execute: () => Effect.void })
+              })
+              if (ctx.location.directory !== refA.directory) return
+              const target =
+                ctx.location.workspaceID === refA.workspaceID ? observedByA : observedBySameDirOtherWorkspace
+              yield* ctx.event.subscribe().pipe(
+                Stream.runForEach((event) => {
+                  if (event.type !== "agent.updated") return Effect.void
+                  target.push(
+                    event.location ? `${event.location.directory}:${event.location.workspaceID ?? ""}` : "global",
+                  )
+                  return ctx.command.reload()
+                }),
+                Effect.forkScoped({ startImmediately: true }),
+              )
+            }),
+        }),
+      )
+
+      for (const ref of [refA, refSameDirOtherWorkspace, refB]) {
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+        }).pipe(Effect.provide(locations.get(ref)))
+      }
+      yield* Effect.yieldNow
+
+      observedByA.length = 0
+      observedBySameDirOtherWorkspace.length = 0
+      publishedLocations.length = 0
+      yield* bus.publish(Agent.Event.Updated, {}, { location: refB })
+      yield* Effect.yieldNow
+      expect(observedByA).toEqual([])
+      expect(observedBySameDirOtherWorkspace).toEqual([])
+      expect(publishedLocations).toEqual([])
+
+      yield* bus.publish(Agent.Event.Updated, {}, { location: refSameDirOtherWorkspace })
+      yield* Effect.yieldNow
+      expect(observedByA).toEqual([])
+      expect(observedBySameDirOtherWorkspace).toEqual([`${refA.directory}:wrk_b`])
+      expect(publishedLocations).toEqual([refSameDirOtherWorkspace])
+
+      observedBySameDirOtherWorkspace.length = 0
+      publishedLocations.length = 0
+      yield* bus.publish(Agent.Event.Updated, {}, { location: refA })
+      yield* Effect.yieldNow
+      expect(observedByA).toEqual([`${refA.directory}:wrk_a`])
+      expect(observedBySameDirOtherWorkspace).toEqual([])
+      expect(publishedLocations).toEqual([refA])
+
+      observedByA.length = 0
+      observedBySameDirOtherWorkspace.length = 0
+      publishedLocations.length = 0
+      yield* bus.publish(Agent.Event.Updated, {}, { global: true })
+      yield* Effect.yieldNow
+      expect(observedByA).toEqual(["global"])
+      expect(observedBySameDirOtherWorkspace).toEqual(["global"])
+      expect(publishedLocations).toHaveLength(2)
+      expect(publishedLocations).toContainEqual(refA)
+      expect(publishedLocations).toContainEqual(refSameDirOtherWorkspace)
     }),
   )
 })
