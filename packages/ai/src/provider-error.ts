@@ -198,9 +198,21 @@ const messageAt = <Fields extends Schema.Struct.Fields>(
 
 // Common error body layouts that carry a human-readable message, in priority order.
 // Provider-specific layouts belong in their protocol.
-const decodeMessage = Schema.decodeUnknownOption(
+const decodeMessage: (body: string) => Option.Option<string> = Schema.decodeUnknownOption(
   Schema.fromJsonString(
     Schema.Union([
+      // Gateways such as OpenRouter hide the upstream error inside a JSON-encoded
+      // `error.metadata.raw` and report only a wrapper message ("Provider returned
+      // error"); prefer the upstream explanation when it carries one.
+      messageAt(
+        {
+          error: Schema.Struct({
+            message: Message,
+            metadata: Schema.Struct({ raw: Schema.String }),
+          }),
+        },
+        (body) => Option.getOrElse(decodeMessage(body.error.metadata.raw), () => body.error.message),
+      ),
       messageAt({ error: Schema.Struct({ message: Message }) }, (body) => body.error.message),
       messageAt({ error: Message }, (body) => body.error),
       messageAt({ message: Message }, (body) => body.message),

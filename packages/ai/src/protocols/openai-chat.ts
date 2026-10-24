@@ -22,7 +22,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
-import { classifyProviderFailure } from "../provider-error.js"
+import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -1018,7 +1018,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
         reason: classifyProviderFailure({
-          message: event.error.message,
+          message: providerErrorMessage(body) ?? event.error.message,
           status: typeof event.error.code === "number" ? event.error.code : undefined,
           rawBody: body,
         }),
