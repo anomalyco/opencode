@@ -70,7 +70,13 @@ export const layer = Layer.effect(
     }
 
     const host = () => {
-      current.loading ??= Promise.all([import("./host"), runPromise(desktopCli.resolve)]).then(([module, cli]) => {
+      // Extension stores read `state` on first use, so the host may not load while the legacy
+      // import is still running: a read would cache the pre-import value for the process lifetime.
+      current.loading ??= Promise.all([
+        import("./host"),
+        runPromise(desktopCli.resolve),
+        runPromise(storage.ready),
+      ]).then(([module, cli]) => {
         current.host = module.createHost({
           db: storage.db,
           state: storage.state,
