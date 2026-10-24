@@ -1266,11 +1266,17 @@ export function Session(props: {
         name: "copy",
       },
       run: () => {
-        const lastAssistantMessage = messagesBeforeRevert().findLast(
-          (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
-        )
+        const messages = messagesBeforeRevert()
+        const lastAssistantMessage = messages
+          .slice(messages.findLastIndex((msg) => msg.type === "user") + 1)
+          .findLast(
+            (msg) =>
+              (msg.type === "assistant" &&
+                msg.content.some((part) => part.type === "text" && part.text.trim() !== "")) ||
+              (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
+          )
         if (!lastAssistantMessage) {
-          toast.show({ message: "No assistant messages found", variant: "error" })
+          toast.show({ message: "No reply text found in the last turn", variant: "error" })
           dialog.clear()
           return
         }
@@ -1285,15 +1291,6 @@ export function Session(props: {
             : lastAssistantMessage.type === "compaction" && lastAssistantMessage.status === "completed"
               ? lastAssistantMessage.summary.trim()
               : ""
-        if (!text) {
-          toast.show({
-            message: "No text content found in last assistant message",
-            variant: "error",
-          })
-          dialog.clear()
-          return
-        }
-
         clipboard
           .write(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
