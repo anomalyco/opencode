@@ -4,19 +4,30 @@ import { type TitlebarTheme } from "../../shared/ipc-contract"
 import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import type { DesktopPaths } from "../paths"
-import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
+import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY, ZOOM_FACTOR_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { storedBackgroundColor, titlebarOverlay, tone } from "./defaults"
+import { storedBackgroundColor, storedZoomFactor, titlebarOverlay, tone } from "./defaults"
+import { normalizeZoomFactor } from "./zoom-factor"
+import { createZoomPersister } from "./zoom-persist"
 
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 
-const maxZoomLevel = 10
-
-const minZoomLevel = 0.2
-
 let backgroundColor: string | undefined
+
+// Zoom is intentionally a single app-wide preference (like a browser profile setting), so every
+// window restores and writes the same key.
+const zoomPersister = createZoomPersister((value) => {
+  try {
+    if (getStore().get(ZOOM_FACTOR_KEY) !== value) getStore().set(ZOOM_FACTOR_KEY, value)
+  } catch {
+    // A locked or read-only settings file must not take the main process down (Windows EPERM).
+    // Losing one zoom write is preferable to an uncaught exception from a timer callback.
+  }
+})
+
+app.on("before-quit", () => zoomPersister.flush())
 
 export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   const mode = tone()
@@ -35,7 +46,7 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
       ? {
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
+          titleBarOverlay: overlay({ mode }, storedZoomFactor()),
         }
       : {}),
     webPreferences: {
@@ -43,6 +54,7 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      zoomFactor: storedZoomFactor(),
     },
   }
 }
@@ -93,8 +105,6 @@ export function setPinchZoomEnabled(enabled: boolean) {
   BrowserWindow.getAllWindows().forEach((win) => {
     pinchZoomEnabled.set(win, enabled)
     emitIpcEvent(win.webContents, new WindowPinchZoomChanged({ enabled }))
-
-    if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
     updateZoom(win)
   })
 }
@@ -104,26 +114,20 @@ export function getPinchZoomEnabled() {
 }
 
 export function setZoomFactor(win: BrowserWindow, factor: number) {
-  win.webContents.setZoomFactor(clampZoom(factor))
+  const next = normalizeZoomFactor(factor)
+  win.webContents.setZoomFactor(next)
+  zoomPersister.push(next)
   updateZoom(win)
 }
 
 export function wireZoom(win: BrowserWindow) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
-  win.webContents.setZoomFactor(1)
   win.webContents.on("zoom-changed", (event, direction) => {
     event.preventDefault()
 
-    if (pinchZoomEnabled.get(win)) {
-      const delta = direction === "in" ? 0.2 : -0.2
-      win.webContents.setZoomFactor(clampZoom(win.webContents.getZoomFactor() + delta))
-      updateZoom(win)
-
-      return
-    }
-
-    if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
-    updateZoom(win)
+    if (!pinchZoomEnabled.get(win)) return
+    const delta = direction === "in" ? 0.2 : -0.2
+    setZoomFactor(win, win.webContents.getZoomFactor() + delta)
   })
 }
 
@@ -147,10 +151,6 @@ function iconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
 
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
   return titlebarOverlay(theme.mode ?? tone(), zoom)
-}
-
-function clampZoom(value: number) {
-  return Math.min(Math.max(value, minZoomLevel), maxZoomLevel)
 }
 
 function updateZoom(win: BrowserWindow) {
