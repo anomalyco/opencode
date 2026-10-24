@@ -119,6 +119,67 @@ test("defensively syncs advertised Copilot models", async () => {
   }
 })
 
+test("keeps models selectable on accounts without a model picker", async () => {
+  // Copilot Free/Student plans only allow auto model selection, so GitHub
+  // reports every model as unpickable. That must not empty the provider, but it
+  // must not offer the models those accounts cannot call directly either.
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          {
+            model_picker_enabled: false,
+            id: "gpt-4o",
+            name: "GPT-4o",
+            version: "gpt-4o-2024-11-20",
+            supported_endpoints: ["/chat/completions"],
+            billing: { token_prices: { batch_size: 0, default: { input_price: 0, output_price: 0 } } },
+            capabilities: {
+              family: "gpt",
+              limits: { max_output_tokens: 16384, max_prompt_tokens: 128000 },
+              supports: { tool_calls: true },
+            },
+          },
+          {
+            model_picker_enabled: false,
+            id: "gpt-5.6-luna",
+            name: "GPT-5.6 Luna",
+            version: "gpt-5.6-luna",
+            supported_endpoints: ["/responses", "ws:/responses"],
+            billing: { token_prices: { batch_size: 1_000_000, default: { input_price: 20, output_price: 120 } } },
+            capabilities: {
+              family: "gpt",
+              limits: { max_output_tokens: 64000, max_prompt_tokens: 200000 },
+              supports: { tool_calls: true },
+            },
+          },
+          {
+            model_picker_enabled: false,
+            id: "gpt-4",
+            name: "GPT-4",
+            version: "gpt-4-0613",
+            billing: { token_prices: { batch_size: 1_000_000, default: { input_price: 250, output_price: 1000 } } },
+            capabilities: {
+              family: "gpt",
+              limits: { max_output_tokens: 4096, max_prompt_tokens: 8000 },
+              supports: { tool_calls: true },
+            },
+          },
+        ],
+      }),
+  })
+
+  try {
+    const models = await CopilotModels.get(server.url.origin, {}, [])
+    expect(models.get(Model.ID.make("gpt-4o"))?.enabled).toBe(true)
+    expect(models.get(Model.ID.make("gpt-5.6-luna"))?.enabled).toBe(false)
+    expect(models.get(Model.ID.make("gpt-4"))?.enabled).toBe(false)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("prices cache reads from either token price spelling", async () => {
   // API version 2026-08-01 renamed cache_price to cache_read_price; older payloads still use cache_price.
   const item = (id: string, prices: Record<string, number>) => ({

@@ -96,6 +96,11 @@ export async function load(baseURL: string, headers: RequestInit["headers"]): Pr
 /** Combine remote facts with source templates, never a previously transformed model result. */
 export function derive(baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) {
   const result = new Map(existing.map((model) => [model.id, model]))
+  // Accounts limited to auto model selection (Copilot Free/Student) report every
+  // model as unpickable. Honouring that flag for all of them would leave the
+  // provider with nothing to offer, so fall back to the models those accounts
+  // can still call directly.
+  const hasPicker = [...remote.values()].some((model) => model.model_picker_enabled)
 
   // Keep aliases and local metadata, but only when their advertised API model
   // still exists. A partial or malformed item cannot create a broken model.
@@ -105,13 +110,13 @@ export function derive(baseURL: string, remote: Snapshot, existing: readonly Mod
       result.delete(id)
       continue
     }
-    result.set(id, build(id, current, baseURL, model))
+    result.set(id, build(id, current, baseURL, hasPicker, model))
   }
 
   for (const [id, model] of remote) {
     const key = Model.ID.make(id)
     if (result.has(key)) continue
-    result.set(key, build(key, model, baseURL))
+    result.set(key, build(key, model, baseURL, hasPicker))
   }
 
   return result
@@ -126,7 +131,22 @@ function usable(model: RemoteModel): model is UsableModel {
   )
 }
 
-function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Model.Info) {
+/**
+ * Whether Copilot serves this model straight from the OAuth token.
+ *
+ * Copilot meters the models it exposes through its own endpoints and serves the
+ * rest directly. The metered ones need the session token that `POST /auto`
+ * hands out, so on an account that only supports auto model selection they are
+ * not callable yet.
+ */
+function directlyCallable(model: RemoteModel) {
+  const prices = model.billing?.token_prices
+  const metered = prices !== undefined && prices.batch_size > 0
+  const routed = model.supported_endpoints?.includes("/responses") ?? false
+  return !metered && !routed
+}
+
+function build(id: Model.ID, remote: UsableModel, baseURL: string, hasPicker: boolean, previous?: Model.Info) {
   const messages = remote.supported_endpoints?.includes("/v1/messages") ?? false
   const endpoint = messages
     ? "messages"
@@ -186,7 +206,10 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
       },
     ],
     status: "active",
-    enabled: remote.model_picker_enabled,
+    // Without a picker to honour, keep only the models the account can call
+    // directly, so an auto-only account is not left with an empty provider and
+    // is not offered models that fail at request time.
+    enabled: hasPicker ? remote.model_picker_enabled : directlyCallable(remote),
     limit: {
       context: remote.capabilities.limits.max_context_window_tokens ?? remote.capabilities.limits.max_prompt_tokens,
       input: remote.capabilities.limits.max_prompt_tokens,
