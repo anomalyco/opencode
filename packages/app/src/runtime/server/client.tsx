@@ -7,6 +7,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "./registry"
 import { createRefCountMap } from "@/runtime/server/refcount"
 import { createRequestQueue } from "@/runtime/server/request-queue"
+import { createAttachmentReader } from "./attachment"
 import { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "./current"
 
@@ -65,6 +66,7 @@ type ServerSDKBase = {
   /** The connection the API currently uses, which a managed server's reconnect may replace. */
   http: ServerConnection.HttpBase
   api: ServerApi
+  attachments: ReturnType<typeof createAttachmentReader>
   pty: ReturnType<typeof createPtyClient>
   connection: {
     status: Accessor<ServerConnectionStatus>
@@ -109,6 +111,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   return {
     server,
     scope,
+    attachments: createAttachmentReader((input) => transport.api.session.message.get(input)),
     get url() {
       return transport.url
     },

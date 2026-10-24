@@ -231,7 +231,7 @@ export function createActiveSessionRegion(input: {
         if (!item || item.type === "shell" || item.type === "idle") return
 
         if (item.type === "user" && !data.session.input.has(sessionID, item.id)) {
-          revert.recall(item)
+          void revert.recall(item)
 
           return
         }

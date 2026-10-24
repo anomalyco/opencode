@@ -1,6 +1,13 @@
-import type { FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
+import type {
+  ComposerState,
+  FileAttachmentPart,
+  ImageAttachmentPart,
+  PathAttachmentPart,
+  Prompt,
+} from "@/composer/state"
 import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import type { SessionMessageUser } from "@opencode/client/promise"
+import { AttachmentReference } from "@opencode/client/attachment-reference"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
 import { contextItemKey, type FileContextItem } from "./schema"
@@ -65,6 +72,16 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
 // A user message or a pending inbox item: the materialized transcript row shares the inbox payload's shape.
 export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">
 
+/** Check the captured draft again after asynchronous preparation, before replacing it. */
+export function unchangedDraft(target: ReturnType<ComposerState["capture"]>) {
+  const snapshot = () =>
+    JSON.stringify([target.current(), target.context.items(), target.model.current(), target.mode.current()])
+
+  const before = snapshot()
+
+  return () => snapshot() === before
+}
+
 // Restores the composer content that produced a prompt, losing nothing it carried. File references
 // without a mention return as context through extractPromptContext; unmentioned agents and skills
 // return as trailing mentions, and inline files as attachments.
@@ -72,6 +89,7 @@ export function extractPromptFromMessage(
   message: PromptSource,
   opts?: { directory?: string; attachmentName?: string; sessionTitle?: (id: string) => string | undefined },
 ): Prompt {
+  if (message.files?.some(AttachmentReference.is)) throw new Error("Resolve attachments before restoring a prompt")
   const presentation = readPromptPresentation(message.metadata)
   const text = presentation?.displayText ?? message.text
   const directory = opts?.directory

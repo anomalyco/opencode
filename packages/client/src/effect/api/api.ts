@@ -2128,6 +2128,33 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalSessionTimelineInput = {
+  readonly sessionID: Session.ID
+  readonly limit?: number | undefined
+  readonly order?: "asc" | "desc" | undefined
+  readonly cursor?: string | undefined
+  readonly type?:
+    | "agent-switched"
+    | "model-switched"
+    | "location-switched"
+    | "user"
+    | "synthetic"
+    | "system"
+    | "skill"
+    | "shell"
+    | "assistant"
+    | "compaction"
+    | "idle"
+    | undefined
+}
+export type ExperimentalSessionTimelineOutput = {
+  readonly data: ReadonlyArray<SessionMessage.Info>
+  readonly cursor: { readonly previous?: string | undefined; readonly next?: string | undefined }
+}
+export type ExperimentalSessionTimelineOperation<E = never> = (
+  input: ExperimentalSessionTimelineInput,
+) => Effect.Effect<ExperimentalSessionTimelineOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2141,6 +2168,7 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
+  readonly session: { readonly timeline: ExperimentalSessionTimelineOperation<E> }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

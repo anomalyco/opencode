@@ -1,10 +1,39 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import { extractPromptContext, extractPromptFromMessage } from "./prompt"
+import { extractPromptContext, extractPromptFromMessage, unchangedDraft } from "./prompt"
+import { createMemoryComposerState } from "./state"
 import { buildPromptRequest } from "./request"
 import { contextItemKey } from "./schema"
 
 describe("extractPromptFromMessage", () => {
+  test("draft restoration guard notices edits and context changes during hydration", () => {
+    const target = createMemoryComposerState({ prompt: "before" }).capture()
+    const unchanged = unchangedDraft(target)
+    expect(unchanged()).toBe(true)
+    target.set([{ type: "text", content: "typed while loading", start: 0, end: 19 }])
+    expect(unchanged()).toBe(false)
+    const next = unchangedDraft(target)
+    target.mode.set("shell")
+    expect(next()).toBe(false)
+  })
+  test("refuses to restore a prompt whose attachments are still references", () => {
+    const projected: SessionMessageUser = {
+      id: "msg_original",
+      type: "user",
+      text: "keep these",
+      time: { created: 1 },
+      files: [
+        {
+          name: "image.png",
+          mime: "image/png",
+          data: "",
+          source: { type: "uri", uri: "opencode-attachment:ses_test/msg_original/0" },
+        },
+      ],
+    }
+
+    expect(() => extractPromptFromMessage(projected)).toThrow("Resolve attachments")
+  })
   test("restores a renamed session and preserves file offsets when resubmitted", () => {
     const id = "ses_0123456789abcdefghijklmnop"
     const text = `@session:${id} @a.ts`

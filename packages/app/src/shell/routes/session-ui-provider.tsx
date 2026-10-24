@@ -119,6 +119,8 @@ export function SessionUIProvider(
         agents={useLocal().agent.visible()}
         shellRunning={(id) => !!data.shell.get(id)}
         shellOutput={(input) => serverSDK.api.shell.output(input)}
+        readAttachment={(file) => serverSDK.attachments.file(file)}
+        onAttachmentError={() => showToast({ title: language.t("common.requestFailed") })}
         turnDiff={{
           get: (input) => turnDiffs()?.get(input),
           load: (input) => turnDiffs()?.load(input, () => serverSDK.api.session.diff(input)),

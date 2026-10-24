@@ -18,6 +18,7 @@
   "exports": {
     ".": "./src/promise/index.ts",
     "./promise": "./src/promise/index.ts",
+    "./attachment-reference": "./src/attachment-reference.ts",
     "./promise/api": "./src/promise/api.ts",
     "./service": "./src/promise/service.ts",
     "./solid": "./src/solid/index.ts",

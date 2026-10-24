@@ -1,4 +1,4 @@
-import { Component, createMemo, For, Show } from "solid-js"
+import { Component, createMemo, For, Show, onCleanup } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
 import { useComposerState } from "@/composer/persistence"
@@ -37,6 +37,11 @@ export const DialogFork: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
   const server = useServer()
+  let pending = false
+  let active = true
+  onCleanup(() => {
+    active = false
+  })
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -59,8 +64,8 @@ export const DialogFork: Component = () => {
     return result.reverse()
   })
 
-  const handleSelect = (item: ForkableMessage | undefined) => {
-    if (!item) return
+  const handleSelect = async (item: ForkableMessage | undefined) => {
+    if (!item || pending) return
 
     const sessionID = params.id
 
@@ -68,30 +73,43 @@ export const DialogFork: Component = () => {
     const message = data.session.message.get(sessionID, item.id)
 
     if (message?.type !== "user") return
+    const directory = location().directory
+    pending = true
 
-    const restored = extractPromptFromMessage(message, {
-      directory: location().directory,
-      attachmentName: language.t("common.attachment"),
-      sessionTitle: (id) => data.session.get(id)?.title,
-    })
-
-    const context = extractPromptContext(message, { directory: location().directory })
-    const dir = base64Encode(location().directory)
-
-    serverSDK.api.session
-      .fork({ sessionID, before: item.id })
-      .then((forked) => {
-        data.session.remember(forked)
-        dialog.close()
-        const target = prompt.capture({ dir, id: forked.id })
-        target.set(restored)
-        target.context.replace([...context.comments, ...context.files])
-        navigate(sessionHref(server.key, forked.id))
+    try {
+      const original = await serverSDK.attachments.hydrate(sessionID, message).catch(() => {
+        showToast({ title: language.t("common.requestFailed") })
       })
-      .catch((cause: unknown) => {
-        const message = cause instanceof Error ? cause.message : String(cause)
-        showToast({ title: language.t("common.requestFailed"), description: message })
+
+      // Closing the dialog while originals load cancels the fork.
+      if (!original || !active) return
+
+      const restored = extractPromptFromMessage(original, {
+        directory,
+        attachmentName: language.t("common.attachment"),
+        sessionTitle: (id) => data.session.get(id)?.title,
       })
+
+      const context = extractPromptContext(original, { directory })
+      const dir = base64Encode(directory)
+
+      await serverSDK.api.session
+        .fork({ sessionID, before: item.id })
+        .then((forked) => {
+          data.session.remember(forked)
+          dialog.close()
+          const target = prompt.capture({ dir, id: forked.id })
+          target.set(restored)
+          target.context.replace([...context.comments, ...context.files])
+          navigate(sessionHref(server.key, forked.id))
+        })
+        .catch((cause: unknown) => {
+          const message = cause instanceof Error ? cause.message : String(cause)
+          showToast({ title: language.t("common.requestFailed"), description: message })
+        })
+    } finally {
+      pending = false
+    }
   }
 
   const list = useFilteredList({

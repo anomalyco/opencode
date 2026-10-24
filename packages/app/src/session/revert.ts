@@ -5,7 +5,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 
-import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
+import { extractPromptContext, extractPromptFromMessage, unchangedDraft } from "@/composer/prompt"
 import { promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
@@ -19,6 +19,7 @@ export function createSessionRevert(input: {
   const data = useData()
   const location = useWorkspaceLocation()
   const language = useLanguage()
+  let staging = false
 
   const request = async <A>(action: () => Promise<A>) =>
     action()
@@ -46,35 +47,56 @@ export function createSessionRevert(input: {
     target.context.replace([...context.comments, ...context.files])
   }
 
+  // Recheck the draft after every await: typing during hydration or server work must never be
+  // overwritten by a restore.
+  const capture = () => {
+    const owner = input.session.ownership.capture()
+    const target = prompt.capture()
+    const unchanged = unchangedDraft(target)
+
+    return { owner, target, current: () => owner.current() && prompt.capture() === target && unchanged() }
+  }
+
+  const hydrate = (sessionID: string, message: SessionMessageUser) =>
+    server.attachments.hydrate(sessionID, message).catch(() => {
+      showToast({ title: language.t("common.requestFailed") })
+    })
+
   const stage = async (message: SessionMessageUser, previous: SessionMessageUser | undefined) => {
     const sessionID = input.session.identity.params.id
 
-    if (!sessionID) return
-    const owner = input.session.ownership.capture()
-    const target = prompt.capture()
+    if (!sessionID || staging) return
+    const { owner, target, current } = capture()
+    const step = async <A>(action: () => Promise<A>) => (await request(action)) && current()
+    staging = true
 
-    // An undelivered prompt has no history to rewind. Withdraw it like the TUI
-    // instead of interrupting the work it is waiting behind.
-    if (data.session.input.has(sessionID, message.id)) {
-      if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
-      restore(target, message)
+    try {
+      const original = await hydrate(sessionID, message)
+
+      if (!original || !current()) return
+
+      // An undelivered prompt has no history to rewind. Withdraw it like the TUI
+      // instead of interrupting the work it is waiting behind.
+      if (data.session.input.has(sessionID, message.id)) {
+        if (!(await step(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
+        restore(target, original)
+        owner.run(() => input.setActiveMessage(previous))
+
+        return
+      }
+
+      // Interrupt acknowledges before execution settles, and staging a busy Session fails.
+      if (!(await step(() => server.api.session.interrupt({ sessionID })))) return
+
+      if (!(await step(() => server.api.session.wait({ sessionID })))) return
+
+      if (!(await step(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
+      // Pending inputs remain until the revert commits, or redo delivers them.
+      restore(target, original)
       owner.run(() => input.setActiveMessage(previous))
-
-      return
+    } finally {
+      staging = false
     }
-
-    // Interrupt acknowledges before the execution settles, and staging a busy Session fails. The
-    // local status can lag the server either way, so always settle first; both are idle no-ops.
-    // Like the TUI, stop at the first failure instead of waiting on work that was never interrupted.
-    if (!(await request(() => server.api.session.interrupt({ sessionID })))) return
-
-    if (!(await request(() => server.api.session.wait({ sessionID })))) return
-
-    if (!(await request(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
-    // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them,
-    // and redo delivers them.
-    restore(target, message)
-    owner.run(() => input.setActiveMessage(previous))
   }
 
   const to = async (messageID: string) => {
@@ -117,7 +139,15 @@ export function createSessionRevert(input: {
   }
 
   /** Puts a sent prompt back in the composer without rewinding the Session. */
-  const recall = (message: SessionMessageUser) => restore(prompt.capture(), message)
+  const recall = async (message: SessionMessageUser) => {
+    const sessionID = input.session.identity.params.id
+
+    if (!sessionID) return
+    const { target, current } = capture()
+    const original = await hydrate(sessionID, message)
+
+    if (original && current()) restore(target, original)
+  }
 
   return { to, undo, redo, recall }
 }

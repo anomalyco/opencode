@@ -12048,6 +12048,162 @@
         "x-websocket": true
       }
     },
+    "/api/experimental/session/{sessionID}/timeline": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "experimental.session.timeline",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Maximum number of messages to return. When omitted, the endpoint returns its default page size."
+            },
+            "required": false
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["asc", "desc"]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Message order for the first page. Use desc for newest first or asc for oldest first."
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "agent-switched",
+                    "model-switched",
+                    "location-switched",
+                    "user",
+                    "synthetic",
+                    "system",
+                    "skill",
+                    "shell",
+                    "assistant",
+                    "compaction",
+                    "idle"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors."
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Messages for display. User attachment bytes are replaced by experimental opencode-attachment:<sessionID>/<messageID>/<index> URIs with empty data; resolve them with session.message.get before display or reuse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTimelineResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidCursorError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidCursorErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve the same pages as session.message.list, with user attachment bytes replaced by references. Experimental: may change without compatibility guarantees.",
+        "summary": "Get session timeline"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -20916,6 +21072,46 @@
             "additionalProperties": false
           }
         ]
+      },
+      "SessionTimelineResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.Message.Info"
+            }
+          },
+          "cursor": {
+            "type": "object",
+            "properties": {
+              "previous": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "next": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["data", "cursor"],
+        "additionalProperties": false,
+        "description": "Messages for display. User attachment bytes are replaced by experimental opencode-attachment:<sessionID>/<messageID>/<index> URIs with empty data; resolve them with session.message.get before display or reuse."
       },
       "SessionTransfer.Data": {
         "type": "object",

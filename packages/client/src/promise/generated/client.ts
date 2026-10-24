@@ -236,6 +236,8 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalSessionTimelineInput,
+  ExperimentalSessionTimelineOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -2035,6 +2037,20 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      session: {
+        timeline: (input: ExperimentalSessionTimelineInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionTimelineOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/timeline`,
+              query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 500],
+              empty: false,
+            },
+            requestOptions,
+          ),
       },
     },
     shell: {

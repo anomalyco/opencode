@@ -49,6 +49,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { attached, typeLabel } from "../components/message-file"
+import { AttachmentReference } from "@opencode/client/attachment-reference"
 
 export async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -318,7 +319,6 @@ export function CurrentUserMessageDisplay(props: {
   run?: UserRun
 }) {
   const data = useData()
-  const dialog = useDialog()
   const i18n = useI18n()
   const menu = useMessageMenu()
 
@@ -536,46 +536,7 @@ export function CurrentUserMessageDisplay(props: {
             </AttachmentCard>
           )}
         </For>
-        <Index each={attachments()}>
-          {(file) => {
-            const url = () => {
-              const source = file().source
-
-              return source.type === "uri" ? source.uri : `data:${file().mime};base64,${file().data}`
-            }
-
-            const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
-            const image = () => file().mime.startsWith("image/")
-
-            return (
-              <Show
-                when={!image()}
-                fallback={
-                  <div
-                    data-slot="user-message-attachment"
-                    data-type="image"
-                    data-clickable="true"
-                    onClick={(event) => {
-                      const origin = event.currentTarget
-                      dialog.show(() => <ImagePreview src={url()} alt={name()} origin={origin} />)
-                    }}
-                  >
-                    <img data-slot="user-message-attachment-image" src={url()} alt={name()} />
-                  </div>
-                }
-              >
-                <AttachmentCard
-                  title={getFilename(name())}
-                  hover={name()}
-                  clickable={!!props.actions?.openAttachment}
-                  onClick={() => props.actions?.openAttachment?.(file())}
-                >
-                  {typeLabel(name(), file().mime, i18n.t("ui.common.file"))}
-                </AttachmentCard>
-              </Show>
-            )
-          }}
-        </Index>
+        <Index each={attachments()}>{(file) => <UserMessageAttachment file={file()} actions={props.actions} />}</Index>
       </div>
     </Show>
   )
@@ -705,6 +666,130 @@ export function CurrentUserMessageDisplay(props: {
         </div>
       </Show>
     </div>
+  )
+}
+
+const fileUrl = (file: PromptFileAttachment) =>
+  file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+
+function UserMessageAttachment(props: { file: PromptFileAttachment; actions?: SessionUserActions }) {
+  const data = useData()
+  const dialog = useDialog()
+  const i18n = useI18n()
+
+  // Keyed by reference URI, so a refetched proxy of the same file neither reloads nor flashes.
+  const reference = createMemo(() =>
+    AttachmentReference.is(props.file) && props.file.source.type === "uri" ? props.file.source.uri : undefined,
+  )
+
+  const [loaded, setLoaded] = createSignal<{ reference: string; file: PromptFileAttachment }>()
+
+  const file = () => {
+    const key = reference()
+
+    if (!key) return props.file
+
+    return loaded()?.reference === key ? loaded()?.file : undefined
+  }
+
+  const url = () => {
+    const value = file()
+
+    return value && fileUrl(value)
+  }
+
+  const name = () => props.file.name ?? i18n.t("ui.message.attachment.alt")
+
+  const load = async () => {
+    const current = file()
+
+    if (current) return current
+    const key = reference()!
+
+    if (!data.readAttachment) throw new Error("Attachment reader is unavailable")
+    const value = await data.readAttachment(props.file)
+
+    if (reference() === key) setLoaded({ reference: key, file: value })
+
+    return value
+  }
+
+  // Explicit clicks that settle after the row unmounts (e.g. a session switch) must not open or report.
+  let disposed = false
+  onCleanup(() => {
+    disposed = true
+  })
+
+  const fail = () => {
+    if (!disposed) data.onAttachmentError?.()
+  }
+
+  return (
+    <Show
+      when={!props.file.mime.startsWith("image/")}
+      fallback={
+        <div
+          data-slot="user-message-attachment"
+          data-type="image"
+          data-clickable="true"
+          ref={(element) =>
+            createEffect(() => {
+              if (!reference()) return
+
+              const observer = new IntersectionObserver(
+                (entries) => {
+                  if (!entries.some((entry) => entry.isIntersecting)) return
+                  // A failed passive load stays observed so leaving and re-entering can retry.
+                  void load()
+                    .then(() => observer.disconnect())
+                    .catch(() => undefined)
+                },
+                { rootMargin: "200px" },
+              )
+
+              observer.observe(element)
+              onCleanup(() => observer.disconnect())
+            })
+          }
+          onClick={(event) => {
+            const origin = event.currentTarget
+            const key = reference()
+            void load()
+              .then((value) => {
+                if (reference() !== key || !origin.isConnected) return
+                dialog.show(() => <ImagePreview src={fileUrl(value)} alt={name()} origin={origin} />)
+              })
+              .catch(fail)
+          }}
+        >
+          <Show
+            when={url()}
+            fallback={<div class="size-full" role="img" aria-label={name()} aria-busy="true" draggable={false} />}
+          >
+            {(src) => <img data-slot="user-message-attachment-image" src={src()} alt={name()} />}
+          </Show>
+        </div>
+      }
+    >
+      <AttachmentCard
+        title={getFilename(name())}
+        hover={name()}
+        clickable={!!props.actions?.openAttachment}
+        onClick={() => {
+          const open = props.actions?.openAttachment
+
+          if (!open) return
+          const key = reference()
+          void load()
+            .then((value) => {
+              if (!disposed && reference() === key) open(value)
+            })
+            .catch(fail)
+        }}
+      >
+        {typeLabel(name(), props.file.mime, i18n.t("ui.common.file"))}
+      </AttachmentCard>
+    </Show>
   )
 }
 

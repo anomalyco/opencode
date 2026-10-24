@@ -8,6 +8,7 @@ import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionHistory } from "./history.js"
+import { AttachmentReference } from "@opencode/schema/attachment-reference"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode/schema/session"
@@ -45,6 +46,7 @@ export type MessagesInput = {
   limit?: number
   order?: "asc" | "desc"
   type?: SessionMessage.Type
+  attachments?: "inline" | "reference"
   cursor?: {
     id: SessionMessage.ID
     direction: "previous" | "next"
@@ -174,10 +176,27 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(
-          direction === "previous" ? rows.toReversed() : rows,
-          SessionHistory.decodeMessageRow,
-        )
+        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, (row) => {
+          if (input.attachments !== "reference" || row.type !== "user" || !("files" in row.data))
+            return SessionHistory.decodeMessageRow(row)
+
+          return SessionHistory.decodeMessageRow({
+            ...row,
+            data: {
+              ...row.data,
+              files: row.data.files?.map((file, index) =>
+                (file.source.type === "inline" && file.data) ||
+                (file.source.type === "uri" && file.source.uri.startsWith("data:"))
+                  ? {
+                      ...file,
+                      data: "",
+                      source: { type: "uri", uri: AttachmentReference.make(input.sessionID, row.id, index) },
+                    }
+                  : file,
+              ),
+            },
+          })
+        })
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {

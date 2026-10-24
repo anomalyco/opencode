@@ -1,10 +1,13 @@
 import { getFilename } from "@opencode/util/path"
 import type { PromptFileAttachment } from "@opencode/client/promise"
+import { AttachmentReference } from "@opencode/client/attachment-reference"
 
 export function attached(file: PromptFileAttachment) {
   if (file.mention) return false
 
   if (file.source.type === "inline") return true
+
+  if (AttachmentReference.is(file)) return true
 
   return file.source.uri.startsWith("data:") || file.source.uri.startsWith("blob:")
 }
