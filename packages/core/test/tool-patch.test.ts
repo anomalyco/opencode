@@ -600,6 +600,30 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("preserves CRLF and mixed line endings when updating and moving files", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const crlf = path.join(directory, "crlf.txt")
+        const mixed = path.join(directory, "mixed.txt")
+        yield* Effect.promise(() =>
+          Promise.all([fs.writeFile(crlf, "foo\r\nbar\r\nbaz\r\n"), fs.writeFile(mixed, "head\r\nlf\nbody\n")]),
+        )
+        const settled = yield* executeTool(
+          registry,
+          call(
+            "*** Begin Patch\n*** Update File: crlf.txt\n@@\n-foo\n+FOO\n bar\n+inserted\n*** Update File: mixed.txt\n*** Move to: moved.txt\n@@\n lf\n-body\n+BODY\n*** End Patch",
+          ),
+        )
+        expect(settled.status).toBe("completed")
+        expect(
+          yield* Effect.promise(() =>
+            Promise.all([fs.readFile(crlf, "utf8"), fs.readFile(path.join(directory, "moved.txt"), "utf8")]),
+          ),
+        ).toEqual(["FOO\r\nbar\r\ninserted\r\nbaz\r\n", "head\r\nlf\nBODY\r\n"])
+      }),
+    ),
+  )
+
   it.live("rejects deleting a directory", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
