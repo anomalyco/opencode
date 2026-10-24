@@ -614,6 +614,11 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     attention: createScopedAttention(api.attention, scope, load.plugin_root),
     // Keep deprecated `api.command` working for v1 plugins; remove in v2.
     command: createCommandShim(keymap, api.ui.dialog, api.tuiConfig.keybinds),
+    blocks: {
+      register(block) {
+        return scope.track(api.blocks.register(block))
+      },
+    },
     keys: api.keys,
     keymap,
     mode: createScopedMode(api.mode, scope),

@@ -36,6 +36,7 @@ type Input = {
   renderer: TuiPluginApi["renderer"]
   attention: TuiPluginApi["attention"]
   Slot: TuiPluginApi["ui"]["Slot"]
+  blocks: TuiPluginApi["blocks"]
 }
 
 function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?: Record<string, unknown>) {
@@ -176,6 +177,7 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
     attention: input.attention,
     // Keep deprecated `api.command` working for v1 plugins; remove in v2.
     command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
+    blocks: input.blocks,
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)
