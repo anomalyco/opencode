@@ -66,7 +66,7 @@ export function createSessionQueue(input: {
         // removes its media_ref and sweeps unreferenced blobs from `media_blob`.
         const rehydrated = await undoQueuedPrompt({
           prompt: change.prompt,
-          readMedia: (hash) => server.api.media.get({ hash }),
+          readMedia: (hash) => server.api.experimental.media.get({ hash }),
           cancelInboxItem: () =>
             server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id }),
         })

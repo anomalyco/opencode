@@ -2,19 +2,16 @@ import type { OpenCodeClient } from "@opencode/client/promise"
 
 export const MEDIA_REF_SCHEME = "media:"
 
-export const MEDIA_ROUTE_PREFIX = "/api/experimental/media/"
-
 export const DEFAULT_MAX_MEDIA_CACHE_ENTRIES = 128
 
-/** The blob hash in a `media:<hash>` ref or in the experimental route path the server sends opted-in clients. */
-export function mediaHashFromUri(uri: string | undefined): string | undefined {
-  const hash = uri?.startsWith(MEDIA_REF_SCHEME)
-    ? uri.slice(MEDIA_REF_SCHEME.length)
-    : uri?.startsWith(MEDIA_ROUTE_PREFIX)
-      ? uri.slice(MEDIA_ROUTE_PREFIX.length)
-      : undefined
+const MEDIA_REF = /^media:([0-9a-f]{64})$/
+const MEDIA_URL = /^(?:https?:\/\/[^/?#]+)?\/api\/(?:experimental\/)?media\/([0-9a-f]{64})(?:[?#].*)?$/
 
-  return hash !== undefined && /^[0-9a-f]{64}$/.test(hash) ? hash : undefined
+/** The blob hash in a `media:<hash>` ref or a media route path or URL, matching the server's `hashFromUri`. */
+export function mediaHashFromUri(uri: string | undefined): string | undefined {
+  if (!uri) return undefined
+
+  return (MEDIA_REF.exec(uri) ?? MEDIA_URL.exec(uri))?.[1]
 }
 
 /** Drafts keep the URL-neutral `media:<hash>` ref; a fetch URL is built only when the bytes load. */
@@ -31,7 +28,7 @@ export type MediaCache = {
 }
 
 export function createMediaCache(
-  getApi: () => Pick<OpenCodeClient, "media">,
+  getApi: () => Pick<OpenCodeClient, "experimental">,
   options?: { readonly maxEntries?: number },
 ): MediaCache {
   const maxEntries = Math.max(1, options?.maxEntries ?? DEFAULT_MAX_MEDIA_CACHE_ENTRIES)
@@ -53,7 +50,7 @@ export function createMediaCache(
 
   const fetchObjectUrl = (hash: string, mime: string) =>
     getApi()
-      .media.get({ hash })
+      .experimental.media.get({ hash })
       .then((bytes) => {
         if (disposed) return undefined
         const existing = urls.get(hash)
