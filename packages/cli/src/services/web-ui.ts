@@ -4,6 +4,24 @@ import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/h
 import { createHash } from "node:crypto"
 import { load, type AssetMap, type BrotliMap } from "../app-assets"
 
+const appleAppSiteAssociation = JSON.stringify({
+  applinks: {
+    details: [
+      {
+        appIDs: ["5NZ4Q7NXJ4.ai.opencode.mobilecode"],
+        components: [
+          { "/": "/auth/connect/*" },
+          { "/": "/server/*/session/*" },
+          { "/": "/session/*" },
+        ],
+      },
+    ],
+  },
+  activitycontinuation: {
+    apps: ["5NZ4Q7NXJ4.ai.opencode.mobilecode"],
+  },
+})
+
 export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
   readonly assets?: AssetMap
   readonly brotli?: BrotliMap
@@ -26,9 +44,25 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
         return yield* api.pipe(
           Effect.catchIf(isRouteNotFound, () => Effect.succeed(HttpServerResponse.empty({ status: 404 }))),
         )
+      if (url.pathname === "/.well-known/apple-app-site-association") return yield* serveAasa(request)
       return yield* assets.pipe(Effect.flatMap((loaded) => serveUI(request, url, loaded.files, loaded.brotli)))
     })
 })
+
+function serveAasa(request: HttpServerRequest.HttpServerRequest) {
+  if (request.method !== "GET" && request.method !== "HEAD")
+    return Effect.succeed(HttpServerResponse.empty({ status: 405 }))
+  const headers = {
+    "content-type": "application/json",
+    "cache-control": "public, max-age=3600",
+    "x-content-type-options": "nosniff",
+  }
+  return Effect.succeed(
+    request.method === "HEAD"
+      ? HttpServerResponse.empty({ status: 200, headers })
+      : HttpServerResponse.raw(appleAppSiteAssociation, { headers, contentType: headers["content-type"] }),
+  )
+}
 
 function serveUI(
   request: HttpServerRequest.HttpServerRequest,

@@ -85,6 +85,7 @@ export const api: ElectronAPI = {
   onPinchZoomEnabledChanged: (cb) => listen("WindowPinchZoomChanged", (event) => cb(event.enabled)),
   onZoomFactorChanged: (cb) => listen("WindowZoomChanged", (event) => cb(event.factor)),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
+  setUserActivity: (activity) => invoke("WindowSetUserActivity", { activity }),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),

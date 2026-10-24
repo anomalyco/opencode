@@ -87,6 +87,7 @@ test("shared packaging defaults", async () => {
   expect(config.mac?.sign).toBeFunction()
   expect(config.dmg?.sign).not.toBe(true)
   expect(config.mac?.extendInfo?.NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac).toBe(true)
+  expect(config.mac?.extendInfo?.NSUserActivityTypes).toEqual(["ai.opencode.view-session"])
   const include = path.join(import.meta.dirname, "resources/windows/installer.nsh")
   expect(config.nsis?.include).toBe(include)
   expect(await Bun.file(include).exists()).toBe(true)

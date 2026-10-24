@@ -10,6 +10,7 @@ import type {
   SaveFilePickerOptions,
   ServerReadyData,
   TitlebarTheme,
+  UserActivity,
 } from "../shared/ipc-contract"
 
 export type ElectronAPI = {
@@ -62,6 +63,7 @@ export type ElectronAPI = {
   onPinchZoomEnabledChanged(cb: (enabled: boolean) => void): () => void
   onZoomFactorChanged(cb: (factor: number) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
+  setUserActivity(activity: UserActivity | null): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>

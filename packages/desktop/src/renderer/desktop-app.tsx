@@ -5,13 +5,16 @@ import {
   AppBaseProviders,
   AppInterface,
   currentRoute,
+  findSessionTab,
   PlatformProvider,
   preloadRoute,
   ServerConnection,
+  tabKey,
   useCommand,
   useCurrentRoute,
   useLanguage,
   useExtensionServers,
+  useServers,
   useTabs,
   type LayoutRoute,
 } from "@opencode/app/desktop"
@@ -187,6 +190,9 @@ function DesktopEffects(props: { api: ElectronAPI }) {
   const command = useCommand()
   bindDesktopMenu((id) => command.trigger(id))
   const theme = useTheme()
+  const route = useCurrentRoute()
+  const tabs = useTabs()
+  const servers = useServers()
 
   createEffect(() => {
     theme.themeId()
@@ -194,6 +200,29 @@ function DesktopEffects(props: { api: ElectronAPI }) {
     const background = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
 
     if (background) void props.api.setBackgroundColor(background)
+  })
+
+  createEffect(() => {
+    const current = route()
+
+    if (current.type !== "session") {
+      void props.api.setUserActivity(null).catch(() => undefined)
+      return
+    }
+
+    const conn = servers.list.find((item) => ServerConnection.key(item) === current.server)
+    const tab = findSessionTab(tabs.store, current.server, current.sessionId)
+    const tabInfo = tab ? tabs.info[tabKey(tab)] : undefined
+    const serverURLs = conn ? [conn.http.url] : []
+
+    void props.api
+      .setUserActivity({
+        sessionID: current.sessionId,
+        directory: tabInfo?.directory,
+        serverKey: current.server,
+        serverURLs,
+      })
+      .catch(() => undefined)
   })
 
   return null

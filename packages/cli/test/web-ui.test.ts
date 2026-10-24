@@ -43,6 +43,7 @@ describe("web UI", () => {
           "/icons/icon.svg",
           "/font.woff2",
           "/sw.js",
+          "/.well-known/apple-app-site-association",
         ],
         (pathname) =>
           Effect.gen(function* () {
@@ -56,6 +57,28 @@ describe("web UI", () => {
             )
           }),
       )
+      const aasaResponse = yield* Effect.promise(() =>
+        fetch(new URL("/.well-known/apple-app-site-association", origin)),
+      )
+      expect(aasaResponse.status).toBe(200)
+      expect(aasaResponse.headers.get("content-type")).toBe("application/json")
+      expect(yield* Effect.promise(() => aasaResponse.json())).toEqual({
+        applinks: {
+          details: [
+            {
+              appIDs: ["5NZ4Q7NXJ4.ai.opencode.mobilecode"],
+              components: [
+                { "/": "/auth/connect/*" },
+                { "/": "/server/*/session/*" },
+                { "/": "/session/*" },
+              ],
+            },
+          ],
+        },
+        activitycontinuation: {
+          apps: ["5NZ4Q7NXJ4.ai.opencode.mobilecode"],
+        },
+      })
       yield* Effect.forEach(["/api", "/api/info", "/api/event", "/api/missing", "/openapi.json"], (pathname) =>
         Effect.gen(function* () {
           const response = yield* Effect.promise(() => fetch(new URL(pathname, origin)))

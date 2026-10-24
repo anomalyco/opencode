@@ -184,6 +184,7 @@ const getBase = (appId: string): Configuration => {
       icon: `resources/icons/icon.icns`,
       extendInfo: {
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
+        NSUserActivityTypes: ["ai.opencode.view-session"],
       },
       hardenedRuntime: true,
       gatekeeperAssess: false,
