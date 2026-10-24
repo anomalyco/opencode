@@ -14,7 +14,6 @@ import { Durable } from "@opencode/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import type { SessionID } from "@opencode/schema/session-id"
-import { AbsolutePath } from "@opencode/schema/schema"
 
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -239,7 +238,7 @@ export function configured(options?: Options) {
                 .get()
                 .pipe(Effect.orDie)
               ref = row
-                ? { directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }
+                ? { directory: row.directory, workspaceID: row.workspaceID ?? undefined }
                 : undefined
               updates.set(owner, ref)
             }

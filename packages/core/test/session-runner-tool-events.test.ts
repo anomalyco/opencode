@@ -154,7 +154,13 @@ testEffect(
       .run()
     yield* database.db
       .insert(SessionTable)
-      .values({ id: sessionID, project_id: Project.ID.global, slug: "publish", directory: "/project", version: "test" })
+      .values({
+        id: sessionID,
+        project_id: Project.ID.global,
+        slug: "publish",
+        directory: AbsolutePath.make("/project"),
+        version: "test",
+      })
       .run()
     const publisher = createLLMEventPublisher(
       {

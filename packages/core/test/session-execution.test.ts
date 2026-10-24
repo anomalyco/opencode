@@ -1300,7 +1300,7 @@ function seedSessions(
           id,
           project_id: Project.ID.global,
           slug: id,
-          directory: "/project",
+          directory: AbsolutePath.make("/project"),
           title: id,
           version: "test",
           ...values,

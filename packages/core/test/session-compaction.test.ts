@@ -432,7 +432,7 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
         id,
         project_id: Project.ID.global,
         slug: id,
-        directory: "/project",
+        directory: AbsolutePath.make("/project"),
         title: id,
         version: "test",
         ...overrides,

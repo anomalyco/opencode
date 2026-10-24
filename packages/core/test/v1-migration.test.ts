@@ -9,6 +9,8 @@ import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionTable } from "@opencode/core/session/sql"
 import { Project } from "@opencode/core/project"
 import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -44,7 +46,7 @@ const session = (
   fork_session_id: null,
   fork_boundary: null,
   slug: "test",
-  directory: "/tmp/test",
+  directory: AbsolutePath.make("/tmp/test"),
   path: null,
   title: "Test",
   version: "1",
@@ -668,7 +670,11 @@ describe("V1Migration.transformSession", () => {
     const summary = assistant("msg_000000000028aaaaaaaaaaaaaa", compact.id, { summary: true }, 4)
     const existing = session({
       agent: Agent.ID.make("existing"),
-      model: { id: "existing-model", providerID: "existing-provider", variant: "existing" },
+      model: {
+        id: Model.ID.make("existing-model"),
+        providerID: Provider.ID.make("existing-provider"),
+        variant: Model.VariantID.make("existing"),
+      },
     })
     const result = transform(
       [summary, compact, tailAssistant, tailUser],
@@ -729,7 +735,11 @@ describe("V1Migration.transformSession", () => {
     ])
     expect(result.session).toEqual({
       agent: Agent.ID.make("review"),
-      model: { id: "m2", providerID: "p2", variant: "default" },
+      model: {
+        id: Model.ID.make("m2"),
+        providerID: Provider.ID.make("p2"),
+        variant: Model.VariantID.make("default"),
+      },
       cost: 7,
       tokens_input: 8,
       tokens_output: 9,
@@ -1017,7 +1027,9 @@ describe("V1Migration database workflow", () => {
             .from(SessionTable)
             .where(eq(SessionTable.id, SessionSchema.ID.make("ses_next")))
             .get(),
-        ).toEqual({ directory: process.platform === "win32" ? "C:\\Users\\sewer" : "C:/Users/sewer" })
+        ).toEqual({
+          directory: AbsolutePath.make(process.platform === "win32" ? "C:\\Users\\sewer" : "C:/Users/sewer"),
+        })
         expect(yield* db.all(sql`SELECT id, seq, data FROM session_message WHERE session_id = 'ses_next'`)).toEqual([
           {
             id: "msg_next",

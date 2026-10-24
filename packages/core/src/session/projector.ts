@@ -6,7 +6,6 @@ import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Model } from "@opencode/schema/model"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
@@ -280,7 +279,7 @@ function run(db: DatabaseService, event: MessageEvent) {
           .get()
           .pipe(
             Effect.orDie,
-            Effect.map((row) => (row?.model ? Schema.decodeUnknownSync(Model.Ref)(row.model) : undefined)),
+            Effect.map((row) => row?.model ?? undefined),
           )
       },
       getLocation() {
@@ -300,11 +299,11 @@ function run(db: DatabaseService, event: MessageEvent) {
               row
                 ? {
                     location: {
-                      directory: AbsolutePath.make(row.directory),
+                      directory: row.directory,
                       workspaceID: row.workspaceID ?? undefined,
                     },
                     projectID: row.projectID,
-                    subpath: row.subpath === null ? undefined : RelativePath.make(row.subpath),
+                    subpath: row.subpath ?? undefined,
                   }
                 : undefined,
             ),

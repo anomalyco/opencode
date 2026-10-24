@@ -227,7 +227,7 @@ const setup = Effect.gen(function* () {
       id: sessionID,
       project_id: (yield* projects.resolve(AbsolutePath.make("/project"))).id,
       slug: "generate-test",
-      directory: "/project",
+      directory: AbsolutePath.make("/project"),
       title: "Generate test",
       version: "test",
       agent: Agent.ID.make("build"),

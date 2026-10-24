@@ -117,7 +117,7 @@ const setup = Effect.gen(function* () {
       id: sessionID,
       project_id: Project.ID.global,
       slug: "test",
-      directory: "/project",
+      directory: AbsolutePath.make("/project"),
       title: "test",
       version: "test",
     })
@@ -840,7 +840,7 @@ describe("Session.prompt", () => {
           id: other,
           project_id: Project.ID.global,
           slug: "other",
-          directory: "/project",
+          directory: AbsolutePath.make("/project"),
           title: "other",
           version: "test",
         })

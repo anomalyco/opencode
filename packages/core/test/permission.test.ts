@@ -46,7 +46,7 @@ function setup(rules: Permission.Ruleset = [], sessionID = Session.ID.make("ses_
         id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
-        directory: "/project",
+        directory: AbsolutePath.make("/project"),
         title: "test",
         version: "test",
         agent: Agent.ID.make("test"),

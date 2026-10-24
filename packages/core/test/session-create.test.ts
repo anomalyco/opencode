@@ -528,7 +528,11 @@ describe("Session.create", () => {
       const root = yield* session.create({ location, title: "root" })
       const nested = yield* session.create({ location, title: "nested" })
 
-      yield* db.update(SessionTable).set({ path: "packages/tui" }).where(eq(SessionTable.id, nested.id)).run()
+      yield* db
+        .update(SessionTable)
+        .set({ path: RelativePath.make("packages/tui") })
+        .where(eq(SessionTable.id, nested.id))
+        .run()
 
       const page = yield* session.list({
         project: Project.ID.global,

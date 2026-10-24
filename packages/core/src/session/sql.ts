@@ -6,12 +6,16 @@ import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
 import type { Agent } from "@opencode/schema/agent"
 import type { FileDiff } from "@opencode/schema/file-diff"
+import type { Instruction } from "@opencode/schema/instruction"
+import type { InstructionEntry } from "@opencode/schema/instruction-entry"
+import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
 import type { Project } from "@opencode/schema/project"
+import type { Provider } from "@opencode/schema/provider"
 import type { SessionSchema } from "./schema.js"
 import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
-import type { Instruction } from "@opencode/schema/instruction"
+import type { AbsolutePath, RelativePath } from "../schema.js"
 import type { Session } from "@opencode/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode/schema/session-inbox"
 import type { RevertV1 } from "@opencode/schema/session-revert"
@@ -33,8 +37,8 @@ export const SessionTable = sqliteTable(
     fork_session_id: text().$type<SessionSchema.ID>(),
     fork_boundary: text({ mode: "json" }).$type<Session.ForkBoundary>(),
     slug: text().notNull(),
-    directory: directoryColumn().notNull(),
-    path: pathColumn(),
+    directory: directoryColumn().$type<AbsolutePath>().notNull(),
+    path: pathColumn().$type<RelativePath>(),
     title: text(),
     version: text().notNull(),
     share_url: text(),
@@ -53,9 +57,9 @@ export const SessionTable = sqliteTable(
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
     agent: text().$type<Agent.ID>(),
     model: text({ mode: "json" }).$type<{
-      id: string
-      providerID: string
-      variant?: string
+      id: Model.ID
+      providerID: Provider.ID
+      variant?: Model.VariantID
     }>(),
     ...Timestamps,
     time_idle: integer(),
@@ -152,7 +156,7 @@ export const InstructionEntryTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    key: text().notNull(),
+    key: text().$type<InstructionEntry.Key>().notNull(),
     value: text({ mode: "json" }).$type<Schema.Json>(),
     removed: integer({ mode: "boolean" }).notNull().default(false),
     ...Timestamps,

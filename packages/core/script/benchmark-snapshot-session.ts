@@ -120,7 +120,13 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
       .run()
     yield* db
       .insert(SessionTable)
-      .values({ id: sessionID, project_id: Project.ID.global, slug: "bench", directory, version: "bench" })
+      .values({
+        id: sessionID,
+        project_id: Project.ID.global,
+        slug: "bench",
+        directory: AbsolutePath.make(directory),
+        version: "bench",
+      })
       .run()
     const steps = yield* SessionStep.make
     const snapshot = yield* Snapshot.Service
