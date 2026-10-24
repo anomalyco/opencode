@@ -156,10 +156,15 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   const reuseProviderMetadata = sameModel && message.error === undefined
-  const reasoningInterrupted = message.content.some(
+  // A different provider needs ordinary tool messages, not the original provider's
+  // inline hosted results. Normalize only this replay, preserving stored history.
+  const parts = message.content.map((item) =>
+    item.type === "tool" && item.executed === true && !sameProvider ? { ...item, executed: false } : item,
+  )
+  const reasoningInterrupted = parts.some(
     (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
   )
-  const content = message.content.flatMap((item): ContentPart[] => {
+  const content = parts.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
         {
@@ -205,7 +210,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
+  const results = parts
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
       toolResult(item, reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message, Media } from "@opencode/ai"
+import { LLM, Message, Media } from "@opencode/ai"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -10,7 +10,10 @@ import { Agent } from "@opencode/core/agent"
 import { Shell } from "@opencode/schema/shell"
 import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
-import { DateTime } from "effect"
+import { DateTime, Effect } from "effect"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import { compileRequest } from "@opencode/ai/route/client"
+import { it } from "./lib/effect"
 import path from "path"
 import { pathToFileURL } from "url"
 
@@ -1151,6 +1154,89 @@ Earlier work
       },
     ])
   })
+
+  it.effect("compiles provider-executed tool history after a provider switch", () =>
+    Effect.gen(function* () {
+      const source = SessionMessage.Assistant.make({
+        id: id("assistant-other-provider"),
+        type: "assistant",
+        agent: build,
+        model: { id: Model.ID.make("codex"), providerID: Provider.ID.make("codex-app-server") },
+        content: [
+          SessionMessage.AssistantText.make({ type: "text", text: "Checking the project." }),
+          ...[true, false].map((executed) =>
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: executed ? "hosted-completed" : "local-completed",
+              name: "bash",
+              executed,
+              providerState: { itemId: "call-state" },
+              providerResultState: { itemId: "result-state" },
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { command: "pwd" },
+                content: [{ type: "text", text: "/project" }],
+              }),
+              time: { created, completed: created },
+            }),
+          ),
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "hosted-failed",
+            name: "bash",
+            executed: true,
+            providerState: { itemId: "failed-call-state" },
+            providerResultState: { itemId: "failed-result-state" },
+            state: SessionMessage.ToolStateError.make({
+              status: "error",
+              input: { command: "false" },
+              error: { type: "unknown", message: "Command failed" },
+              content: [{ type: "text", text: "Exit code 1" }],
+            }),
+            time: { created, completed: created },
+          }),
+        ],
+        time: { created, completed: created },
+      })
+      const original = toLLMMessages([source], source.model)
+      const messages = toLLMMessages([source], model)
+      const prepared = yield* compileRequest(
+        LLM.request({ model: OpenAIChat.route.model({ id: "deepseek-chat" }), messages }),
+      )
+      expect(messages.map((message) => message.role)).toEqual(["assistant", "tool", "tool", "tool"])
+      expect(messages[0]?.content.map((part) => part.type)).toEqual(["text", "tool-call", "tool-call", "tool-call"])
+      for (const part of messages.flatMap((message) => message.content)) {
+        if (part.type === "tool-call" || part.type === "tool-result") {
+          expect(part.providerMetadata).toBeUndefined()
+          expect(part.providerExecuted).toBe(false)
+        }
+      }
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "Checking the project.",
+          reasoning_content: "",
+          tool_calls: [
+            { id: "hosted-completed", type: "function", function: { name: "bash", arguments: '{"command":"pwd"}' } },
+            { id: "local-completed", type: "function", function: { name: "bash", arguments: '{"command":"pwd"}' } },
+            { id: "hosted-failed", type: "function", function: { name: "bash", arguments: '{"command":"false"}' } },
+          ],
+        },
+        { role: "tool", tool_call_id: "hosted-completed", content: "/project" },
+        { role: "tool", tool_call_id: "local-completed", content: "/project" },
+        {
+          role: "tool",
+          tool_call_id: "hosted-failed",
+          content: JSON.stringify({
+            error: { type: "unknown", message: "Command failed" },
+            content: [{ type: "text", text: "Exit code 1" }],
+          }),
+        },
+      ])
+      // Switching back must still replay the original provider's native tool state.
+      expect(toLLMMessages([source], source.model)).toEqual(original)
+    }),
+  )
 
   test("preserves provider metadata for a catalog alias with a different API model ID", () => {
     const messages = toLLMMessages(
