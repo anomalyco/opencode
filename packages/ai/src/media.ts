@@ -9,7 +9,7 @@ import { ProviderMetadata } from "./schema/options.js"
 import { responseHttp, Service } from "./route/executor-service.js"
 import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
-export { detectMediaType } from "./utils/media-type.js"
+export { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 const OCTET_STREAM = "application/octet-stream"
 

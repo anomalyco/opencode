@@ -70,6 +70,16 @@ describe("Media", () => {
       expect(Media.detectMediaType(new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt "))).toBe("audio/wav")
       expect(Media.detectMediaType(new TextEncoder().encode("OggS\0\x02"))).toBe("audio/ogg")
       expect(Media.detectMediaType(new TextEncoder().encode("fLaC\0\0\0\x22"))).toBe("audio/flac")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xfe, 0x68, 0x00, 0x69, 0x00]))).toBeUndefined()
+      expect(Media.detectMediaType(Uint8Array.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]))).toBe(
+        "audio/mp4",
+      )
+      expect(Media.fileMediaType(Uint8Array.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]), "clip.m4a")).toBe(
+        "audio/mp4",
+      )
+      expect(Media.fileMediaType(Uint8Array.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]), "clip.mp4")).toBe(
+        "video/mp4",
+      )
       expect(Media.bytes(PNG).mediaType).toBe("image/png")
       expect(Media.bytes(Uint8Array.from([1, 2, 3])).mediaType).toBe("application/octet-stream")
       expect(Media.bytes(Uint8Array.from([1, 2, 3]), "image/x-custom").mediaType).toBe("image/x-custom")

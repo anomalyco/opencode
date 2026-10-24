@@ -108,6 +108,8 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
       message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${label}`,
     })
 
+  // Prompt attachments stay content-sniffed: an extension guess such as `text/markdown` would bypass the text
+  // attachment path downstream, so only magic bytes decide whether the attachment is media.
   const mime = resolved.mime ?? Mime.detect(resolved.bytes)
   const content =
     mime === "text/plain" && resolved.start !== undefined

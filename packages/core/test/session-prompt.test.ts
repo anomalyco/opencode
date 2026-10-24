@@ -25,6 +25,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Image } from "@opencode/core/image"
@@ -372,6 +373,48 @@ describe("Session.prompt", () => {
           .toString("utf8")
           .replace(/\r$/, ""),
       ).toBe('import { describe, expect } from "bun:test"')
+    }),
+  )
+
+  it.effect("keeps markdown attachments textual so their line range reaches the model", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const source = path.join(directory.path, "notes.md")
+      yield* Effect.promise(() => Bun.write(source, "# Title\n\nA markdown body\n"))
+      const sourceUri = pathToFileURL(source)
+      sourceUri.searchParams.set("start", "3")
+      sourceUri.searchParams.set("end", "3")
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect this",
+        files: [{ uri: sourceUri.href, name: "notes.md" }],
+        resume: false,
+      })
+
+      expect(message.payload.files?.[0]).toMatchObject({ mime: "text/plain", name: "notes.md" })
+      expect(Buffer.from(message.payload.files?.[0]?.data ?? "", "base64").toString("utf8")).toBe(
+        "A markdown body",
+      )
+
+      const content = toLLMMessages(
+        [
+          SessionMessage.User.make({
+            id: SessionMessage.ID.make("msg_markdown_attachment"),
+            type: "user",
+            text: "Inspect this",
+            files: [...(message.payload.files ?? [])],
+            time: { created: DateTime.makeUnsafe(0) },
+          }),
+        ],
+        Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+      )
+      expect(content[0]?.content).toMatchObject([
+        { type: "text", text: "Inspect this" },
+        { type: "text", text: "\n\nAttached file: notes.md\n\nA markdown body" },
+      ])
     }),
   )
 
