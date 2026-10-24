@@ -14,6 +14,7 @@ import type { createNotificationCoordinator } from "@/shell/notifications/coordi
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
+import { sessionHref } from "@/shell/routes/session"
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
@@ -232,8 +233,11 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.responseReady.title"),
+            session.title ?? sessionID,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            sessionHref(input.key, sessionID),
           ),
         )
       }
@@ -256,8 +260,11 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.error.title"),
+            description,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            sessionHref(input.key, sessionID),
           ),
         )
       }
