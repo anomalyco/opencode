@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, type TestOptions } from "bun:test"
 import {
   AIError,
   CompactionPart,
@@ -589,6 +589,7 @@ type Scenario = Effect.Success<typeof setup>
 const scenario = (
   name: string,
   body: (s: Scenario) => Effect.gen.Return<void, unknown, Layer.Success<typeof layer> | Scope.Scope>,
+  opts?: number | TestOptions,
 ) =>
   it.effect(
     name,
@@ -596,6 +597,7 @@ const scenario = (
       const s = yield* setup
       return yield* body(s)
     }),
+    opts,
   )
 
 // Nominal retry gaps: exponential from 2s capped at 10s, for 10 retries.
@@ -3351,6 +3353,126 @@ describe("SessionRunnerLLM", () => {
     yield* replaySessionProjection(sessionID)
     expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
   })
+
+const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+// Real PNG magic bytes followed by zero padding, canonically padded: sniffed as image/png while staying oversized.
+const oversizedImageUri = () => {
+  const body = `${TINY_PNG.replace(/=+$/, "")}${"A".repeat(4_500_000)}`
+  return `data:image/png;base64,${body}${"=".repeat((4 - (body.length % 4)) % 4)}`
+}
+
+  const unclassifiedRejection = (status = 400) =>
+    new AIError({
+      reason: new InvalidRequestError({
+        message: "The request contains invalid parameters. Check the request body for any errors or inconsistencies.",
+        http: new HttpContext({ url: "https://gateway.example/v1/responses", status, headers: {} }),
+      }),
+    })
+
+  scenario("recovers once after an unclassified oversized rejection", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.session.prompt({
+      sessionID,
+      text: "Inspect the screenshot",
+      files: [{ uri: oversizedImageUri() }],
+      resume: false,
+    })
+    yield* s.llm.push(TestLLM.text("The screenshot shows a button", "inspection"))
+    yield* s.resume
+    s.requests.length = 0
+    yield* s.llm.push(
+      Stream.fail(unclassifiedRejection()),
+      TestLLM.text("## Objective\n- Inspect the screenshot", "summary"),
+      TestLLM.text("Recovered", "recovered"),
+    )
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests).toHaveLength(3)
+    expect(s.requests[0]?.messages.some((m) => m.content.some((p) => p.type === "media"))).toBeTrue()
+    expect(s.requests[1]?.messages.every((m) => m.content.every((p) => p.type === "text"))).toBeTrue()
+    expect(JSON.stringify(s.requests[1])).not.toContain("AAAAAAAAAA")
+    expect(JSON.stringify(s.requests[1])).toContain("Inspect the screenshot")
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", summary: "## Objective\n- Inspect the screenshot" },
+      { type: "assistant", finish: "stop" },
+    ])
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
+  }, 30_000)
+
+  scenario("does not recover an unclassified rejection for a small request", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(Stream.fail(unclassifiedRejection()))
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe(
+      "The request contains invalid parameters. Check the request body for any errors or inconsistencies.",
+    )
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+  })
+
+  scenario("does not recover a server-side failure for an oversized request", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.session.prompt({
+      sessionID,
+      text: "Inspect the screenshot",
+      files: [{ uri: oversizedImageUri() }],
+      resume: false,
+    })
+    yield* s.llm.push(Stream.fail(unclassifiedRejection(500)))
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe(
+      "The request contains invalid parameters. Check the request body for any errors or inconsistencies.",
+    )
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+  }, 30_000)
+
+  scenario("does not recover a streamed unclassified error for an oversized request", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.session.prompt({
+      sessionID,
+      text: "Inspect the screenshot",
+      files: [{ uri: oversizedImageUri() }],
+      resume: false,
+    })
+    // Streamed provider errors carry no HTTP status, so the size gate cannot tell them
+    // apart from server-side failures: they must not trigger compaction.
+    yield* s.llm.push([
+      LLMEvent.providerError({ message: "The request contains invalid parameters. Check the request body for any errors or inconsistencies." }),
+    ])
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe(
+      "The request contains invalid parameters. Check the request body for any errors or inconsistencies.",
+    )
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+  }, 30_000)
+
+  scenario("does not recover a non-gateway 400 on an oversized request", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.session.prompt({
+      sessionID,
+      text: "Inspect the screenshot",
+      files: [{ uri: oversizedImageUri() }],
+      resume: false,
+    })
+    // Only the known-generic gateway wordings qualify: 400s naming a concrete
+    // bug (corrupt attachment in #53014, bad tool schema) never compact, even
+    // when the request itself is oversized.
+    for (const message of [
+      "The file you uploaded is badly formatted or corrupted.",
+      'Invalid arguments for tool "shell": command: Missing key',
+    ]) {
+      yield* s.llm.push(
+        Stream.fail(
+          new AIError({
+            reason: new InvalidRequestError({
+              message,
+              http: new HttpContext({ url: "https://gateway.example/v1/responses", status: 400, headers: {} }),
+            }),
+          }),
+        ),
+      )
+      expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe(message)
+      expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+    }
+  }, 30_000)
 
   scenario("refreshes preparation after overflow compaction without promoting new input", function* (s) {
     yield* setupOverflowRecovery(s)

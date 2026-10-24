@@ -118,7 +118,7 @@ for (const fixture of [
           retry: (_cause, _error, retry) =>
             Effect.succeed(retry ? { retry: true, attempt: 2, delay: 0 } : { retry: false }),
           recoverContinuation: true,
-          recoverOverflow: Effect.succeed(false),
+          recoverOverflow: () => Effect.succeed(false),
         })
         .pipe(Effect.exit)
       expect(Exit.isSuccess(result)).toBe(fixture.finish === "stop")

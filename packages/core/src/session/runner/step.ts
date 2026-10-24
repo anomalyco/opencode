@@ -6,6 +6,7 @@ import {
   LLMClient,
   LLMEvent,
   isContextOverflowFailure,
+  isPayloadTooLargeFailure,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode/ai"
@@ -19,6 +20,7 @@ import { Tool } from "../../tool.js"
 import { ToolOutput } from "../../tool-output.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
 import { StepFailedError } from "../error.js"
+import { OVERSIZED_REQUEST_BYTES, estimateRequestBytes } from "../compaction.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionModelRequest } from "../model-request.js"
@@ -56,12 +58,43 @@ interface Input {
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
-  readonly recoverOverflow: Effect.Effect<boolean>
+  readonly recoverOverflow: (reason: "overflow" | "payload") => Effect.Effect<boolean>
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
+
+const isRequestOverflowFailure = (failure: unknown) =>
+  isContextOverflowFailure(failure) || isPayloadTooLargeFailure(failure)
+
+// The #54690 gateway family rejects oversized bodies with a generic HTTP 400
+// (`invalid_request_error`, null code) carrying no size signal, so
+// `classifyProviderFailure` correctly leaves it unclassified: classification
+// sees the message but not the request bytes. Only these known-generic
+// gateway wordings qualify, and only against a huge request (see below).
+const OVERSIZED_GATEWAY_MESSAGE_PATTERNS = [
+  /the request contains invalid parameters/i,
+]
+
+/**
+ * Proxies and gateways often reject oversized bodies with an unclassified 4xx instead of a size
+ * signal, while media counts flat toward tokens and dominates bytes. A rejection carrying one
+ * of the known-generic gateway wordings against a huge request is most likely size-caused, so
+ * it recovers like a payload rejection. Anything naming a concrete bug (corrupt file, bad tool
+ * schema, unsupported param), any classified failure, and all small requests never qualify.
+ * Only thrown failures carry HTTP status, so streamed provider errors are left to the
+ * classified paths.
+ */
+const isOversizedRejection = (failure: unknown, requestBytes: number) => {
+  if (requestBytes < OVERSIZED_REQUEST_BYTES) return false
+  if (!(failure instanceof AIError)) return false
+  if (failure.reason._tag !== "InvalidRequest" || failure.reason.classification !== undefined) return false
+  const http = failure.reason.http
+  if (http === undefined || http.status < 400 || http.status >= 500) return false
+  const text = [failure.reason.message, failure.reason.body ?? ""].join("\n")
+  return OVERSIZED_GATEWAY_MESSAGE_PATTERNS.some((pattern) => pattern.test(text))
+}
 
 /** Captures Location-scoped dependencies without introducing another service or execution loop. */
 export const make = Effect.gen(function* () {
@@ -103,6 +136,8 @@ export const make = Effect.gen(function* () {
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
     let overflowFailure: ProviderErrorEvent | undefined
+    let cachedRequestBytes: number | undefined
+    const requestBytes = () => (cachedRequestBytes ??= estimateRequestBytes(input.prepared.request))
     // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.runForEach((event) =>
@@ -112,7 +147,7 @@ export const make = Effect.gen(function* () {
           if (!publisher.hasStarted()) yield* Fiber.join(pendingStartSnapshot)
           if (
             LLMEvent.is.providerError(event) &&
-            isContextOverflowFailure(event) &&
+            isRequestOverflowFailure(event) &&
             !publisher.record().outputStarted
           ) {
             overflowFailure = event
@@ -153,14 +188,16 @@ export const make = Effect.gen(function* () {
         const tools = classifyToolExits(joined, toolRuns)
 
         const overflow = overflowFailure ?? streamFailure
+        const oversized = overflow !== undefined && isOversizedRejection(overflow, requestBytes())
         if (
           !publisher.record().outputStarted &&
-          isContextOverflowFailure(overflow) &&
-          (yield* restore(input.recoverOverflow))
+          (isRequestOverflowFailure(overflow) || oversized) &&
+          (yield* restore(input.recoverOverflow(isPayloadTooLargeFailure(overflow) || oversized ? "payload" : "overflow")))
         ) {
-          yield* Effect.logWarning("provider rejected the request as too long; compacting", {
+          yield* Effect.logWarning("provider rejected the request size; compacted before retrying", {
             sessionID: input.sessionID,
             model: input.model.ref,
+            reason: isPayloadTooLargeFailure(overflow) || oversized ? "payload" : "overflow",
             message: overflow?.message,
           })
           return Outcome.Compacted()
@@ -187,7 +224,10 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.RecoverFull()
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          llmFailure &&
+          llmError &&
+          !isRequestOverflowFailure(llmFailure) &&
+          !isOversizedRejection(llmFailure, requestBytes())
             ? yield* restore(
                 input.retry(
                   llmFailure,
