@@ -653,6 +653,95 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  for (const file of [
+    { mime: "application/vnd.apache.parquet", name: "table.parquet" },
+    { mime: "text/csv", name: undefined },
+  ]) {
+    it.effect(`continues history containing an unsupported ${file.mime} tool file`, () =>
+      Effect.gen(function* () {
+        const messages = [
+          Message.user("Read the table."),
+          Message.assistant([ToolCallPart.make({ id: "call_table", name: "read", input: {} })]),
+          Message.tool({
+            id: "call_table",
+            name: "read",
+            resultType: "content",
+            result: [
+              { type: "text", text: "Table read successfully" },
+              { type: "file", mime: file.mime, name: file.name, uri: "data:application/octet-stream;base64,UEFSMQ==" },
+            ],
+          }),
+        ]
+        const stored = encodeJson(messages)
+        for (const history of [messages, [...messages, Message.user("What can we do next?")]]) {
+          const prepared = yield* compileRequest(LLM.request({ model, messages: history }))
+          expect(prepared.body.messages[2]).toMatchObject({
+            role: "tool",
+            tool_call_id: "call_table",
+          })
+          expect(prepared.body.messages[2]?.content).toContain("Table read successfully")
+          const text = encodeJson(prepared.body.messages)
+          expect(text).toContain("omitted")
+          expect(text).toContain(file.name ?? "unnamed file")
+          expect(text).toContain(file.mime)
+          expect(text).not.toContain("UEFSMQ==")
+          if (history.length > messages.length)
+            expect(prepared.body.messages.at(-1)).toEqual({ role: "user", content: "What can we do next?" })
+        }
+        expect(encodeJson(messages)).toBe(stored)
+      }),
+    )
+  }
+
+  it.effect("keeps PNG and PDF tool files while explaining an omitted CSV", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_files", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_files",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Files read successfully" },
+                { type: "file", mime: "image/png", name: "pixel.png", uri: "data:image/png;base64,AAEC" },
+                { type: "file", mime: "text/csv", name: "table.csv", uri: "data:text/csv;base64,YSxi" },
+                {
+                  type: "file",
+                  mime: "application/pdf",
+                  name: "report.pdf",
+                  uri: "data:application/pdf;base64,JVBERi0=",
+                },
+              ],
+            }),
+            Message.user("Describe what is available."),
+          ],
+        }),
+      )
+      expect(prepared.body.messages[1]).toMatchObject({
+        role: "tool",
+        tool_call_id: "call_files",
+      })
+      expect(prepared.body.messages[1]?.content).toContain("Files read successfully")
+      expect(prepared.body.messages[1]?.content).toContain("omitted")
+      expect(prepared.body.messages[1]?.content).toContain("table.csv")
+      expect(prepared.body.messages[1]?.content).toContain("text/csv")
+      expect(prepared.body.messages.slice(2)).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAEC" } },
+            { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+          ],
+        },
+        { role: "user", content: "Describe what is available." },
+      ])
+      expect(encodeJson(prepared.body.messages)).not.toContain("YSxi")
+    }),
+  )
+
   it.effect("bridges image tool results before their synthetic user message when required", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
