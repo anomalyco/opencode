@@ -48,12 +48,44 @@ export type AutocompleteOption = {
   queueable?: boolean
 }
 
-type AutocompleteResults = {
+export type AutocompleteResults = {
   options: AutocompleteOption[]
   failed: boolean
   mode: AutocompleteRef["visible"]
   query: string
   resolved: boolean
+}
+
+export function createFilePart(
+  item: FileSystemEntry,
+  filePath: string,
+  lineRange?: { startLine: number; endLine?: number },
+) {
+  const urlObj = pathToFileURL(filePath)
+  const filename =
+    lineRange && item.type !== "directory"
+      ? `${item.path}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+      : item.path
+
+  if (lineRange && item.type !== "directory") {
+    urlObj.searchParams.set("start", String(lineRange.startLine))
+    if (lineRange.endLine !== undefined) {
+      urlObj.searchParams.set("end", String(lineRange.endLine))
+    }
+  }
+
+  return {
+    filename,
+    part: {
+      type: "file" as const,
+      path: item.path,
+      value: {
+        uri: urlObj.href,
+        name: filename,
+        mention: { start: 0, end: 0, text: "" },
+      },
+    },
+  }
 }
 
 export function Autocomplete(props: {
@@ -239,38 +271,6 @@ export function Autocomplete(props: {
     })
 
     if (part.type === "file" && part.path) frecency.updateFrecency(part.path)
-  }
-
-  function createFilePart(
-    item: FileSystemEntry,
-    filePath: string,
-    lineRange?: { startLine: number; endLine?: number },
-  ) {
-    const urlObj = pathToFileURL(filePath)
-    const filename =
-      lineRange && item.type !== "directory"
-        ? `${item.path}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
-        : item.path
-
-    if (lineRange && item.type !== "directory") {
-      urlObj.searchParams.set("start", String(lineRange.startLine))
-      if (lineRange.endLine !== undefined) {
-        urlObj.searchParams.set("end", String(lineRange.endLine))
-      }
-    }
-
-    return {
-      filename,
-      part: {
-        type: "file" as const,
-        path: item.path,
-        value: {
-          uri: urlObj.href,
-          name: filename,
-          mention: { start: 0, end: 0, text: "" },
-        },
-      },
-    }
   }
 
   const references = createMemo(() => data.location.reference.list() ?? [])

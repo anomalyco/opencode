@@ -25,6 +25,11 @@ export const experiments: Experiment[] = [
     title: "TUI tools",
     description: "Let the agent open terminals in this TUI (requires server support)",
   },
+  {
+    id: "live-follow",
+    title: "Live IDE follow",
+    description: "Mirror the editor's current file/selection as a prompt chip",
+  },
 ]
 
 export function DialogExperiments() {
