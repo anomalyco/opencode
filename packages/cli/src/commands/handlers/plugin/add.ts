@@ -1,47 +1,77 @@
 import { EOL } from "node:os"
-import path from "node:path"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { Effect } from "effect"
-import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
+import { Effect, Option } from "effect"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
 import { Host } from "@opencode/plugin/host"
+import { select, text } from "@clack/prompts"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { resolveConfigPath } from "../mcp/add"
 import { Config } from "../../../config"
+import { handlePromptErrors, prompt, requireInteractive } from "../../../ui/prompt"
+import { pluginTarget, readPluginConfig, writePlugins } from "./config"
 
 export default Runtime.handler(
   Commands.commands.plugin.commands.add,
   Effect.fn("cli.plugin.add")(function* (input) {
-    if (!(yield* Effect.promise(() => Npm.isInstallablePackage(input.package))))
+    if (input.local && input.global)
+      return yield* Effect.fail(new Error("Provide either --local or --global, not both"))
+    const supplied = Option.getOrUndefined(input.package)
+    if (!supplied) yield* requireInteractive("Pass a plugin package when running without an interactive terminal")
+    const targetPackage =
+      supplied ??
+      (yield* prompt(() =>
+        text({
+          message: "Which plugin would you like to add?",
+          placeholder: "opencode-acme-plugin or github:acme/opencode-plugin",
+          validate: (value) => (value?.trim() ? undefined : "Enter an npm registry or Git package specifier"),
+        }),
+      )).trim()
+    if (!(yield* Effect.promise(() => Npm.isInstallablePackage(targetPackage))))
       return yield* Effect.fail(new Error("Plugin target must be an npm registry package or Git package specifier"))
     const npm = yield* Npm.Service
-    const installed = yield* npm.add(input.package)
+    const installed = yield* npm.add(targetPackage)
     const entrypoints = Host.resolve(installed)
     const target = configurationTarget(entrypoints.server, entrypoints.tui)
     if (!target)
-      return yield* Effect.fail(new Error(`Plugin package has no server or TUI entrypoint: ${input.package}`))
+      return yield* Effect.fail(new Error(`Plugin package has no server or TUI entrypoint: ${targetPackage}`))
 
     if (target === "server") {
       const global = yield* Global.Service
-      const configPath = yield* Effect.promise(() => resolveConfigPath(global.config))
-      const changed = yield* Effect.promise(() => writePluginConfig(configPath, input.package))
+      const scope = input.local
+        ? "local"
+        : input.global || !process.stdin.isTTY || !process.stdout.isTTY
+          ? "global"
+          : yield* prompt(() =>
+              select({
+                message: "Where should this plugin be added?",
+                options: [
+                  { value: "local", label: "Project", hint: process.cwd() },
+                  { value: "global", label: "Global", hint: "All projects" },
+                ],
+              }),
+            )
+      const configPath = yield* Effect.promise(() =>
+        resolveConfigPath(scope === "local" ? process.cwd() : global.config),
+      )
+      const changed = yield* Effect.promise(() => writePluginConfig(configPath, targetPackage))
       process.stdout.write(
         changed
-          ? `Plugin "${input.package}" installed and added to ${configPath}${EOL}`
-          : `Plugin "${input.package}" is already configured in ${configPath}${EOL}`,
+          ? `Plugin "${targetPackage}" installed and added to ${configPath}${EOL}`
+          : `Plugin "${targetPackage}" is already configured in ${configPath}${EOL}`,
       )
       return
     }
 
+    if (input.local)
+      return yield* Effect.fail(new Error("TUI-only plugins require global CLI configuration; use --global instead"))
     const config = yield* Config.Service
     yield* config.update((draft) => {
-      if (configured(draft.plugins, input.package)) return
-      draft.plugins = [...(draft.plugins ?? []), input.package]
+      if (draft.plugins?.some((entry) => pluginTarget(entry) === targetPackage)) return
+      draft.plugins = [...(draft.plugins ?? []), targetPackage]
     })
-    process.stdout.write(`TUI plugin "${input.package}" installed and added to ${config.path}${EOL}`)
-  }),
+    process.stdout.write(`TUI plugin "${targetPackage}" installed and added to ${config.path}${EOL}`)
+  }, handlePromptErrors),
 )
 
 export function configurationTarget(server?: string, tui?: string) {
@@ -50,32 +80,8 @@ export function configurationTarget(server?: string, tui?: string) {
 }
 
 export async function writePluginConfig(configPath: string, spec: string) {
-  const text = await readFile(configPath, "utf8").catch((error) => {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return "{}"
-    throw error
-  })
-  const errors: ParseError[] = []
-  const config: unknown = parse(text, errors, { allowTrailingComma: true })
-  if (errors.length || typeof config !== "object" || config === null || Array.isArray(config))
-    throw new Error(`Invalid global configuration: ${configPath}`)
-  const plugins = "plugins" in config ? config.plugins : undefined
-  if (plugins !== undefined && !Array.isArray(plugins)) throw new Error(`Invalid plugins configuration: ${configPath}`)
-  if (configured(plugins, spec)) return false
-
-  const updated = applyEdits(
-    text,
-    modify(text, ["plugins"], [...(plugins ?? []), spec], { formattingOptions: { tabSize: 2, insertSpaces: true } }),
-  )
-  await mkdir(path.dirname(configPath), { recursive: true })
-  const temporary = configPath + ".tmp"
-  await writeFile(temporary, updated.endsWith("\n") ? updated : updated + "\n", { mode: 0o600 })
-  await rename(temporary, configPath)
+  const config = await readPluginConfig(configPath)
+  if (config.plugins.some((entry) => pluginTarget(entry) === spec)) return false
+  await writePlugins(configPath, config.text, [...config.plugins, spec])
   return true
-}
-
-function configured(plugins: readonly unknown[] | undefined, spec: string) {
-  return plugins?.some(
-    (entry) =>
-      entry === spec || (typeof entry === "object" && entry !== null && "package" in entry && entry.package === spec),
-  )
 }

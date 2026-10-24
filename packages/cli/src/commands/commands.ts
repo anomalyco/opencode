@@ -292,9 +292,20 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("add", {
-          description: "Install a plugin and add it to the global configuration",
+          description: "Install a plugin and add it to project or global configuration",
           params: {
-            package: Argument.String("package").pipe(Argument.withDescription("npm registry or Git package specifier")),
+            package: Argument.String("package").pipe(
+              Argument.withDescription("npm registry or Git package specifier (prompts when omitted)"),
+              Argument.optional,
+            ),
+            local: Flag.Boolean("local").pipe(
+              Flag.withDescription("Write to the current project's config"),
+              Flag.withDefault(false),
+            ),
+            global: Flag.Boolean("global").pipe(
+              Flag.withDescription("Write to the global config"),
+              Flag.withDefault(false),
+            ),
           },
         }),
         Spec.make("check", {
@@ -318,9 +329,25 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("remove", {
-          description: "Remove a plugin from global configuration",
+          description: "Remove a plugin from project or global configuration",
           params: {
-            package: Argument.String("package").pipe(Argument.withDescription("configured package specifier")),
+            package: Argument.String("package").pipe(
+              Argument.withDescription("Configured plugin target (opens a picker when omitted)"),
+              Argument.optional,
+            ),
+            local: Flag.Boolean("local").pipe(
+              Flag.withDescription("Remove from project configuration only"),
+              Flag.withDefault(false),
+            ),
+            global: Flag.Boolean("global").pipe(
+              Flag.withDescription("Remove from global configuration only"),
+              Flag.withDefault(false),
+            ),
+            yes: Flag.Boolean("yes").pipe(
+              Flag.withAlias("y"),
+              Flag.withDescription("Skip removal confirmation"),
+              Flag.withDefault(false),
+            ),
           },
         }),
       ],

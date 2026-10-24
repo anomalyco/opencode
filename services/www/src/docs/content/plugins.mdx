@@ -87,16 +87,50 @@ policy.
 
 ## Manage
 
-Install, list, check, update, or remove global package plugins with the CLI.
+Run `plugin add` to enter a package specifier and choose project or global configuration, or pass the package directly:
 
 ```sh
+opencode plugin add
 opencode plugin add opencode-acme-plugin@1.2.0
+```
+
+Skip the prompt with `--local` for the current project or `--global` for all projects.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0 --local
+opencode plugin add opencode-acme-plugin@1.2.0 --global
+```
+
+Project installation uses an existing `opencode.json(c)` or `.opencode/opencode.json(c)` in the current directory,
+or creates `opencode.json` there. Noninteractive commands without a scope flag keep the global default.
+
+TUI-only plugins always use global `cli.json`; `--local` is not supported for them.
+
+Run `plugin remove` to search configured plugins, grouped as Project, Inherited, and Global, with each entry's config file shown.
+Pass an exact target to skip the picker when it matches one file. Scope flags limit the selection; `--yes` skips confirmation:
+
+```sh
+opencode plugin remove
+opencode plugin remove opencode-acme-plugin@1.2.0 --local
+opencode plugin remove opencode-acme-plugin@1.2.0 --global --yes
+```
+
+- Removal changes only the selected config entry, including entries inherited from parent directories. It does not
+  delete source files or cached packages. Another config may still load the plugin.
+- Global removal affects all projects. Built-in and automatically discovered local plugins are not removal choices.
+- Noninteractive removal requires a target that matches one config file. Use a scope flag to narrow ambiguous matches,
+  or edit the listed files directly.
+- Listing warns about malformed or unreadable config files and skips them. Removal still validates the selected file
+  before writing.
+
+List loaded plugins, or check and update package plugins:
+
+```sh
 opencode plugin list
 opencode plugin list --builtin
 opencode plugin check
 opencode plugin update
 opencode plugin update opencode-acme-plugin
-opencode plugin remove opencode-acme-plugin@1.2.0
 ```
 
 `plugin check` checks server and TUI-only package plugins for updates. `plugin update` updates every outdated package;
