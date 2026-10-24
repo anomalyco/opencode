@@ -481,7 +481,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   yield* Effect.sync(() => {
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
-    const text = epilogue({ session: result.session, updatedVersion: result.updatedVersion })
+    const text = epilogue({
+      session: result.session,
+      updatedVersion: result.updatedVersion,
+      tty: process.stdout.isTTY,
+    })
     if (text) process.stdout.write(text + "\n")
   })
 })
