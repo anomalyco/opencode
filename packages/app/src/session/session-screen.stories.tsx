@@ -131,6 +131,23 @@ export const PermissionRequest = {
   ),
 }
 
+export const LongPermissionRequest = {
+  render: () => (
+    <SessionPreview
+      title="Review a long shell command"
+      description={description}
+      document={permissionPendingDocument}
+      request={{
+        type: "permission",
+        value: {
+          ...activePermissionRequest,
+          resources: [Array.from({ length: 80 }, (_, i) => `echo ${i}: ${"review this command ".repeat(8)}`).join("\n")],
+        },
+      }}
+    />
+  ),
+}
+
 export const QuestionRequest = {
   render: () => (
     <SessionPreview
