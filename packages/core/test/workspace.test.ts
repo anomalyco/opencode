@@ -407,6 +407,7 @@ it.effect("routes file overrides through the workspace connection without spawni
       new TextEncoder().encode("hello"),
     )
     expect(yield* files.list(root)).toEqual([{ name: "note.txt", type: "file" }])
+    expect(yield* files.realPath(`${root}/./note.txt`)).toBe(`${root}/note.txt`)
 
     yield* files.move(`${root}/note.txt`, `${root}/renamed.txt`)
     expect(yield* files.list(root)).toEqual([{ name: "renamed.txt", type: "file" }])
