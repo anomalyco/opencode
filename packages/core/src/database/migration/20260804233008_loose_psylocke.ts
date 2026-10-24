@@ -136,6 +136,16 @@ const migration: DatabaseMigration.Migration = {
           CONSTRAINT \`fk_session_message_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      // Preserve 1.19 API history until the data importer can resolve its owners.
+      // This durable staging table survives interruption between schema and data migration.
+      yield* tx.run(`
+        CREATE TABLE \`migration_v1_session_message\` AS
+        SELECT id, session_id, type, seq, time_created, time_updated, data FROM \`session_message\`;
+      `)
+      yield* tx.run(`
+        CREATE INDEX \`migration_v1_session_message_session_idx\`
+        ON \`migration_v1_session_message\` (session_id, seq);
+      `)
       yield* tx.run(`DROP TABLE \`session_message\`;`)
       yield* tx.run(`ALTER TABLE \`__new_session_message\` RENAME TO \`session_message\`;`)
       yield* tx.run(

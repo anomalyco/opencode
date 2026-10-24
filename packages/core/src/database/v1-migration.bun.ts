@@ -573,6 +573,9 @@ export function run(
             }),
           )
           .pipe(Effect.orDie)
+      const staged = yield* db.get(sql`
+        SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'migration_v1_session_message'
+      `)
       const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
       const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
       const cursor = state?.phase === "sessions" ? state.cursor : undefined
@@ -647,6 +650,8 @@ export function run(
                   set: { value: { phase: "sessions", cursor: nextID.id }, time_updated: Date.now() },
                 })
                 .run()
+              // Sessions imported from opencode-next.db remain authoritative.
+              if (nextID.imported) return
               if (projectID !== nextID.project_id)
                 yield* Effect.logWarning("Reassigned V1 session with missing project", {
                   sessionID: nextID.id,
@@ -698,35 +703,51 @@ export function run(
                 sql`SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${next.id}`,
               )
               const transformed = transformSession({ session: next, messages: sourceMessages, parts: sourceParts })
+              const native = staged
+                ? yield* tx.all<NextMessage>(sql`
+                    SELECT id, session_id, type, seq, time_created, time_updated, data
+                    FROM migration_v1_session_message WHERE session_id = ${next.id} ORDER BY seq
+                  `)
+                : []
+              const nativeIDs = new Set(native.map((message) => message.id))
+              const legacy = transformed.messages.filter((message) => !nativeIDs.has(message.id))
+              const messages = [
+                ...legacy.map((message, seq) => ({ ...message, seq, data: JSON.stringify(message.data) })),
+                ...native.map((message) => ({ ...message, seq: message.seq + legacy.length })),
+              ]
+              const watermark = messages.at(-1)?.seq ?? -1
               yield* Effect.forEach(transformed.warnings, (warning) =>
                 Effect.logWarning("Skipped V1 migration row", warning),
               )
               yield* tx.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, next.id)).run()
-              yield* Effect.forEach(transformed.messages, (message) =>
+              yield* Effect.forEach(messages, (message) =>
                 tx
                   .insert(SessionMessageTable)
                   .values({
                     id: SessionMessage.ID.make(message.id),
                     session_id: SessionSchema.ID.make(message.session_id),
-                    type: message.type,
+                    type: message.type as SessionMessage.Type,
                     seq: message.seq,
                     time_created: message.time_created,
                     time_updated: message.time_updated,
-                    data: sql`${JSON.stringify(message.data)}`,
+                    data: sql`${message.data}`,
                   })
                   .run(),
               )
               yield* tx
                 .update(SessionTable)
-                .set({ ...transformed.session, time_updated: next.time_updated })
+                .set({ ...(native.length ? {} : transformed.session), time_updated: next.time_updated })
                 .where(eq(SessionTable.id, next.id))
                 .run()
               yield* tx
                 .insert(EventSequenceTable)
-                .values({ aggregate_id: next.id, seq: transformed.watermark })
+                .values({ aggregate_id: next.id, seq: watermark })
                 .onConflictDoUpdate({
                   target: EventSequenceTable.aggregate_id,
-                  set: { seq: transformed.watermark, owner_id: null },
+                  set: {
+                    seq: native.length ? sql`max(${EventSequenceTable.seq}, ${watermark})` : watermark,
+                    owner_id: null,
+                  },
                 })
                 .run()
             }),
@@ -747,6 +768,7 @@ export function run(
       yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
+            if (staged) yield* tx.run(sql`DROP TABLE migration_v1_session_message`)
             yield* tx
               .insert(KVTable)
               .values({ key: MIGRATION_STATE_KEY, value: { phase: "completed" } })
