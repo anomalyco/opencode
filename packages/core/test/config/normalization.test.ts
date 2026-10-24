@@ -683,6 +683,46 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.providers).not.toHaveProperty(["untouched", "compatibility"])
   })
 
+  test("diagnoses native-only agent fields written in a legacy agent section", () => {
+    const result = normalized({
+      agent: { reviewer: { disabled: true, system: "Review.", prompt: "Review carefully." } },
+      mode: { planner: { disabled: true } },
+    })
+    expect(
+      result.diagnostics.filter((item) => item.kind === "unsupported").map((item) => [item.path, item.message]),
+    ).toEqual([
+      [
+        ["agent", "reviewer", "system"],
+        "native agent field in a legacy agent section is forwarded to the provider as a request option; use 'prompt' instead",
+      ],
+      [
+        ["agent", "reviewer", "disabled"],
+        "native agent field in a legacy agent section is forwarded to the provider as a request option; use 'disable' instead",
+      ],
+      [
+        ["mode", "planner", "disabled"],
+        "native agent field in a legacy agent section is forwarded to the provider as a request option; use 'disable' instead",
+      ],
+    ])
+    // The section still migrates; the native field is reported rather than silently dropped.
+    const reviewer = (result.encoded.agents as Record<string, any>).reviewer
+    expect(reviewer.disabled).toBeUndefined()
+    expect(reviewer.request.body.disabled).toBe(true)
+  })
+
+  test("accepts the legacy disable and prompt fields without diagnostics", () => {
+    const result = normalized({ agent: { reviewer: { disable: true, prompt: "Review carefully." } } })
+    expect(result.diagnostics).toEqual([])
+    const reviewer = (result.encoded.agents as Record<string, any>).reviewer
+    expect(reviewer.disabled).toBe(true)
+    expect(reviewer.system).toBe("Review carefully.")
+  })
+
+  test("accepts native agent fields in the native agents section without diagnostics", () => {
+    const result = normalized({ agents: { reviewer: { disabled: true, system: "Review." } } })
+    expect(result.diagnostics).toEqual([])
+  })
+
   test("invalid legacy provider overlays skip only that provider", () => {
     const result = normalized({
       provider: {
