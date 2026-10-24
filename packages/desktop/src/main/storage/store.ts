@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, renameSync } from "node:fs"
 import path from "node:path"
 import electron from "electron"
 
+import { writeFileAtomic } from "./atomic-write"
 import { SETTINGS_STORE } from "./keys"
 
 const cache = new Map<string, SettingsStore>()
@@ -32,11 +33,7 @@ export function getStore(name = SETTINGS_STORE) {
 export function createSettingsStore(file: string) {
   let data = read(file)
 
-  const write = () => {
-    mkdirSync(path.dirname(file), { recursive: true })
-    writeFileSync(`${file}.tmp`, JSON.stringify(data, null, "\t"))
-    renameSync(`${file}.tmp`, file)
-  }
+  const write = () => writeFileAtomic(file, JSON.stringify(data, null, "\t"))
 
   return {
     path: file,
