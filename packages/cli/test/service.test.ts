@@ -26,6 +26,17 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("preview-a", "linux")).toBe(ServiceConfig.defaultPort("preview-a", "linux"))
   expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
+  expect(ServiceConfig.defaultPort("latest", "linux", "/tmp/ocA")).toBe(
+    ServiceConfig.defaultPort("latest", "linux", "/tmp/ocA"),
+  )
+  expect(ServiceConfig.defaultPort("latest", "linux", "/tmp/ocA")).not.toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("latest", "linux", "/tmp/ocA")).not.toBe(
+    ServiceConfig.defaultPort("latest", "linux", "/tmp/ocB"),
+  )
+  const profilePorts = Array.from({ length: 200 }, (_, index) =>
+    ServiceConfig.defaultPort("latest", "linux", `/tmp/oc-${index}`),
+  )
+  expect(profilePorts.every((port) => port >= 10_000 && port < 0x8000)).toBe(true)
 })
 
 test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
@@ -200,10 +211,66 @@ test("service filenames share release channels and identify preview channels", (
   expect(ServiceConfig.filename("local")).toBe("service-local.json")
   expect(ServiceConfig.filename("preview-a")).toBe("service-preview-a.json")
   expect(ServiceConfig.filename("preview/a")).toBe("service-preview-a.json")
+  expect(ServiceConfig.filename("latest", "/tmp/ocA")).toBe(ServiceConfig.filename("dev", "/tmp/ocA"))
+  expect(ServiceConfig.filename("latest", "/tmp/ocA")).not.toBe("service.json")
+  expect(ServiceConfig.filename("latest", "/tmp/ocA")).not.toBe(ServiceConfig.filename("latest", "/tmp/ocB"))
+  expect(ServiceConfig.filename("local", "/tmp/ocA")).not.toBe(ServiceConfig.filename("latest", "/tmp/ocA"))
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234", "preview-a")).toBe(true)
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234.2", "preview-a")).toBe(true)
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-other-1234", "preview-a")).toBe(false)
   expect(ServiceConfig.versionBelongsToChannel("1.2.3", "preview-a")).toBe(false)
+})
+
+test("custom OPENCODE_CONFIG_DIR profiles isolate registration and port in a shared state directory", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-profiles-"))
+  const state = path.join(root, "state")
+  const configA = path.join(root, "ocA")
+  const configB = path.join(root, "ocB")
+  const previous = process.env.OPENCODE_CONFIG_DIR
+  const run = (configDir: string) => {
+    process.env.OPENCODE_CONFIG_DIR = configDir
+    return Effect.runPromise(
+      ServiceConfig.options().pipe(
+        Effect.provide(Global.layerWith({ config: configDir, state })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+  }
+  try {
+    const optionsA = await run(configA)
+    const optionsB = await run(configB)
+    expect(path.dirname(optionsA.file)).toBe(state)
+    expect(path.dirname(optionsB.file)).toBe(state)
+    expect(optionsA.file).not.toBe(path.join(state, ServiceConfig.filename()))
+    expect(optionsA.file).not.toBe(optionsB.file)
+    expect(optionsA.env?.OPENCODE_CONFIG_DIR).toBe(path.resolve(configA))
+    expect(optionsB.env?.OPENCODE_CONFIG_DIR).toBe(path.resolve(configB))
+
+    // Upgrading with a single custom OPENCODE_CONFIG_DIR adopts an unhashed registration only when its password matches.
+    const legacyRegistration = path.join(state, ServiceConfig.filename())
+    const record = {
+      id: "existing-profile-a",
+      version: OPENCODE_VERSION,
+      url: "http://127.0.0.1:49374",
+      pid: 1234,
+      password: "profile-a-secret",
+    }
+    await fs.writeFile(path.join(configA, ServiceConfig.filename()), JSON.stringify({ password: "profile-a-secret" }))
+    await fs.writeFile(path.join(configB, ServiceConfig.filename()), JSON.stringify({ password: "profile-b-secret" }))
+    await fs.writeFile(legacyRegistration, JSON.stringify(record))
+
+    await run(configB)
+    expect(await Bun.file(optionsB.file).exists()).toBe(false)
+    expect(await Bun.file(legacyRegistration).exists()).toBe(true)
+
+    await run(configA)
+    expect(await Bun.file(optionsA.file).json()).toEqual(record)
+    expect(await Bun.file(legacyRegistration).exists()).toBe(false)
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = previous
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test("service config migrates from the hashed channel filename", async () => {
@@ -427,8 +494,9 @@ test.each([
   "managed service applies CORS configuration with flag overrides: $args",
   async ({ args, origins }) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-cors-"))
-    const config = path.join(root, "config", ServiceConfig.filename())
-    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    const configDir = path.join(root, "config")
+    const config = path.join(configDir, ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.filename(undefined, configDir))
     const cors = ["http://192.0.2.10:3001", "https://configured.example.com"]
     await fs.mkdir(path.dirname(config), { recursive: true })
     await fs.writeFile(config, JSON.stringify({ cors }))
@@ -474,10 +542,11 @@ test("the original managed service contender binds when the occupied port is rel
   })
   const port = listener.port
   if (port === undefined) throw new Error("Server did not bind a port")
-  const registration = path.join(root, "state", "opencode", "service-local.json")
-  await fs.mkdir(path.join(root, "config"), { recursive: true })
+  const configDir = path.join(root, "config")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.filename("local", configDir))
+  await fs.mkdir(configDir, { recursive: true })
   await fs.mkdir(path.dirname(registration), { recursive: true })
-  await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
+  await fs.writeFile(path.join(configDir, "service-local.json"), JSON.stringify({ port }))
   await fs.writeFile(
     registration,
     JSON.stringify({

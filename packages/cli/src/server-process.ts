@@ -58,6 +58,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ),
         )
   const global = yield* Global.Service
+  const profile = ServiceConfig.activeProfile()
+  if (profile !== undefined) process.env.OPENCODE_CONFIG_DIR = profile
   // A sandbox may deny $HOME; the service then keeps the cwd it was launched from.
   if (options.mode === "service")
     yield* Effect.try(() => process.chdir(global.home)).pipe(
@@ -69,7 +71,10 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
-      const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const port =
+        options.port ??
+        config.port ??
+        (options.mode === "service" ? ServiceConfig.defaultPort(OPENCODE_CHANNEL, process.platform, profile) : undefined)
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
