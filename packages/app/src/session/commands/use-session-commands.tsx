@@ -15,6 +15,8 @@ import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
+import { useServer } from "@/runtime/server/current"
+import { useSessionPins } from "@/home/sessions/pins"
 import { Command } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "@/runtime/extension/host"
 import type { Region } from "@/runtime/extension/panels"
@@ -60,6 +62,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const platform = usePlatform()
   const layout = useLayout()
   const host = useExtensionHost()
+  const server = useServer()
+  const pins = useSessionPins()
 
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
@@ -301,6 +305,27 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const undo = actions.revert.undo
   const redo = actions.revert.redo
 
+  // Subagent sessions are not listed on Home, so they cannot be pinned.
+  const pinnableSessionID = () => {
+    const sessionID = actions.session.identity.params.id
+
+    if (!sessionID || actions.session.data.info()?.parentID) return
+
+    return sessionID
+  }
+
+  const pinned = () => {
+    const sessionID = pinnableSessionID()
+
+    return !!sessionID && pins.pinned(server.key, sessionID)
+  }
+
+  const togglePin = () => {
+    const sessionID = pinnableSessionID()
+
+    if (sessionID) pins.toggle(server.key, sessionID)
+  }
+
   const compact = async () => {
     const sessionID = actions.session.identity.params.id
 
@@ -381,6 +406,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.copyID"),
       disabled: !actions.session.identity.params.id,
       onSelect: copySessionID,
+    }),
+    sessionCommand({
+      id: "session.pin",
+      title: language.t(pinned() ? "command.session.unpin" : "command.session.pin"),
+      description: language.t("command.session.pin.description"),
+      disabled: !pinnableSessionID(),
+      onSelect: togglePin,
     }),
   ]
 

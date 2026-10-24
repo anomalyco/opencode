@@ -31,8 +31,10 @@ export function HomeSessions(props: {
           searchNoResultsLabel={props.search.result.noResultsLabel()}
           titleOpacity={props.scroll.header.titleOpacity}
           isOpenTab={props.sessions.tab.isOpen}
+          isPinned={props.sessions.pin.is}
           onCreateSession={props.sessions.session.create}
           onOpenSession={props.sessions.session.open}
+          onTogglePin={props.sessions.pin.toggle}
           onArchiveSession={props.sessions.session.archive}
           onRenameSession={props.sessions.session.rename}
           onExportSession={props.sessions.session.export}

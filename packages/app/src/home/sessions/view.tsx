@@ -38,7 +38,7 @@ const HOME_SESSION_LONG_PRESS_MS = 500
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: "navigator" in globalThis && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -65,8 +65,10 @@ export type HomeSessionsViewProps = {
   searchNoResultsLabel: string
   titleOpacity: (id: HomeSessionGroup["id"]) => number
   isOpenTab: (record: HomeSessionRecord) => boolean
+  isPinned: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
+  onTogglePin: (record: HomeSessionRecord) => void
   onArchiveSession: (session: SessionInfo) => Promise<void>
   onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
   onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
@@ -779,6 +781,9 @@ function HomeSessionRow(
               requestAnimationFrame(() => rowButton()?.focus())
             }}
           >
+            <Menu.Item onSelect={() => props.onTogglePin(props.record)}>
+              {props.language.t(props.isPinned(props.record) ? "common.unpin" : "common.pin")}
+            </Menu.Item>
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
             <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
               {props.language.t("common.export")}…

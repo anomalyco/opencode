@@ -26,15 +26,15 @@ test("the session context menu renames, exports, and deletes a Home session", as
 
   await target.focus()
   await target.press("Shift+F10")
-  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Pin" })).toBeVisible()
   await page.keyboard.press("Escape")
-  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeHidden()
+  await expect(page.getByRole("menuitem", { name: "Pin" })).toBeHidden()
   await expect(target).toBeFocused()
 
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText(["Pin", "Rename", "Export…", "Delete…"])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -75,6 +75,34 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await dialog.getByRole("button", { name: "Delete session" }).click()
   await removed
   await expect(renamedRow).toBeHidden()
+})
+
+test("pinning a Home session keeps it above the other sessions", async ({ page }) => {
+  await openHome(page)
+  const list = page.getByRole("region", { name: "Recent sessions" })
+  const target = row(page, fixture.expected.targetTitle)
+  await expect(target).toBeVisible()
+  await expect(list.getByText("Pinned", { exact: true })).toHaveCount(0)
+
+  await target.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
+
+  await expect(list.getByText("Pinned", { exact: true })).toBeVisible()
+  await expect(list.locator('[data-component="home-session-row-container"]').first()).toHaveAttribute(
+    "data-session-id",
+    fixture.targetID,
+  )
+
+  await page.reload()
+  await expect(list.getByText("Pinned", { exact: true })).toBeVisible()
+  await expect(list.locator('[data-component="home-session-row-container"]').first()).toHaveAttribute(
+    "data-session-id",
+    fixture.targetID,
+  )
+
+  await target.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Unpin", exact: true }).click()
+  await expect(list.getByText("Pinned", { exact: true })).toHaveCount(0)
 })
 
 test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {

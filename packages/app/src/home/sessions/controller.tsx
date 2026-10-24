@@ -4,6 +4,7 @@ import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
 import {
@@ -27,6 +28,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import type { HomeController } from "../model"
 import { buildHomeSessionRecords, homeProjectForSession, homeSessionLocation, type HomeSessionRecord } from "./records"
+import { useSessionPins } from "./pins"
 
 export type { HomeSessionRecord } from "./records"
 
@@ -34,7 +36,7 @@ export type { HomeSessionRecord } from "./records"
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
 
 export type HomeSessionGroup = {
-  id: "today" | "yesterday" | "older"
+  id: "pinned" | "today" | "yesterday" | "older"
   title: string
   sessions: HomeSessionRecord[]
 }
@@ -48,6 +50,7 @@ export function createHomeSessionsController(home: HomeController) {
   const language = useLanguage()
   const platform = usePlatform()
   const queryClient = useQueryClient()
+  const pins = useSessionPins()
 
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -91,17 +94,70 @@ export function createHomeSessionsController(home: HomeController) {
     )
   })
 
-  const allRecords = createMemo(() =>
-    buildHomeSessionRecords({
-      sessions: indexedSessions,
+  const serverKey = createMemo(() => {
+    const conn = home.server.focused()
+
+    return conn ? ServerConnection.key(conn) : undefined
+  })
+
+  const pinnedIDs = createMemo(() => {
+    const server = serverKey()
+
+    return server ? pins.ids(server) : []
+  })
+
+  // Pinned sessions can outlive the fetched index, so resolve the ones it does not hold.
+  const resolvedPins = new Set<string>()
+  const [resolved, setResolved] = createStore<{ sessions: Record<string, SessionInfo | undefined> }>({ sessions: {} })
+
+  createEffect(() => {
+    const ctx = home.server.focusedContext()
+    const server = serverKey()
+
+    if (!ctx || !server) return
+    const indexed = new Set(indexedSessions().map((session) => session.id))
+
+    pinnedIDs()
+      .filter((sessionID) => !indexed.has(sessionID))
+      .forEach((sessionID) => {
+        const key = `${server}\0${sessionID}`
+
+        if (resolvedPins.has(key)) return
+        resolvedPins.add(key)
+        void untrack(() => ctx.sdk.api.session.get({ sessionID })).then(
+          (session) => setResolved("sessions", key, session),
+          () => undefined,
+        )
+      })
+  })
+
+  const pinnedSessions = createMemo(() => {
+    const server = serverKey()
+
+    if (!server) return []
+    const indexed = new Map(indexedSessions().map((session) => [session.id, session] as const))
+
+    return pinnedIDs().flatMap((sessionID) => {
+      const session = indexed.get(sessionID) ?? resolved.sessions[`${server}\0${sessionID}`]
+
+      return session && !session.parentID && session.time.archived === undefined ? [session] : []
+    })
+  })
+
+  const allRecords = createMemo(() => {
+    const pinned = new Map(pinnedIDs().map((id, index) => [id, index] as const))
+    const rank = (sessionID: string) => pinned.get(sessionID) ?? Number.MAX_SAFE_INTEGER
+
+    return buildHomeSessionRecords({
+      sessions: () => [...pinnedSessions(), ...indexedSessions()],
       projectDirectories,
       projects: home.project.list,
       resolveProject: (session) => home.server.focusedContext()?.projects.forSession(session),
-    }),
-  )
+    }).toSorted((a, b) => rank(a.session.id) - rank(b.session.id))
+  })
 
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
-  const groups = createMemo(() => groupSessions(records(), language))
+  const groups = createMemo(() => groupSessions(records(), language, new Set(pinnedIDs())))
   const prefetched = new Set<string>()
 
   const location = (record: HomeSessionRecord) => {
@@ -249,10 +305,11 @@ export function createHomeSessionsController(home: HomeController) {
       .remove(session.id)
       .then(() => {
         notifySessionTabsRemoved({
-          server: ServerConnection.key(conn),
+          server,
           directory: session.location.directory,
           sessionIDs: ids,
         })
+        pins.forget(server, ids)
 
         return true
       })
@@ -388,6 +445,19 @@ export function createHomeSessionsController(home: HomeController) {
         return !!server && sessionHasOpenTab(tabs.store, server, record.session)
       },
     },
+    pin: {
+      is: (record: HomeSessionRecord) => {
+        const server = serverKey()
+
+        return !!server && pins.pinned(server, record.session.id)
+      },
+      toggle: (record: HomeSessionRecord) => {
+        const server = serverKey()
+
+        if (!server) return
+        pins.toggle(server, record.session.id)
+      },
+    },
   }
 }
 
@@ -404,14 +474,20 @@ function localDay(date: Date) {
   return date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate()
 }
 
-function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof useLanguage>): HomeSessionGroup[] {
+function groupSessions(
+  records: HomeSessionRecord[],
+  language: ReturnType<typeof useLanguage>,
+  pinned: Set<string>,
+): HomeSessionGroup[] {
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
   const day = (record: HomeSessionRecord) => localDay(new Date(record.session.time.updated ?? record.session.time.created))
-  const todaySessions = records.filter((record) => day(record) === today)
-  const yesterdaySessions = records.filter((record) => day(record) === yesterday)
-  const olderSessions = records.filter((record) => day(record) !== today && day(record) !== yesterday)
+  const pinnedRecords = records.filter((record) => pinned.has(record.session.id))
+  const recent = records.filter((record) => !pinned.has(record.session.id))
+  const todaySessions = recent.filter((record) => day(record) === today)
+  const yesterdaySessions = recent.filter((record) => day(record) === yesterday)
+  const olderSessions = recent.filter((record) => day(record) !== today && day(record) !== yesterday)
 
   const olderTitle =
     todaySessions.length === 0 && yesterdaySessions.length === 0
@@ -419,6 +495,7 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
       : language.t("home.sessions.group.older")
 
   return [
+    { id: "pinned" as const, title: language.t("home.sessions.group.pinned"), sessions: pinnedRecords },
     { id: "today" as const, title: language.t("home.sessions.group.today"), sessions: todaySessions },
     { id: "yesterday" as const, title: language.t("home.sessions.group.yesterday"), sessions: yesterdaySessions },
     { id: "older" as const, title: olderTitle, sessions: olderSessions },

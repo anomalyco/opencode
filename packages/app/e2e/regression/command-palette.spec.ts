@@ -48,6 +48,29 @@ test("lists recent sessions before a query is entered", async ({ page }) => {
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
 })
 
+test("pins the open session from the palette", async ({ page }) => {
+  const { dialog, input } = await openCommandPalette(page)
+  await input.pressSequentially("pin session")
+  const pin = dialog.getByRole("option", { name: /^Pin session/ })
+  await expect(pin).toHaveAttribute("aria-selected", "true")
+  await input.press("Enter")
+  await expect(dialog).toHaveCount(0)
+
+  await page.keyboard.press("ControlOrMeta+Shift+P")
+  const reopened = page.getByRole("dialog").getByRole("textbox")
+  await reopened.pressSequentially("pin session")
+  await expect(page.getByRole("option", { name: /^Unpin session/ })).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("Escape")
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  const list = page.getByRole("region", { name: "Recent sessions" })
+  await expect(list.getByText("Pinned", { exact: true })).toBeVisible()
+  await expect(list.locator('[data-component="home-session-row-container"]').first()).toHaveAttribute(
+    "data-session-id",
+    paletteSession.id,
+  )
+})
+
 test("reopens from its shortcut as soon as it closes", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   await input.press("Escape")

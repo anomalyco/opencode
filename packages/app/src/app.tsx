@@ -10,6 +10,7 @@ import { type Component, createRenderEffect, ErrorBoundary, type JSX, type Paren
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { SessionPinsProvider } from "@/home/sessions/pins"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
@@ -94,16 +95,18 @@ export function AppInterface(props: {
   // route changes. Draft and session routes override only their server-bound data
   // providers beneath it.
   const Root = (rootProps: ParentProps) => (
-    <TabsProvider>
-      <GlobalProvider>
-        <BodyTypography />
-        <CommandProvider>
-          <DesktopCommands />
-          {props.children}
-          {rootProps.children}
-        </CommandProvider>
-      </GlobalProvider>
-    </TabsProvider>
+    <SessionPinsProvider>
+      <TabsProvider>
+        <GlobalProvider>
+          <BodyTypography />
+          <CommandProvider>
+            <DesktopCommands />
+            {props.children}
+            {rootProps.children}
+          </CommandProvider>
+        </GlobalProvider>
+      </TabsProvider>
+    </SessionPinsProvider>
   )
 
   return (
