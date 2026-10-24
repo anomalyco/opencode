@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Gerencie o agente do GitHub para automação de repositórios.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Instale o agente do GitHub em seu repositório.
-
-```bash
-opencode github install
-```
-
-Isso configura o fluxo de trabalho necessário do GitHub Actions e o guia pelo processo de configuração. [Saiba mais](/docs/github).
-
----
-
-#### run
-
-Execute o agente do GitHub. Isso é tipicamente usado em GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Opções
-
-| Flag                                  | Descrição                                        |
-| ------------------------------------- | ------------------------------------------------ |
-| <nobr><code>{"--event"}</code></nobr> | Evento simulado do GitHub para executar o agente |
-| <nobr><code>{"--token"}</code></nobr> | Token de acesso pessoal do GitHub                |
-
----
-
 ### mcp
 
 Gerencie servidores do Model Context Protocol.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Inicie um servidor opencode sem cabeça com uma interface web.
-
-```bash
-opencode web
-```
-
-Isso inicia um servidor HTTP e abre um navegador para acessar o opencode através de uma interface web. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
-
-#### Opções
-
-| Flag                                     | Descrição                                             |
-| ---------------------------------------- | ----------------------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | Porta para escutar                                    |
-| <nobr><code>{"--hostname"}</code></nobr> | Nome do host para escutar                             |
-| <nobr><code>{"--mdns"}</code></nobr>     | Habilitar descoberta mDNS                             |
-| <nobr><code>{"--cors"}</code></nobr>     | Origem(ns) de navegador adicionais para permitir CORS |
 
 ---
 

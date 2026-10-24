@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-إدارة وكيل GitHub لأتمتة المستودع.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-تثبيت وكيل GitHub في مستودعك.
-
-```bash
-opencode github install
-```
-
-يقوم ذلك بإعداد سير عمل GitHub Actions اللازم ويرشدك خلال عملية التهيئة. [اعرف المزيد](/docs/github).
-
----
-
-#### run
-
-تشغيل وكيل GitHub. يُستخدم هذا عادة ضمن GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### الرايات
-
-| الراية                                | الوصف                                |
-| ------------------------------------- | ------------------------------------ |
-| <nobr><code>{"--event"}</code></nobr> | حدث GitHub مُحاكى لتشغيل الوكيل عليه |
-| <nobr><code>{"--token"}</code></nobr> | رمز وصول شخصي لـ GitHub              |
-
----
-
 ### mcp
 
 إدارة خوادم Model Context Protocol.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-بدء خادم OpenCode بدون واجهة مع واجهة ويب.
-
-```bash
-opencode web
-```
-
-يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
-
-#### الرايات
-
-| الراية                                   | الوصف                                     |
-| ---------------------------------------- | ----------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | المنفذ الذي يتم الاستماع عليه             |
-| <nobr><code>{"--hostname"}</code></nobr> | اسم المضيف الذي يتم الاستماع عليه         |
-| <nobr><code>{"--mdns"}</code></nobr>     | تفعيل اكتشاف mDNS                         |
-| <nobr><code>{"--cors"}</code></nobr>     | أصول/منشأات إضافية للمتصفح للسماح بـ CORS |
 
 ---
 

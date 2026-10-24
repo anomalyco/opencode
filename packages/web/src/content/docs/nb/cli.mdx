@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Administrer GitHub-agenten for depotautomatisering.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Installer GitHub-agenten i depotet ditt.
-
-```bash
-opencode github install
-```
-
-Dette setter opp den nødvendige GitHub Actions-arbeidsflyten og veileder deg gjennom konfigurasjonsprosessen. [Finn ut mer](/docs/github).
-
----
-
-#### run
-
-Kjør GitHub-agenten. Dette brukes vanligvis i GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Flagg
-
-| Flagg                                 | Beskrivelse                                  |
-| ------------------------------------- | -------------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | GitHub mock-hendelse agenten skal kjøres for |
-| <nobr><code>{"--token"}</code></nobr> | GitHub personlig tilgangsnøkkel              |
-
----
-
 ### mcp
 
 Administrer Model Context Protocol-servere.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Start en headless OpenCode-server med et webgrensesnitt.
-
-```bash
-opencode web
-```
-
-Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenCode via et nettgrensesnitt. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
-
-#### Flagg
-
-| Flagg                                    | Beskrivelse                                        |
-| ---------------------------------------- | -------------------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | Port å lytte på                                    |
-| <nobr><code>{"--hostname"}</code></nobr> | Vertsnavn å lytte på                               |
-| <nobr><code>{"--mdns"}</code></nobr>     | Aktiver mDNS-oppdagelse                            |
-| <nobr><code>{"--cors"}</code></nobr>     | Ytterligere nettleseropprinnelse som tillater CORS |
 
 ---
 

@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Upravljajte GitHub agentom za automatizaciju repozitorija.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Instalirajte GitHub agenta u svoj repozitorij.
-
-```bash
-opencode github install
-```
-
-Ovo postavlja neophodni tok rada GitHub Actions i vodi vas kroz proces konfiguracije. [Saznajte više](/docs/github).
-
----
-
-#### run
-
-Pokrenite GitHub agent. Ovo se obično koristi u GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Opcije
-
-| Opcija                                | Opis                                   |
-| ------------------------------------- | -------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | GitHub mock event za pokretanje agenta |
-| <nobr><code>{"--token"}</code></nobr> | GitHub Personal Access Token           |
-
----
-
 ### mcp
 
 Upravljajte Model Context Protocol (MCP) serverima.
@@ -415,27 +376,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Pokrenite OpenCode headless server sa web interfejsom.
-
-```bash
-opencode web
-```
-
-Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode-u preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
-
-#### Opcije
-
-| Opcija                                   | Opis                                                  |
-| ---------------------------------------- | ----------------------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | Port na kojem treba slušati                           |
-| <nobr><code>{"--hostname"}</code></nobr> | Hostname na kojem treba slušati                       |
-| <nobr><code>{"--mdns"}</code></nobr>     | Omogući mDNS otkrivanje                               |
-| <nobr><code>{"--cors"}</code></nobr>     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
 
 ---
 

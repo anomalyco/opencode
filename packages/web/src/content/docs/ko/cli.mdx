@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-저장소 자동화를 위한 GitHub 에이전트를 관리합니다.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-저장소에 GitHub 에이전트를 설치합니다.
-
-```bash
-opencode github install
-```
-
-필요한 GitHub Actions 워크플로를 설정하고 구성 과정을 안내합니다. [더 알아보기](/docs/github).
-
----
-
-#### run
-
-GitHub 에이전트를 실행합니다. 보통 GitHub Actions에서 사용합니다.
-
-```bash
-opencode github run
-```
-
-##### 플래그
-
-| 플래그                                | 설명                      |
-| ------------------------------------- | ------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | 실행할 GitHub 모의 이벤트 |
-| <nobr><code>{"--token"}</code></nobr> | GitHub 개인 액세스 토큰   |
-
----
-
 ### mcp
 
 Model Context Protocol 서버를 관리합니다.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-웹 인터페이스를 포함한 headless OpenCode 서버를 시작합니다.
-
-```bash
-opencode web
-```
-
-이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 OpenCode에 접속합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
-
-#### 플래그
-
-| 플래그                                   | 설명                              |
-| ---------------------------------------- | --------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | 수신 포트                         |
-| <nobr><code>{"--hostname"}</code></nobr> | 수신 호스트명                     |
-| <nobr><code>{"--mdns"}</code></nobr>     | mDNS 검색 활성화                  |
-| <nobr><code>{"--cors"}</code></nobr>     | 허용할 추가 브라우저 origin(CORS) |
 
 ---
 

@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Gérez l'agent GitHub pour l'automatisation du dépôt.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Installez l'agent GitHub dans votre dépôt.
-
-```bash
-opencode github install
-```
-
-Cela configure le flux de travail GitHub Actions nécessaire et vous guide tout au long du processus de configuration. [En savoir plus](/docs/github).
-
----
-
-#### run
-
-Exécutez l'agent GitHub. Ceci est généralement utilisé dans les GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Options
-
-| Option                                | Description                                          |
-| ------------------------------------- | ---------------------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | Événement simulé GitHub pour lequel exécuter l'agent |
-| <nobr><code>{"--token"}</code></nobr> | Jeton d'accès personnel GitHub                       |
-
----
-
 ### MCP
 
 Gérer les serveurs Model Context Protocol.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Démarrez un serveur OpenCode sans interface graphique avec une interface Web.
-
-```bash
-opencode web
-```
-
-Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à OpenCode via une interface Web. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
-
-#### Options
-
-| Option                                   | Description                                                |
-| ---------------------------------------- | ---------------------------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | Port d'écoute                                              |
-| <nobr><code>{"--hostname"}</code></nobr> | Nom d'hôte d'écoute                                        |
-| <nobr><code>{"--mdns"}</code></nobr>     | Activer la découverte mDNS                                 |
-| <nobr><code>{"--cors"}</code></nobr>     | Origines de navigateur supplémentaires pour autoriser CORS |
 
 ---
 

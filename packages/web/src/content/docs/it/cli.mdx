@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Gestisci l'agente GitHub per l'automazione dei repository.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Installa l'agente GitHub nel tuo repository.
-
-```bash
-opencode github install
-```
-
-Questo configura il workflow GitHub Actions necessario e ti guida nel processo di configurazione. [Scopri di più](/docs/github).
-
----
-
-#### run
-
-Esegui l'agente GitHub. Tipicamente usato in GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Flag
-
-| Flag                                  | Descrizione                                  |
-| ------------------------------------- | -------------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | Evento GitHub mock per cui eseguire l'agente |
-| <nobr><code>{"--token"}</code></nobr> | GitHub personal access token                 |
-
----
-
 ### mcp
 
 Gestisci i server Model Context Protocol.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Avvia un server OpenCode headless con interfaccia web.
-
-```bash
-opencode web
-```
-
-Avvia un server HTTP e apre un browser per accedere a OpenCode tramite interfaccia web. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
-
-#### Flag
-
-| Flag                                     | Descrizione                                    |
-| ---------------------------------------- | ---------------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | Porta su cui mettersi in ascolto               |
-| <nobr><code>{"--hostname"}</code></nobr> | Hostname su cui mettersi in ascolto            |
-| <nobr><code>{"--mdns"}</code></nobr>     | Abilita discovery mDNS                         |
-| <nobr><code>{"--cors"}</code></nobr>     | Origin browser addizionali per consentire CORS |
 
 ---
 

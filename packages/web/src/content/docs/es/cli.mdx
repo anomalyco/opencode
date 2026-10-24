@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Administre el agente GitHub para la automatización del repositorio.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Instale el agente GitHub en su repositorio.
-
-```bash
-opencode github install
-```
-
-Esto configura el flujo de trabajo de acciones GitHub necesario y lo guía a través del proceso de configuración. [Más información](/docs/github).
-
----
-
-#### run
-
-Ejecute el agente GitHub. Esto se usa normalmente en acciones GitHub.
-
-```bash
-opencode github run
-```
-
-##### Opciones
-
-| Opción                                | Descripción                                    |
-| ------------------------------------- | ---------------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | GitHub evento simulado para ejecutar el agente |
-| <nobr><code>{"--token"}</code></nobr> | GitHub token de acceso personal                |
-
----
-
 ### mcp
 
 Administrar servidores de protocolo de contexto modelo.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Inicie un servidor OpenCode sin cabeza con una interfaz web.
-
-```bash
-opencode web
-```
-
-Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
-
-#### Opciones
-
-| Opción                                   | Descripción                                          |
-| ---------------------------------------- | ---------------------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | Puerto para escuchar                                 |
-| <nobr><code>{"--hostname"}</code></nobr> | Nombre de host para escuchar                         |
-| <nobr><code>{"--mdns"}</code></nobr>     | Habilitar el descubrimiento de mDNS                  |
-| <nobr><code>{"--cors"}</code></nobr>     | Orígenes de navegador adicionales para permitir CORS |
 
 ---
 
