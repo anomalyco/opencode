@@ -36,7 +36,7 @@ import {
 } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
-import { createMarkdownRenderer } from "./markdown-solid"
+import { createMarkdownRenderer, settleMarkdownWords } from "./markdown-solid"
 import {
   useMarkdown,
   type OpenMarkdownLocalFile,
@@ -73,6 +73,10 @@ const renderedMarkdown = new WeakMap<
   HTMLDivElement,
   { renderer: ReturnType<typeof createMarkdownRenderer>; raw: string }
 >()
+
+export function hasLiveMarkdownRenderer(block: HTMLDivElement) {
+  return renderedMarkdown.has(block)
+}
 
 function escape(text: string) {
   return text
@@ -889,14 +893,20 @@ function updateBlock(
   }
 
   const existing =
-    current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && !renderedCodeTokens.has(current)
+    current instanceof HTMLDivElement &&
+    !renderedCodeTokens.has(current) &&
+    // Block keys include the mode, so a live block that settles keeps its element under its new key.
+    (current.dataset.markdownKey === block.key || (renderedMarkdown.has(current) && block.mode !== "live"))
       ? current
       : undefined
 
   if (existing?.dataset.markdownHash === block.hash) {
     // A block that finishes streaming keeps its DOM and the user's selection; only its file paths get checked now.
     if (existing.dataset.markdownMode === "live" && block.mode !== "live") {
+      existing.dataset.markdownKey = block.key
       existing.dataset.markdownMode = block.mode
+      disposeRenderedMarkdown(existing)
+      settleMarkdownWords(existing)
       markInlineCode(existing, existing, false, localFileExists)
     }
 
@@ -909,8 +919,8 @@ function updateBlock(
   next.dataset.markdownHash = block.hash
   next.dataset.markdownMode = block.mode
   next.style.display = "contents"
+
   const rendered = renderedMarkdown.get(next)
-  // Keep live renderers in control of their DOM, including after completion.
   const source = rendered || block.mode === "live" ? document.createElement("div") : next
 
   if (source === next) disposeCopyButtons(next)
@@ -922,8 +932,18 @@ function updateBlock(
   markExternalLinkFavicons(source)
 
   if (rendered) {
-    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+    rendered.renderer.update(source.innerHTML, true, rendered.raw !== block.raw)
     rendered.raw = block.raw
+
+    if (block.mode === "live") return
+
+    // A block that settles with new content gets one last live patch, which Solid applies after this
+    // effect, then settles in place.
+    queueMicrotask(() => {
+      if (renderedMarkdown.get(next) !== rendered || next.dataset.markdownMode === "live") return
+      disposeRenderedMarkdown(next)
+      settleMarkdownWords(next)
+    })
 
     return
   }

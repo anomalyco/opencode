@@ -492,25 +492,37 @@ story("renders the trailing chunk while the stream is paused", async ({ page }) 
   await expect(harness.getByLabel("Streaming")).toBeChecked()
 })
 
-story("keeps live elements and selection when a stream completes and later changes", async ({ page }) => {
+story("disposes live renderers and word spans on settle while preserving selection", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Hello **world**", streaming: true })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
-  const paragraph = markdown.locator("p")
+  const block = markdown.locator("[data-markdown-block]").first()
+  const paragraph = markdown.locator("p").first()
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(2)
+  await block.evaluate((element) => element.setAttribute("data-retained", "true"))
   await paragraph.evaluate((element) => element.setAttribute("data-retained", "true"))
   await harness.getByLabel("Markdown text").fill("Hello **world** again")
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(3)
   await expect(paragraph).toHaveAttribute("data-retained", "true")
   await expect(markdown.locator("[data-markdown-enter]")).not.toHaveCount(0)
+  expect(
+    await page.evaluate(async (fixture) => {
+      const { hasLiveMarkdownRenderer } = await import(fixture)
+
+      const element = document.querySelector<HTMLDivElement>(
+        '[data-testid="markdown-fixture"] [data-markdown-block]',
+      )!
+
+      return hasLiveMarkdownRenderer(element)
+    }, fixture),
+  ).toBe(true)
   await paragraph.evaluate((element) => {
-    const range = document.createRange()
-    range.selectNodeContents(element.querySelector("strong")!)
-    window.getSelection()!.removeAllRanges()
-    window.getSelection()!.addRange(range)
+    const [hello, world] = Array.from(element.querySelectorAll("[data-markdown-word]"), (span) => span.firstChild!)
+    // Select backward from inside "world" to inside "Hello", as a right-to-left drag would.
+    window.getSelection()!.setBaseAndExtent(world, 3, hello, 2)
     // Change the control without moving browser focus or selection.
     const input = document.querySelector<HTMLInputElement>('[data-testid="markdown-fixture"] input')!
     input.checked = false
@@ -518,14 +530,92 @@ story("keeps live elements and selection when a stream completes and later chang
   })
   await expect(harness.getByLabel("Streaming")).not.toBeChecked()
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(block).toHaveAttribute("data-retained", "true")
   await expect(paragraph).toHaveAttribute("data-retained", "true")
-  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("world")
+  await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
+  expect(
+    await page.evaluate(async (fixture) => {
+      const { hasLiveMarkdownRenderer } = await import(fixture)
+
+      const element = document.querySelector<HTMLDivElement>(
+        '[data-testid="markdown-fixture"] [data-markdown-block]',
+      )!
+
+      return hasLiveMarkdownRenderer(element)
+    }, fixture),
+  ).toBe(false)
+  expect(
+    await paragraph.evaluate((element) => {
+      const selection = window.getSelection()!
+
+      return {
+        text: selection.toString(),
+        backward: selection.getRangeAt(0).endContainer === selection.anchorNode,
+        // In-app Find matches within a single text node, so each run of words is one node again.
+        nodes: Array.from(element.childNodes, (node) => node.textContent),
+      }
+    }),
+  ).toEqual({ text: "llo wor", backward: true, nodes: ["Hello ", "world", " again"] })
   await harness.getByLabel("Markdown text").fill("Changed **content**")
   await expect(paragraph).toHaveText("Changed content")
-  await expect(paragraph).toHaveAttribute("data-retained", "true")
+  await expect(block).toHaveAttribute("data-retained", "true")
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
+})
+
+story("settles a live block in place when its final update also changes its content", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Hello **world**", streaming: true })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  const paragraph = markdown.locator("p").first()
+  await expect(markdown.locator("[data-markdown-word]")).toHaveCount(2)
+  await paragraph.evaluate((element) => element.setAttribute("data-retained", "true"))
+  await page.evaluate(() => {
+    const textarea = document.querySelector<HTMLTextAreaElement>('[data-testid="markdown-fixture"] textarea')!
+    const input = document.querySelector<HTMLInputElement>('[data-testid="markdown-fixture"] input')!
+    textarea.value = "Hello **world** again"
+    textarea.dispatchEvent(new Event("input", { bubbles: true }))
+    input.checked = false
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(paragraph).toHaveText("Hello world again")
+  await expect(paragraph).toHaveAttribute("data-retained", "true")
+  await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
+  expect(
+    await page.evaluate(async (fixture) => {
+      const { hasLiveMarkdownRenderer } = await import(fixture)
+
+      return hasLiveMarkdownRenderer(
+        document.querySelector<HTMLDivElement>('[data-testid="markdown-fixture"] [data-markdown-block]')!,
+      )
+    }, fixture),
+  ).toBe(false)
+})
+
+story("settles cache-keyed live blocks in place under their settled key", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Hello **world**", streaming: true, cached: true })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  const paragraph = markdown.locator("p").first()
+  await expect(markdown.locator("[data-markdown-word]")).toHaveCount(2)
+  await paragraph.evaluate((element) => element.setAttribute("data-retained", "true"))
+  await harness.getByLabel("Streaming").uncheck()
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
+  expect(
+    await markdown.evaluate((element) => ({
+      key: element.querySelector("[data-markdown-block]")?.getAttribute("data-markdown-key"),
+      retained: element.querySelector("p")?.getAttribute("data-retained"),
+    })),
+  ).toEqual({ key: expect.stringMatching(/:markdown-test:0:full$/), retained: "true" })
 })
 
 story("replaces completed DOM before live rendering and retains streamed code copy actions", async ({ page }) => {
