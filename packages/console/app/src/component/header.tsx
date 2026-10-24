@@ -35,7 +35,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: boolean }) {
+export function Header(props: { zen?: boolean; go?: boolean; login?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
   const i18n = useI18n()
   const language = useLanguage()
@@ -196,7 +196,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
               </a>
             </Show>
           </li>
-          <Show when={props.zen || props.go}>
+          <Show when={props.zen || props.go || props.login}>
             <li>
               <a href="/console">{i18n.t("nav.login")}</a>
             </li>
@@ -322,7 +322,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                     </a>
                   </Show>
                 </li>
-                <Show when={props.zen || props.go}>
+                <Show when={props.zen || props.go || props.login}>
                   <li>
                     <a href="/console">{i18n.t("nav.login")}</a>
                   </li>

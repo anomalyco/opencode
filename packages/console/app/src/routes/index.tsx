@@ -64,7 +64,7 @@ export default function Home() {
       <LocaleLinks path="/" />
       <SocialMeta title={i18n.t("home.title")} description={i18n.t("app.meta.description")} path="/" />
       <div data-component="container">
-        <Header />
+        <Header login />
 
         <div data-component="content">
           <section data-component="hero">
