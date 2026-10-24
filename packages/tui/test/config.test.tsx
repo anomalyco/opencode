@@ -48,6 +48,17 @@ test("validates config constraints", () => {
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 
+test("prompt.paste_summary takes thresholds, a format and an excerpt length", () => {
+  const config = decodeInfo({
+    prompt: { paste_summary: { lines: 10, characters: 2000, format: "[{lines} lines: {excerpt}]", excerpt: 40 } },
+  }).prompt?.paste_summary
+  expect(config).toEqual({ lines: 10, characters: 2000, format: "[{lines} lines: {excerpt}]", excerpt: 40 })
+  expect(() => decodeInfo({ prompt: { paste_summary: { lines: 0 } } })).toThrow()
+  expect(() => decodeInfo({ prompt: { paste_summary: { characters: -1 } } })).toThrow()
+  expect(() => decodeInfo({ prompt: { paste_summary: { format: "" } } })).toThrow()
+  expect(() => decodeInfo({ prompt: { paste_summary: { excerpt: 1.5 } } })).toThrow()
+})
+
 test("resolves host-neutral defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 

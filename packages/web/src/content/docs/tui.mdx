@@ -409,11 +409,36 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
+- `prompt.paste_summary` - When a paste is replaced by a placeholder such as `[Pasted ~12 lines]`, and what the placeholder says. See [Paste summary](#paste-summary).
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Paste summary
+
+A paste of three lines or more, or of more than 150 characters, goes into the prompt as a placeholder such as `[Pasted ~12 lines]`; the pasted text is sent in its place. `prompt.paste_summary` changes when that happens and what the placeholder says:
+
+```json title="tui.json"
+{
+  "prompt": {
+    "paste_summary": {
+      "lines": 10,
+      "characters": 2000,
+      "format": "[Pasted {lines} lines, {bytes} B: {excerpt}]",
+      "excerpt": 40
+    }
+  }
+}
+```
+
+- `lines` - A paste of at least this many lines is summarized. Defaults to `3`.
+- `characters` - A paste longer than this many characters is summarized. Defaults to `150`.
+- `format` - The placeholder. Defaults to `"[Pasted ~{lines} lines]"`. `{lines}` is the paste's line count, `{characters}` its length, `{bytes}` its size in UTF-8 bytes, and `{excerpt}` its start, with line breaks and repeated spaces collapsed.
+- `excerpt` - How many characters `{excerpt}` shows before it is cut with `…`. Defaults to `30`.
+
+With the example above, a 12-line stack trace that starts with `TypeError: Cannot read properties of undefined` shows as `[Pasted 12 lines, 1834 B: TypeError: Cannot read properties of und…]`. **Disable paste summary** in the command palette turns summarizing off for every paste, and **Enable paste summary** turns it back on.
 
 ### Attention
 
