@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Iň oňat açyk çeşme modellerine ygtybarly girmek üçin aýda 10 $ töläp, OpenCode Go-a ýazylyň.",
   "dialog.usageExceeded.freeTier.actionLabel": "Abuna ýazylyň",
-  "dialog.usageExceeded.accountRateLimit.title": "Çäklendirildi",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ulanyş çägine ýetdi. Indi bu modeli ulanmagy dowam etdirmek üçin, bar bolan balansyňyzdan peýdalanmagy üpjün ediň",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Sazlamalary açyň",
   "ui.sessionTurn.status.delegating": "Iş tabşyrmak",
   "ui.sessionTurn.status.planning": "Indiki ädimleri meýilleşdirmek",
   "ui.sessionTurn.status.gatheringContext": "Gözleg",

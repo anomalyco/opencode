@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "გამოიწერეთ OpenCode Go საუკეთესო ღია კოდის მოდელებზე სანდო წვდომისთვის, თვეში $10-ად.",
   "dialog.usageExceeded.freeTier.actionLabel": "გამოწერა",
-  "dialog.usageExceeded.accountRateLimit.title": "გადასვლის ლიმიტი მიღწეულია",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "გამოყენების ლიმიტი მიღწეულია. ამ მოდელის ახლა გამოყენების გასაგრძელებლად, ჩართეთ გამოყენება ხელმისაწვდომი ბალანსიდან",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "გახსნა პარამეტრები",
   "ui.sessionTurn.status.delegating": "სამუშაოს დელეგირება",
   "ui.sessionTurn.status.planning": "შემდეგი ნაბიჯების დაგეგმვა",
   "ui.sessionTurn.status.gatheringContext": "შესწავლა",

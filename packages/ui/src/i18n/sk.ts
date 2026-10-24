@@ -99,10 +99,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Predplaťte si OpenCode Go za 10 $/mesiac a získajte spoľahlivý prístup k najlepším open-source modelom.",
   "dialog.usageExceeded.freeTier.actionLabel": "Predplatiť",
-  "dialog.usageExceeded.accountRateLimit.title": "Dosiahnutý limit Go",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Bol dosiahnutý limit používania. Ak chcete tento model používať ďalej, povoľte používanie z dostupného kreditu.",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvoriť nastavenia",
   "ui.sessionTurn.status.delegating": "Delegovanie úloh",
   "ui.sessionTurn.status.planning": "Plánovanie ďalších krokov",
   "ui.sessionTurn.status.gatheringContext": "Preskúmavanie",

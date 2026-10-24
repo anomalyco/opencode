@@ -72,10 +72,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "$10/ماہ میں بہترین اوپن سورس ماڈلز تک قابل اعتماد رسائی کے لیے OpenCode Go کو سبسکرائب کریں۔",
   "dialog.usageExceeded.freeTier.actionLabel": "سبسکرائب کریں۔",
-  "dialog.usageExceeded.accountRateLimit.title": "Go حد تک پہنچ گئی۔",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "استعمال کی حد تک پہنچ گئی۔ ابھی اس ماڈل کا استعمال جاری رکھنے کے لیے، اپنے دستیاب بیلنس سے استعمال کو فعال کریں۔",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ترتیبات کھولیں۔",
   "ui.sessionTurn.status.delegating": "کام سونپا جا رہا ہے",
   "ui.sessionTurn.status.planning": "اگلے اقدامات کی منصوبہ بندی کی جا رہی ہے",
   "ui.sessionTurn.status.gatheringContext": "دریافت کرنا",

@@ -633,18 +633,21 @@ export function Session(props: {
     "go-upsell",
     { initial: {} },
   )
-  const handledFreeLimits = new Set<string>()
+  const handledLimits = new Set<string>()
   useUsageAlerts(() => route.sessionID)
   let sessionDisposed = false
   onCleanup(() => {
     sessionDisposed = true
   })
-  // Restore the prompt when the free allowance stops it, and offer OpenCode Go on the first hit in a day.
+  // Restore the prompt when the free allowance or an OpenCode Go limit stops it, and offer OpenCode Go on the first free
+  // allowance hit in a day.
   onCleanup(
     data.on("session.step.failed", (event) => {
-      if (event.data.sessionID !== route.sessionID || event.data.error.type !== "provider.free-limit") return
-      if (handledFreeLimits.has(event.data.assistantMessageID)) return
-      handledFreeLimits.add(event.data.assistantMessageID)
+      const type = event.data.error.type
+      if (event.data.sessionID !== route.sessionID) return
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
+      if (handledLimits.has(event.data.assistantMessageID)) return
+      handledLimits.add(event.data.assistantMessageID)
       const current = prompt()
       const wasEmpty = Boolean(
         current &&
@@ -665,7 +668,7 @@ export function Session(props: {
           break
         }
       }
-      if (dialog.stack.length > 0) return
+      if (type === "provider.go-limit" || dialog.stack.length > 0) return
       if (goUpsell.dontShow || goUpsellMemory.dontShow) return
       const now = Date.now()
       const seen = Math.max(goUpsell.lastSeenAt ?? 0, goUpsellMemory.lastSeenAt ?? 0)

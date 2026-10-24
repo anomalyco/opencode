@@ -97,6 +97,14 @@ export function refusalReset(error: { readonly response?: { readonly body: strin
   return Number.isNaN(at) ? undefined : at
 }
 
+/** When a refused request may retry, from its `retry-after` counted from `base`; nothing past a week, as a bad header. */
+export function retryReset(error: { readonly retryAfterMs?: number } | undefined, base: number) {
+  const delay = error?.retryAfterMs
+  if (delay === undefined || !Number.isFinite(delay) || delay < 0 || delay > 7 * 86_400_000) return undefined
+  const at = base + delay
+  return Number.isNaN(new Date(at).getTime()) ? undefined : at
+}
+
 /**
  * Who spends from a limit and, when it pools spend across models, which ones. A limit on each model separately names
  * only who spends from it.

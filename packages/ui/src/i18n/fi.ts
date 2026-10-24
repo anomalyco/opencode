@@ -107,10 +107,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Tilaa OpenCode Go 10 dollarilla kuukaudessa saadaksesi luotettavan pääsyn parhaisiin avoimen lähdekoodin malleihin.",
   "dialog.usageExceeded.freeTier.actionLabel": "Tilaa",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-raja saavutettu",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Käyttöraja saavutettu. Jos haluat jatkaa tämän mallin käyttöä heti, ota käyttöön veloitus käytettävissä olevasta saldostasi",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Avaa asetukset",
   "ui.sessionTurn.status.delegating": "Työn delegointi",
   "ui.sessionTurn.status.planning": "Seuraavien vaiheiden suunnittelu",
   "ui.sessionTurn.status.gatheringContext": "Tutkiminen",

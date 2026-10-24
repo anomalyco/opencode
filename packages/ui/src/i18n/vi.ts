@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Đăng ký OpenCode Go với giá $10/tháng để có quyền truy cập đáng tin cậy vào các mô hình nguồn mở tốt nhất.",
   "dialog.usageExceeded.freeTier.actionLabel": "Đăng ký",
-  "dialog.usageExceeded.accountRateLimit.title": "Đã đạt giới hạn Go",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Đã đạt đến giới hạn sử dụng. Để tiếp tục sử dụng mô hình này ngay bây giờ, hãy cho phép sử dụng từ số dư khả dụng của bạn",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Mở cài đặt",
   "ui.sessionTurn.status.delegating": "Phân công công việc",
   "ui.sessionTurn.status.planning": "Lập kế hoạch các bước tiếp theo",
   "ui.sessionTurn.status.gatheringContext": "Khám phá",

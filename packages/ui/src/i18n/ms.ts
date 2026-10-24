@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Langgan OpenCode Go pada harga $10/bulan untuk akses yang lebih stabil kepada model sumber terbuka terbaik.",
   "dialog.usageExceeded.freeTier.actionLabel": "Langgan",
-  "dialog.usageExceeded.accountRateLimit.title": "Had Go dicapai",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Had penggunaan telah dicapai. Untuk terus menggunakan model ini sekarang, aktifkan penggunaan daripada baki tersedia anda",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Buka tetapan",
   "ui.sessionTurn.status.delegating": "Medelegasi tugasan",
   "ui.sessionTurn.status.planning": "Merancang langkah seterusnya",
   "ui.sessionTurn.status.gatheringContext": "Meneroka",

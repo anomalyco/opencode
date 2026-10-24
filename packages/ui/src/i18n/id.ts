@@ -76,10 +76,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Berlangganan OpenCode Go seharga $10/bulan untuk akses andal ke model sumber terbuka terbaik.",
   "dialog.usageExceeded.freeTier.actionLabel": "Berlangganan",
-  "dialog.usageExceeded.accountRateLimit.title": "Batas Go tercapai",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Batas penggunaan tercapai. Untuk terus menggunakan model ini sekarang, aktifkan penggunaan dari saldo Anda yang tersedia",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Buka pengaturan",
 
   "ui.sessionTurn.status.delegating": "Mendelegasikan pekerjaan",
   "ui.sessionTurn.status.planning": "Merencanakan langkah selanjutnya",
