@@ -89,6 +89,11 @@ describe("ConfigCommandPlugin.Plugin", () => {
       input: '"alpha beta" gamma delta',
       expected: "First alpha beta. Rest gamma delta.",
     },
+    {
+      template: "Create a file named $1 in the directory $2 with the following content: $3",
+      input: `config.json src '{ "key": "value" }'`,
+      expected: 'Create a file named config.json in the directory src with the following content: { "key": "value" }',
+    },
     { template: "$ARGUMENTS / $ARGUMENTS", input: "$& $$", expected: "$& $$ / $& $$" },
   ]) {
     it.live(`interpolates ${JSON.stringify(item.template)} with literal input ${JSON.stringify(item.input)}`, () =>
@@ -139,6 +144,69 @@ describe("ConfigCommandPlugin.Plugin", () => {
       }),
     )
   }
+
+  it.live("interpolates shell output in the session directory rather than the project root", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "nested")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(directory)
+            await Bun.write(path.join(tmp.path, "context.txt"), "PROJECT_ROOT")
+            await Bun.write(path.join(directory, "context.txt"), "SESSION_DIRECTORY")
+          })
+          const command = yield* Command.Service
+          const prompts: string[] = []
+          yield* ConfigCommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: command.reload,
+              },
+              session: {
+                prompt: (input) =>
+                  Effect.sync(() => {
+                    prompts.push(input.text)
+                    return SessionInbox.User.make({
+                      id: SessionMessage.ID.make("msg_test"),
+                      sessionID: input.sessionID,
+                      time: { created: DateTime.makeUnsafe(0) },
+                      type: "user",
+                      payload: { text: input.text },
+                      delivery: input.delivery ?? "steer",
+                    })
+                  }),
+              },
+            }),
+          ).pipe(
+            Effect.provide(
+              Config.testLayer([
+                new Document({
+                  type: "document",
+                  info: decode({ commands: { inspect: { template: "Inspect !`cat context.txt`" } } }),
+                }),
+              ]),
+            ),
+            Effect.provideService(
+              Location.Service,
+              Location.Service.of(
+                location(
+                  { directory: AbsolutePath.make(directory) },
+                  { projectDirectory: AbsolutePath.make(tmp.path) },
+                ),
+              ),
+            ),
+          )
+          yield* command.execute({
+            name: "inspect",
+            invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text: "" }, delivery: "steer" },
+          })
+          expect(prompts).toEqual(["Inspect SESSION_DIRECTORY"])
+        }),
+      ),
+    ),
+  )
 
   it.live("loads inline and file-based commands in config order", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
