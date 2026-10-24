@@ -97,7 +97,7 @@ describe("prompt local attachments", () => {
 
     for (const input of [file, `'${file}'`, pathToFileURL(file).href]) {
       expect(await resolvePastedAttachments(input, process.platform)).toEqual([
-        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
+        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png", pastedPath: input },
       ])
     }
   })
@@ -113,8 +113,8 @@ describe("prompt local attachments", () => {
       `# dropped files\r\n${pathToFileURL(image).href}\r\n${pathToFileURL(pdf).href}`,
     ]) {
       expect(await resolvePastedAttachments(input, process.platform)).toEqual([
-        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
-        { type: "file", uri: "data:application/pdf;base64,BAUG", filename: "two file.pdf" },
+        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png", pastedPath: image },
+        { type: "file", uri: "data:application/pdf;base64,BAUG", filename: "two file.pdf", pastedPath: pdf },
       ])
     }
   })

@@ -1429,16 +1429,18 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  function expandPastedText(extmarkId: number) {
+  function expandPastedPart(extmarkId: number) {
     const extmark = input.extmarks.get(extmarkId)
     const ref = store.extmarkToPart.get(extmarkId)
-    if (!extmark || ref?.type !== "pasted") return false
-    const part = store.prompt.pasted[ref.index]
-    if (!part) return false
+    if (!extmark || !ref) return false
+    let text: string | undefined
+    if (ref.type === "pasted") text = store.prompt.pasted[ref.index]?.text
+    if (ref.type === "file") text = store.prompt.files?.[ref.index]?.pastedPath
+    if (text === undefined) return false
 
     input.extmarks.delete(extmarkId)
     input.setSelection(extmark.start, extmark.end)
-    input.insertText(part.text)
+    input.insertText(text)
     return true
   }
 
@@ -1468,7 +1470,7 @@ export function Prompt(props: PromptProps) {
           store.prompt.pasted[ref.index]?.text === pastedContent
         )
       })
-      if (extmark && expandPastedText(extmark.id)) return
+      if (extmark && expandPastedPart(extmark.id)) return
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
     }
@@ -1482,7 +1484,7 @@ export function Prompt(props: PromptProps) {
     }, 0)
   }
 
-  function pasteAttachment(file: { filename?: string; uri: string }) {
+  function pasteAttachment(file: { filename?: string; uri: string; pastedPath?: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
     const virtualText = promptAttachmentLabel(store.prompt.files, { uri: file.uri, name: file.filename })
@@ -1502,6 +1504,7 @@ export function Prompt(props: PromptProps) {
     const part: NonNullable<PromptInfo["files"]>[number] = {
       uri: file.uri,
       name: file.filename,
+      pastedPath: file.pastedPath,
       mention: {
         start: extmarkStart,
         end: extmarkEnd,
@@ -1828,8 +1831,14 @@ export function Prompt(props: PromptProps) {
                 r.target?.focus()
                 const extmark = input.extmarks
                   .getAtOffset(input.cursorOffset)
-                  .find((item) => store.extmarkToPart.get(item.id)?.type === "pasted")
-                if (!extmark || !expandPastedText(extmark.id)) return
+                  .find((item) => {
+                    const ref = store.extmarkToPart.get(item.id)
+                    return (
+                      ref?.type === "pasted" ||
+                      (ref?.type === "file" && store.prompt.files?.[ref.index]?.pastedPath !== undefined)
+                    )
+                  })
+                if (!extmark || !expandPastedPart(extmark.id)) return
                 r.preventDefault()
                 r.stopPropagation()
               }}
