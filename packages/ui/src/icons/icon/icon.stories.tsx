@@ -24,6 +24,8 @@ const names = [
   "outline-eye",
   "outline-eye-slash",
   "outline-hexagonal-warning",
+  "pause",
+  "play",
   "plus",
   "review",
   "settings-gear",

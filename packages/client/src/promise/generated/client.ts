@@ -85,6 +85,12 @@ import type {
   SessionInterruptOutput,
   SessionBackgroundInput,
   SessionBackgroundOutput,
+  SessionGoalGetInput,
+  SessionGoalGetOutput,
+  SessionGoalUpdateInput,
+  SessionGoalUpdateOutput,
+  SessionTodoReplaceInput,
+  SessionTodoReplaceOutput,
   SessionMessageGetInput,
   SessionMessageGetOutput,
   SessionFormListInput,
@@ -1014,6 +1020,54 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      goal: {
+        get: (input: SessionGoalGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionGoalGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/goal`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        update: (input: SessionGoalUpdateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionGoalUpdateOutput }>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/goal`,
+              body: {
+                action: input["action"],
+                objective: input["objective"],
+                expectedRevision: input["expectedRevision"],
+                expectedGoalID: input["expectedGoalID"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      todo: {
+        replace: (input: SessionTodoReplaceInput, requestOptions?: RequestOptions) =>
+          request<SessionTodoReplaceOutput>(
+            {
+              method: "PUT",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/todo`,
+              body: {
+                todos: input["todos"],
+                expectedRevision: input["expectedRevision"],
+                expectedGoalID: input["expectedGoalID"],
+              },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
       message: {
         get: (input: SessionMessageGetInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: SessionMessageGetOutput }>(

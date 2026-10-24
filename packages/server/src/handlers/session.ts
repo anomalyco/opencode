@@ -1,4 +1,5 @@
 import { Session } from "@opencode/core/session"
+import { SessionGoal } from "@opencode/core/session/goal"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
@@ -597,6 +598,48 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.background",
         Effect.fn(function* (ctx) {
           yield* session.background(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.goal.get",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const goal = yield* SessionGoal.Service
+          return { data: yield* goal.readState(ctx.params.sessionID) }
+        }),
+      )
+      .handle(
+        "session.goal.update",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const goal = yield* SessionGoal.Service
+          return {
+            data: yield* goal
+              .update(ctx.params.sessionID, ctx.payload)
+              .pipe(
+                Effect.catchTag(
+                  "SessionGoal.ConflictError",
+                  (error) => new ConflictError({ message: error.message }),
+                ),
+              ),
+          }
+        }),
+      )
+      .handle(
+        "session.todo.replace",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const goal = yield* SessionGoal.Service
+          const expected =
+            ctx.payload.expectedRevision === undefined
+              ? undefined
+              : { revision: ctx.payload.expectedRevision, goalID: ctx.payload.expectedGoalID }
+          yield* goal
+            .replaceTodo(ctx.params.sessionID, ctx.payload.todos, expected)
+            .pipe(
+              Effect.catchTag("SessionGoal.ConflictError", (error) => new ConflictError({ message: error.message })),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )

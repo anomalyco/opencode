@@ -256,6 +256,7 @@ const source = {
   "ui.message.thought": "Thought",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.duration.hoursMinutes": "{{hours}}h {{minutes}}m",
   "ui.message.interrupted": "Interrupted",
   "ui.message.modelVariant": "{{model}} ({{variant}})",
   "ui.sessionTimeline.notice.model": "Model",

@@ -10,6 +10,7 @@ import type {
   SessionFormCancelInput,
   FormInfo,
   SessionFormReplyInput,
+  SessionGoalState,
   IntegrationInfo,
   LocationRef,
   LocationGetOutput,
@@ -124,6 +125,8 @@ type Store = {
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
+    // Latest goal read model per session, including the process-local `armed` flag.
+    goal: Record<string, SessionGoalState>
   }
   project: {
     info: Record<string, Project>
@@ -266,6 +269,7 @@ export function createData(config: CreateDataInput) {
       pending: {},
       permission: {},
       form: {},
+      goal: {},
     },
     project: {
       info: {},
@@ -610,6 +614,7 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.message:${sessionID}`)
     sync.invalidate(`session.permission:${sessionID}`)
     sync.invalidate(`session.form:${sessionID}:`)
+    sync.invalidate(`session.goal:${sessionID}`)
     setStore(
       "session",
       produce((draft) => {
@@ -621,6 +626,7 @@ export function createData(config: CreateDataInput) {
         delete draft.pending[sessionID]
         delete draft.permission[sessionID]
         delete draft.form[sessionID]
+        delete draft.goal[sessionID]
         for (const [rootID, family] of Object.entries(draft.family)) {
           const next = family.filter((id) => id !== sessionID)
           if (next.length === 0) delete draft.family[rootID]
@@ -838,6 +844,18 @@ export function createData(config: CreateDataInput) {
           if (active && active.id !== event.data.inboxID && outbox.delete(active.id))
             removePending(event.data.sessionID, active.id)
         }
+        return
+      }
+      case "session.goal.updated":
+      case "session.goal.cleared":
+      case "session.todo.updated":
+      case "session.todo.verified": {
+        const sessionID = event.data.sessionID
+        // The events carry neither `armed` nor the full todo list, so a loaded goal
+        // re-reads the read model instead of patching the store from the payload.
+        const loaded = store.session.goal[sessionID] !== undefined || sync.has(`session.goal:${sessionID}`)
+        sync.invalidate(`session.goal:${sessionID}`)
+        if (loaded) refresh(() => result.session.goal.sync(sessionID))
         return
       }
       case "session.instructions.updated":
@@ -1875,6 +1893,19 @@ export function createData(config: CreateDataInput) {
         },
         cancel(input: SessionFormCancelInput, ref?: LocationRef) {
           return settleForm(input, ref, api().session.form.cancel(input, formRequestOptions(input.sessionID, ref)))
+        },
+      },
+      goal: {
+        list(sessionID: string) {
+          return store.session.goal[sessionID]
+        },
+        sync(sessionID: string) {
+          return sync.run(`session.goal:${sessionID}`, async () => {
+            setStore("session", "goal", sessionID, reconcile(await api().session.goal.get({ sessionID })))
+          })
+        },
+        invalidate(sessionID: string) {
+          sync.invalidate(`session.goal:${sessionID}`)
         },
       },
     },

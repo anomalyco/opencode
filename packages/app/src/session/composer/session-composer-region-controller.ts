@@ -12,6 +12,7 @@ export function createSessionComposerRegionController(input: {
 }) {
   return {
     state: input.state,
+    goal: input.state.goal,
     centered: input.centered,
     onResponseSubmit: input.onResponseSubmit,
     openParent: input.openParent,
