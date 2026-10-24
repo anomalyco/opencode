@@ -196,11 +196,9 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
               </a>
             </Show>
           </li>
-          <Show when={props.zen || props.go}>
-            <li>
-              <a href="/console">{i18n.t("nav.login")}</a>
-            </li>
-          </Show>
+          <li>
+            <a href="/console">{i18n.t("nav.login")}</a>
+          </li>
           <Show when={!props.hideGetStarted}>
             <li>
               <A href={language.route("/download")} data-slot="cta-button">
@@ -322,11 +320,9 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                     </a>
                   </Show>
                 </li>
-                <Show when={props.zen || props.go}>
-                  <li>
-                    <a href="/console">{i18n.t("nav.login")}</a>
-                  </li>
-                </Show>
+                <li>
+                  <a href="/console">{i18n.t("nav.login")}</a>
+                </li>
                 <Show when={!props.hideGetStarted}>
                   <li>
                     <A href={language.route("/download")} data-slot="cta-button">
