@@ -28,19 +28,24 @@ const tokenSharingMessages = {
 const FREE_USAGE_LIMIT_MESSAGE =
   "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."
 
+const GO_USAGE_LIMIT_MESSAGE =
+  "OpenCode Go usage limit reached. Switch models, or enable usage from your balance in the Console to keep going."
+
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
+    if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
       case "Authentication":
         return providerError("provider.auth", cause.reason)
       case "QuotaExceeded":
-        if (!cause.reason.body?.includes("FreeUsageLimitError")) return providerError("provider.quota", cause.reason)
-        return {
-          ...providerError("provider.free-limit", cause.reason),
-          message: FREE_USAGE_LIMIT_MESSAGE,
-        }
+        if (cause.reason.body?.includes("FreeUsageLimitError"))
+          return { ...providerError("provider.free-limit", cause.reason), message: FREE_USAGE_LIMIT_MESSAGE }
+        if (cause.reason.body?.includes("GoUsageLimitError"))
+          return { ...providerError("provider.go-limit", cause.reason), message: GO_USAGE_LIMIT_MESSAGE }
+        return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
       case "Transport":

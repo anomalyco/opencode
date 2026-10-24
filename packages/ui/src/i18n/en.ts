@@ -77,6 +77,8 @@ const source = {
   "ui.sessionTurn.retry.geminiHot": "gemini is way too hot right now",
   "ui.sessionTurn.freeLimit.title": "You've used today's free messages.",
   "ui.sessionTurn.freeLimit.lineReset": "You've used today's free messages. They reset at {{time}}.",
+  "ui.sessionTurn.goLimit.title": "You've reached your OpenCode Go usage limit.",
+  "ui.sessionTurn.goLimit.lineReset": "You've reached your OpenCode Go usage limit. It resets at {{time}}.",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 

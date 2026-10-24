@@ -192,13 +192,16 @@ export function createActiveSessionRegion(input: {
 
   const recalled = new Set<string>()
 
-  // The free allowance stops a prompt after it was sent. Hand its text back so switching models and resending is one
-  // step, unless the user has already started typing something else.
+  // The free allowance or a Go usage limit stops a prompt after it was sent. Hand its text back so switching models and
+  // resending is one step, unless the user has already started typing something else.
   onCleanup(
     location().event.on("session.step.failed", (event) => {
       const sessionID = input.session.identity.params.id
+      const type = event.data.error.type
 
-      if (!sessionID || event.data.sessionID !== sessionID || event.data.error.type !== "provider.free-limit") return
+      if (!sessionID || event.data.sessionID !== sessionID) return
+
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
 
       if (recalled.has(event.data.assistantMessageID)) return
       recalled.add(event.data.assistantMessageID)

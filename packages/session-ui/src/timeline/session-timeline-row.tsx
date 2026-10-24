@@ -1010,12 +1010,19 @@ export function createSessionTimelineRowRenderer(input: {
       return value
     }
 
-    const freeLimit = createMemo(() => {
-      if (current().kind !== "free-limit") return
+    const usageLimit = createMemo(() => {
+      const kind = current().kind
+
+      if (!kind) return
+
+      const keys =
+        kind === "go-limit"
+          ? ({ title: "ui.sessionTurn.goLimit.title", lineReset: "ui.sessionTurn.goLimit.lineReset" } as const)
+          : ({ title: "ui.sessionTurn.freeLimit.title", lineReset: "ui.sessionTurn.freeLimit.lineReset" } as const)
+
       const at = current().resetAt
 
-      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime()))
-        return i18n.t("ui.sessionTurn.freeLimit.title")
+      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime())) return i18n.t(keys.title)
 
       const now = Date.now()
       const sameDay = new Date(at).toDateString() === new Date(now).toDateString() && at - now < 86_400_000
@@ -1025,13 +1032,13 @@ export function createSessionTimelineRowRenderer(input: {
         sameDay ? { timeStyle: "short" } : { dateStyle: "medium", timeStyle: "short" },
       ).format(at)
 
-      return i18n.t("ui.sessionTurn.freeLimit.lineReset", { time })
+      return i18n.t(keys.lineReset, { time })
     })
 
     return (
       <Frame row={current()}>
         <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-          <Show when={freeLimit()} fallback={<SessionError message={current().text} />}>
+          <Show when={usageLimit()} fallback={<SessionError message={current().text} />}>
             {(text) => (
               <div
                 role="status"

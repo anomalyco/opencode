@@ -113,13 +113,32 @@ describe("toSessionError", () => {
     expect(SessionRunnerRetry.isRetryable(paid)).toBe(true)
     expect(toSessionError(paid)).toMatchObject({ type: "provider.rate-limit", retryAfterMs: 45_000 })
 
-    const go = fail(
-      "https://opencode.ai/inference/go/openai/v1/chat/completions",
-      { type: "error", error: { type: "GoUsageLimitError", message: "Subscription quota exceeded." } },
-      { "retry-after": "120" },
-    )
+    const goBody = {
+      type: "error",
+      error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+      metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+    }
+    const go = fail("https://opencode.ai/inference/go/openai/v1/chat/completions", goBody, { "retry-after": "120" })
     expect(SessionRunnerRetry.isRetryable(go)).toBe(false)
-    expect(toSessionError(go)).toMatchObject({ type: "provider.quota", retryAfterMs: 120_000 })
+    expect(toSessionError(go)).toEqual({
+      type: "provider.go-limit",
+      message:
+        "OpenCode Go usage limit reached. Switch models, or enable usage from your balance in the Console to keep going.",
+      status: 429,
+      response: { body: JSON.stringify(goBody) },
+      retryAfterMs: 120_000,
+    })
+
+    const credit = RequestExecutor.httpFailure({
+      message: "Credit limit exceeded.",
+      url: "https://opencode.ai/inference/openai/v1/chat/completions",
+      status: 402,
+      responseBody: JSON.stringify({
+        type: "error",
+        error: { type: "CreditLimitExceeded", message: "Credit limit exceeded." },
+      }),
+    })
+    expect(toSessionError(credit)).toMatchObject({ type: "provider.quota" })
 
     const other = fail(
       "https://api.openai.com/v1/chat/completions",
@@ -215,6 +234,9 @@ describe("toSessionError", () => {
         const error = toSessionError(llm(new UnknownProviderError({ message: "Request failed", body })))
         expect(error.message).toContain(guidance)
         expect(error.response).toEqual({ body })
+        expect(error.type).toBe(
+          code === "subscription_sharing_usage_limit_exceeded" ? "provider.chatgpt-limit" : "provider.unknown",
+        )
       }
     }
   })
