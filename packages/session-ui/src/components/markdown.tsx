@@ -295,6 +295,7 @@ function clearMermaid(wrapper: HTMLElement) {
 
 function markCodeLinks(root: HTMLDivElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+  let nestedLinks = false
 
   for (const code of codeNodes) {
     const href = codeUrl(code.textContent ?? "")
@@ -316,6 +317,7 @@ function markCodeLinks(root: HTMLDivElement) {
       continue
     }
 
+    if (code.closest("a")) nestedLinks = true
     const link = document.createElement("a")
     link.href = href
     link.className = "external-link"
@@ -324,6 +326,8 @@ function markCodeLinks(root: HTMLDivElement) {
     code.parentNode?.replaceChild(link, code)
     link.appendChild(code)
   }
+
+  return nestedLinks
 }
 
 const publicFaviconHost = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
@@ -916,13 +920,22 @@ function updateBlock(
   if (source === next) disposeCopyButtons(next)
   source.innerHTML = block.html
   markInlineCode(source, next, block.mode === "live", localFileExists)
-  markCodeLinks(source)
+  const nestedLinks = markCodeLinks(source)
+  const sessionMarked = sessionLinks && markSessionLinks(source)
 
-  if (sessionLinks) markSessionLinks(source)
+  // Session-link fragments can introduce empty text nodes; HTML serialization used to remove them.
+  if ((rendered || block.mode === "live") && sessionMarked) source.normalize()
   markExternalLinkFavicons(source)
 
+  // Keep HTML parser repair for nested anchors and session links in raw-text or select elements.
+  if (
+    (rendered || block.mode === "live") &&
+    (nestedLinks || (sessionMarked && source.querySelector("textarea button, title button, select button")))
+  )
+    source.innerHTML = source.innerHTML
+
   if (rendered) {
-    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+    rendered.renderer.update(source, block.mode === "live", rendered.raw !== block.raw)
     rendered.raw = block.raw
 
     return
@@ -931,7 +944,7 @@ function updateBlock(
   if (block.mode === "live") {
     next.replaceChildren()
     renderedMarkdown.set(next, {
-      renderer: createMarkdownRenderer(next, source.innerHTML, true),
+      renderer: createMarkdownRenderer(next, source, true),
       raw: block.raw,
     })
   }
