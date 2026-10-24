@@ -225,8 +225,6 @@ type SocketRecorderOptions = Omit<RecorderOptions, "match">
 
 `directory` defaults to `<cwd>/test/fixtures/recordings`.
 
-See [`examples/`](./examples) for complete HTTP and WebSocket examples.
-
 ## Cassettes
 
 Cassettes are readable JSON files intended to be committed with your tests. HTTP interactions are stored in request order. WebSocket cassettes preserve the observed order of client and server frames. Text stays readable; binary bodies and frames are stored losslessly as base64.
