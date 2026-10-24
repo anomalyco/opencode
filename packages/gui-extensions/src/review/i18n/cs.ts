@@ -1,5 +1,5 @@
 export default {
-  "tab.title": "Recenze",
+  "tab.title": "Revize",
   "tab.count.one": "{{count}} soubor změněn",
   "tab.count.few": "{{count}} soubory změněny",
   "tab.count.many": "{{count}} souboru změněno",
@@ -8,12 +8,12 @@ export default {
   "mobile.title.few": "Změny",
   "mobile.title.many": "Změny",
   "mobile.title.other": "Změny",
-  "empty.git": "Zatím žádné neprovedené změny",
+  "empty.git": "Zatím žádné nepotvrzené změny",
   "empty.branch": "Zatím žádné změny ve větvi",
-  "git.title": "Vytvořte úložiště Git",
-  "git.description": "Sledujte, kontrolujte a vracejte změny v tomto projektu",
+  "git.title": "Vytvořit úložiště Git",
+  "git.description": "Sledovat, kontrolovat a vracet změny v tomto projektu",
   loadingChanges: "Načítání změn…",
   noChanges: "Žádné změny",
   "settings.wrapLines.title": "Zalamovat řádky",
-  "settings.wrapLines.description": "Zabalte dlouhé řádky do mobilních diffů namísto vodorovného posouvání",
+  "settings.wrapLines.description": "Zalamovat dlouhé řádky v mobilních diffech namísto vodorovného posouvání",
 }
