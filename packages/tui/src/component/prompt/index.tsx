@@ -716,6 +716,10 @@ export function Prompt(props: PromptProps) {
   const stashSessionID = props.sessionID
 
   onMount(() => {
+    // A Prompt disposed before its mount effect ran cannot render the draft.
+    // Consuming the tab's stash there would lose it: the live Prompt that mounts
+    // next would come up empty.
+    if (disposed) return
     const saved = takeDraft(stashSessionID)
     if (store.prompt.text) return
     if (saved && saved.prompt.text) {
