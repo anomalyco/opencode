@@ -142,6 +142,7 @@ const layer = Layer.effect(
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
+          if (code === 2 && /^rg: error parsing glob/m.test(stderr)) return yield* failure(stderr.trim())
           if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
