@@ -1,6 +1,24 @@
 import { expect, test } from "@playwright/test"
 import { assistantMessage, setupTimeline, shell, textPart, userMessage } from "../utils/timeline"
 
+test("assistant steps remain accessible while the response is streaming", async ({ page }) => {
+  const text = "Streaming assistant output"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage(
+        [shell("prt_accessible_shell", "completed", "done", "echo progress"), textPart("prt_accessible_text", text)],
+        { completed: false },
+      ),
+    ],
+  })
+
+  const assistant = page.locator('[data-slot="session-turn-assistant-content"]')
+  await expect(assistant.filter({ hasText: text })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Used 1 Shell" })).toBeVisible()
+  await expect(assistant.filter({ hasText: text })).toMatchAriaSnapshot(`- paragraph: ${text}`)
+})
+
 test("space activates a focused timeline button instead of scrolling", async ({ page }) => {
   const shellID = "prt_space_button_shell"
   await setupTimeline(page, {
