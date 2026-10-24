@@ -182,10 +182,17 @@ export function normalize(input: unknown): Result {
   const permissions = [...toolRules, ...permissionRules, ...nativePermissions]
   if (permissions.length || Array.isArray(input.permissions)) encoded.permissions = permissions
 
+  // A JSON config can only describe plugin options with the `[name, options]` tuple, so both keys accept it.
   const legacyPlugins = decodeList(input.plugin, ConfigPluginV1.Spec, ["plugin"], diagnostics, decodeValue).map(
-    (plugin) => (typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] }),
+    (plugin) => (typeof plugin === "string" ? plugin : pluginEntry(plugin[0], plugin[1])),
   )
-  const nativePlugins = decodeList(input.plugins, ConfigPlugin.Plugin, ["plugins"], diagnostics, decodeEncoded)
+  const nativePlugins = decodeList(
+    Array.isArray(input.plugins) ? input.plugins.map((plugin) => tupleEntry(plugin)) : input.plugins,
+    ConfigPlugin.Plugin,
+    ["plugins"],
+    diagnostics,
+    decodeEncoded,
+  )
   if (legacyPlugins.length || nativePlugins.length || Array.isArray(input.plugin) || Array.isArray(input.plugins))
     encoded.plugins = [...legacyPlugins, ...nativePlugins]
 
@@ -714,6 +721,14 @@ function decodeMap<S extends Schema.Codec<unknown, unknown, never>, A>(
       return decoded === undefined ? [] : [[name, decoded]]
     }),
   )
+}
+
+function pluginEntry(name: unknown, options?: unknown) {
+  return options === undefined ? { package: name } : { package: name, options }
+}
+
+function tupleEntry(plugin: unknown) {
+  return Array.isArray(plugin) ? pluginEntry(plugin[0], plugin[1]) : plugin
 }
 
 function decodeList<S extends Schema.Codec<unknown, unknown, never>, A>(

@@ -352,6 +352,26 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics.filter((item) => item.kind === "invalid")).toHaveLength(4)
   })
 
+  test("accepts the [name, options] plugin tuple under plugins", () => {
+    const result = normalized({ plugins: [["pkg", { a: 1 }]] })
+    expect(result.encoded.plugins).toEqual([{ package: "pkg", options: { a: 1 } }])
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("keeps the plugin entry shapes that already decoded", () => {
+    const result = normalized({
+      plugins: ["plain", ["pkg", { a: 1 }], { package: "obj", options: { b: 2 } }, 42],
+      plugin: [["legacy", { c: 3 }]],
+    })
+    expect(result.encoded.plugins).toEqual([
+      { package: "legacy", options: { c: 3 } },
+      "plain",
+      { package: "pkg", options: { a: 1 } },
+      { package: "obj", options: { b: 2 } },
+    ])
+    expect(result.diagnostics.map((item) => item.path)).toEqual([["plugins", "3"]])
+  })
+
   test("omits malformed collection roots instead of synthesizing empty values", () => {
     const result = normalized({
       commands: [],
