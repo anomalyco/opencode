@@ -5,13 +5,20 @@ import { getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type ServerSDK } from "./client"
-import { bootstrapDirectory, bootstrapGlobal, loadGlobalConfigQuery, loadPathQuery } from "./global-sync/bootstrap"
+import {
+  bootstrapDirectory,
+  bootstrapGlobal,
+  listedProject,
+  loadGlobalConfigQuery,
+  loadPathQuery,
+  projectsQueryKey,
+} from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import type { ProjectMeta } from "./global-sync/types"
 import { formatServerError } from "@/runtime/server/errors"
-import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { queryOptions, skipToken, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
-import { directoryKey, updateProjectInfo } from "./global-sync/utils"
+import { directoryKey, normalizeProjectInfo, updateProjectInfo } from "./global-sync/utils"
 import { PathKey } from "@/workspaces/path-key"
 import type { ServerScope } from "@/runtime/server/scope"
 import { persisted } from "@/runtime/persistence/storage"
@@ -229,20 +236,50 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   }
 
   function applyProjectUpdate(update: Parameters<typeof updateProjectInfo>[1]) {
-    setGlobalStore("project", (projects) =>
-      projects.map((project) =>
+    setGlobalStore("project", (projects) => {
+      // The server announces a newly registered project (e.g. another client's first session in a directory) with
+      // this event too; adding it lets every connected client discover the project without reloading.
+      if (!projects.some((project) => project.id === update.id)) {
+        const added = normalizeProjectInfo(update)
+
+        return listedProject(added) ? [...projects, added] : projects
+      }
+
+      return projects.map((project) =>
         project.id === update.id
           ? // The wire payload carries no worktrees; keep the inventory this project already loaded.
             withWorktreeInventory(updateProjectInfo(project, update), worktrees.cached(update.id))
           : project,
-      ),
-    )
+      )
+    })
   }
+
+  // Observes the project inventory without fetching it: bootstrap loads it, and a failed load keeps the last one.
+  const projectInventory = useQuery(() => ({
+    queryKey: projectsQueryKey(serverSDK.scope),
+    queryFn: skipToken,
+  }))
+
+  // Projects whose inventory reload a session event already requested; a project the server never lists
+  // (e.g. one `listedProject` hides) must not reload the inventory on every one of its session events.
+  const reloaded = new Set<string>()
 
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
 
     if (event.type === "project.updated") applyProjectUpdate(event.data)
+
+    // The server registers a project on another client's first session in its directory and publishes only
+    // session.created for it, not project.updated. Reload the inventory so every connected client lists it.
+    if (
+      event.type === "session.created" &&
+      !reloaded.has(event.data.projectID) &&
+      !untrack(() => globalStore.project).some((project) => project.id === event.data.projectID)
+    ) {
+      reloaded.add(event.data.projectID)
+
+      if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
+    }
 
     if (event.type === "worktree.updated") {
       void worktrees.list(event.data.projectID)
@@ -306,6 +343,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     child: children.child,
     disableMcp: children.disableMcp,
     // bootstrap,
+    /** True once the server's project inventory has loaded; until then `data.project` is not the server's list. */
+    projectsLoaded: () => projectInventory.data !== undefined,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     worktrees,

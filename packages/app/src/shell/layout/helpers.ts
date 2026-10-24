@@ -48,6 +48,31 @@ export function closeHomeProject(
   return selected
 }
 
+/**
+ * The server's projects this client has not opened or closed, newest first. A fresh browser has no local project
+ * list, so the server inventory is what makes existing projects visible; local state only orders and hides them.
+ */
+export function discoverServerProjects<T extends { worktree: string; time?: { updated?: number } }>(input: {
+  opened: readonly { worktree: string }[]
+  closed: readonly string[]
+  known: readonly T[]
+}) {
+  const hidden = new Set([...input.opened.map((project) => pathKey(project.worktree)), ...input.closed.map(pathKey)])
+
+  return input.known
+    .toSorted((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+    .filter((project) => {
+      if (!project.worktree) return false
+      const key = pathKey(project.worktree)
+
+      if (hidden.has(key)) return false
+      hidden.add(key)
+
+      return true
+    })
+    .map((project) => ({ ...project, expanded: false }))
+}
+
 export function homeProjectDirectories(result: string | string[] | null) {
   if (!result) return []
 

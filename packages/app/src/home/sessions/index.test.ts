@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
 import {
+  createReconnectTracker,
   HOME_SESSION_INDEX_LIMIT,
   HOME_SESSION_LIMIT,
   HOME_V2_SESSION_PAGE_LIMIT,
@@ -159,5 +160,25 @@ describe("Home session index parity with the complete index", () => {
     const index = await loadHomeSessionIndex(async () => ({ data: hot, cursor: {} }))
     expect(index).toHaveLength(HOME_SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)
     expect(view(index, [])).toEqual(view(hot, []))
+  })
+})
+
+describe("createReconnectTracker", () => {
+  test("reports a reconnection after a lost stream, not the first connection", () => {
+    const reconnected = createReconnectTracker<string>()
+    expect(reconnected("a", "connecting")).toBe(false)
+    expect(reconnected("a", "connected")).toBe(false)
+    expect(reconnected("a", "connected")).toBe(false)
+    expect(reconnected("a", "reconnecting")).toBe(false)
+    expect(reconnected("a", "connected")).toBe(true)
+    expect(reconnected("a", "connected")).toBe(false)
+  })
+
+  test("starts over for another server", () => {
+    const reconnected = createReconnectTracker<string>()
+    reconnected("a", "connected")
+    reconnected("a", "reconnecting")
+    expect(reconnected("b", "connected")).toBe(false)
+    expect(reconnected("a", "connected")).toBe(false)
   })
 })

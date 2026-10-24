@@ -60,14 +60,13 @@ export function createHomeController() {
     const conn = servers.visible.find((conn) => ServerConnection.key(conn) === current.server)
 
     if (!conn) return
+    const ctx = global.ensureServerCtx(conn)
 
-    if (
-      global
-        .ensureServerCtx(conn)
-        .projects.list()
-        .some((project) => pathKey(project.worktree) === pathKey(directory))
-    )
-      return
+    // A selected project may come from the server inventory, which loads after storage; a failed load must not
+    // clear it either.
+    if (!ctx.sync.projectsLoaded()) return
+
+    if (ctx.projects.list().some((project) => pathKey(project.worktree) === pathKey(directory))) return
     setSelection({ server: current.server })
   })
 

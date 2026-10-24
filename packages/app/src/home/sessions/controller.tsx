@@ -3,10 +3,11 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
+import { type Accessor, createEffect, createMemo, type JSX, onCleanup, startTransition, untrack } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
 import {
+  createReconnectTracker,
   HOME_SESSION_LIMIT,
   loadHomeSessionIndex,
   mergeHomeSessionIndex,
@@ -74,6 +75,31 @@ export function createHomeSessionsController(home: HomeController) {
       refetchOnReconnect: true,
       select: selectSessions,
     }
+  })
+
+  // The fetched index is a snapshot; keep it consistent with what other clients do on the same server.
+  createEffect(() => {
+    const ctx = home.server.focusedContext()
+    const conn = home.server.focused()
+
+    if (!ctx || !conn) return
+    onCleanup(
+      ctx.data.on("session.deleted", (event) =>
+        queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+          current?.filter((session) => session.id !== event.data.sessionID),
+        ),
+      ),
+    )
+  })
+
+  const reconnected = createReconnectTracker()
+  createEffect(() => {
+    const conn = home.server.focused()
+    const status = home.server.focusedContext()?.sdk.connection.status()
+
+    if (!conn || !reconnected(conn, status)) return
+    // Sessions created, renamed, or deleted while the stream was down sent events this client never received.
+    void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
   })
 
   const indexedSessions = createMemo(() => {

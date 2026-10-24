@@ -6,7 +6,8 @@ export function addProjects(context: ServerCtx, directories: string[]) {
   if (!directory) return
 
   directories.forEach((item) => {
-    if (context.projects.list().some((project) => project.worktree === item)) return
+    // A discovered project is listed but not opened here; adding it explicitly still opens it.
+    if (context.projects.opened().some((project) => project.worktree === item)) return
     const location = { directory: item }
     void context.sdk.api.file
       .list({ path: ".", location })
