@@ -411,6 +411,7 @@ describe("DatabaseMigration", () => {
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO project VALUES ('project')`)
         yield* db.run(
           sql`CREATE TABLE project_directory (project_id text NOT NULL, directory text NOT NULL, type text, strategy text, time_created integer NOT NULL, PRIMARY KEY (project_id, directory))`,
         )
@@ -427,6 +428,32 @@ describe("DatabaseMigration", () => {
           { directory: "/strategy", strategy: "git" },
         ])
         expect(yield* db.get(sql`SELECT count(*) AS count FROM project_directory`)).toEqual({ count: 4 })
+      }),
+    )
+  })
+
+  test("skips project directories whose project no longer exists when creating worktrees", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO project VALUES ('project')`)
+        yield* db.run(
+          sql`CREATE TABLE project_directory (project_id text NOT NULL, directory text NOT NULL, type text, strategy text, time_created integer NOT NULL, PRIMARY KEY (project_id, directory))`,
+        )
+        yield* db.run(
+          sql`INSERT INTO project_directory (project_id, directory, type, strategy, time_created) VALUES ('project', '/root', 'main', NULL, 1), ('deleted', '/tmp/gone', NULL, NULL, 2)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [worktreeMigration])
+
+        expect(yield* db.all(sql`SELECT project_id, directory FROM worktree`)).toEqual([
+          { project_id: "project", directory: "/root" },
+        ])
+        expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${worktreeMigration.id}`)).toEqual({
+          id: worktreeMigration.id,
+        })
       }),
     )
   })
