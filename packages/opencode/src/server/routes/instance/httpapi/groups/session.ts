@@ -43,7 +43,15 @@ export const DiffQuery = Schema.Struct({
 export const MessagesQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
-  before: Schema.optional(Schema.String),
+  before: Schema.optional(Schema.String).annotate({
+    description: "Return messages older than this cursor (X-Next-Cursor of a previous page) or message ID",
+  }),
+  after: Schema.optional(Schema.String).annotate({
+    description: "Return messages newer than this cursor (X-Next-Cursor of a previous page) or message ID",
+  }),
+  order: Schema.optional(Schema.Literals(["asc", "desc"])).annotate({
+    description: "Without before or after: 'desc' (default) pages from the newest message, 'asc' from the oldest",
+  }),
 })
 export const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
 export const UpdatePayload = Schema.Struct({

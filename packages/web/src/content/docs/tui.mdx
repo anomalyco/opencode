@@ -411,6 +411,8 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `transcript.max_messages` - How many of a session's most recent messages the TUI keeps loaded (default: `100`). Older messages are hidden behind a divider: a rule with the hidden count and `load all`, `load 50 above` and `load 100 above` above it, and `load 50 below` and `load 100 below` under it. "Above" fills the gap from its older edge, "below" from its newer edge; a page as big as the gap is left out, since `load all` does the same. Loading every message costs about 10 ms and 0.5 MB of memory per message, so `load all` reads `load all (slow)` from 300 hidden messages and `load all (slow / memory heavy)` from 500. The same actions are in the command palette, `/load-hidden` loads all of them, and the `messages_hidden_*` keybinds are unbound by default.
+- `transcript.keep_first_prompt` - Keep the session's first prompt at the top, above the divider, when older messages are hidden (default: `true`).
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.

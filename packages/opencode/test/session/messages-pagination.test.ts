@@ -164,6 +164,54 @@ describe("MessageV2.page", () => {
     ),
   )
 
+  it.instance("pages forward from the oldest message", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 5)
+
+        const a = yield* MessageV2.page({ sessionID, limit: 2, order: "asc" })
+        expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(a.more).toBe(true)
+
+        const b = yield* MessageV2.page({ sessionID, limit: 2, after: a.cursor! })
+        expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(2, 4))
+
+        const c = yield* MessageV2.page({ sessionID, limit: 2, after: b.cursor! })
+        expect(c.items.map((item) => item.info.id)).toEqual(ids.slice(4))
+        expect(c.more).toBe(false)
+        expect(c.cursor).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.instance("anchors before and after a message ID", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 6)
+
+        const older = yield* MessageV2.page({ sessionID, limit: 2, before: ids[3] })
+        expect(older.items.map((item) => item.info.id)).toEqual(ids.slice(1, 3))
+        expect(older.more).toBe(true)
+
+        const newer = yield* MessageV2.page({ sessionID, limit: 2, after: ids[3] })
+        expect(newer.items.map((item) => item.info.id)).toEqual(ids.slice(4, 6))
+        expect(newer.more).toBe(false)
+
+        expect(yield* MessageV2.total(sessionID)).toBe(6)
+      }),
+    ),
+  )
+
+  it.instance("fails with NotFoundError for an anchor message outside the session", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        yield* fill(sessionID, 1)
+        const error = yield* Effect.flip(MessageV2.page({ sessionID, limit: 2, before: "msg_missing" }))
+        expect(error).toBeInstanceOf(NotFoundError)
+      }),
+    ),
+  )
+
   it.instance("returns items in chronological order within a page", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {

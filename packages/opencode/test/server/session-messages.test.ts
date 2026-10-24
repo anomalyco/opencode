@@ -111,6 +111,41 @@ describe("session messages endpoint", () => {
   )
 
   it.instance(
+    "pages forward from the oldest message and reports the total",
+    withoutWatcher(
+      Effect.gen(function* () {
+        const session = yield* sessionScoped
+        const ids = yield* fill(session.id, 5)
+
+        const a = yield* request(`/session/${session.id}/message?limit=2&order=asc`)
+        expect(a.status).toBe(200)
+        expect((yield* json<SessionV1.WithParts[]>(a)).map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(a.headers["x-total-count"]).toBe("5")
+        expect(a.headers["link"]).toContain("after=")
+
+        const b = yield* request(
+          `/session/${session.id}/message?limit=2&after=${encodeURIComponent(a.headers["x-next-cursor"]!)}`,
+        )
+        expect((yield* json<SessionV1.WithParts[]>(b)).map((item) => item.info.id)).toEqual(ids.slice(2, 4))
+
+        const last = yield* request(`/session/${session.id}/message?limit=2&after=${ids[3]}`)
+        expect((yield* json<SessionV1.WithParts[]>(last)).map((item) => item.info.id)).toEqual(ids.slice(4))
+        expect(last.headers["x-next-cursor"]).toBeUndefined()
+        expect(last.headers["x-total-count"]).toBe("5")
+
+        const older = yield* request(`/session/${session.id}/message?limit=2&before=${ids[3]}`)
+        expect((yield* json<SessionV1.WithParts[]>(older)).map((item) => item.info.id)).toEqual(ids.slice(1, 3))
+
+        const conflict = yield* request(`/session/${session.id}/message?limit=2&before=${ids[3]}&after=${ids[1]}`)
+        expect(conflict.status).toBe(400)
+        const mismatch = yield* request(`/session/${session.id}/message?limit=2&order=asc&before=${ids[3]}`)
+        expect(mismatch.status).toBe(400)
+      }),
+    ),
+    { git: true },
+  )
+
+  it.instance(
     "keeps full-history responses when limit is omitted",
     withoutWatcher(
       Effect.gen(function* () {

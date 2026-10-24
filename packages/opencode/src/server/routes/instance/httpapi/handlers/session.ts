@@ -19,7 +19,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect/instance-state"
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import {
@@ -107,11 +107,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
-      if (ctx.query.before) {
-        const before = ctx.query.before
+      const anchor = ctx.query.after ?? ctx.query.before
+      if (ctx.query.before && ctx.query.after) return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.after && ctx.query.order === "desc") return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.before && ctx.query.order === "asc") return yield* new HttpApiError.BadRequest({})
+      if (anchor && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+      if (anchor && !anchor.startsWith("msg")) {
         yield* Effect.try({
-          try: () => MessageV2.cursor.decode(before),
+          try: () => MessageV2.cursor.decode(anchor),
           catch: () => new HttpApiError.BadRequest({}),
         })
       }
@@ -125,21 +128,42 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           sessionID: ctx.params.sessionID,
           limit: ctx.query.limit,
           before: ctx.query.before,
+          after: ctx.query.after,
+          order: ctx.query.order,
         }),
       )
-      if (!page.cursor) return page.items
+      const total = yield* MessageV2.total(ctx.params.sessionID)
+      if (!page.cursor) {
+        // Returning the items, not a jsonUnsafe response, keeps them going
+        // through the success schema, so a corrupt stored row is still a 400.
+        yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+          Effect.succeed(
+            response.status >= 400
+              ? response
+              : HttpServerResponse.setHeaders(response, {
+                  "Access-Control-Expose-Headers": "X-Total-Count",
+                  "X-Total-Count": total.toString(),
+                }),
+          ),
+        )
+        return page.items
+      }
 
       const request = yield* HttpServerRequest.HttpServerRequest
       // toURL() honors the Host + x-forwarded-proto headers, so the Link
       // header echoes the real origin instead of a hard-coded localhost.
       const url = Option.getOrElse(HttpServerRequest.toURL(request), () => new URL(request.url, "http://localhost"))
+      const direction = ctx.query.after !== undefined || ctx.query.order === "asc" ? "after" : "before"
       url.searchParams.set("limit", ctx.query.limit.toString())
-      url.searchParams.set("before", page.cursor)
+      url.searchParams.delete("order")
+      url.searchParams.delete(direction === "after" ? "before" : "after")
+      url.searchParams.set(direction, page.cursor)
       return HttpServerResponse.jsonUnsafe(page.items, {
         headers: {
-          "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
+          "Access-Control-Expose-Headers": "Link, X-Next-Cursor, X-Total-Count",
           Link: `<${url.toString()}>; rel="next"`,
           "X-Next-Cursor": page.cursor,
+          "X-Total-Count": total.toString(),
         },
       })
     })
