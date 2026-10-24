@@ -52,24 +52,9 @@ export function createSessionRevert(input: {
     const owner = input.session.ownership.capture()
     const target = prompt.capture()
 
-    // An undelivered prompt has no history to rewind. Withdraw it like the TUI
-    // instead of interrupting the work it is waiting behind.
-    if (data.session.input.has(sessionID, message.id)) {
-      if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
-      restore(target, message)
-      owner.run(() => input.setActiveMessage(previous))
-
-      return
-    }
-
-    // Interrupt acknowledges before the execution settles, and staging a busy Session fails. The
-    // local status can lag the server either way, so always settle first; both are idle no-ops.
-    // Like the TUI, stop at the first failure instead of waiting on work that was never interrupted.
-    if (!(await request(() => server.api.session.interrupt({ sessionID })))) return
-
-    if (!(await request(() => server.api.session.wait({ sessionID })))) return
-
-    if (!(await request(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
+    // Shared with the TUI: withdraw undelivered inbox rows, otherwise interrupt and stage.
+    // Runs on the per-session send chain so cancel cannot overtake the prompt POST.
+    if (!(await request(() => data.session.undo({ sessionID, messageID: message.id })))) return
     // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them,
     // and redo delivers them.
     restore(target, message)

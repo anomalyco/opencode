@@ -3,7 +3,6 @@ import { useData } from "../../context/data"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useClipboard } from "../../context/clipboard"
 import { useToast } from "../../ui/toast"
-import { useClient } from "../../context/client"
 import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
 import type { PromptInfo } from "../../prompt/history"
@@ -18,7 +17,6 @@ export function DialogMessage(props: {
   const data = useData()
   const clipboard = useClipboard()
   const toast = useToast()
-  const client = useClient()
   const newDesigns = useNewDesigns()
   const message = createMemo(() => data.session.message.get(props.sessionID, props.messageID))
 
@@ -39,14 +37,15 @@ export function DialogMessage(props: {
           description: "undo messages and file changes",
           onSelect: (dialog) => {
             const value = message()
-            if (value?.type === "user") {
-              props.setPrompt?.({
-                ...projectedPromptInput(value),
-                pasted: [],
+            void data.session
+              .undo({ sessionID: props.sessionID, messageID: props.messageID })
+              .then(() => {
+                if (value?.type !== "user") return
+                props.setPrompt?.({
+                  ...projectedPromptInput(value),
+                  pasted: [],
+                })
               })
-            }
-            void client.api.session.revert
-              .stage({ sessionID: props.sessionID, messageID: props.messageID })
               .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
           },
