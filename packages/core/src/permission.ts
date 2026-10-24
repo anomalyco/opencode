@@ -87,6 +87,23 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
   return rulesets.flat()
 }
 
+function logEvaluation(
+  input: AssertInput,
+  effect: Permission.Effect,
+  rule: Permission.Rule | undefined,
+  rules: Permission.Ruleset,
+) {
+  // Rule indexes identify the decision without logging private resources or the full ruleset.
+  return Effect.logInfo("permission evaluated", {
+    sessionID: input.sessionID,
+    permission: input.action,
+    effect,
+    ruleEffect: rule?.effect ?? "allow",
+    rule: rule ? rules.lastIndexOf(rule) : -1,
+    rules: rules.length,
+  })
+}
+
 export interface Interface {
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
@@ -117,16 +134,19 @@ const layer = Layer.effect(
     const pending = new Map<ID, Pending>()
     let closed = false
 
+    const publishReply = (request: Request, reply: Reply) =>
+      bus
+        .publish(Permission.Event.Replied, { sessionID: request.sessionID, requestID: request.id, reply })
+        .pipe(
+          Effect.tap(() =>
+            Effect.logInfo("permission replied", { sessionID: request.sessionID, id: request.id, reply }),
+          ),
+        )
+
     const close = Effect.gen(function* () {
       closed = true
       yield* Effect.forEach(Array.from(pending.values()), (item) =>
-        bus
-          .publish(Permission.Event.Replied, {
-            sessionID: item.request.sessionID,
-            requestID: item.request.id,
-            reply: "reject",
-          })
-          .pipe(Effect.ensuring(Deferred.fail(item.deferred, new DeclinedError()))),
+        publishReply(item.request, "reject").pipe(Effect.ensuring(Deferred.fail(item.deferred, new DeclinedError()))),
       )
       pending.clear()
     }).pipe(Effect.uninterruptible)
@@ -149,20 +169,23 @@ const layer = Layer.effect(
       return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
     })
 
-    function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
-      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
-    }
-
     function relevant(input: AssertInput, rules: Permission.Ruleset) {
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
-      if (denied(input, rules)) return { effect: "deny" as const, rules }
+      const blocked = input.resources
+        .map((resource) => evaluate(input.action, resource, rules))
+        .find((rule) => rule.effect === "deny")
+      if (blocked) {
+        yield* logEvaluation(input, "deny", blocked, rules)
+        return { effect: "deny" as const, rules }
+      }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
+      const matches = input.resources.map((resource) => evaluate(input.action, resource, all))
+      const rule = matches.find((rule) => rule.effect === "ask") ?? matches[0]
+      const effect: Permission.Effect = matches.some((rule) => rule.effect === "ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
         agent: input.agent,
@@ -172,6 +195,7 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
+      yield* logEvaluation(input, event.effect, rule, all)
       return { effect: event.effect, message: event.message, rules: all }
     })
 
@@ -207,6 +231,11 @@ const layer = Layer.effect(
           yield* bus
             .publish(Permission.Event.Asked, request)
             .pipe(Effect.onError(() => Effect.sync(() => pending.delete(request.id))))
+          yield* Effect.logInfo("permission asking", {
+            sessionID: request.sessionID,
+            id: request.id,
+            permission: request.action,
+          })
           return item
         }),
       )
@@ -258,11 +287,7 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* bus.publish(Permission.Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-            reply: input.reply,
-          })
+          yield* publishReply(existing.request, input.reply)
 
           if (input.reply === "reject") {
             yield* Deferred.fail(
@@ -272,11 +297,7 @@ const layer = Layer.effect(
             pending.delete(input.requestID)
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* bus.publish(Permission.Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: item.request.id,
-                reply: "reject",
-              })
+              yield* publishReply(item.request, "reject")
               // Feedback applies to the whole batch, so parallel asks don't end the step.
               yield* Deferred.fail(
                 item.deferred,
@@ -303,11 +324,7 @@ const layer = Layer.effect(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
             if (result?.effect !== "allow") continue
-            yield* bus.publish(Permission.Event.Replied, {
-              sessionID: item.request.sessionID,
-              requestID: item.request.id,
-              reply: "always",
-            })
+            yield* publishReply(item.request, "always")
             yield* Deferred.succeed(item.deferred, undefined)
             pending.delete(id)
           }
