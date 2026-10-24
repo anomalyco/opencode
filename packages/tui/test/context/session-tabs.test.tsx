@@ -265,6 +265,74 @@ test("loads VCS metadata for each persisted tab location", async () => {
   }
 })
 
+test("loads label metadata for the first 20 tab locations and the rest when opened", async () => {
+  const sessionIDs = Array.from({ length: 25 }, (_, index) => `tab${index}`)
+  const directories = Object.fromEntries(sessionIDs.map((sessionID) => [sessionID, `${directory}/${sessionID}`]))
+  const setup = await renderSessionTabs("tab0", {
+    home: true,
+    persisted: sessionIDs,
+    sessionDirectories: directories,
+  })
+
+  try {
+    const eager = sessionIDs.slice(0, 20).map((sessionID) => directories[sessionID])
+    await wait(() => eager.every((dir) => setup.locations.includes(dir) && setup.vcsLocations.includes(dir)))
+    await Bun.sleep(100)
+    const lazy = directories.tab22
+    expect(setup.locations).not.toContain(lazy)
+    expect(setup.vcsLocations).not.toContain(lazy)
+    expect(sessionIDs.slice(20).some((sessionID) => setup.locations.includes(directories[sessionID]))).toBe(false)
+
+    setup.route.navigate({ type: "session", sessionID: "tab22" })
+    await wait(() => setup.locations.includes(lazy) && setup.vcsLocations.includes(lazy))
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("counts the label metadata limit in unique locations, not tabs", async () => {
+  const sessionIDs = Array.from({ length: 30 }, (_, index) => `tab${index}`)
+  const shared = `${directory}/shared`
+  const directories = Object.fromEntries(
+    sessionIDs.map((sessionID, index) => [sessionID, index < 10 ? shared : `${directory}/${sessionID}`]),
+  )
+  const setup = await renderSessionTabs("tab0", {
+    home: true,
+    persisted: sessionIDs,
+    sessionDirectories: directories,
+  })
+
+  try {
+    // tab0-tab9 share one location, so the 20 unique locations reach tab28.
+    const eager = [shared, ...sessionIDs.slice(10, 29).map((sessionID) => directories[sessionID])]
+    await wait(() => eager.every((dir) => setup.locations.includes(dir) && setup.vcsLocations.includes(dir)))
+    await Bun.sleep(100)
+    expect(setup.locations).not.toContain(directories.tab29)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("prefers the current, unread, and recently active tabs for label metadata", async () => {
+  const sessionIDs = Array.from({ length: 25 }, (_, index) => `tab${index}`)
+  const directories = Object.fromEntries(sessionIDs.map((sessionID) => [sessionID, `${directory}/${sessionID}`]))
+  const setup = await renderSessionTabs("tab24", {
+    persisted: sessionIDs,
+    sessionDirectories: directories,
+    sessionTimes: { tab23: { idle: 5 }, tab22: { idle: 10, viewed: 10 } },
+  })
+
+  try {
+    // Current tab24, unread tab23, recently active tab22, then strip order fills the remaining 17.
+    const eager = ["tab24", "tab23", "tab22", ...sessionIDs.slice(0, 17)].map((sessionID) => directories[sessionID])
+    await wait(() => eager.every((dir) => setup.locations.includes(dir) && setup.vcsLocations.includes(dir)))
+    await Bun.sleep(100)
+    expect(sessionIDs.slice(17, 22).some((sessionID) => setup.locations.includes(directories[sessionID]))).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("opens a background tab without changing the current session", async () => {
   const setup = await renderSessionTabs("first")
 

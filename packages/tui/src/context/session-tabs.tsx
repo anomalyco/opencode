@@ -51,6 +51,10 @@ const empty = (): TabsState => ({ tabs: [], unread: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
+// Tab labels read Location and VCS info, and serving either boots that Location on the server
+// (config, plugins, MCP servers). Load the most relevant tab Locations on connect; the rest load
+// when opened.
+const TAB_LOCATION_PREFETCH_LIMIT = 20
 const VIEW_RETRY_DELAY = 250
 const VIEW_RETRY_MAX_DELAY = 5_000
 
@@ -292,16 +296,35 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       void (async () => {
         await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID, { children: true })))
         if (stale) return
+        // Prefer the current tab, then tabs that need attention, then recently visited tabs (this
+        // client's history survives a service restart), then recent session activity. The stable
+        // sort keeps strip order as the final tie-break.
+        const visited = history.entries.toReversed()
+        const tier = (sessionID: string) => {
+          if (sessionID === current()) return 0
+          const tab = status(sessionID)
+          return tab.busy || tab.attention || tab.unread ? 1 : 2
+        }
+        const recency = (sessionID: string) => {
+          const index = visited.indexOf(sessionID)
+          return index === -1 ? visited.length : index
+        }
+        const activity = (sessionID: string) => {
+          const time = data.session.get(sessionID)?.time
+          return time ? Math.max(time.updated, time.idle ?? 0, time.viewed ?? 0) : 0
+        }
         const locations = new Map(
-          sessionIDs
+          state()
+            .tabs.map((tab) => tab.sessionID)
+            .toSorted((a, b) => tier(a) - tier(b) || recency(a) - recency(b) || activity(b) - activity(a))
             .map((sessionID) => data.session.get(sessionID)?.location)
             .filter((location) => location !== undefined)
             .map((location) => [locationKey(location), location]),
         )
         await Promise.allSettled(
-          Array.from(locations.values(), (location) =>
-            Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)]),
-          ),
+          Array.from(locations.values())
+            .slice(0, TAB_LOCATION_PREFETCH_LIMIT)
+            .map((location) => Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)])),
         )
       })()
       const timer = setTimeout(async () => {
@@ -323,6 +346,24 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         clearTimeout(timer)
       })
     })
+
+    // Tabs past the prefetch limit load their label metadata once opened.
+    createEffect(
+      on(
+        () => {
+          if (!enabled() || client.connection.status() !== "connected") return
+          const sessionID = current()
+          const location = sessionID ? data.session.get(sessionID)?.location : undefined
+          return location ? locationKey(location) : undefined
+        },
+        (key) => {
+          const sessionID = current()
+          const location = key && sessionID ? data.session.get(sessionID)?.location : undefined
+          if (!location || (data.location.info(location) && data.location.vcs.info(location))) return
+          void Promise.allSettled([data.location.syncInfo(location), data.location.vcs.sync(location)])
+        },
+      ),
+    )
 
     onCleanup(
       event.on("session.moved", (evt) => {
