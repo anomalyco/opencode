@@ -51,6 +51,12 @@ export function DialogSsh(props: {
     () => ssh.submitting(id) || (state.started && !ssh.error(id) && isSshConnecting(item()?.stage ?? "connecting")),
   )
 
+  const installing = createMemo(() => {
+    const stage = item()?.stage
+
+    return stage === "downloading" || stage === "uploading"
+  })
+
   const prompt = createMemo<SshItem["prompt"]>((previous) => item()?.prompt ?? (busy() ? previous : undefined))
   // A new object for each challenge shown, and when one goes away.
   const challenge = createMemo(on([prompt, () => prompt()?.id], () => ({})))
@@ -176,6 +182,12 @@ export function DialogSsh(props: {
                 onInput={(event) => setState("name", event.currentTarget.value)}
                 onKeyDown={keyDown}
               />
+            </div>
+          </Show>
+          <Show when={busy() && installing() && !prompt()}>
+            <div class="flex w-full min-w-0 flex-col gap-2" role="status" aria-live="polite">
+              <span class="text-14-medium text-v2-text-text-base">{extension.t("stage.installing")}</span>
+              <span class="text-13-regular text-v2-text-text-muted">{extension.t("stage.installHint")}</span>
             </div>
           </Show>
           <Show when={item()?.stage === "incompatible"}>

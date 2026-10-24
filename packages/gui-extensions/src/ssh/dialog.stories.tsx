@@ -28,6 +28,7 @@ function Fixture(props: {
   connectionDelay?: number
   initial?: "connecting" | "password" | "confirmation" | "failure" | "required"
   responseDelay?: number
+  stage?: "downloading" | "uploading" | "starting"
 }) {
   const state: FixtureState = {
     step: 0,
@@ -82,6 +83,12 @@ function Fixture(props: {
         stage: "connecting",
         detail: "",
         destination: "brendon@dev.example.com:22",
+      }
+
+      if (props.stage) {
+        update({ stage: props.stage })
+
+        return
       }
 
       if (props.initial === "connecting") return
@@ -316,6 +323,10 @@ export const KeyReconnect = { render: () => <Fixture initial="required" session 
 export const Host = { render: () => <Fixture /> }
 
 export const Connecting = { render: () => <Fixture initial="connecting" /> }
+
+export const Installing = { render: () => <Fixture initial="connecting" stage="uploading" /> }
+
+export const Starting = { render: () => <Fixture initial="connecting" stage="starting" /> }
 
 export const Password = { render: () => <Fixture initial="password" /> }
 
