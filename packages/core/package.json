@@ -67,6 +67,13 @@
       "node": "./src/shell/parser-wasm.node.ts",
       "default": "./src/shell/parser-wasm.bun.ts"
     },
+    "#undici-fetch": {
+      "types": "./src/util/undici-fetch.node.ts",
+      "workerd": "./src/util/undici-fetch.noop.ts",
+      "bun": "./src/util/undici-fetch.noop.ts",
+      "node": "./src/util/undici-fetch.node.ts",
+      "default": "./src/util/undici-fetch.noop.ts"
+    },
     "#v1-migration": {
       "types": "./src/database/v1-migration.bun.ts",
       "bun": "./src/database/v1-migration.bun.ts",
@@ -135,6 +142,7 @@
     "tree-sitter-powershell": "0.25.10",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
+    "undici": "8.11.2",
     "zod": "catalog:"
   }
 }
