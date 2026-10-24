@@ -27,11 +27,13 @@ export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: 
 export function resolveNewSessionBranch(input: {
   worktree: string
   directory: string
+  projectDirectory: string
   createBranch?: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
   if (input.worktree === "create" && input.createBranch) return input.createBranch
-  const directory = input.worktree === "main" || input.worktree === "create" ? input.directory : input.worktree
+  const directory =
+    input.worktree === "main" ? input.projectDirectory : input.worktree === "create" ? input.directory : input.worktree
 
   return input.worktreeBranch(directory)
 }
@@ -182,12 +184,15 @@ export function createNewSessionWorkspaceController(input: {
   )
 
   const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
+  const localDirectory = createMemo(
+    () => data.location.info({ directory: sdk().directory })?.project.canonical ?? sdk().directory,
+  )
 
   const [branches] = createResource(
     () => (visible() ? { directory: projectRoot(), search: state.search } : undefined),
     ({ directory, search }) =>
-      serverSDK.api.vcs
-        .branch.list({ location: { directory }, search, limit: 50 })
+      serverSDK.api.vcs.branch
+        .list({ location: { directory }, search, limit: 50 })
         .then((response) => ({ directory, search, data: response.data }))
         .catch(() => ({ directory, search, data: [] })),
   )
@@ -205,17 +210,21 @@ export function createNewSessionWorkspaceController(input: {
   createEffect(() => {
     const selection = value()
 
-    if (selection === "main" || selection === "create") return
+    if (selection === "create") return
     const project = currentProject()
 
-    if (project) setState("existing", { projectID: project.id, directory: selection })
-    void data.location.vcs.sync({ directory: selection }).catch(() => undefined)
+    if (selection !== "main" && project) setState("existing", { projectID: project.id, directory: selection })
+    const directory = selection === "main" ? localDirectory() : selection
+
+    if (selection === "main" && sameDirectory(directory, sdk().directory)) return
+    void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
 
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
       directory: sdk().directory,
+      projectDirectory: localDirectory(),
       createBranch: input.selectedBranch(),
       worktreeBranch: (worktree) => data.location.vcs.info({ directory: worktree })?.branch.current,
     }),
