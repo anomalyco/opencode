@@ -6866,6 +6866,64 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  // What a compaction costs, measured instead of assumed. Summarising is itself a request: the
+  // older half of the conversation is re-sent to the model to produce the summary. The saving
+  // only exists if the summary plus the retained tail is smaller than what it replaced, and the
+  // post-compaction steps have to pay off that saving rather than re-billing the same history.
+  scenario("compaction shrinks what each following step sends", function* (s) {
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-before-size-compaction", 3_950))
+    yield* s.runPrompt("Earlier question ".repeat(180))
+
+    s.currentModel = compactModel
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.text("## Objective\n- measured summary", "text-size-summary"),
+      TestLLM.textWithUsage("After", "text-size-after", 900),
+    )
+    yield* s.admit("Recent exact request ".repeat(180))
+    yield* s.resume
+
+    const summaryRequest = s.requests.find((request) =>
+      userTexts(request).some((text) => text.includes("## Objective")),
+    )
+    expect(summaryRequest).toBeDefined()
+    if (!summaryRequest) return
+
+    const stepRequest = s.requests.find((request) => userTexts(request).some((text) => text.includes("<summary>")))
+    expect(stepRequest).toBeDefined()
+    if (!stepRequest) return
+
+    // The post-compaction step carries the summary instead of the history behind it.
+    const checkpoint = userTexts(stepRequest).find((text) => text.startsWith("<conversation-checkpoint>"))
+    expect(checkpoint).toBeDefined()
+
+    const billable = (request: LLMRequest) =>
+      request.system.reduce((sum, part) => sum + part.text.length, 0) +
+      request.messages.reduce(
+        (sum, message) =>
+          sum + message.content.reduce((inner, part) => inner + (part.type === "text" ? part.text.length : 0), 0),
+        0,
+      )
+
+    // The retained tail is verbatim, so the replacement is the summary plus that tail.
+    const context = yield* s.context
+    const compaction = context.find((message) => message.type === "compaction")
+    expect(compaction?.type === "compaction" && compaction.status === "completed").toBe(true)
+
+    const original = "Earlier question ".repeat(180).length + "Recent exact request ".repeat(180).length
+    const replacement =
+      (compaction?.type === "compaction" && compaction.status === "completed"
+        ? compaction.summary.length + compaction.recent.length
+        : 0) || 0
+
+    // Compaction paid off: what the summary replaced is larger than what replaced it.
+    expect(replacement).toBeGreaterThan(0)
+    expect(replacement).toBeLessThan(original)
+
+    // And the step after it sends less than the summary request that produced the checkpoint.
+    expect(billable(stepRequest)).toBeLessThan(billable(summaryRequest))
+  })
+
   scenario("rejects malformed streamed tool input ordering", function* (s) {
     yield* s.llm.push([LLMEvent.toolInputDelta({ id: "call-1", name: "read", text: "{}" })])
 
