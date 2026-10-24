@@ -324,3 +324,20 @@ test("provides config and its host interface", async () => {
     app.renderer.destroy()
   }
 })
+
+test("validates permission prompt settings", () => {
+  expect(decodeInfo({ session: { permission_prompt: { max_height: 30, default_expanded: true } } })).toEqual({
+    session: { permission_prompt: { max_height: 30, default_expanded: true } },
+  })
+  expect(() => decodeInfo({ session: { permission_prompt: { max_height: 0 } } })).toThrow()
+  expect(() => decodeInfo({ session: { permission_prompt: { max_height: -1 } } })).toThrow()
+  expect(() => decodeInfo({ session: { permission_prompt: { max_height: 1.5 } } })).toThrow()
+  expect(() => decodeInfo({ session: { permission_prompt: { default_expanded: "true" } } })).toThrow()
+
+  const resolved = resolve(decodeInfo({ session: { permission_prompt: { max_height: 20 } } }), {
+    terminalSuspend: true,
+    environment: {},
+  })
+  expect(resolved.session.permission_prompt).toEqual({ max_height: 20 })
+  expect(resolve({}, { terminalSuspend: true, environment: {} }).session.permission_prompt).toBeUndefined()
+})
