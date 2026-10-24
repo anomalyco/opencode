@@ -95,7 +95,8 @@ const SsoRequired = Schema.Struct({
 const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
-const signedOutMessage = "Reconnect OpenCode Console to continue"
+const signedOutMessage =
+  "Reconnect OpenCode Console to continue; use /connect or run `opencode auth login opencode`"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
 
@@ -700,9 +701,33 @@ function post<S extends Schema.Top>(
   statusOk = true,
 ) {
   return send(http, url, body).pipe(
-    Effect.flatMap((response) => (statusOk ? HttpClientResponse.filterStatusOk(response) : Effect.succeed(response))),
+    Effect.flatMap((response) => (statusOk ? requireOk(url, response) : Effect.succeed(response))),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
   )
+}
+
+// Console failures carry the reason in the body and, for rate limits, retry-after. Keep both in the log and
+// in the error the CLI prints; a status alone cannot tell a dead credential from a busy service.
+function requireOk(url: string, response: HttpClientResponse.HttpClientResponse) {
+  if (response.status >= 200 && response.status < 300) return Effect.succeed(response)
+  return Effect.gen(function* () {
+    const retryAfter = response.headers["retry-after"]
+    const body = (yield* response.text.pipe(Effect.orElseSucceed(() => ""))).trim().slice(0, 300)
+    const detail = [
+      `HTTP ${response.status}`,
+      retryAfter === undefined ? undefined : `retry after ${retryAfter}`,
+      body.length > 0 ? body : undefined,
+    ]
+      .filter((part): part is string => part !== undefined)
+      .join(": ")
+    yield* Effect.logWarning("OpenCode Console request failed", {
+      url,
+      status: response.status,
+      retryAfter,
+      body,
+    })
+    return yield* Effect.fail(new Error(`OpenCode Console request failed (${detail})`))
+  })
 }
 
 function send(http: HttpClient.HttpClient, url: string, body: Record<string, string | boolean>) {
