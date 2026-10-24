@@ -217,7 +217,11 @@ export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
   const encoder = new TextEncoder()
   defineAccessor(proto, "encoding", () => "utf-8")
   methods(builtins, proto, [
-    ["encode", 0, (_, args) => new Bytes(builtins.Uint8Array, encoder.encode(coerceToString(args[0] ?? "")))],
+    [
+      "encode",
+      0,
+      (_, args) => new Bytes(builtins.Uint8Array, encoder.encode(coerceToString(args[0] === undefined ? "" : args[0]))),
+    ],
   ])
   return constructor<R>(builtins, proto, {
     name: "TextEncoder",
