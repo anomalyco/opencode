@@ -387,7 +387,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     const attempt = Effect.gen(function* () {
       const current = yield* connect(false)
       return yield* Effect.tryPromise({
-        try: () => subscribePromise(current, terminalID, input),
+        try: (signal) => subscribePromise(current, terminalID, input, signal),
         catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
       }).pipe(
         Effect.catch((error) => {
@@ -553,8 +553,9 @@ async function subscribePromise(
   registration: Registration,
   id: number,
   input: Parameters<DaemonTransport["subscribe"]>[1],
+  signal: AbortSignal,
 ): Promise<DaemonAttachment> {
-  const socket = net.createConnection(registration.socket)
+  const socket = net.createConnection({ path: registration.socket, signal })
   const frames = decoder(socket)
   try {
     await new Promise<void>((resolve, reject) => {
