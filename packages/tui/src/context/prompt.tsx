@@ -1,7 +1,11 @@
 import { createSimpleContext } from "./helper"
 import type { PromptRef } from "../component/prompt"
 
-export const { use: usePromptRef, provider: PromptRefProvider } = createSimpleContext({
+export const {
+  use: usePromptRef,
+  provider: PromptRefProvider,
+  context: PromptRefContext,
+} = createSimpleContext({
   name: "PromptRef",
   init: () => {
     let current: PromptRef | undefined
