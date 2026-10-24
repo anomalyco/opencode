@@ -40,6 +40,14 @@ export default Runtime.handler(
         body,
       }),
     )
+    if (response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() === "text/event-stream") {
+      yield* Effect.promise(() => writeEventStream(response.body))
+      if (!response.ok) {
+        process.stderr.write(`HTTP ${response.status} ${response.statusText}${EOL}`)
+        process.exitCode = 1
+      }
+      return
+    }
     const output = yield* Effect.promise(() => response.text())
     if (output) process.stdout.write(output + (output.endsWith(EOL) ? "" : EOL))
     if (!response.ok) {
@@ -48,6 +56,22 @@ export default Runtime.handler(
     }
   }),
 )
+
+async function writeEventStream(body: Response["body"]) {
+  if (!body) return
+  const decoder = new TextDecoder()
+  let tail = ""
+  const write = async (output: string) => {
+    if (!output) return
+    tail = (tail + output).slice(-EOL.length)
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(output, (error) => (error ? reject(error) : resolve()))
+    })
+  }
+  for await (const chunk of body) await write(decoder.decode(chunk, { stream: true }))
+  await write(decoder.decode())
+  if (tail && !tail.endsWith(EOL)) await write(EOL)
+}
 
 export function resolveOperation(spec: OpenApi, operationID: string, params: Record<string, string>) {
   for (const [path, operations] of Object.entries(spec.paths ?? {})) {
