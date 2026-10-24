@@ -242,6 +242,24 @@ describe("ModelResolver", () => {
     ),
   )
 
+  it.effect("fills Mantle catalog URLs from the provider region", () =>
+    withEnv({ AWS_REGION: undefined, AWS_DEFAULT_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          providerID: Provider.ID.amazonBedrock,
+          modelID: "openai.gpt-5.5",
+          settings: { baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1" },
+        })
+        const resolved = yield* ModelResolver.fromCatalogModel({
+          ...catalog,
+          settings: Provider.mergeOverlay({ region: "us-west-2" }, catalog.settings),
+        })
+
+        expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+      }),
+    ),
+  )
+
   it.effect("prefers the configured Mantle region over the environment", () =>
     withEnv({ AWS_REGION: "us-east-1" }, () =>
       Effect.gen(function* () {

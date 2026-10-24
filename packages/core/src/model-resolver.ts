@@ -278,7 +278,7 @@ function prepareProviderSettings(
 ): Effect.Effect<Readonly<Record<string, unknown>>, UnresolvedProviderVariablesError> {
   const baseURL = settings.baseURL
   if (typeof baseURL !== "string") return Effect.succeed(settings)
-  return prepareProviderURL(model, baseURL).pipe(
+  return prepareProviderURL(model, baseURL, settings).pipe(
     Effect.map((prepared) => (prepared === baseURL ? settings : { ...settings, baseURL: prepared })),
   )
 }
@@ -286,9 +286,15 @@ function prepareProviderSettings(
 function prepareProviderURL(
   model: RuntimeInfo,
   baseURL: string,
+  settings: Readonly<Record<string, unknown>>,
 ): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
-  const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
+  // Catalog Bedrock URLs are model settings while `region` is a provider setting, so they only meet here.
+  const prepared = baseURL.replace(
+    /\$\{([^}]+)\}/g,
+    (placeholder, name: string) =>
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+  )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
 }
