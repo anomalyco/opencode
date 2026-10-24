@@ -80,15 +80,87 @@ OpenCode adds. Clients that don't recognize these keys can ignore them. The
 ### Transport
 
 The client starts `opencode acp` as a child process. The two exchange newline-delimited JSON-RPC messages over stdin and
-stdout, using ACP protocol version 1.
+stdout. OpenCode negotiates ACP v1 or the ACP v2 preview per connection, and uses only that version's message shapes after
+initialization.
 
 `opencode acp` starts a private OpenCode server for its own use. It doesn't connect to the shared background service,
 and it doesn't open a network port for ACP. One process can serve many ACP sessions. It exits when the client closes
 stdin.
 
-### Capabilities
+### ACP v2 preview
 
-OpenCode's `initialize` response includes these agent capabilities:
+ACP v2 is opt-in and is not yet recommended for production use. Enable it explicitly:
+
+```bash
+OPENCODE_EXPERIMENTAL_ACP_V2=1 opencode acp
+```
+
+With the flag set to `1`, OpenCode negotiates v2 when the client requests it and retains v1 for v1 clients. Without it,
+OpenCode negotiates v1 even when the client requests v2. ACP v2 is still a draft, so its wire format and SDK may change.
+Mid-run prompts steer at the next safe execution boundary. Each prompt acknowledges its own delivered user message;
+foreground state describes the whole session, not an individual prompt. A session-wide observer remains attached after
+idle, so resumed parent output is delivered without another client prompt. Cancelling an undelivered prompt request
+removes that inbox item without interrupting the session's other work.
+
+Validation includes wire tests and an isolated stdio integration test exercising the real CLI, server, session runner,
+and provider adapter against a local model endpoint. Interoperability with external v2 editors and live providers still
+needs validation before removing the experimental gate. A cached snapshot is not proof that externally started work
+remains observable; an observer connection failure invalidates confirmed activity with `state: "unknown"`.
+
+```json
+{
+  "method": "initialize",
+  "params": {
+    "protocolVersion": 2,
+    "info": { "name": "my-client", "version": "1.0.0" },
+    "capabilities": {}
+  }
+}
+```
+
+The v2 agent supports session creation, listing, forking, resuming, closing, prompting, cancellation, and config options. It also
+advertises image and embedded-context prompts, stdio and HTTP MCP servers, additional directories, and session deletion.
+V2 `session/resume` accepts `replayFrom: { "type": "start" }` to replay history; omitting it resumes without replay.
+Unstable provider-configuration APIs are not advertised in either version.
+
+V1 features use their corresponding v2 surfaces:
+
+| V1 behavior | V2 equivalent |
+| --- | --- |
+| `session/load` history replay | `session/resume` with `replayFrom: { "type": "start" }` |
+| `session/set_mode` | `session/set_config_option` with `configId: "mode"` |
+| Terminal authentication | Advertise `capabilities.auth.terminal: {}`; use the returned terminal method and `auth/login` |
+| Slash commands and `/compact` | Advertised through `available_commands_update`; submit through `session/prompt` |
+| Child-session extension | Same opt-in `capabilities._meta["opencode/child-session-updates"]` |
+
+`auth/logout` acknowledges the request and closes this ACP connection. It does not delete shared provider credentials.
+Clients without terminal-auth support can authenticate with `opencode auth login` before starting the agent.
+
+```json
+{ "method": "auth/login", "params": { "methodId": "opencode-login" } }
+```
+
+Unlike v1, a v2 `session/prompt` response acknowledges that the user message was inserted; it does not wait for the
+model run to finish. Admission to the server inbox alone is not an acknowledgment: OpenCode waits for delivery into
+conversation history. OpenCode reports the inserted `user_message`, foreground `state_update` notifications, and the idle
+stop reason separately. A request cancellation only interrupts work before insertion; use `session/cancel` to stop an
+accepted prompt.
+
+Slash commands are echoed as agent-owned user messages in the ACP conversation before command execution. Their message
+IDs identify that live echo, not a retained server transcript entry, so they are not replayed as command messages.
+
+```json
+{ "sessionUpdate": "state_update", "state": "idle", "stopReason": "end_turn" }
+```
+
+V2 config options use `configId` and a typed value (`{ "type": "id", "value": "provider/model" }`). Tool-call updates
+use upsert semantics, and v2 diffs report file operations and renderable patches rather than v1 `oldText`/`newText` pairs.
+Replay sends replacement message snapshots so repeated resumes do not append duplicate text. Resume reports the latest
+foreground state observed on this connection, or `state: "unknown"` when activity is not observable here.
+
+### Capabilities (ACP v1)
+
+OpenCode's ACP v1 `initialize` response includes these agent capabilities. For v2 capabilities, see [ACP v2 preview](#acp-v2-preview).
 
 ```json
 {

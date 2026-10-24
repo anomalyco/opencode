@@ -5,6 +5,17 @@ import { currentValue } from "./select-options"
 import { makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
+  test("falls back to v1 when a client requests v2 without the experimental opt-in", async () => {
+    await using acp = await startWire()
+    const request = { protocolVersion: 2, info: { name: "test", version: "1" } }
+    const initialized = await acp.request("initialize", request)
+    expect(initialized.protocolVersion).toBe(1)
+    expect(initialized.agentCapabilities?.loadSession).toBe(true)
+    const session = await acp.newSession()
+    expect(session.sessionId).toBeTruthy()
+    expect(session.configOptions?.map((option) => option.id)).toContain("model")
+  })
+
   test("initialize advertises capabilities, negotiates the version, and offers terminal auth only when asked", async () => {
     await using acp = await startWire()
 

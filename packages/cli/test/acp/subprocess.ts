@@ -39,6 +39,7 @@ type AcpProcess = {
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
   readonly close: () => Promise<number>
   readonly stderr: () => string
+  readonly notification: () => Promise<JsonRpcMessage>
   readonly [Symbol.asyncDispose]: () => Promise<void>
 }
 
@@ -78,7 +79,7 @@ export async function createAcpFixture(
     root,
     home,
     llm: { requests },
-    spawn() {
+    spawn(options: { readonly experimentalV2?: boolean } = {}) {
       const acp = spawnAcp({
         env: isolatedEnv(root, {
           USERPROFILE: root,
@@ -86,6 +87,7 @@ export async function createAcpFixture(
           OPENCODE_CONFIG_CONTENT: undefined,
           OPENCODE_DISABLE_AUTOUPDATE: "true",
           OPENCODE_MODELS_PATH: models,
+          OPENCODE_EXPERIMENTAL_ACP_V2: options.experimentalV2 ? "1" : undefined,
         }),
       })
       processes.add(acp)
@@ -294,6 +296,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     pid: child.pid,
     exited: child.exited,
     request,
+    notification: () => take((message) => "method" in message, 20_000, "ACP notification"),
     async close() {
       if (!inputClosed) {
         inputClosed = true

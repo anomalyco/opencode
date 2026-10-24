@@ -28,13 +28,16 @@ export function history(
     ),
   ).pipe(
     Stream.runForEach((message) =>
-      Effect.forEach(
-        updates(message, attached.cwd, capabilities),
-        (update) =>
-          ACPPermission.withCompletedDiffs(update, completedSource(message, update), attached.cwd).pipe(
-            Effect.flatMap((enriched) => connection.sessionUpdate({ sessionId: attached.id, update: enriched })),
-          ),
-        { discard: true },
+      Effect.forEach(updates(message, attached.cwd, capabilities), (update) =>
+        ACPPermission.withCompletedDiffs(update, completedSource(message, update), attached.cwd),
+      ).pipe(
+        Effect.flatMap((updates) =>
+          connection.replayUpdates
+            ? connection.replayUpdates(attached.id, updates)
+            : Effect.forEach(updates, (update) => connection.sessionUpdate({ sessionId: attached.id, update }), {
+                discard: true,
+              }),
+        ),
       ),
     ),
   )

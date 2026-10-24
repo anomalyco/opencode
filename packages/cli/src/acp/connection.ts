@@ -9,6 +9,7 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionNotification,
+  type PromptRequest,
   type Stream,
 } from "@agentclientprotocol/sdk"
 import { Context, Deferred, Effect } from "effect"
@@ -18,7 +19,23 @@ export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/a
 })
 
 export interface Interface {
+  readonly sessionSnapshot?: (sessionID: string) => Effect.Effect<void, RequestError>
+  readonly replayUpdates?: (
+    sessionID: string,
+    updates: SessionNotification["update"][],
+  ) => Effect.Effect<void, RequestError>
   readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, RequestError>
+  readonly sessionState: (
+    sessionID: string,
+    state: "running" | "requires_action" | "idle" | "unknown",
+    stopReason?: "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled" | "error",
+    error?: { readonly code: number; readonly message: string },
+  ) => Effect.Effect<void, RequestError>
+  readonly userMessage: (
+    sessionID: string,
+    messageID: string,
+    content: PromptRequest["prompt"],
+  ) => Effect.Effect<void, RequestError>
   readonly requestPermission: (
     params: RequestPermissionRequest,
   ) => Effect.Effect<RequestPermissionResponse, RequestError>
@@ -51,6 +68,8 @@ export function make(app: AgentApp, stream: Stream) {
     agent,
     connection: {
       sessionUpdate: (params) => promise(() => agent.client.notify(methods.client.session.update, params)),
+      sessionState: () => Effect.void,
+      userMessage: () => Effect.void,
       requestPermission: (params) =>
         promise((signal) =>
           agent.client.request(methods.client.session.requestPermission, params, { cancellationSignal: signal }),

@@ -25,7 +25,7 @@
     "typecheck:tsc": "tsc -b"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.6.0",
+    "@agentclientprotocol/sdk": "1.8.0",
     "@clack/core": "1.0.0-alpha.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",

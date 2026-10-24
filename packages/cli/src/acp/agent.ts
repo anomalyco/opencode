@@ -9,6 +9,7 @@ import {
   type JsonRpcId,
   type Stream,
 } from "@agentclientprotocol/sdk"
+import type { WireStream } from "@agentclientprotocol/sdk/experimental/v2"
 import type { OpenCodeClient } from "@opencode/client/effect"
 import { Cause, Deferred, Effect, Ref, type Scope } from "effect"
 import { ACPCapabilities } from "./capabilities"
@@ -127,6 +128,64 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     connection,
   })
   return acp.agent
+})
+
+export const router = Effect.fnUntraced(function* (
+  client: OpenCodeClient,
+  options: { readonly experimentalV2?: boolean } = {},
+) {
+  const { agentProtocolRouter } = yield* Effect.promise(() => import("@agentclientprotocol/sdk/experimental/v2"))
+  const { ACPAgentV2 } = yield* Effect.promise(() => import("./agent-v2"))
+  const run = Effect.runPromiseWith(yield* Effect.context<Scope.Scope>())
+  return {
+    connect(stream: WireStream) {
+      const controller = new AbortController()
+      const selected: { close?: (reason?: unknown) => void } = {}
+      const observe = <
+        Connection extends {
+          readonly closed: Promise<void>
+          readonly signal: AbortSignal
+          close(reason?: unknown): void
+        },
+      >(
+        connection: Connection,
+      ) => {
+        selected.close = (reason) => connection.close(reason)
+        void connection.closed.then(() => controller.abort(connection.signal.reason))
+        return connection
+      }
+      const reader = stream.readable.getReader()
+      const readable = new ReadableStream({
+        pull: (output) =>
+          reader.read().then(
+            (item) => {
+              if (item.done) {
+                output.close()
+                return
+              }
+              output.enqueue(item.value)
+            },
+            (error) => {
+              controller.abort(error)
+              output.error(error)
+            },
+          ),
+        cancel: (reason) => reader.cancel(reason),
+      })
+      const protocol = agentProtocolRouter().withV1({
+        // SAFETY: the SDK router removes v2 batch framing before dispatching to v1.
+        connect: (stream) => run(connect(client, stream as Stream)).then(observe),
+      })
+      if (options.experimentalV2)
+        protocol.withV2({ connect: (stream) => run(ACPAgentV2.connect(client, stream)).then(observe) })
+      const connection = protocol.connect({ readable, writable: stream.writable })
+      return {
+        ...connection,
+        closed: connection.closed.then(() => selected.close?.(controller.signal.reason)),
+        signal: controller.signal,
+      }
+    },
+  }
 })
 
 const spanName = (method: string) => `cli.acp.${method.replaceAll("/", ".")}`

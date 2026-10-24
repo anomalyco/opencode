@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { createAcpFixture, initialize } from "./subprocess"
+import type { InitializeResponse } from "@agentclientprotocol/sdk"
+import { createAcpFixture, expectOk, initialize } from "./subprocess"
 
 describe("acp lifecycle subprocess", () => {
   test("stdin EOF exits cleanly", async () => {
     await using fixture = await createAcpFixture()
     const acp = fixture.spawn()
-    await initialize(acp)
+    const initialized = expectOk(
+      await acp.request<InitializeResponse>("initialize", {
+        protocolVersion: 2,
+        info: { name: "fallback-test", version: "1" },
+      }),
+    )
+    expect(initialized.protocolVersion).toBe(1)
+    expect(initialized.agentCapabilities?.loadSession).toBe(true)
     expect(await acp.close()).toBe(0)
   }, 60_000)
 

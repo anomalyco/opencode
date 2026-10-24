@@ -62,6 +62,9 @@ export interface Interface {
   ) => Effect.Effect<SetSessionConfigOptionResponse, ACPError.Failure>
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, ACPError.Failure>
   readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
+  readonly promptAccepted: ACPTurn.Interface["promptAccepted"]
+  readonly observeSession: ACPTurn.Interface["observe"]
+  readonly sessionSnapshot: (sessionID: string) => Effect.Effect<void, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
 }
 
@@ -236,6 +239,9 @@ export function make(input: {
       return {}
     }),
     prompt: input.turn.prompt,
+    promptAccepted: input.turn.promptAccepted,
+    observeSession: input.turn.observe,
+    sessionSnapshot: (sessionID) => input.connection.sessionSnapshot?.(sessionID) ?? Effect.void,
     cancel: input.turn.cancel,
   }
 }

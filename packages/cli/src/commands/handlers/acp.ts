@@ -32,7 +32,13 @@ export default Runtime.handler(
       ),
       Effect.provide(FetchHttpClient.layer),
     )
-    const connection = yield* ACP.connect(client, ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()))
+    const connection = yield* process.env.OPENCODE_EXPERIMENTAL_ACP_V2 === "1"
+      ? Effect.gen(function* () {
+          const { ndJsonStream } = yield* Effect.promise(() => import("@agentclientprotocol/sdk/experimental/v2"))
+          const protocol = yield* ACP.router(client, { experimentalV2: true })
+          return protocol.connect(ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()))
+        })
+      : ACP.connect(client, ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()))
     const failure = yield* Effect.raceFirst(
       Effect.promise(() => connection.closed).pipe(
         Effect.map(() =>
