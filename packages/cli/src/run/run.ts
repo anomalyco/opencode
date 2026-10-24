@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionMessageAssistantTool } from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -112,7 +113,12 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
         ? {
             providerID: selected.providerID,
             id: selected.id,
-            variant: options.variant ?? ("variant" in selected ? selected.variant : undefined),
+            variant:
+              options.variant === undefined
+                ? "variant" in selected
+                  ? selected.variant
+                  : undefined
+                : Model.VariantID.make(options.variant),
           }
         : undefined
       if ((options.variant ?? explicit?.variant) && !model)
