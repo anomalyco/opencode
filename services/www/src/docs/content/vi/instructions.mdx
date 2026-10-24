@@ -1,0 +1,158 @@
+---
+title: "Chỉ dẫn"
+---
+
+Thêm một tệp `AGENTS.md` để trao cho OpenCode hướng dẫn dự án lâu dài. Dùng tệp đó cho các
+lệnh build, ghi chú kiến trúc, quy ước mã nguồn và yêu cầu kiểm chứng.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Hãy commit các tệp chỉ dẫn của dự án để mọi người làm việc trong kho lưu trữ đều nhận
+được cùng một hướng dẫn.
+
+## Phạm vi
+
+Đặt `AGENTS.md` trong thư mục mà hướng dẫn của nó nên áp dụng. OpenCode nạp tệp toàn cục,
+rồi nạp mọi `AGENTS.md` từ thư mục không gian làm việc hiện tại hướng về thư mục home. Với các
+không gian làm việc nằm ngoài thư mục home, nó dừng ở gốc dự án.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+Trong ví dụ này, cả bốn tệp đều được nạp. Chúng được kết hợp theo thứ tự sau:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Đặt hướng dẫn áp dụng ở mọi nơi vào tệp toàn cục. Đặt hướng dẫn cho toàn kho lưu trữ ở
+gốc dự án và hướng dẫn cụ thể hơn gần với mã nguồn mà nó bao phủ. OpenCode kết hợp các
+tệp và không giải quyết xung đột giữa chúng.
+
+Nếu không gian làm việc nằm ngoài gốc dự án, chỉ tệp toàn cục được nạp. Hãy đặt
+`OPENCODE_DISABLE_PROJECT_CONFIG=1` để bỏ qua việc phát hiện `AGENTS.md` của dự án mà
+không vô hiệu hóa tệp toàn cục.
+
+<Callout type="note">
+  OpenCode V2 chỉ nhận diện `AGENTS.md`. Nó không dùng `CLAUDE.md` làm phương án dự phòng.
+</Callout>
+
+## Phát hiện
+
+Các tệp chỉ dẫn bên dưới không gian làm việc được phát hiện khi tác nhân khám phá dự án. Việc đọc
+một tệp hoặc liệt kê một thư mục sẽ nạp mọi tệp `AGENTS.md` nằm giữa mục tiêu đó và
+không gian làm việc.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Các tệp lồng nhau được nạp theo thứ tự gần trước và khử trùng lặp, trong khi mục chỉ dẫn
+của chúng vẫn nằm trong lịch sử mà mô hình nhìn thấy. Đọc lại cùng khu vực đó thường
+không chèn lại chúng. Nếu việc nén hoặc một thao tác hoàn tác xóa mục đó, một lần đọc về
+sau có thể nạp lại tệp.
+
+Các chỉnh sửa đối với một tệp lồng nhau không được phát hiện tự động sau khi nó được nạp.
+Hãy bắt đầu một phiên mới khi văn bản đã cập nhật cần có hiệu lực ngay.
+
+## Thứ tự
+
+Lời nhắc hệ thống của tác nhân hoặc nhà cung cấp được chọn sẽ được gửi trước. Sau đó
+OpenCode ghép các chỉ dẫn ban đầu theo thứ tự sau:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+Các nguồn này được kết hợp chứ không dùng làm ghi đè. Những tệp `AGENTS.md` lồng nhau được
+phát hiện về sau sẽ được thêm vào lịch sử phiên theo thứ tự phát hiện.
+
+## Cập nhật
+
+Chỉnh sửa một tệp `AGENTS.md` toàn cục hoặc được phát hiện theo chiều đi lên trong khi
+một phiên đang chạy để cập nhật hướng dẫn của nó.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Trước yêu cầu mô hình kế tiếp, OpenCode phát hiện thay đổi và thêm một bản cập nhật chỉ
+dẫn trước khi chuyển đầu vào đang chờ:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Việc xóa mọi tệp `AGENTS.md` môi trường báo cho phiên biết các chỉ dẫn môi trường trước
+  đó không còn áp dụng.
+- Một lần đọc tạm thời thất bại sẽ giữ lại các chỉ dẫn đã biết gần nhất thay vì coi chúng
+  là đã bị xóa.
+- Việc di chuyển một phiên giữ nguyên trạng thái chỉ dẫn của nó, nên hướng dẫn tại điểm
+  đến được giới thiệu như một bản cập nhật.
+- Việc commit một thao tác hoàn tác phiên sẽ xóa trạng thái chỉ dẫn của phiên đó và nạp lại
+  các chỉ dẫn trước lời nhắc kế tiếp.
+
+Giá trị của các chỉ dẫn vẫn là thông tin đặc quyền. Client có thể thấy những nguồn nào
+đã thay đổi, nhưng không thấy nội dung của chúng.
+
+## Cấu hình
+
+Dùng mảng `instructions` để thêm tệp, mẫu glob hoặc URL HTTP(S) bên cạnh các tệp
+`AGENTS.md` được phát hiện:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Các chỉ dẫn được cấu hình nạp sau các tệp `AGENTS.md`, theo thứ tự được liệt kê. Các mục
+từ mọi tài liệu cấu hình đều được kết hợp.
+
+| Mục                   | Cách phân giải                                                           |
+| ----------------------- | -------------------------------------------------------------------- |
+| Đường dẫn tương đối hoặc glob   | Được tìm trong từng thư mục từ không gian làm việc lên đến gốc dự án |
+| Đường dẫn `~/`               | Được phân giải từ thư mục home của bạn                                    |
+| Đường dẫn tuyệt đối           | Dùng đúng như đã viết; tên tệp có thể là một glob                         |
+| `http://` hoặc `https://` | Được fetch khi nạp cấu hình, với thời gian chờ năm giây                |
+
+- Các tệp cục bộ được cập nhật như `AGENTS.md` khi chúng thay đổi. Những tệp mới khớp với
+  một glob sẽ nạp ở lần thay đổi cấu hình kế tiếp.
+- Các tệp bị thiếu sẽ được bỏ qua. Một URL không thể fetch sẽ bị bỏ qua, hoặc giữ lại nội
+  dung đã fetch lần cuối.
+- Với `OPENCODE_DISABLE_PROJECT_CONFIG=1`, hoặc khi không gian làm việc nằm ngoài dự án, các mục
+  tương đối được phân giải so với thư mục cấu hình toàn cục.
+
+Xem [Cấu hình](/config) để biết các vị trí cấu hình và thứ tự ưu tiên.

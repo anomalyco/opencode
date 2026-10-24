@@ -1,0 +1,274 @@
+---
+title: "Lệnh"
+---
+
+Tạo `.opencode/commands/review.md` để biến một lời nhắc thành `/review`:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+Chạy nó từ TUI với một đối tượng đích:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode gửi `Review src/auth.ts for bugs and missing tests.` như một lời nhắc của người
+dùng.
+
+## Markdown
+
+Đặt lệnh toàn cục trong `~/.config/opencode/commands/` và lệnh của dự án trong
+`.opencode/commands/`.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Chỉ các tệp `.md` được phát hiện. Đường dẫn lồng nhau trở thành tên lệnh với dấu phân cách
+`/`:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+Chạy lệnh lồng nhau dưới dạng `/team/review src/auth.ts`. Các thư mục số ít cũ `command/`
+cũng được phát hiện, nhưng hãy dùng `commands/` cho các tệp mới.
+
+Thêm frontmatter YAML khi lệnh cần metadata. Phần thân Markdown sau khi cắt khoảng trắng
+luôn là mẫu lời nhắc.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-4-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Định nghĩa các lệnh dưới `commands` trong bất kỳ
+[tệp cấu hình OpenCode](/config) JSON hoặc JSONC nào. Mỗi lệnh cần một `template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Trường
+
+Frontmatter Markdown và các mục JSON chấp nhận cùng các trường, chỉ khác là Markdown lấy
+`template` từ phần thân tệp.
+
+| Trường | Bắt buộc | Hành vi |
+| --- | --- | --- |
+| `template` | Chỉ JSON | Mẫu lời nhắc. |
+| `description` | Không | Văn bản hiển thị trong danh sách lệnh và khi phát hiện. |
+| `agent` | Không | Tác nhân được chọn khi lệnh chạy. |
+| `model` | Không | Ghi đè mô hình ở dạng `provider/model` hoặc `provider/model#variant`. |
+| `subagent` | Không | `true` chạy trong một phiên con ở nền; `false` buộc dùng phiên hiện tại. |
+| `subtask` | Không | Bí danh không dùng nữa của `subagent`. |
+
+Ví dụ, lệnh JSON này đặt mọi trường tùy chọn hiện hành:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Không đặt `template` trong frontmatter Markdown; phần thân cung cấp nó.
+
+## Đối số
+
+Dùng `$ARGUMENTS` cho chuỗi đối số đầy đủ, đúng như đã nhập.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+Với `/component Account Settings`, placeholder trở thành `Account Settings`.
+
+## Vị trí
+
+Dùng `$1`, `$2` và các số lớn hơn cho các đối số vị trí đã phân tích. Dấu nháy đơn hoặc
+nháy kép gom các từ lại và bị loại bỏ.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+Với `/check src/auth.ts "error handling"`, `$1` trở thành `src/auth.ts` và `$2` trở thành
+`error handling`.
+
+Placeholder có số lớn nhất sẽ nhận phần đối số của nó và mọi thứ sau đó. Các vị trí không
+có giá trị trở thành chuỗi rỗng.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+Với `/compare api stable branch`, OpenCode gửi `Compare api with stable branch.`
+
+## Dự phòng
+
+Khi một mẫu không có `$ARGUMENTS` hay placeholder vị trí, OpenCode nối các đối số không
+rỗng vào sau một dòng trống.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+Với `/explain src/cache.ts`, lời nhắc trở thành:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+Bọc một lệnh shell trong `!` theo sau là dấu gạch ngược để chèn kết quả của nó trước khi
+lời nhắc được gửi.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode chạy từng khối bằng shell đã cấu hình tại Location của dự án đang hoạt động rồi
+chèn kết quả gộp của nó. Placeholder đối số được mở rộng trước:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+Với `/history 5`, shell nhận `git log --oneline -5`. Không đặt đối số không tin cậy bên
+trong các khối shell.
+
+<Callout type="warning">
+  Các khối shell chạy khi OpenCode đánh giá lệnh, bên ngoài luồng quyền công cụ của tác nhân. Chỉ dùng các lệnh từ những
+  nguồn bạn tin cậy.
+</Callout>
+
+## Tệp đính kèm
+
+Các mẫu được lưu không mở rộng `@path`; nó vẫn là văn bản lời nhắc thông thường.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Để đính kèm một tệp, hãy thêm nó qua composer khi gọi lệnh. OpenCode giữ nguyên các tệp
+đính kèm đó khi gửi lời nhắc đã mở rộng.
+
+## Thực thi
+
+Các lệnh mở rộng đối số và khối shell trước khi gửi một lời nhắc người dùng bền vững.
+Chúng mặc định chạy trong phiên hiện tại.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+Chạy `/plan migration` sẽ chuyển phiên hiện tại sang `plan` trước khi gửi lời nhắc.
+
+Việc chọn mô hình tuân theo các quy tắc sau:
+
+1. `model` của lệnh ghi đè mọi mô hình khác.
+2. Nếu không, mô hình đã cấu hình của tác nhân lệnh được chọn sẽ ghi đè mô hình đang hoạt
+   động lúc gọi.
+3. Nếu không, mô hình của phiên hiện tại vẫn hoạt động.
+
+Ví dụ, lệnh này chọn cả tác nhân và một mô hình tường minh:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-5#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Nền
+
+Đặt `subagent: true` để chạy một lệnh trong một phiên con ở nền.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+Tác nhân cha vẫn sẵn sàng và giữ nguyên tác nhân cùng mô hình của nó. OpenCode gửi kết quả
+hoặc lỗi của tiến trình con trở lại cho tác nhân cha khi tiến trình con kết thúc.
+
+| Giá trị | Hành vi |
+| --- | --- |
+| `true` | Luôn dùng một tiến trình con, kể cả khi tác nhân được chọn có `mode: primary`. |
+| `false` | Luôn dùng phiên hiện tại, kể cả khi tác nhân được chọn có `mode: subagent`. |
+| Bị bỏ qua | Chỉ dùng một tiến trình con khi tác nhân được chọn có `mode: subagent`. |
+
+Tiến trình con dùng mô hình của lệnh, rồi đến mô hình của tác nhân được chọn, rồi đến mô
+hình của tác nhân cha. `subtask` cũ vẫn được chấp nhận; nếu cả hai trường cùng có,
+`subagent` thắng.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Ví dụ này chạy trong phiên hiện tại vì `subagent` được ưu tiên.
+
+## Tải
+
+Lệnh Markdown và JSON dùng chung một sổ đăng ký. Nguồn đặt sau thay thế các lệnh có cùng
+tên đứng trước.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Nguồn của dự án được ưu tiên hơn nguồn toàn cục, và nguồn dự án gần hơn được ưu tiên hơn
+nguồn tổ tiên. Một định nghĩa tùy chỉnh cũng có thể thay thế một lệnh tích hợp sẵn đứng
+trước. OpenCode tự động nạp lại các tệp lệnh và các thay đổi cấu hình.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Lưu tệp này sẽ cập nhật `/review` mà không cần khởi động lại OpenCode.

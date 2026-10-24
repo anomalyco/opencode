@@ -1,0 +1,602 @@
+---
+title: "Cấu hình"
+---
+
+Tạo `opencode.jsonc` trong dự án của bạn để cấu hình OpenCode. Hãy thêm schema để trình biên tập kiểm tra, rồi chỉ đặt
+những tuỳ chọn bạn cần.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Bạn cũng có thể nhờ OpenCode cập nhật tệp này giúp bạn.
+
+## Định dạng
+
+OpenCode hỗ trợ JSON và JSONC. Hãy dùng JSONC khi bạn muốn có chú thích hoặc dấu phẩy cuối.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+## Vị trí
+
+Đặt các cài đặt được quản lý ở cấp máy trong thư mục cấu hình hệ thống:
+
+| Nền tảng | Thư mục                                   |
+| -------- | ----------------------------------------- |
+| macOS    | `/Library/Application Support/opencode`   |
+| Linux    | `/etc/opencode`                           |
+| Windows  | `%ProgramData%\opencode`                  |
+
+Thư mục hệ thống hoạt động giống như thư mục toàn cục. Ngoài `opencode.json(c)`, nó còn tải `agents/`, `commands/`,
+`skills/` và `plugins/` cho mọi người dùng trên máy:
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+Trên macOS, OpenCode còn đọc các cài đặt được quản lý mà công cụ MDM triển khai cho domain `ai.opencode.managed`. Hồ sơ
+riêng theo người dùng sẽ thay thế hồ sơ ở cấp máy:
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+Cài đặt được quản lý có độ ưu tiên cao nhất, nên người dùng và dự án không thể ghi đè các giá trị đó, và cài đặt được quản
+lý ghi đè thư mục hệ thống. Chỉ riêng cài đặt không thể ngăn người dùng thêm nhà cung cấp, MCP server, tác nhân hay tiện
+ích mở rộng; hãy dùng [chính sách](/policies#precedence) trong cấu hình được quản lý để áp dụng hạn chế.
+
+Đặt cài đặt người dùng cho mọi dự án trong cấu hình toàn cục:
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+Đặt cài đặt dự án trong một trong hai tệp sau:
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode tìm kiếm từ thư mục hiện tại cho tới thư mục gốc của hệ thống tệp. Trước tiên nó hợp nhất các tệp
+`opencode.json(c)` trực tiếp từ thư mục xa nhất tới gần nhất, rồi hợp nhất các tệp bên trong thư mục `.opencode` theo
+cùng thứ tự. Nghĩa là mọi cấu hình `.opencode` tìm thấy đều ghi đè mọi cấu hình trực tiếp. Hãy dùng một dạng thống nhất
+trong toàn bộ cây thư mục trừ khi bạn cần hành vi đó.
+
+Ví dụ, khởi động OpenCode từ `/home/user/projects/acme/packages/web`:
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode áp dụng các tệp này theo thứ tự từ ưu tiên thấp nhất tới cao nhất:
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+Cấu hình của package ghi đè các cài đặt tương ứng từ cấu hình kho lưu trữ, và cấu hình kho lưu trữ ghi đè cấu hình toàn
+cục. Cấu hình hệ thống ghi đè tất cả chúng. Các cài đặt không xung đột được giữ nguyên. [Chính
+sách](/policies#precedence) từ tệp toàn cục và tệp dự án được đánh giá theo thứ tự ngược lại, và chính sách hệ thống
+đứng trên tất cả.
+
+## Schema
+
+Schema cấu hình OpenCode đầy đủ có sẵn tại
+[opencode.ai/config.json](https://opencode.ai/config.json).
+
+Thêm trường `$schema` vào tệp cấu hình của bạn để bật kiểm tra và tự động hoàn thiện trong các trình biên tập hỗ trợ
+JSON Schema:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+Hãy dùng schema làm nguồn chân lý cho các trường có sẵn, giá trị được chấp nhận và cấu trúc cấu hình lồng nhau.
+
+### Shell
+
+Đặt shell được terminal và công cụ shell sử dụng.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### Mô hình
+
+Đặt mô hình mặc định theo định dạng `provider/model`. Mặc định ở gốc hiện chưa giữ lại `#variant`; tham chiếu mô hình của
+tác nhân và lệnh có thể chọn một biến thể.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Xem [hướng dẫn mô hình](/models) để biết về cách chọn mô hình và mô hình cục bộ.
+
+### Tác nhân
+
+Chọn tác nhân chính được dùng khi một phiên không chọn tác nhân nào một cách tường minh.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+Xem [hướng dẫn tác nhân](/agents) để biết về tác nhân tích hợp và tác nhân
+tùy chỉnh.
+
+### Cập nhật
+
+Kiểm soát việc kiểm tra cập nhật từ cấu hình toàn cục. Đặt `update` thành `"disable"` để bỏ qua, `"notify"` để hiển
+thị các bản cập nhật có sẵn trước khi cài đặt, hoặc `"auto"` để tự động cài bản cập nhật. Khi bị bỏ qua, `update` mặc định
+là `"notify"`.
+
+Việc cài tự động không khởi động lại server đang chạy. Hãy khởi động lại thủ công để kích hoạt bản cập nhật đã cài. Giá trị
+ở cấp dự án bị bỏ qua.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### Tên người dùng
+
+Đặt tên người dùng. OpenCode chấp nhận trường này nhưng không hiển thị nó trong
+cuộc trò chuyện.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### Quyền
+
+Định nghĩa các quy tắc có thứ tự cho phép, từ chối hoặc hỏi trước khi một tác nhân dùng công cụ trên một tài nguyên
+khớp.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Xem [hướng dẫn quyền](/permissions) để biết về khớp quy tắc và các hành động có sẵn.
+
+### Chính sách
+
+Cho phép hoặc từ chối việc dùng một nhà cung cấp, từ chối tuyệt đối một kiểm tra quyền, hoặc chặn một MCP server,
+kỹ năng hay tiện ích mở rộng, bằng các câu lệnh có thứ tự mà cấu hình rộng hơn có thể ghi đè.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+Xem [hướng dẫn chính sách](/policies) để biết về khớp, thứ tự ưu tiên giữa các tệp
+cấu hình và chính sách do Console quản lý.
+
+### Tác nhân
+
+Ghi đè tác nhân tích hợp hoặc định nghĩa tác nhân chuyên biệt với mô hình, chỉ dẫn, chế độ và quyền riêng của chúng.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+Xem [hướng dẫn tác nhân](/agents) để biết toàn bộ tuỳ chọn tác nhân và tác nhân dựa trên tệp.
+
+### Ảnh chụp
+
+Bật hoặc tắt ảnh chụp hệ thống tệp được dùng cho hành vi hoàn tác và quay lại.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+Xem [hướng dẫn ảnh chụp](/snapshots) để biết về hành vi hoàn tác và làm lại.
+
+### Watcher
+
+Bỏ qua các tệp và thư mục không nên kích hoạt cập nhật hệ thống tệp.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### Trình định dạng
+
+Định dạng tệp sau khi các công cụ `write`, `edit` hoặc `patch` thay đổi chúng. Đặt
+`formatter` thành `true` để bật các trình định dạng tích hợp có sẵn.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+Xem [hướng dẫn trình định dạng](/formatters) để biết về trình định dạng tích hợp và
+tùy chỉnh.
+
+### Media
+
+Kiểm soát cách các ảnh quá khổ được công cụ `read` tải lên được thay đổi kích thước hoặc từ chối trước khi chúng
+được gửi tới một mô hình.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Xem [hướng dẫn tệp đính kèm](/attachments) để biết về xử lý ảnh và giới hạn.
+
+### Output
+
+Đặt số dòng và số byte tối đa được giữ lại từ một kết quả của công cụ.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### Tìm kiếm
+
+Chọn cách OpenCode tìm kiếm trên web. Dùng `"random"` để tự động chọn một nhà cung
+cấp khả dụng.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+Xem [hướng dẫn tìm kiếm web](/websearch) để biết về nhà cung cấp, thông tin xác
+thực, cách chọn, giới hạn tần suất và cách tắt tìm kiếm.
+
+### MCP
+
+Cấu hình các server Model Context Protocol cục bộ và từ xa. Giá trị `mcp.timeout` toàn cục áp dụng cho các
+server được định nghĩa trong tệp cấu hình; `timeout` của từng server sẽ ghi đè chúng.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+Xem [hướng dẫn MCP](/mcp-servers) để biết về server từ xa, OAuth, biến môi trường và thời gian chờ.
+
+### Nén
+
+Kiểm soát việc nén context tự động và lượng context gần đây được giữ lại.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": 20000,
+  },
+}
+```
+
+Tóm tắt cục bộ vẫn là mặc định. Hãy chọn nén gốc của nhà cung cấp cho cả yêu cầu tự
+động và yêu cầu thủ công bằng một chính sách nhà cung cấp hoặc mô hình:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Cài đặt của mô hình sẽ ghi đè cài đặt của nhà cung cấp. Việc nén tự động dùng ngân sách input khả dụng của mô hình
+đã chọn. Các checkpoint của nhà cung cấp giữ những tin nhắn người dùng gần đây trong cùng ngân sách
+`compaction.tokens` mà tóm tắt cục bộ dùng cho phần đuôi được giữ lại. `compaction.auto: false` ở cấp cao nhất
+tắt việc nén tự động mới mà không loại bỏ các checkpoint đã cài. Xem [hướng dẫn nén](/compaction) để biết
+về ngân sách và khôi phục khi tràn.
+
+### Warming
+
+Giữ các phiên mô hình vừa hoạt động ở trạng thái sẵn sàng bằng các request tạm thời định kỳ. Warming mặc định bị
+tắt; đặt thành `true` để dùng khoảng thời gian nhàn rỗi bốn phút và cửa sổ hoạt động 30 phút.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "4 minutes",
+    "duration": "30 minutes",
+  },
+}
+```
+
+Xem [hướng dẫn warming](/warming) để biết về hành vi request, tuỳ chỉnh
+và các yếu tố chi phí.
+
+### Kỹ năng
+
+Thêm thư mục hoặc URL mà OpenCode nên tìm kiếm kỹ năng tác nhân.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+Xem [hướng dẫn kỹ năng](/skills) để biết về cấu trúc kỹ năng và việc tự động phát hiện dưới `.opencode/skills/`.
+
+### Lệnh
+
+Định nghĩa các lệnh slash dùng lại được dưới dạng mẫu lời nhắc có tên.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+Xem [hướng dẫn lệnh](/commands) để biết về đối số, mô hình, tác nhân và lệnh dựa trên tệp.
+
+### Chỉ dẫn
+
+Khai báo các tệp chỉ dẫn, glob hoặc URL HTTP(S) bổ sung. OpenCode tải chúng cùng với các tệp `AGENTS.md` tìm thấy
+được.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+Xem [hướng dẫn chỉ dẫn](/instructions) để biết về chỉ dẫn dự án và `AGENTS.md`.
+
+### Tham chiếu
+
+Làm cho các thư mục cục bộ hoặc kho Git trở thành context hỗ trợ có tên.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+Xem [hướng dẫn tham chiếu](/references) để biết về dạng viết ngắn, khả năng hiển thị và cách phân giải đường dẫn.
+
+### Worktree
+
+Đặt thư mục cha cho các worktree cục bộ mới. OpenCode nối thêm tên worktree được yêu cầu hoặc được sinh ra.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Đường dẫn tương đối được phân giải so với checkout chuẩn đã lưu của dự án. Điều này áp dụng giống nhau cho cả
+cấu hình toàn cục và cấu hình dự án; đường dẫn tuyệt đối được dùng nguyên vẹn, và `~/` được phân giải so với thư
+mục home của người dùng.
+
+Ví dụ, cấu hình toàn cục này đặt worktree mới dưới thư mục `.lane/trees/` riêng của từng dự án:
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+Không có cài đặt này, việc tạo sẽ dùng thư mục dữ liệu của server theo đường dẫn
+`worktree/<first-six-project-ID-characters>`. Việc tạo và làm mới worktree tải cấu hình từ checkout chuẩn đã lưu
+của dự án, kể cả khi các bản clone khác dùng chung project ID đó. Thay đổi nó không di chuyển các worktree hiện
+có.
+
+Git là mặc định tích hợp. Một [tiện ích mở rộng](/build/plugins#worktrees) đăng ký một chiến lược sẽ tự động trở
+thành mặc định trong runtime của tiện ích mở rộng đó. Các thao tác dự án dùng runtime của checkout chuẩn. Các tuỳ
+chọn riêng theo chiến lược thuộc về tiện ích mở rộng đó, không thuộc object cấu hình `worktree`.
+
+### Tiện ích mở rộng
+
+Tải tiện ích mở rộng từ package hoặc thư mục tiện ích mở rộng cục bộ. Hãy dùng dạng object khi một tiện ích mở
+rộng nhận options.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+Xem [hướng dẫn tiện ích mở rộng](/plugins) để biết về cách tải và cấu hình tiện ích mở rộng.
+
+### Nhà cung cấp
+
+Cấu hình nhà cung cấp và thêm hoặc ghi đè mô hình, thiết lập request, header và biến thể mô hình của chúng.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2-custom": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+`settings.transport: "websocket"` của nhà cung cấp chọn WebSocket phiên của nó.
+
+Xem [hướng dẫn nhà cung cấp](/providers) để biết về thông tin xác thực, endpoint tuỳ chỉnh, package nhà cung
+cấp, truyền tải WebSocket và cấu hình mô hình.
+
+## Biến
+
+Bạn có thể dùng phép thế chấn trong các tệp cấu hình để tham chiếu biến môi trường và nội dung tệp. Hãy đặt tham chiếu bên trong
+các chuỗi JSON.
+
+### Biến môi trường
+
+Dùng `{env:VARIABLE_NAME}` để thay thế biến môi trường:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Nếu biến môi trường chưa được đặt, nó sẽ được thay bằng một chuỗi rỗng.
+
+### Tệp
+
+Dùng `{file:path/to/file}` để thay thế nội dung của một tệp:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}
+```
+
+Đường dẫn tệp có thể là:
+
+- Tương đối so với thư mục chứa tệp cấu hình
+- Tuyệt đối, hoặc bắt đầu bằng `~/` cho thư mục home của bạn
+
+Nếu tệp không tồn tại, nó sẽ được thay bằng một chuỗi rỗng.
+
+Những cách này hữu ích cho:
+
+- Giữ dữ liệu nhạy cảm như khóa API trong các tệp riêng biệt
+- Dùng chung các đoạn cấu hình phổ biến giữa nhiều tệp cấu hình

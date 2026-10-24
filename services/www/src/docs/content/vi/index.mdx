@@ -1,0 +1,86 @@
+---
+title: "Giới thiệu"
+---
+
+OpenCode là một tác nhân lập trình AI mã nguồn mở. Nó khả dụng dưới dạng giao diện terminal, ứng dụng desktop hoặc ứng dụng
+web.
+
+
+## CLI
+
+<CodeTabs
+  id="install"
+  label="Cách cài đặt"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+    { label: "mise", code: "mise use -g opencode" },
+  ]}
+/>
+
+Gói npm dùng một script postinstall để chọn binary `opencode` gốc cho nền tảng của bạn. Lệnh của Bun và pnpm cho phép rõ ràng
+script cần thiết; Vite+ không cần thêm cờ nào. Lệnh mise yêu cầu mise 2026.10.9 trở lên; các phiên bản cũ hơn sẽ cài OpenCode 1.
+
+Các trình quản lý gói của Windows không được hỗ trợ.
+
+
+Tải một binary CLI độc lập cho nền tảng của bạn.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
+- **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
+- **Linux (glibc):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz)
+- **Linux (musl):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline-musl.tar.gz)
+
+## Desktop
+
+Tải bản OpenCode Desktop mới nhất cho nền tảng của bạn.
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg)
+- **Windows:** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe)
+- **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
+- **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
+- **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+
+## Web
+
+Truy cập giao diện web của OpenCode bằng lệnh `opencode pair`.
+
+```bash
+$ opencode pair
+
+  URLs      http://127.0.0.1:49374
+  Username  opencode
+  Password  ********
+```
+
+## Docker
+
+Docker image dùng các thẻ có gắn phiên bản, ví dụ `ghcr.io/anomalyco/opencode:2.0.0`.
+
+---
+
+## Kết nối
+
+OpenCode hỗ trợ sẵn nhiều nhà cung cấp LLM - bạn có thể kết nối trực tiếp [trong TUI](/cli/providers) bằng `/connect`.
+
+Xem [Nhà cung cấp](/providers) để cấu hình nhà cung cấp tùy chỉnh.
+
+Nếu muốn dễ dàng truy cập mọi mô hình lập trình tốt nhất, bạn có thể dùng thử [OpenCode Console](/console).
+
+Bạn cũng có thể dùng thử [OpenCode Go](/console/go), một gói đăng ký $10/tháng cấp cho bạn quyền truy cập các mô hình mã
+nguồn mở tốt nhất.
+
+---
+
+## Tùy chỉnh
+
+Biến OpenCode thành của riêng bạn bằng cách chỉnh sửa [cấu hình OpenCode](/config), [tải tiện ích mở rộng](/plugins), [kết nối máy
+chủ MCP](/mcp-servers), hoặc [tạo lệnh](/commands). Về giao diện terminal và các phím tắt, xem [cài đặt
+CLI](/cli/config).
