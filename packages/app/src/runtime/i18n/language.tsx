@@ -104,6 +104,7 @@ const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
+  kab: () => merge(import("@/runtime/i18n/kab"), import("@opencode/ui/i18n/kab")),
   zh: () => merge(import("@/runtime/i18n/zh"), import("@opencode/ui/i18n/zh")),
   zht: () => merge(import("@/runtime/i18n/zht"), import("@opencode/ui/i18n/zht")),
   ko: () => merge(import("@/runtime/i18n/ko"), import("@opencode/ui/i18n/ko")),

@@ -50,6 +50,8 @@ describe("desktop native locale detection", () => {
   })
 
   test.each([
+    [["kab"], "kab"],
+    [["kab-DZ"], "kab"],
     [["zh-TW"], "zht"],
     [["zh-SG"], "zh"],
     [["pa-PK"], "pa"],
