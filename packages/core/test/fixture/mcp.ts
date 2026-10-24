@@ -7,6 +7,7 @@ import { location } from "./location"
 
 // Plugins may register MCP transforms at startup; with no servers there is nothing to rebuild.
 export const emptyMcp = Mcp.Service.of({
+  start: () => Effect.void,
   transform: () => Effect.succeed({ dispose: Effect.void }),
   reload: () => Effect.void,
   servers: () => Effect.succeed([]),

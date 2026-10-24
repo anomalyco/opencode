@@ -13,7 +13,7 @@ export type McpControls = {
   change: (name: string, enabled: boolean) => void
 }
 
-export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess?: () => unknown) {
+export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess?: () => void) {
   const data = useData()
   const serverSDK = useServerSDK()
   const platform = usePlatform()
@@ -27,12 +27,18 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
 
   return useMutation(() => ({
     mutationFn: async (input: string | { name: string; enabled: boolean; directory?: string }) => {
+      // oxlint-disable anti-slop/no-runtime-typeof -- This in-process API discriminates its declared string-or-options union, not unparsed external data.
       const name = typeof input === "string" ? input : input.name
       const ref = typeof input !== "string" && input.directory ? { directory: input.directory } : location()
       const server = (await serverSDK.api.mcp.list({ location: ref })).data.find((item) => item.name === name)
 
       if (!server || (server.status.status === "pending" && typeof input === "string")) return
-      const enabled = typeof input === "string" ? server.status.status !== "connected" : input.enabled
+
+      const enabled =
+        typeof input === "string"
+          ? server.status.status !== "connected" && server.status.status !== "idle"
+          : input.enabled
+      // oxlint-enable anti-slop/no-runtime-typeof
 
       if (!enabled) {
         await serverSDK.api.mcp.disconnect({ server: name, location: ref })

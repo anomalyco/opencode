@@ -1,7 +1,7 @@
 export * as CommandPlugin from "./command.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Bus } from "../bus.js"
 import { Location } from "../location.js"
 import { Mcp } from "../mcp/index.js"
@@ -15,14 +15,19 @@ export const Plugin = define({
     const mcp = yield* Mcp.Service
     const bus = yield* Bus.Service
     const loaded = { prompts: [] as Mcp.Prompt[] }
-    yield* bus.subscribe(Mcp.PromptsChanged).pipe(
-      Stream.runForEach(() =>
-        mcp.prompts().pipe(
-          Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
-          Effect.andThen(ctx.command.reload()),
-        ),
+    // First-use command lookup must observe prompt registration before MCP startup settles.
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        event.type !== Mcp.PromptsChanged.type ||
+        (event.location !== undefined &&
+          (event.location.directory !== location.directory || event.location.workspaceID !== location.workspaceID))
+          ? Effect.void
+          : mcp.prompts().pipe(
+              Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
+              Effect.andThen(ctx.command.reload()),
+            ),
       ),
-      Effect.forkScoped({ startImmediately: true }),
+      (unsubscribe) => unsubscribe,
     )
     loaded.prompts = yield* mcp.prompts()
     yield* ctx.command.transform((editor) => {

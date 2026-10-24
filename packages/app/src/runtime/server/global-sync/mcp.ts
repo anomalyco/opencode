@@ -10,6 +10,7 @@ export async function toggleMcp(input: {
   if (input.status === "pending") return
   await {
     connected: input.disconnect,
+    idle: input.disconnect,
     needs_auth: input.authenticate,
     disabled: input.connect,
     failed: input.connect,

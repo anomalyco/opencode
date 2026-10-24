@@ -7,6 +7,7 @@ import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Bus } from "./bus.js"
+import { Mcp } from "./mcp/index.js"
 import { State } from "./state.js"
 
 export const Info = Command.Info
@@ -54,6 +55,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const mcp = yield* Mcp.Service
     const state = State.create<Map<string, Definition>, Editor>({
       name: "command",
       initial: () => new Map(),
@@ -71,14 +73,17 @@ export const layer = Layer.effect(
     return Service.of({
       reload: state.reload,
       transform: state.transform,
-      get: Effect.fn("Command.get")((name) =>
-        Effect.sync(() => {
-          const definition = state.get().get(name)
-          return definition ? info(definition) : undefined
-        }),
-      ),
-      list: Effect.fn("Command.list")(() => Effect.sync(() => Array.from(state.get().values(), info))),
+      get: Effect.fn("Command.get")(function* (name) {
+        yield* mcp.start()
+        const definition = state.get().get(name)
+        return definition ? info(definition) : undefined
+      }),
+      list: Effect.fn("Command.list")(function* () {
+        yield* mcp.start()
+        return Array.from(state.get().values(), info)
+      }),
       execute: Effect.fn("Command.execute")(function* (input) {
+        yield* mcp.start()
         const definition = state.get().get(input.name)
         if (!definition)
           return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
@@ -94,7 +99,7 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node],
+  deps: [Bus.node, Mcp.node],
 })
 
 function errorMessage(error: unknown) {

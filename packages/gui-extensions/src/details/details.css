@@ -244,6 +244,7 @@
   }
 }
 .session-service-dot[data-status="connected"],
+.session-service-dot[data-status="idle"],
 .session-service-dot[data-status="active"] {
   color: var(--icon-success-base);
 }

@@ -28,6 +28,7 @@ export default Runtime.handler(
 function icon(status: McpServer["status"]) {
   switch (status.status) {
     case "connected":
+    case "idle":
       return "✓"
     case "needs_auth":
       return "⚠"

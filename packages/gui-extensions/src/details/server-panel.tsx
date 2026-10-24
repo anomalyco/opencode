@@ -276,6 +276,8 @@ function McpMenu(props: ServiceMenuProps) {
 
               if (status === "pending") return ctx.t("connecting")
 
+              if (status === "idle") return ctx.t("idle")
+
               if (status === "needs_auth") return ctx.t("needsAuth")
 
               return undefined

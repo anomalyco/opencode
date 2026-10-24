@@ -7,13 +7,15 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
   const theme = props.context.theme
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
-  const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
+  const on = createMemo(
+    () => list().filter((item) => item.status.status === "connected" || item.status.status === "idle").length,
+  )
   const bad = createMemo(
     () => list().filter((item) => item.status.status === "failed" || item.status.status === "needs_auth").length,
   )
 
   const dot = (status: string) => {
-    if (status === "connected") return theme.text.feedback.success.base
+    if (status === "connected" || status === "idle") return theme.text.feedback.success.base
     if (status === "failed") return theme.text.feedback.error.base
     if (status === "disabled") return theme.text.muted
     if (status === "needs_auth") return theme.text.feedback.warning.base
@@ -77,6 +79,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                 >
                   <Switch fallback={item.status.status}>
                     <Match when={item.status.status === "connected"}>Connected</Match>
+                    <Match when={item.status.status === "idle"}>Idle</Match>
                     <Match when={item.status.status === "pending"}>Connecting</Match>
                     <Match when={item.status.status === "failed"}>Error</Match>
                     <Match when={item.status.status === "disabled"}>Disabled</Match>
