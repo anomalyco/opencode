@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, Layer, Logger, Queue, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -144,6 +144,74 @@ function stored(projectID: Project.ID) {
 }
 
 describe("Worktree", () => {
+  it.live("lists no Git worktrees for an existing non-git directory", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const git = yield* WorktreeGit.make
+
+      expect(yield* git.list(abs(root.path))).toEqual([])
+    }),
+  )
+
+  it.live("refreshes a non-git project without discovery warnings", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      yield* Effect.promise(() => fs.rm(path.join(input.root.path, ".git"), { recursive: true, force: true }))
+      const worktrees = yield* fixtureWorktree()
+      const warnings: string[] = []
+
+      yield* worktrees.refresh().pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((entry) => {
+              if (entry.logLevel === "Warn") warnings.push(Bun.inspect(entry.message))
+            }),
+          ]),
+        ),
+      )
+
+      expect(warnings).toEqual([])
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+    }),
+  )
+
+  it.live("lists no worktrees when Git discovery cannot resolve a marker", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      yield* Effect.promise(() => fs.writeFile(path.join(root.path, ".git"), "gitdir: missing-admin\n"))
+      const git = yield* Git.Service
+      const worktrees = yield* WorktreeGit.make
+      const directory = abs(root.path)
+
+      expect(yield* git.repo.discover(directory)).toBeUndefined()
+      expect(yield* worktrees.list(directory)).toEqual([])
+    }),
+  )
+
+  it.live("keeps discovery errors for missing directories", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const git = yield* WorktreeGit.make
+      const missing = yield* git.list(abs(path.join(root.path, "missing"))).pipe(Effect.flip)
+      expect(missing).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+    }),
+  )
+
+  it.live("still rejects Git worktree mutations without a repository", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const git = yield* WorktreeGit.make
+      const directory = abs(root.path)
+      const create = yield* git
+        .create({ sourceDirectory: directory, directory: abs(path.join(root.path, "child")) })
+        .pipe(Effect.flip)
+      const remove = yield* git.remove({ directory, force: false }).pipe(Effect.flip)
+
+      expect(create).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+      expect(remove).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+    }),
+  )
+
   projectIt.live("tracks canonical and linked worktrees when a project resolves", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(
