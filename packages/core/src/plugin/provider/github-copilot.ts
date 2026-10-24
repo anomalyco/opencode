@@ -212,6 +212,8 @@ export const GithubCopilotPlugin = define({
 
     yield* ctx.integration.transform((editor) => {
       editor.method.remove("github-copilot", { type: "key" })
+      // GITHUB_TOKEN is a GitHub tooling credential, not a Copilot OAuth credential.
+      editor.method.remove("github-copilot", { type: "env", names: [] })
       editor.method.update(oauth(ctx.app))
     })
     yield* ctx.provider.transform((evt) => {

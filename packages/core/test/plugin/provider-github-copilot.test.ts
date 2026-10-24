@@ -1,5 +1,6 @@
 import { AISDK } from "@opencode/core/aisdk"
 import { App } from "@opencode/core/app"
+import { Credential } from "@opencode/core/credential"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
@@ -22,6 +23,7 @@ import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -94,30 +96,100 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("removes the generic key method", () =>
-    Effect.gen(function* () {
-      const integrations = yield* Integration.Service
-      yield* integrations.transform((editor) => {
-        editor.method.update({
-          integrationID: Integration.ID.make("github-copilot"),
-          method: { type: "key" },
+  it.effect("does not activate Copilot from GITHUB_TOKEN", () =>
+    withEnv({ GITHUB_TOKEN: "test-github-token" }, () =>
+      Effect.gen(function* () {
+        const integrations = yield* Integration.Service
+        const providers = yield* Provider.Service
+        yield* providers.transform((editor) => {
+          editor.update(Provider.ID.githubCopilot, (provider) => {
+            provider.integrationID = Integration.ID.make("github-copilot")
+          })
+          editor.update(Provider.ID.make("github-models"), (provider) => {
+            provider.integrationID = Integration.ID.make("github-models")
+          })
         })
-        editor.method.update({
-          integrationID: Integration.ID.make("github-copilot"),
-          method: { type: "env", names: ["GITHUB_TOKEN"] },
+        yield* integrations.transform((editor) => {
+          editor.method.update({
+            integrationID: Integration.ID.make("github-copilot"),
+            method: { type: "key" },
+          })
+          editor.method.update({
+            integrationID: Integration.ID.make("github-copilot"),
+            method: { type: "env", names: ["GITHUB_TOKEN"] },
+          })
+          editor.method.update({
+            integrationID: Integration.ID.make("github-models"),
+            method: { type: "env", names: ["GITHUB_TOKEN"] },
+          })
         })
-      })
-      yield* addPlugin()
-      expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
-        { type: "env", names: ["GITHUB_TOKEN"] },
-        {
-          id: Integration.MethodID.make("device"),
-          type: "oauth",
-          label: "Login with GitHub Copilot",
-          form: expect.any(Array),
-        },
-      ])
-    }),
+        expect(yield* integrations.connection.active(Integration.ID.make("github-copilot"))).toEqual({
+          type: "env",
+          name: "GITHUB_TOKEN",
+        })
+        yield* addPlugin()
+        expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
+          {
+            id: Integration.MethodID.make("device"),
+            type: "oauth",
+            label: "Login with GitHub Copilot",
+            form: expect.any(Array),
+          },
+        ])
+        expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.connections).toEqual([])
+        expect(yield* integrations.connection.active(Integration.ID.make("github-copilot"))).toBeUndefined()
+        expect((yield* providers.snapshot()).providers.map((provider) => provider.id)).toEqual([
+          Provider.ID.make("github-models"),
+        ])
+        expect(yield* integrations.connection.active(Integration.ID.make("github-models"))).toEqual({
+          type: "env",
+          name: "GITHUB_TOKEN",
+        })
+      }),
+    ),
+  )
+
+  it.live("preserves Copilot enterprise OAuth with GITHUB_TOKEN", () =>
+    withEnv({ GITHUB_TOKEN: "test-github-token" }, () =>
+      Effect.gen(function* () {
+        const server = yield* Effect.acquireRelease(
+          Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json({ data: [] }) })),
+          (server) => Effect.promise(() => server.stop(true)),
+        )
+        const integrations = yield* Integration.Service
+        const credentials = yield* Credential.Service
+        const providers = yield* Provider.Service
+        const integrationID = Integration.ID.make("github-copilot")
+        yield* providers.transform((editor) => {
+          editor.update(Provider.ID.githubCopilot, (provider) => {
+            provider.integrationID = integrationID
+          })
+        })
+        yield* integrations.transform((editor) => {
+          editor.method.update({ integrationID, method: { type: "key" } })
+          editor.method.update({ integrationID, method: { type: "env", names: ["GITHUB_TOKEN"] } })
+        })
+        const credential = yield* credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            refresh: "test-oauth-token",
+            access: "test-oauth-token",
+            expires: 0,
+            metadata: { enterpriseUrl: "company.ghe.com", apiEndpoint: server.url.origin },
+          }),
+        })
+        yield* addPlugin()
+        const connection = required(yield* integrations.connection.active(integrationID))
+        expect(connection).toMatchObject({ type: "credential", id: credential.id, method: "oauth" })
+        expect((yield* integrations.get(integrationID))?.connections).toEqual([connection])
+        expect(yield* integrations.connection.resolve(connection)).toEqual(credential.value)
+        expect((yield* providers.snapshot()).providers.map((provider) => provider.id)).toEqual([
+          Provider.ID.githubCopilot,
+        ])
+      }),
+    ),
   )
 
   it.live("adds Copilot authentication and request metadata headers", () =>
