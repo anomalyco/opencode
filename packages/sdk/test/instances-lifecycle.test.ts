@@ -3,7 +3,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
-import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { testEffect } from "../../core/test/lib/effect"
 import { EmbeddedHost } from "../src/internal/host"
@@ -47,16 +47,22 @@ it.live("a cancelled borrower cannot strand a later failed instance construction
       location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
     })
     expect(acquired).toEqual([])
+    expect(yield* Effect.void.pipe(instances.provideCached(session))).toEqual(Option.none())
+    expect(acquired).toEqual([])
 
     const borrower = yield* Effect.void.pipe(instances.provide(session), Effect.forkScoped)
     const lookup = yield* Deferred.await(started)
+    const cached = yield* Effect.void.pipe(instances.provideCached(session), Effect.forkScoped)
+    yield* Effect.yieldNow
     yield* Fiber.interrupt(borrower)
     expect(released).toEqual([])
     yield* Deferred.succeed(release, undefined)
     expect(Exit.isFailure(yield* Fiber.await(lookup).pipe(Effect.timeout("1 second")))).toBe(true)
+    expect(Exit.isFailure(yield* Fiber.await(cached).pipe(Effect.timeout("1 second")))).toBe(true)
     expect(released).toEqual([1])
 
     yield* Effect.void.pipe(instances.provide(session))
+    expect(yield* Effect.succeed("warm").pipe(instances.provideCached(session))).toEqual(Option.some("warm"))
     expect(acquired).toEqual([1, 2])
     expect(released).toEqual([1])
 

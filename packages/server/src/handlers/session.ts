@@ -4,7 +4,10 @@ import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
-import { DateTime, Effect, Stream } from "effect"
+import { Instance } from "@opencode/core/instance/service"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { DateTime, Effect, Option, Stream } from "effect"
+import { HttpServerRequest } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
 import {
@@ -22,7 +25,7 @@ import {
   SkillNotFoundError,
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
-import { locationErrors } from "../location"
+import { cachedLocation, locationErrors, requestRef, sessionInfo } from "../location"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
 
 function missingForm(id: Form.ID) {
@@ -32,6 +35,8 @@ function missingForm(id: Form.ID) {
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const locations = yield* LocationServiceMap.Service
+    const instances = yield* Instance.Service
     const transfer = yield* SessionTransfer.Service
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
       const form = yield* Form.Service
@@ -616,8 +621,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
-          const form = yield* Form.Service
-          return { data: yield* form.list({ sessionID: ctx.params.sessionID }) }
+          const read = Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID }))
+          const forms =
+            ctx.params.sessionID === "global"
+              ? yield* cachedLocation(locations, requestRef(yield* HttpServerRequest.HttpServerRequest), read)
+              : yield* read.pipe(
+                  instances.provideCached(yield* sessionInfo(session, ctx.params.sessionID)),
+                  locationErrors,
+                )
+          return { data: Option.getOrElse(forms, () => []) }
         }),
       )
       .handle(

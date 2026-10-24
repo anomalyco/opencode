@@ -13,6 +13,7 @@ const instances = makeGlobalNode({
       const locations = yield* LocationServiceMap.Service
       return Instance.Service.of({
         provide: (session) => Effect.provide(locations.get(session.location)),
+        provideCached: (session) => Instance.cached(locations, LocationServiceMap.canonical(session.location)),
       })
     }),
   ),

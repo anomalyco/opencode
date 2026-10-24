@@ -147,6 +147,8 @@ const setup = Effect.fnUntraced(function* (options?: {
   const instances = Instance.Service.of({
     // This fixture supplies only the instance services exercised by Session.
     provide: (session) => Effect.provide(servicesFor(session.location) as Layer.Layer<Instance.Services>),
+    // This fixture has no cache and is only used for active Session operations.
+    provideCached: () => () => Effect.succeedNone,
   })
   const sessions = yield* Session.make().pipe(
     Effect.satisfiesServicesType<

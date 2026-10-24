@@ -145,6 +145,7 @@ it.live(
                 )
                 const selector = Instance.Service.of({
                   provide: (session) => Effect.provide(instances.get(session.id)),
+                  provideCached: (session) => Instance.cached(instances, session.id),
                 })
                 const bindings: LayerNode.Replacements = [
                   ...replacements,
@@ -197,8 +198,11 @@ it.live(
           expect(yield* Effect.promise<unknown>(() => response.json())).toEqual({ data: [] })
         }
       }
-      // Reading permissions or forms builds the Session's Instance and starts its plugin activation at once; the
-      // ordering assertion after the prompts is what proves each Session boots exactly once.
+      expect(boots).toEqual([])
+      for (const resource of ["permission", "form"]) {
+        expect((yield* request(`/api/session/ses_missing_instance/${resource}`)).status).toBe(404)
+      }
+      expect(boots).toEqual([])
 
       for (const config of configs) {
         const session = yield* sessions.get(config.id)
