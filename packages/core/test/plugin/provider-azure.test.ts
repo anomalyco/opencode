@@ -2,6 +2,7 @@ import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode/core/agent"
 import { describe, expect } from "bun:test"
 import { Effect, Schedule, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { Bus } from "@opencode/core/bus"
@@ -276,7 +277,6 @@ describe("AzurePlugin connecting", () => {
       ])
     }),
   )
-
 })
 
 describe("AzurePlugin startup", () => {
@@ -502,6 +502,148 @@ describe("AzurePlugin discovery", () => {
         ["gpt-5-mini", "gpt-5-mini", 400_000],
         ["gpt-5-nano", "nano-production", 300_000],
       ])
+    }),
+  )
+})
+
+describe("AzurePlugin sync failures", () => {
+  it.effect("retries a deployment sync that failed while the network was down", () =>
+    Effect.gen(function* () {
+      let attempts = 0
+      const answered = Promise.withResolvers<void>()
+      const retried = Promise.withResolvers<void>()
+      const azure = yield* fakeAzure({
+        resource: () => {
+          attempts++
+          // The first answer stands in for a laptop that woke before its modem and VPN were up.
+          if (attempts === 1) {
+            answered.resolve()
+            return new Response("Service Unavailable", { status: 503 })
+          }
+          retried.resolve()
+          return resourceList(listed("prod-mini", "gpt-5-mini"))
+        },
+      })
+      yield* seedCatalog
+      yield* connect(keyCredential())
+      yield* addPlugin(azure.endpoints)
+
+      yield* Effect.promise(() => answered.promise)
+      yield* settle
+      expect(azure.requests).toHaveLength(1)
+
+      // The retry is the ladder's first wait, so advancing the clock is what spends it: the test neither waits a real
+      // second nor depends on that first wait staying at one second.
+      yield* TestClock.adjust("1 seconds")
+      yield* Effect.promise(() => retried.promise)
+      yield* settle
+      expect(yield* azureModelIDs).toEqual(["prod-mini"])
+      // The second attempt is the retry: discovery never runs again for an unchanged connection.
+      expect(azure.requests).toHaveLength(2)
+    }),
+  )
+
+  it.effect("leaves a failure that cannot pass alone instead of retrying it", () =>
+    Effect.gen(function* () {
+      const azure = yield* fakeAzure({ resource: unauthorized })
+      yield* seedCatalog
+      yield* connect(keyCredential())
+      yield* addPlugin(azure.endpoints)
+
+      yield* settle
+      // Every wait of both ladders lies inside these two jumps, so a retried rejected key would have shown up as a
+      // second request rather than hiding behind a delay this test happened to outwait.
+      yield* TestClock.adjust("2 minutes")
+      yield* settle
+      yield* TestClock.adjust("2 minutes")
+      yield* settle
+      expect(azure.requests).toHaveLength(1)
+      expect(yield* azureModelIDs).toEqual(catalogIDs)
+    }),
+  )
+
+  it.effect("retries discovery when the Azure CLI could not reach Entra ID for a token", () =>
+    Effect.gen(function* () {
+      let tokenCalls = 0
+      const refused = Promise.withResolvers<void>()
+      const loaded = Promise.withResolvers<void>()
+      const cli = yield* fakeAzureCli((args) => {
+        if (!args.includes("get-access-token")) return { value: [] }
+        tokenCalls++
+        // A laptop that woke before its modem: `az` cannot reach Entra ID, exits non-zero, and no request is sent.
+        if (tokenCalls > 2) return cliToken(args)
+        if (tokenCalls === 2) refused.resolve()
+        return new Error("Unable to connect to login.microsoftonline.com")
+      })
+      const azure = yield* fakeAzure({
+        resource: () => {
+          loaded.resolve()
+          return resourceList(listed("prod-mini", "gpt-5-mini"))
+        },
+        management: notFound,
+      })
+      yield* seedCatalog
+      yield* connect(cliCredential())
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+
+      // The management attempt fails inside the CLI, and so does the resource inventory that replaces it, so discovery
+      // sent no request at all: the token itself is what fails, before anything leaves the process.
+      yield* Effect.promise(() => refused.promise)
+      yield* settle
+      expect(azure.requests).toEqual([])
+
+      // The CLI ladder's first wait. The third attempt reaches Azure, whose management API has no deployment list for
+      // this resource, so discovery falls back to the resource's own inventory.
+      yield* TestClock.adjust("1 seconds")
+      yield* Effect.promise(() => loaded.promise)
+      yield* settle
+      expect(yield* azureModelIDs).toEqual(["prod-mini"])
+    }),
+  )
+
+  it.effect("keeps retrying the Azure CLI past a wake-up that takes more than a few seconds", () =>
+    Effect.gen(function* () {
+      // Each attempt mints two tokens before it fails: the management scope, then the resource scope it falls back to.
+      // Failing eight of them is four failed attempts, so the fifth attempt is the first that can reach Azure, and the
+      // ladder reaches it only after waiting 1, 2, 4 and 8 seconds.
+      let tokenCalls = 0
+      const loaded = Promise.withResolvers<void>()
+      const cli = yield* fakeAzureCli((args) => {
+        if (!args.includes("get-access-token")) return { value: [] }
+        tokenCalls++
+        if (tokenCalls > 8) return cliToken(args)
+        return new Error("Unable to connect to login.microsoftonline.com")
+      })
+      const azure = yield* fakeAzure({
+        resource: () => {
+          loaded.resolve()
+          return resourceList(listed("prod-mini", "gpt-5-mini"))
+        },
+        management: notFound,
+      })
+      yield* seedCatalog
+      yield* connect(cliCredential())
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+
+      yield* settle
+      expect(tokenCalls).toBe(2)
+
+      // Seven seconds is where a three-step ladder gives up, and discovery has to still be running here: this is the
+      // wake-from-sleep that takes about as long as a modem and a VPN, which is the case #57690 reports.
+      yield* TestClock.adjust("1 seconds")
+      yield* settle
+      yield* TestClock.adjust("2 seconds")
+      yield* settle
+      yield* TestClock.adjust("4 seconds")
+      yield* settle
+      expect(tokenCalls).toBe(8)
+      expect(azure.requests).toEqual([])
+
+      // The fourth wait buys the attempt that reaches Azure, and the deployments arrive without a restart.
+      yield* TestClock.adjust("8 seconds")
+      yield* Effect.promise(() => loaded.promise)
+      yield* settle
+      expect(yield* azureModelIDs).toEqual(["prod-mini"])
     }),
   )
 })

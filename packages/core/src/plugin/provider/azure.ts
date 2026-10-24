@@ -1,5 +1,5 @@
-import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Cause, Clock, Effect, FiberHandle, Option, Schedule, Schema, Semaphore, Stream } from "effect"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
@@ -50,6 +50,39 @@ const decodeManagementDeployment = Schema.decodeUnknownOption(
 )
 const ResourceQuery = Schema.Struct({ query: Schema.String })
 const Resources = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.NonEmptyString })) })
+
+// A laptop can wake before its modem and VPN are up, and discovery otherwise runs only at startup and on an account
+// switch, so a single failed sync would leave the catalog-only list until the next restart. `exponential` widens the
+// gap 1, 2, 4, 8, 16, 30 s once `spaced` caps it, and `recurs` bounds the whole ladder at about two minutes.
+const syncSchedule = Schedule.max([
+  Schedule.min([Schedule.exponential("1 seconds"), Schedule.spaced("30 seconds")]),
+  Schedule.recurs(8),
+])
+
+// Azure answers a transport failure, a 408 or 429, or a 5xx other than 501 while it restarts or the network is down,
+// and a timed-out attempt may pass on the next one. A rejected key or an unmatchable body fails the same way however
+// often it is asked, so retrying it would only delay the warning.
+const isTransient = (cause: unknown) => {
+  if (Cause.isTimeoutError(cause)) return true
+  if (!HttpClientError.isHttpClientError(cause)) return false
+  if (cause.reason._tag === "TransportError") return true
+  if (cause.reason._tag !== "StatusCodeError") return false
+  const status = cause.reason.response.status
+  return status === 408 || status === 429 || (status >= 500 && status !== 501)
+}
+
+// A CLI run that failed is the only signal available: `run` reports a timeout, a non-zero exit and an unreachable
+// network as the same `AppProcessError`, so the choice is between retrying all of them and retrying none. Retrying is
+// what reaches a machine whose network came back, so the CLI gets the same ladder as the request rather than a shorter
+// one: the CLI is what an `external` connection needs first, and a wake-from-sleep that takes half a minute to get its
+// network back would otherwise stay unfixed for exactly the users this covers. A CLI that really is signed out pays by
+// delaying its one warning about two minutes, and a run that fails locally is cheap.
+const isCliFailure = (cause: unknown) => cause instanceof AppProcess.AppProcessError
+
+// Only a failure that can pass is retried, and only that one is worth a warning: a rejected key reaches the single
+// warning `discover` already logs, without a retry message in between.
+const retryWarning = (message: string, cause: unknown, retryable: (cause: unknown) => boolean) =>
+  retryable(cause) ? Effect.logWarning(message, { cause }).pipe(Effect.as(true)) : Effect.succeed(false)
 
 type Deployment = { readonly name: string; readonly model: string }
 
@@ -257,10 +290,27 @@ export function make(
       // data-plane version 2022-12-01 has it; later versions dropped `/deployments` and keep `/models`, which lists
       // models the resource can deploy rather than its deployments.
       // https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/data-plane/OpenAIAuthoring/stable/2022-12-01/azureopenai.json
+
+      // A switch interrupts discovery through the fiber handle, so a pending retry never answers the old connection.
+      // The inner ladder waits out an Azure outage, the outer one a failure that happens before any request is made,
+      // and both run the same schedule: whichever way the network is missing, discovery has about two minutes to reach
+      // it. Only one of them ever applies to a given failure, so the two do not add up.
       const deployments = (url: string, resource: string, credential: Credential.Key | Credential.External) =>
-        credential.type === "external"
-          ? managementDeployments(resource).pipe(Effect.catch(() => resourceDeployments(url, credential)))
-          : resourceDeployments(url, credential)
+        Effect.retry(
+          Effect.retry(
+            credential.type === "external"
+              ? managementDeployments(resource).pipe(Effect.catch(() => resourceDeployments(url, credential)))
+              : resourceDeployments(url, credential),
+            {
+              schedule: syncSchedule,
+              while: (cause) => retryWarning("retrying Azure deployment sync", cause, isTransient),
+            },
+          ),
+          {
+            schedule: syncSchedule,
+            while: (cause) => retryWarning("retrying Azure discovery after a CLI failure", cause, isCliFailure),
+          },
+        )
 
       // Local and quick, so a switch rebinds the provider before discovery for the new connection calls Azure.
       const rebind = () =>
@@ -421,7 +471,9 @@ export function make(
         Effect.forkScoped({ startImmediately: true }),
       )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
-      // Later changes load when the connection changes, so a new deployment needs a reconnect or restart.
+      // A sync that failed while the network was down retries on its own, so a woken laptop lists its deployments
+      // once the network returns. Later changes load when the connection changes, so a new deployment needs a
+      // reconnect or restart.
       yield* refresh().pipe(Effect.forkScoped)
 
       // Entra bearer tokens are minted per request from the target URL's scope, so they are injected
