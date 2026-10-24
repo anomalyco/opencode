@@ -8,6 +8,9 @@ import { State } from "./state.js"
 import { Location } from "./location.js"
 import { freeze } from "immer"
 import { AISDKNative } from "./aisdk-native.js"
+import { Database } from "./database/database.js"
+import { SessionTable } from "./session/sql.js"
+import { and, desc, isNotNull, isNull } from "drizzle-orm"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -92,6 +95,7 @@ const layer = Layer.effect(
     const providers = yield* Provider.Service
     const bus = yield* Bus.Service
     const location = yield* Location.Service
+    const db = (yield* Database.Service).db
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
     let input: Provider.Snapshot | undefined
     const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
@@ -272,7 +276,19 @@ const layer = Layer.effect(
         const value = yield* read()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available.find(supportsText)
+        if (model?.enabled) return model
+        // Without a configured default, prefer the model of the most recently used top-level session.
+        const recent = yield* db
+          .select({ model: SessionTable.model })
+          .from(SessionTable)
+          .where(and(isNull(SessionTable.parent_id), isNotNull(SessionTable.model)))
+          .orderBy(desc(SessionTable.time_updated))
+          .get()
+          .pipe(Effect.orDie)
+        const last =
+          recent?.model &&
+          value.byProvider.get(Provider.ID.make(recent.model.providerID))?.get(ID.make(recent.model.id))
+        return last?.enabled && supportsText(last) ? last : value.available.find(supportsText)
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
@@ -291,7 +307,11 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Bus.node, Location.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Provider.node, Bus.node, Location.node, Database.node],
+})
 
 // Signed out, only free OpenCode models are enabled. Clients default to the first available model, so keep
 // these free models ahead of each new free launch instead of letting release order pick the default.
