@@ -1,6 +1,6 @@
 export * as Ipc from "./ipc"
 
-import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { app, BrowserWindow, MessageChannelMain, webContents } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
@@ -18,6 +18,7 @@ import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
+import { runDesktopMenuAction } from "./native/menu-actions"
 import { DesktopCli } from "./service/desktop-cli"
 import { getLastFocusedWindow } from "./windows"
 
@@ -78,11 +79,36 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
   const onWindowCreated = (_event: Electron.Event, win: BrowserWindow) => wire(win)
 
+  // Every webContents has its own keyboard stream; embedded views (for example the browser panel)
+  // need F11 handled too, otherwise the hidden default menu's native-fullscreen accelerator still
+  // fires there. Windows maximizes instead so the taskbar stays reachable (#54714).
+  const onWebContentsCreated = (_event: Electron.Event | undefined, contents: Electron.WebContents) => {
+    if (process.platform !== "win32") return
+    contents.on("before-input-event", (event, input) => {
+      if (input.type !== "keyDown" || input.key !== "F11") return
+
+      event.preventDefault()
+
+      if (input.isAutoRepeat) return
+
+      const win = getLastFocusedWindow()
+
+      if (win) runDesktopMenuAction(win, "window.toggleMaximize")
+    })
+  }
+
   yield* Effect.sync(() => {
     app.on("browser-window-created", onWindowCreated)
+    app.on("web-contents-created", onWebContentsCreated)
     BrowserWindow.getAllWindows().forEach((win) => wire(win))
+    webContents.getAllWebContents().forEach((contents) => onWebContentsCreated(undefined, contents))
   })
-  yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", onWindowCreated)))
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      app.off("browser-window-created", onWindowCreated)
+      app.off("web-contents-created", onWebContentsCreated)
+    }),
+  )
 
   return {
     installMenu: () => createMenu(menu),

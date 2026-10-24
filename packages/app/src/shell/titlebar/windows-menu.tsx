@@ -43,6 +43,9 @@ export function WindowsAppMenu(props: {
     desktopMenuWithExtensions(
       (menu.items ?? [])
         .filter((entry) => desktopMenuVisible(entry, "windows"))
+        // Windows uses Window -> Maximize and routes F11 there, so a "Toggle Full Screen" item
+        // would be a duplicate that no longer enters native fullscreen (#54714).
+        .filter((entry) => entry.type !== "item" || entry.action !== "view.toggleFullscreen")
         .map((entry) => ({ key: desktopMenuKey(entry), entry })),
       menubar?.items().filter((item) => item.menu === menu.id) ?? [],
     )
