@@ -25,6 +25,50 @@ import { makePluginTestLayer, PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
+it.live("reports session move failures to Code Mode and moves after the directory exists", () =>
+  Effect.gen(function* () {
+    const location = yield* Location.Service
+    const sessions = yield* Session.Service
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const source = AbsolutePath.make(path.join(location.directory, "removed-source"))
+    const session = yield* sessions.create({ location: Location.Ref.make({ directory: source }) })
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins))
+
+    const move = (input: Record<string, unknown>) =>
+      executeTool(registry, {
+        sessionID: session.id,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: `call-move-${JSON.stringify(input)}`,
+          name: "execute",
+          input: {
+            code: `try { return await tools.opencode.session_move(${JSON.stringify(input)}) } catch (error) { return { message: error.message } }`,
+          },
+        },
+      }).pipe(Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")))
+
+    const missing = AbsolutePath.make(path.join(location.directory, "missing"))
+    expect(yield* move({ directory: missing })).toEqual({ message: `Directory does not exist: ${missing}` })
+    expect((yield* sessions.get(session.id)).location.directory).toBe(source)
+    expect(yield* sessions.inbox(session.id)).toEqual([])
+
+    const file = AbsolutePath.make(path.join(location.directory, "file"))
+    yield* Effect.promise(() => fs.writeFile(file, "not a directory"))
+    expect(yield* move({ directory: file })).toEqual({ message: `Not a directory: ${file}` })
+
+    const other = Session.ID.create()
+    expect(yield* move({ sessionID: other, directory: location.directory })).toEqual({
+      message: `Session not found: ${other}`,
+    })
+
+    yield* Effect.promise(() => fs.mkdir(missing))
+    expect(yield* move({ directory: missing })).toEqual({ sessionID: session.id, directory: missing })
+    expect((yield* sessions.get(session.id)).location.directory).toBe(missing)
+  }),
+)
+
 const alpha = { id: "test/alpha", name: "Alpha", released: 300, variants: ["fast"], cost: [], status: "beta" }
 const beta = { id: "other/beta", name: "Beta", released: 200, variants: [], cost: [], status: "active" }
 const gamma = { id: "other/gamma", name: "Gamma Flash", released: 100, variants: [], cost: [], status: "active" }
