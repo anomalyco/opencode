@@ -806,6 +806,18 @@
     [data-slot="icon-svg"] {
       transform: translateY(1px);
     }
+
+    /* Same filled chevron as the tool header: points right, turns down when the call is expanded. */
+    &[data-chevron] [data-slot="icon-svg"] {
+      transform: translateY(1px) rotate(-90deg);
+      transition: transform 0.15s ease;
+    }
+  }
+
+  [data-slot="execute-tool-call"][aria-expanded="true"]
+    [data-slot="execute-tool-call-marker"][data-chevron]
+    [data-slot="icon-svg"] {
+    transform: translateY(1px);
   }
 
   [data-slot="execute-tool-call-name"] {
@@ -866,11 +878,12 @@
     display: inline-flex;
     flex-shrink: 0;
     color: var(--v2-text-text-faint);
+    transform: rotate(-90deg);
     transition: transform 0.15s ease;
   }
 
   [data-slot="execute-tool-call"][aria-expanded="true"] [data-slot="execute-tool-call-arrow"] {
-    transform: rotate(90deg);
+    transform: none;
   }
 
   [data-slot="execute-tool-call"][data-status="error"] [data-slot="execute-tool-call-marker"],
