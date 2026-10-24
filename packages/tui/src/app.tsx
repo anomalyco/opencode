@@ -789,7 +789,11 @@ function App() {
             ),
           })
           if (agent) local.agent.set(agent.id)
-          if (model) local.model.set(model)
+          if (config.data.session.new_model === "last_used") {
+            if (model) local.model.set(model)
+          } else {
+            local.model.clearNewSessionSelection()
+          }
           dialog.clear()
         },
       },
@@ -816,7 +820,11 @@ function App() {
             ),
           })
           if (agent) local.agent.set(agent.id)
-          if (model) local.model.set(model)
+          if (config.data.session.new_model === "last_used") {
+            if (model) local.model.set(model)
+          } else {
+            local.model.clearNewSessionSelection()
+          }
           dialog.clear()
         },
       },

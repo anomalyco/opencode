@@ -142,6 +142,15 @@ export const settings: Setting[] = [
     keywords: ["directory", "cwd", "inherit"],
   },
   {
+    title: "New session model",
+    category: "Session",
+    path: ["session", "new_model"],
+    default: "last_used",
+    values: ["last_used", "default"],
+    labels: ["last used", "configured default"],
+    keywords: ["model", "carry over", "reset"],
+  },
+  {
     title: "Permissions",
     category: "Session",
     path: ["session", "permissions"],

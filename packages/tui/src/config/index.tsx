@@ -177,6 +177,9 @@ export const Info = Schema.Struct({
       new_location: Schema.optional(Schema.Literals(["launch", "inherit"])).annotate({
         description: "Start new sessions in the TUI launch directory or inherit the active session location",
       }),
+      new_model: Schema.optional(Schema.Literals(["last_used", "default"])).annotate({
+        description: "Start new sessions with the last used model or the configured default model",
+      }),
       permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
         description: "Prompt for permission requests or accept them automatically",
       }),
@@ -271,8 +274,9 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
+  session: Omit<NonNullable<Info["session"]>, "new_location" | "new_model" | "permissions" | "tps"> & {
     new_location: "launch" | "inherit"
+    new_model: "last_used" | "default"
     permissions: "prompt" | "autoaccept"
     tps: boolean
   }
@@ -324,6 +328,7 @@ export function resolve(
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      new_model: input.session?.new_model ?? "last_used",
       permissions: input.session?.permissions ?? "prompt",
       tps: input.session?.tps ?? true,
     },
