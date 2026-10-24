@@ -111,6 +111,30 @@ describe("Form", () => {
     }),
   )
 
+  it.effect("wraps a single string multiselect answer into the array shape", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const created = yield* service.create({
+        sessionID: "global",
+        title: "Choice form",
+        fields: [{ key: "area", type: "multiselect", options: [{ value: "a", label: "A" }], custom: true }],
+      })
+
+      yield* service.reply({ id: created.id, answer: { area: "a" } })
+      expect(yield* service.state(created.id)).toEqual({ status: "answered", answer: { area: ["a"] } })
+
+      const required = yield* service.create({
+        sessionID: "global",
+        title: "Required choice form",
+        fields: [{ key: "area", type: "multiselect", options: [{ value: "a", label: "A" }], required: true }],
+      })
+      const missing = yield* service.reply({ id: required.id, answer: { area: "" } }).pipe(Effect.flip)
+      expect(missing).toEqual(
+        new Form.InvalidAnswerError({ id: required.id, message: "Missing required form field: area" }),
+      )
+    }),
+  )
+
   it.effect("evaluates when against multiselect answers as inclusion", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service

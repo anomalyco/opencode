@@ -182,13 +182,14 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const entry = yield* requireEntry(input.id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
-          const invalid = validateAnswer(entry.form.fields, input.answer)
+          const answer = normalizeAnswer(entry.form.fields, input.answer)
+          const invalid = validateAnswer(entry.form.fields, answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
-          const next: TerminalState = { status: "answered", answer: input.answer }
+          const next: TerminalState = { status: "answered", answer }
           yield* bus.publish(Form.Event.Replied, {
             id: input.id,
             sessionID: entry.form.sessionID,
-            answer: input.answer,
+            answer,
           })
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
@@ -357,6 +358,20 @@ function validateField(field: InputField, value: Form.Value): string | undefined
 
 function isStringArray(value: Form.Value): value is ReadonlyArray<string> {
   return Array.isArray(value) && value.every((item): item is string => typeof item === "string")
+}
+
+// Older clients submit a single string for multiselect fields. Wrap it into the canonical array
+// shape so the answer survives validation; an empty string means nothing was selected.
+function normalizeAnswer(fields: ReadonlyArray<Form.Field>, answer: Answer): Answer {
+  const multi = new Set(
+    fields.filter((field): field is Form.MultiselectField => field.type === "multiselect").map((field) => field.key),
+  )
+  return Object.fromEntries(
+    Object.entries(answer).map(([key, value]) => {
+      if (!multi.has(key) || typeof value !== "string") return [key, value]
+      return [key, value ? [value] : []]
+    }),
+  )
 }
 
 function isDate(value: string) {
