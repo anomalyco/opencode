@@ -3,7 +3,7 @@ import { ProgressCircle } from "@opencode/ui/progress-circle"
 import { Button } from "@opencode/ui/button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { lastAssistantWithUsage } from "@opencode/client/solid"
+import { assistantUsageState } from "@opencode/client/solid"
 import { useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 
@@ -44,9 +44,11 @@ export function SessionContextUsage(props: {
     props.session.id ? props.session.server.data.session.get(props.session.id) : undefined,
   )
 
+  const measurement = createMemo(() => assistantUsageState(messages(), info()?.revert?.messageID))
+
   // Same step as the TUI: after the last completed compaction and before an undo boundary.
   const context = createMemo(() => {
-    const message = lastAssistantWithUsage(messages(), info()?.revert?.messageID)
+    const message = measurement().message
 
     if (!message) return
     const model = catalogModel(props.session, message.model)?.model
@@ -64,10 +66,14 @@ export function SessionContextUsage(props: {
     }
   })
 
+  const unmeasured = () => measurement().unmeasured
+
   const tokens = createMemo(() =>
-    new Intl.NumberFormat(i18n.locale(), { notation: "compact", maximumFractionDigits: 0 })
-      .format(context()?.total ?? 0)
-      .toLocaleLowerCase(i18n.locale()),
+    unmeasured()
+      ? "—"
+      : new Intl.NumberFormat(i18n.locale(), { notation: "compact", maximumFractionDigits: 0 })
+          .format(context()?.total ?? 0)
+          .toLocaleLowerCase(i18n.locale()),
   )
 
   // A root session's cost includes its subagent sessions, as in the TUI.
@@ -92,18 +98,20 @@ export function SessionContextUsage(props: {
   }
 
   const circle = () => (
-    <div class="flex items-center justify-center">
-      <ProgressCircle
-        appearance="indicator"
-        size={16}
-        strokeWidth={2}
-        percentage={context()?.usage ?? 0}
-        style={{
-          "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
-          "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
-          "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
-        }}
-      />
+    <div class="flex size-4 items-center justify-center">
+      <Show when={!unmeasured()} fallback={<span>—</span>}>
+        <ProgressCircle
+          appearance="indicator"
+          size={16}
+          strokeWidth={2}
+          percentage={context()?.usage ?? 0}
+          style={{
+            "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
+            "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
+            "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
+          }}
+        />
+      </Show>
     </div>
   )
 
@@ -118,8 +126,11 @@ export function SessionContextUsage(props: {
       <Show when={showCost()}>
         <ContextTooltipRow name={ctx.t("usage.cost")} value={cost()} />
       </Show>
-      <ContextTooltipRow name={ctx.t("usage.usage")} value={`${context()?.usage ?? 0}%`} />
-      <ContextTooltipRow name={ctx.t("usage.tokens")} value={context()?.total.toLocaleString(i18n.locale()) ?? "0"} />
+      <ContextTooltipRow name={ctx.t("usage.usage")} value={unmeasured() ? "—" : `${context()?.usage ?? 0}%`} />
+      <ContextTooltipRow
+        name={ctx.t("usage.tokens")}
+        value={unmeasured() ? "—" : (context()?.total.toLocaleString(i18n.locale()) ?? "0")}
+      />
     </div>
   )
 

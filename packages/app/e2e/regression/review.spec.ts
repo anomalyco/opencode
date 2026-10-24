@@ -347,10 +347,10 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
     // The root's model is free, but its subagent spent on a paid model: the family total shows.
     { id: "ses_context_family", title: "Paid subagent", model: "free", cost: 0, usage: true, text: "2k·$1.25" },
     // A completed compaction resets the context until the next reply reports usage, as in the TUI.
-    { id: "ses_context_compacted", title: "Compacted", model: "paid", cost: 1.25, usage: true, text: "0·$1.25" },
+    { id: "ses_context_compacted", title: "Compacted", model: "paid", cost: 1.25, usage: true, text: "—·$1.25" },
   ]
 
-  await openSession(page, {
+  const workspace = await openSession(page, {
     name: "ContextPricing",
     provider: provider(
       { id: "free", name: "Free", cost: { input: 0, output: 0 } },
@@ -403,6 +403,7 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
       ),
     }),
   })
+
   const button = page.getByRole("button", { name: "Toggle session context", exact: true })
 
   for (const item of cases) {
@@ -410,6 +411,41 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
     await expectSessionTitle(page, item.title)
     await expect(button).toHaveText(item.text)
   }
+
+  const sessionID = "ses_context_compacted"
+  const assistantMessageID = "msg_context_next_reply"
+  await workspace.push([
+    {
+      id: "evt_context_next_started",
+      created: 4,
+      type: "session.step.started",
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID,
+        assistantMessageID,
+        agent: "build",
+        model: { id: "paid", providerID: "opencode" },
+        started: 4,
+      },
+    },
+  ])
+  await expect(button).toHaveText("—·$1.25")
+  await workspace.push([
+    {
+      id: "evt_context_next_ended",
+      created: 5,
+      type: "session.step.ended",
+      durable: { aggregateID: sessionID, seq: 2, version: 1 },
+      data: {
+        sessionID,
+        assistantMessageID,
+        finish: "stop",
+        cost: 0,
+        tokens: { input: 3000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    },
+  ])
+  await expect(button).toHaveText("4k·$1.25")
 })
 
 test("file tree expands Windows paths and scrolls long names in both directions", async ({ page }) => {
