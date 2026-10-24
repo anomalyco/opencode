@@ -2,6 +2,7 @@ import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { type ParseError, parse } from "jsonc-parser"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
@@ -1376,8 +1377,10 @@ describe("Config", () => {
           token: process.env.OPENCODE_TEST_MCP_TOKEN,
           missing: process.env.OPENCODE_TEST_MISSING,
           flag: process.env.OPENCODE_TEST_FLAG,
+          shell: process.env.OPENCODE_TEST_SHELL,
         }
         process.env.OPENCODE_TEST_FLAG = "false"
+        process.env.OPENCODE_TEST_SHELL = '"cmd.exe"'
         process.env.OPENCODE_TEST_MCP_TOKEN = String.raw`C:\Users\new\"secret"`
         delete process.env.OPENCODE_TEST_MISSING
         return previous
@@ -1396,6 +1399,7 @@ describe("Config", () => {
                       // Ignored reference: {file:.}
                       "username": "user-{env:OPENCODE_TEST_MISSING}",
                       "snapshots": {env:OPENCODE_TEST_FLAG},
+                      "shell": {env:OPENCODE_TEST_SHELL},
                       "mcp": {
                         "servers": {
                           "remote": {
@@ -1420,6 +1424,7 @@ describe("Config", () => {
                 const document = (yield* config.entries()).find((entry) => entry.type === "document")
                 expect(document?.info.username).toBe("user-")
                 expect(document?.info.snapshots).toBe(false)
+                expect(document?.info.shell).toBe("cmd.exe")
                 const remote = document?.info.mcp?.servers?.remote
                 expect(remote?.type).toBe("remote")
                 if (remote?.type !== "remote") return
@@ -1441,6 +1446,8 @@ describe("Config", () => {
           else process.env.OPENCODE_TEST_MISSING = previous.missing
           if (previous.flag === undefined) delete process.env.OPENCODE_TEST_FLAG
           else process.env.OPENCODE_TEST_FLAG = previous.flag
+          if (previous.shell === undefined) delete process.env.OPENCODE_TEST_SHELL
+          else process.env.OPENCODE_TEST_SHELL = previous.shell
         }),
     ),
   )
@@ -1455,6 +1462,37 @@ describe("Config", () => {
         env: { QUOTED: String.raw`a\"b`, FRAGMENT: '{"k":"v"}' },
       })
       expect(JSON.parse(text)).toEqual({ quoted: 'a"b', fragment: { k: "v" } })
+    }).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
+  )
+
+  it.effect("preserves raw fragments and escaped env values when another env needs escaping", () =>
+    Effect.gen(function* () {
+      const text = yield* ConfigVariable.substitute({
+        type: "virtual",
+        source: "test",
+        dir: "/",
+        text: `{
+          // {env:COMMENT}
+          "windows": "{env:WINDOWS}",
+          "fragment": {env:FRAGMENT},
+          "quoted": "{env:QUOTED}",
+          "quotedFragment": "{env:FRAGMENT}"
+        }`,
+        env: {
+          COMMENT: "first line\ninvalid",
+          WINDOWS: String.raw`C:\Users\new\"path"`,
+          FRAGMENT: '{"k":"v"}',
+          QUOTED: String.raw`a\"b`,
+        },
+      })
+      const errors: ParseError[] = []
+      expect(parse(text, errors)).toEqual({
+        windows: String.raw`C:\Users\new\"path"`,
+        fragment: { k: "v" },
+        quoted: 'a"b',
+        quotedFragment: '{"k":"v"}',
+      })
+      expect(errors).toEqual([])
     }).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
   )
 
