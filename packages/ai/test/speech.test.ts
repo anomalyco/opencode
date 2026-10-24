@@ -2,9 +2,9 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { Base64 } from "effect/encoding"
 import { Speech, SpeechClient, SpeechEvent } from "../src/index.js"
-import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
+import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse } from "./lib/http.js"
+import { dynamicResponse, observe, type Call } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
 // Recorded tests in test/provider cover lowering and decoding; these cover what recordings cannot.
@@ -36,6 +36,7 @@ const google38Lite = Google.configure({ apiKey: "test", baseURL: "https://google
   "gemini-3.8-flash-lite-tts",
 )
 const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).speech("aura-2-thalia-en")
+const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).speech("grok-tts")
 const voice = "JBFqnCBsd6RMkjVDRZzb"
 
 describe("Speech", () => {
@@ -298,6 +299,76 @@ describe("Speech", () => {
       ])
       const finish = events.find(SpeechEvent.is.finish)
       expect(yield* finish!.audio.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
+    }),
+  )
+
+  it.effect("lowers xAI speech to voice_id, language, and codec and describes the audio it sent", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const audio = Uint8Array.from([1, 2, 3])
+      const record = (contentType: string) =>
+        layer((input) =>
+          observe(calls, input).pipe(
+            Effect.andThen(Effect.succeed(input.respond(audio, { headers: { "content-type": contentType } }))),
+          ),
+        )
+      const [spoken, overridden] = yield* Effect.all([
+        Speech.generate({ model: xai, text: "Hi", voice: "ara", format: "wav" }).pipe(
+          Effect.provide(record("audio/wav")),
+        ),
+        Speech.generate({
+          model: xai,
+          text: "Hi",
+          voice: { id: "custom-voice" },
+          providerOptions: { output_format: { codec: "mulaw", sample_rate: 8000 } },
+        }).pipe(Effect.provide(record("audio/basic"))),
+      ])
+
+      expect(JSON.parse(calls[0].body)).toEqual({
+        text: "Hi",
+        voice_id: "ara",
+        language: "auto",
+        output_format: { codec: "wav" },
+      })
+      expect(JSON.parse(calls[1].body)).toMatchObject({
+        voice_id: "custom-voice",
+        language: "auto",
+        output_format: { codec: "mulaw", sample_rate: 8000 },
+      })
+      expect(spoken.audio.info).toEqual({ format: "wav" })
+      expect(overridden.audio.info).toEqual({ format: "pcm", encoding: "pcm_mulaw", sampleRate: 8000, channels: 1 })
+      expect(yield* overridden.audio.bytes()).toEqual(audio)
+    }),
+  )
+
+  it.effect("rejects xAI speech it cannot lower before sending anything", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.all(
+        [
+          Speech.generate({ model: xai, text: "Hi", format: "ogg" }),
+          Speech.generate({ model: xai, text: "Hi", timestamps: true }),
+          Speech.generate({ model: xai, text: "Hi", instructions: "Warm." }),
+        ].map((effect) => Effect.flip(effect)),
+      ).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network"))))
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual([
+        ["UnsupportedOperation", "media.format"],
+        ["UnsupportedOperation", "media.timestamps"],
+        ["UnsupportedOperation", "media.instructions"],
+      ])
+    }),
+  )
+
+  it.effect("streams xAI audio as deltas that end in one finish", () =>
+    Effect.gen(function* () {
+      const bytes = Uint8Array.from([1, 2, 3])
+      const events = yield* collect(Speech.stream({ model: xai, text: "Hi", format: "pcm" })).pipe(
+        Effect.provide(respond(new Blob([bytes]).stream(), "audio/pcm")),
+      )
+      const finish = events.find(SpeechEvent.is.finish)
+      if (!finish) throw new Error("Expected a finish event")
+      expect(events.filter(SpeechEvent.is.audioDelta).length).toBeGreaterThan(0)
+      expect(yield* finish.audio.bytes()).toEqual(bytes)
+      expect(finish.audio.info).toEqual({ format: "pcm", encoding: "pcm_s16le", sampleRate: 24000, channels: 1 })
     }),
   )
 })

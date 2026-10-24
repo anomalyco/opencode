@@ -3,7 +3,7 @@ import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClientRequest } from "effect/http"
 import { Media, Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/index.js"
-import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
+import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -38,6 +38,7 @@ const assemblyai = AssemblyAI.configure({ apiKey: "aai-key", baseURL: "https://a
 const elevenlabs = ElevenLabs.configure({ apiKey: "test", baseURL: "https://elevenlabs.test" }).transcription(
   "scribe_v2",
 )
+const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).transcription("grok-voice-transcribe-2.0")
 
 describe("Transcription", () => {
   it.effect("rejects what a route cannot honor before sending anything", () =>
@@ -620,6 +621,100 @@ describe("Transcription", () => {
         },
       ])
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
+    }),
+  )
+
+  it.effect("lowers xAI speech-to-text fields, keeps the file last, and maps words and speakers", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: xai,
+        audio,
+        language: "en",
+        diarize: true,
+        timestamps: "word",
+        providerOptions: { keyterm: ["OpenCode", "Grok"], format: true },
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.andThen(
+                Effect.succeed(
+                  json(input, {
+                    text: "Hello from OpenCode!",
+                    language: "en",
+                    duration: 1.5,
+                    words: [
+                      { text: "Hello", start: 0.1, end: 0.3, speaker: 0 },
+                      { text: "from", start: 0.3, end: 0.5, speaker: 0 },
+                      { text: "OpenCode!", start: 0.5, end: 1.5, speaker: 1 },
+                    ],
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      const form = yield* formFields(calls[0])
+      expect(form["model"]).toEqual(["grok-voice-transcribe-2.0"])
+      expect(form["language"]).toEqual(["en"])
+      expect(form["diarize"]).toEqual(["true"])
+      expect(form["keyterm"]).toEqual(["OpenCode", "Grok"])
+      expect(form["format"]).toEqual(["true"])
+      expect(form["file"]).toHaveLength(1)
+      const fileAt = calls[0].body.indexOf('name="file"')
+      expect(fileAt).toBeGreaterThan(calls[0].body.indexOf('name="keyterm"'))
+      expect(fileAt).toBeGreaterThan(calls[0].body.indexOf('name="format"'))
+
+      expect(response.text).toBe("Hello from OpenCode!")
+      expect(response.language).toBe("en")
+      expect(response.durationSeconds).toBe(1.5)
+      expect(response.usage).toEqual({ type: "seconds", seconds: 1.5 })
+      expect(response.words).toEqual([
+        { text: "Hello", startSeconds: 0.1, endSeconds: 0.3, speaker: "0" },
+        { text: "from", startSeconds: 0.3, endSeconds: 0.5, speaker: "0" },
+        { text: "OpenCode!", startSeconds: 0.5, endSeconds: 1.5, speaker: "1" },
+      ])
+    }),
+  )
+
+  it.effect("hands xAI an audio URL instead of uploading it", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: xai,
+        audio: Media.url("https://audio.test/x.mp3"),
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(Effect.andThen(Effect.succeed(json(input, { text: "ok", duration: 0.5 })))),
+          ),
+        ),
+      )
+
+      const form = yield* formFields(calls[0])
+      expect(form["url"]).toEqual(["https://audio.test/x.mp3"])
+      expect(form["file"]).toBeUndefined()
+      expect(response.text).toBe("ok")
+    }),
+  )
+
+  it.effect("rejects xAI transcription requests it cannot honor before sending anything", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.all(
+        [
+          Transcription.generate({ model: xai, audio, timestamps: "segment" }),
+          Transcription.generate({ model: xai, audio, prompt: "Names" }),
+          Transcription.generate({ model: xai, audio, speakers: 2 }),
+        ].map((effect) => Effect.flip(effect)),
+      ).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network"))))
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual([
+        ["UnsupportedOperation", "media.timestamps"],
+        ["UnsupportedOperation", "media.prompt"],
+        ["UnsupportedOperation", "media.speakers"],
+      ])
     }),
   )
 })
