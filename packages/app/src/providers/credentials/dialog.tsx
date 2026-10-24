@@ -9,14 +9,23 @@ import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { useData } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
+import { useGlobal } from "@/runtime/server/runtime"
+import { formatServerError } from "@/runtime/server/errors"
+import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./form"
+import { saveCustomProvider } from "./save"
 import { CustomManagedProviderIcon } from "@/providers/models/provider-group"
 
-export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
+export function CustomProviderForm(props: { autofocus?: boolean; directory?: string } = {}) {
   const dialog = useDialog()
   const data = useData()
   const language = useLanguage()
+  const sdk = useServerSDK()
+  const global = useGlobal()
+  const accounts = useProviderAccountActions(() => props.directory)
+  const location = () => (props.directory ? { directory: props.directory } : undefined)
 
   const [form, setForm] = createStore<FormState>({
     providerID: "",
@@ -93,7 +102,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
       t: language.t,
       // TODO: Restore disabled-provider validation when V2 exposes config reads.
       disabledProviders: [],
-      existingProviderIDs: new Set((data.location.provider.list() ?? []).map((provider) => provider.id)),
+      existingProviderIDs: new Set((data.location.provider.list(location()) ?? []).map((provider) => provider.id)),
     })
 
     batch(() => {
@@ -105,13 +114,52 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
     return output.result
   }
 
+  const refresh = async (providerID: string, modelIDs: string[]) => {
+    // Config writes return before the server's debounced catalog reload finishes.
+    const deadline = Date.now() + 10_000
+
+    while (true) {
+      await accounts.refresh()
+      const providers = data.location.provider.list(location()) ?? []
+      const models = data.location.model.list(location()) ?? []
+      if (
+        providers.some((provider) => provider.id === providerID) &&
+        modelIDs.every((id) =>
+          models.some((model) => model.providerID === providerID && model.id === id && model.enabled),
+        )
+      )
+        return
+
+      if (Date.now() >= deadline) throw new Error(language.t("provider.custom.error.notLoaded"))
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>): Promise<typeof result> => {
-      // TODO: Restore custom providers when V2 exposes config and arbitrary credential APIs.
-      throw new Error(language.t("provider.custom.unavailable"))
+      await saveCustomProvider(sdk.api, result)
+
+      return result
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
+      // The picker only lists the newest model per family, which would hide what was just defined.
+      global.models.show(
+        Object.keys(result.config.models).map((modelID) => ({ providerID: result.providerID, modelID })),
+      )
+      const loaded = await refresh(result.providerID, Object.keys(result.config.models))
+        .then(() => true)
+        .catch((error: unknown) => {
+          // Persistence succeeded. Close the form so a refresh failure cannot resubmit its credential.
+          showToast({
+            title: language.t("provider.custom.saved.title", { provider: result.name }),
+            description: language.t("provider.custom.error.refreshFailed", {
+              error: formatServerError(error, language.t),
+            }),
+          })
+          return false
+        })
       dialog.close()
+      if (!loaded) return
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -120,8 +168,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
       })
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : String(err)
-      showToast({ title: language.t("common.requestFailed"), description: message })
+      showToast({ title: language.t("common.requestFailed"), description: formatServerError(err, language.t) })
     },
   }))
 

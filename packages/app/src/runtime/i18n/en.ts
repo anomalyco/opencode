@@ -248,6 +248,9 @@ export const dict = {
   "provider.custom.error.baseURL.format": "Must start with http:// or https://",
   "provider.custom.error.required": "Required",
   "provider.custom.error.duplicate": "Duplicate",
+  "provider.custom.saved.title": "{{provider}} saved",
+  "provider.custom.error.notLoaded": "The new models are not available yet. Check your provider configuration.",
+  "provider.custom.error.refreshFailed": "The provider was saved, but its models could not be loaded: {{error}}",
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",

@@ -103,6 +103,7 @@ export const DialogConnectProvider: Component<{
 
   const language = useLanguage()
   const dialog = useDialog()
+  const params = useParams()
 
   const [welcome, setWelcome, , welcomeReady] = persisted(
     Persist.global("chatgpt-plan-welcome.v1"),
@@ -126,7 +127,10 @@ export const DialogConnectProvider: Component<{
     return (
       <Switch>
         <Match when={controller.selected() === CUSTOM_ID}>
-          <CustomProviderForm autofocus={false} />
+          <CustomProviderForm
+            autofocus={false}
+            directory={props.defaultLocation ? undefined : (props.directory ?? decode64(params.dir))}
+          />
         </Match>
         <Match
           keyed

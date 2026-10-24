@@ -6051,6 +6051,199 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ConfigUpdateInput = { readonly shell: { readonly shell: string | null }["shell"] }
+export type ConfigUpdateInput = {
+  readonly shell?: {
+    readonly shell?: string | null
+    readonly providers?: {
+      readonly [x: string]: {
+        readonly canonical?: string
+        readonly name?: string
+        readonly env?: ReadonlyArray<string>
+        readonly package?: string
+        readonly compatibility?: {
+          readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
+          readonly requireReasoning?: boolean
+          readonly maxTokensField?: "max_completion_tokens" | "max_tokens"
+          readonly requireFinishReason?: boolean
+          readonly requireAssistantAfterTool?: boolean
+          readonly supportsPromptCacheKey?: boolean
+          readonly streamUsage?: boolean
+          readonly cacheFormat?: "anthropic" | "alibaba"
+        }
+        readonly settings?: {
+          readonly timeout?: number | false
+          readonly headerTimeout?: number | false
+          readonly chunkTimeout?: number | false
+          readonly compaction?: { readonly type: "summary" } | { readonly type: "native" }
+          readonly transport?: "http" | "websocket"
+          readonly encoding?: "zstd" | "gzip" | "none"
+        } & { readonly [x: string]: JsonValue | null }
+        readonly headers?: { readonly [x: string]: string }
+        readonly body?: { readonly [x: string]: JsonValue }
+        readonly models?: {
+          readonly [x: string]: {
+            readonly modelID?: string
+            readonly family?: string
+            readonly name?: string
+            readonly releaseDate?: string
+            readonly compatibility?: {
+              readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
+              readonly requireReasoning?: boolean
+              readonly maxTokensField?: "max_completion_tokens" | "max_tokens"
+              readonly requireFinishReason?: boolean
+              readonly requireAssistantAfterTool?: boolean
+              readonly supportsPromptCacheKey?: boolean
+              readonly streamUsage?: boolean
+              readonly cacheFormat?: "anthropic" | "alibaba"
+              readonly supportsThinkingBlockBinding?: boolean
+              readonly supportsEffortUpdates?: boolean
+            }
+            readonly package?: string
+            readonly settings?: {
+              readonly compaction?: { readonly type: "summary" } | { readonly type: "native" }
+              readonly encoding?: "zstd" | "gzip" | "none"
+            } & { readonly [x: string]: JsonValue | null }
+            readonly headers?: { readonly [x: string]: string }
+            readonly body?: { readonly [x: string]: JsonValue }
+            readonly capabilities?: {
+              readonly tools?: boolean
+              readonly input?: ReadonlyArray<string>
+              readonly output?: ReadonlyArray<string>
+              readonly temperature?: boolean
+              readonly reasoning?:
+                | { readonly supported: false }
+                | {
+                    readonly supported: true
+                    readonly toggle?: boolean
+                    readonly effort?: ReadonlyArray<string>
+                    readonly budget?: { readonly min?: number; readonly max?: number }
+                  }
+            }
+            readonly variants?: ReadonlyArray<{
+              readonly id: string
+              readonly settings?: {
+                readonly compaction?: { readonly type: "summary" } | { readonly type: "native" }
+                readonly encoding?: "zstd" | "gzip" | "none"
+              } & { readonly [x: string]: JsonValue | null }
+              readonly headers?: { readonly [x: string]: string }
+              readonly body?: { readonly [x: string]: JsonValue }
+            }>
+            readonly cost?:
+              | {
+                  readonly tier?: { readonly type: "context"; readonly size: number }
+                  readonly input: number
+                  readonly output: number
+                  readonly cache?: { readonly read?: number; readonly write?: number }
+                }
+              | ReadonlyArray<{
+                  readonly tier?: { readonly type: "context"; readonly size: number }
+                  readonly input: number
+                  readonly output: number
+                  readonly cache?: { readonly read?: number; readonly write?: number }
+                }>
+            readonly disabled?: boolean
+            readonly limit?: { readonly context?: number; readonly input?: number; readonly output?: number }
+          }
+        }
+      }
+    }
+  }["shell"]
+  readonly providers?: {
+    readonly shell?: string | null
+    readonly providers?: {
+      readonly [x: string]: {
+        readonly canonical?: string
+        readonly name?: string
+        readonly env?: ReadonlyArray<string>
+        readonly package?: string
+        readonly compatibility?: {
+          readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
+          readonly requireReasoning?: boolean
+          readonly maxTokensField?: "max_completion_tokens" | "max_tokens"
+          readonly requireFinishReason?: boolean
+          readonly requireAssistantAfterTool?: boolean
+          readonly supportsPromptCacheKey?: boolean
+          readonly streamUsage?: boolean
+          readonly cacheFormat?: "anthropic" | "alibaba"
+        }
+        readonly settings?: {
+          readonly timeout?: number | false
+          readonly headerTimeout?: number | false
+          readonly chunkTimeout?: number | false
+          readonly compaction?: { readonly type: "summary" } | { readonly type: "native" }
+          readonly transport?: "http" | "websocket"
+          readonly encoding?: "zstd" | "gzip" | "none"
+        } & { readonly [x: string]: JsonValue | null }
+        readonly headers?: { readonly [x: string]: string }
+        readonly body?: { readonly [x: string]: JsonValue }
+        readonly models?: {
+          readonly [x: string]: {
+            readonly modelID?: string
+            readonly family?: string
+            readonly name?: string
+            readonly releaseDate?: string
+            readonly compatibility?: {
+              readonly reasoningField?: "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
+              readonly requireReasoning?: boolean
+              readonly maxTokensField?: "max_completion_tokens" | "max_tokens"
+              readonly requireFinishReason?: boolean
+              readonly requireAssistantAfterTool?: boolean
+              readonly supportsPromptCacheKey?: boolean
+              readonly streamUsage?: boolean
+              readonly cacheFormat?: "anthropic" | "alibaba"
+              readonly supportsThinkingBlockBinding?: boolean
+              readonly supportsEffortUpdates?: boolean
+            }
+            readonly package?: string
+            readonly settings?: {
+              readonly compaction?: { readonly type: "summary" } | { readonly type: "native" }
+              readonly encoding?: "zstd" | "gzip" | "none"
+            } & { readonly [x: string]: JsonValue | null }
+            readonly headers?: { readonly [x: string]: string }
+            readonly body?: { readonly [x: string]: JsonValue }
+            readonly capabilities?: {
+              readonly tools?: boolean
+              readonly input?: ReadonlyArray<string>
+              readonly output?: ReadonlyArray<string>
+              readonly temperature?: boolean
+              readonly reasoning?:
+                | { readonly supported: false }
+                | {
+                    readonly supported: true
+                    readonly toggle?: boolean
+                    readonly effort?: ReadonlyArray<string>
+                    readonly budget?: { readonly min?: number; readonly max?: number }
+                  }
+            }
+            readonly variants?: ReadonlyArray<{
+              readonly id: string
+              readonly settings?: {
+                readonly compaction?: { readonly type: "summary" } | { readonly type: "native" }
+                readonly encoding?: "zstd" | "gzip" | "none"
+              } & { readonly [x: string]: JsonValue | null }
+              readonly headers?: { readonly [x: string]: string }
+              readonly body?: { readonly [x: string]: JsonValue }
+            }>
+            readonly cost?:
+              | {
+                  readonly tier?: { readonly type: "context"; readonly size: number }
+                  readonly input: number
+                  readonly output: number
+                  readonly cache?: { readonly read?: number; readonly write?: number }
+                }
+              | ReadonlyArray<{
+                  readonly tier?: { readonly type: "context"; readonly size: number }
+                  readonly input: number
+                  readonly output: number
+                  readonly cache?: { readonly read?: number; readonly write?: number }
+                }>
+            readonly disabled?: boolean
+            readonly limit?: { readonly context?: number; readonly input?: number; readonly output?: number }
+          }
+        }
+      }
+    }
+  }["providers"]
+}
 
 export type ConfigUpdateOutput = void

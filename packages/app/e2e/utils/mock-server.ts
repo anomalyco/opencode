@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import { Config } from "@opencode/schema/config"
+import type { Credential } from "@opencode/schema/credential"
 import { Permission } from "@opencode/schema/permission"
 import { Worktree } from "@opencode/schema/worktree"
 import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
@@ -45,6 +47,7 @@ export interface MockServerConfig {
   server?: string
   provider: Resolvable<MockProviderCatalog>
   integrations?: Resolvable<unknown[]>
+  onCredentialCreate?: (input: Credential.CreateInput) => unknown
   // Runs on POST /api/credential/:id/activate; the fixture swaps its integrations and catalog to the new account.
   onCredentialActivate?: (credentialID: string) => void
   // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
@@ -62,6 +65,7 @@ export interface MockServerConfig {
   // Without it, writes answer 501 MockUnsupported.
   onFileWrite?: (input: { path: string; directory: string; body: string }) => void
   configEntries?: unknown[]
+  onConfigUpdate?: (patch: Config.Patch) => void | MockAnswer
   directory: string
   project: unknown
   // Replaces the `/api/project` inventory, which defaults to `[project]`.
@@ -815,6 +819,17 @@ function mockHandlers(
           return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
         }),
       )
+      .handleRaw("configUpdate", (ctx) =>
+        Effect.gen(function* () {
+          const patch = yield* Effect.orDie(
+            ctx.request.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Config.Patch))),
+          )
+          const answer = config.onConfigUpdate?.(patch)
+          return answer
+            ? HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+            : HttpServerResponse.empty()
+        }),
+      )
       .handleRaw("sessionCreate", (ctx) =>
         Effect.gen(function* () {
           const input = yield* Effect.orDie(ctx.request.json)
@@ -926,6 +941,11 @@ function mockHandlers(
               },
             })
           }),
+        credentialCreate: (ctx) => {
+          const create = config.onCredentialCreate
+          if (!create) return unsupported("create credentials", "onCredentialCreate")
+          return Effect.sync(() => ({ data: create(ctx.payload) }))
+        },
         credentialActivate: (ctx) =>
           Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialUpdate: (ctx) =>
@@ -968,7 +988,6 @@ function mockHandlers(
             canonical: projectSeed(config)?.canonical ?? config.directory,
           }),
         configShells: () => Effect.succeed(config.shells ?? []),
-        configUpdate: () => noContent,
         websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
         worktreeList: () =>
           Effect.sync(() => {

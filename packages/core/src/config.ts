@@ -388,11 +388,23 @@ export const layer = (options?: Options) =>
           const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
           const updated = yield* Effect.try({
             try: () =>
-              applyEdits(
+              // One modify per change against the current text: edits from separate modify calls on the
+              // same original text can target the same insertion point.
+              [
+                ...(patch.shell === undefined ? [] : [{ path: ["shell"], value: patch.shell ?? undefined }]),
+                ...Object.entries(patch.providers ?? {}).map(([id, provider]) => ({
+                  path: ["providers", id],
+                  value: provider,
+                })),
+              ].reduce(
+                (current, change) =>
+                  applyEdits(
+                    current,
+                    modify(current, change.path, change.value, {
+                      formattingOptions: { tabSize: 2, insertSpaces: true },
+                    }),
+                  ),
                 text,
-                modify(text, ["shell"], patch.shell ?? undefined, {
-                  formattingOptions: { tabSize: 2, insertSpaces: true },
-                }),
               ),
             catch: (cause) => new FSUtil.FileSystemError({ method: "config.update", cause }),
           })

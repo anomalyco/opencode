@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
+import type { Config } from "@opencode/schema/config"
+import type { Credential } from "@opencode/schema/credential"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
@@ -47,6 +49,24 @@ async function openProject(page: Page, name = "Settings demo") {
   await settings.getByRole("tab", { name: "Projects", exact: true }).click()
   await settings.getByRole("button", { name, exact: true }).click()
   await expect(settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+}
+
+async function customProviderForm(page: Page) {
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Connect provider", exact: true })
+    .locator('[data-provider-id="_custom"]')
+    .click()
+  const dialog = page.getByRole("dialog").filter({ has: page.getByLabel("Provider ID", { exact: true }) })
+  await dialog.getByLabel("Provider ID", { exact: true }).fill("local")
+  await dialog.getByLabel("Display name", { exact: true }).fill("My Local Server")
+  await dialog.getByLabel("Base URL", { exact: true }).fill("http://localhost:8080/v1")
+  await dialog.getByLabel("API key", { exact: true }).fill("sk-local")
+  await dialog.getByLabel("ID", { exact: true }).fill("my-model")
+  await dialog.getByLabel("Name", { exact: true }).fill("My Model")
+  return dialog
 }
 
 const patched = (page: Page) =>
@@ -784,6 +804,111 @@ for (const row of [
     await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(row.console ? 1 : 0)
   })
 }
+
+test("providers: a custom provider waits for its models before reporting success", async ({ page }) => {
+  const writes: Config.Patch[] = []
+  const credentials: Credential.CreateInput[] = []
+  const { settings } = await open(page, {
+    provider: () =>
+      writes.length
+        ? {
+            all: [
+              {
+                id: "local",
+                name: "My Local Server",
+                models: { "my-model": { id: "my-model", name: "My Model" } },
+              },
+            ],
+            connected: ["local"],
+          }
+        : NO_PROVIDER,
+    onCredentialCreate: (input) => {
+      credentials.push(input)
+      return { ...input, id: "cred_local", active: true }
+    },
+    onConfigUpdate: (patch) => {
+      writes.push(patch)
+    },
+  })
+  const dialog = await customProviderForm(page)
+  await dialog.getByLabel("Header", { exact: true }).fill("X-Custom")
+  await dialog.getByLabel("Value", { exact: true }).fill("enabled")
+  const models = await holdRoute(page, /\/api\/model(?:\?|$)/, { method: "GET" })
+  await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+  await models.arrived
+  await expect(dialog.getByRole("button", { name: "Saving…", exact: true })).toBeDisabled()
+  await expect(page.getByText("My Local Server connected", { exact: true })).toHaveCount(0)
+  models.release()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByText("My Local Server connected", { exact: true })).toBeVisible()
+  await expect(settings.locator('[data-component="connected-providers-section"]')).toContainText("My Local Server")
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  await expect(settings.getByRole("switch", { name: "My Model", exact: true })).toBeChecked()
+  await page.getByRole("button", { name: "New session", exact: true }).click()
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  const model = page.locator('[data-action="composer-model"]')
+  await model.click()
+  await page
+    .getByRole("menu", { name: "My Model", exact: true })
+    .getByRole("menuitemradio", { name: "My Model", exact: true })
+    .click()
+  await expect(model).toHaveText("My Model")
+  expect(credentials).toEqual([
+    { integrationID: "local", label: "My Local Server", value: { type: "key", key: "sk-local" } },
+  ])
+  expect(writes).toEqual([
+    {
+      providers: {
+        local: {
+          package: "@opencode/ai/providers/openai-compatible",
+          name: "My Local Server",
+          settings: { baseURL: "http://localhost:8080/v1" },
+          headers: { "X-Custom": "enabled" },
+          models: { "my-model": { name: "My Model" } },
+        },
+      },
+    },
+  ])
+})
+
+test("providers: a rejected custom provider save keeps the form available to retry", async ({ page }) => {
+  await open(page, {
+    onCredentialCreate: (input) => ({ ...input, id: "cred_local", active: true }),
+    onConfigUpdate: () => ({ status: 500, body: { message: "Config write failed" } }),
+  })
+  const dialog = await customProviderForm(page)
+  await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+  await expect(page.getByText("UnexpectedStatus: 500", { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel("Provider ID", { exact: true })).toHaveValue("local")
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("sk-local")
+  await expect(dialog.getByRole("button", { name: "Submit", exact: true })).toBeEnabled()
+  await expect(page.getByText("My Local Server connected", { exact: true })).toHaveCount(0)
+})
+
+test("providers: a saved custom provider reports when its catalog does not load", async ({ page }) => {
+  await page.clock.install()
+  const writes: Config.Patch[] = []
+  await open(page, {
+    onCredentialCreate: (input) => ({ ...input, id: "cred_local", active: true }),
+    onConfigUpdate: (patch) => {
+      writes.push(patch)
+    },
+  })
+  const dialog = await customProviderForm(page)
+  const models = page.waitForResponse(
+    (response) => writes.length > 0 && new URL(response.url()).pathname === "/api/model",
+  )
+  await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+  await models
+  await page.clock.fastForward(10_001)
+  await expect(dialog).toBeHidden()
+  await expect(page.getByText("My Local Server saved", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("The provider was saved, but its models could not be loaded:", { exact: false }),
+  ).toBeVisible()
+  await expect(page.getByText("My Local Server connected", { exact: true })).toHaveCount(0)
+  expect(writes).toHaveLength(1)
+})
 
 const consoleIntegrations = [
   {
