@@ -9,6 +9,7 @@ import { closeSync, existsSync, openSync } from "node:fs"
 import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
+import { DatabaseStorage } from "./storage.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -37,6 +38,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       const db = yield* makeDatabase
 
       if (supportsTuningPragmas) {
+        yield* DatabaseStorage.configure(db)
         yield* db.run("PRAGMA journal_mode = WAL")
         yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA busy_timeout = 5000")
@@ -47,6 +49,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db))
+      if (supportsTuningPragmas) yield* DatabaseStorage.reclaim(db)
 
       return { db }
     }).pipe(Effect.orDie),
@@ -69,7 +72,10 @@ export function layer(options: Options = { path: ":memory:" }) {
     Effect.gen(function* () {
       const provide = (filename: string) =>
         databaseLayer(filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename))).pipe(
-          Layer.provide(sqliteLayer({ filename })),
+          // Configure auto-vacuum before the driver creates the database header in WAL mode.
+          Layer.provide(
+            filename === ":memory:" ? sqliteLayer({ filename }) : sqliteLayer({ filename, disableWAL: true }),
+          ),
         )
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)

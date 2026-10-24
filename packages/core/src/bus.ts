@@ -5,6 +5,7 @@ import { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database.js"
+import { DatabaseStorage } from "./database/storage.js"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
 import type { Location } from "@opencode/schema/location"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
@@ -716,6 +717,7 @@ export function configured(options?: Options) {
             )
             .pipe(
               Effect.tap(() => Effect.sync(() => sessions.delete(aggregateID as SessionID))),
+              Effect.tap(() => DatabaseStorage.reclaim(db)),
               Effect.orDie,
             )
         }
