@@ -5,6 +5,7 @@ import { cleanStages } from "./cli-stages"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
+import { SpawnFailure } from "./spawn-failure"
 
 export * as BackgroundService from "./background-service"
 
@@ -41,7 +42,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const ensure = () =>
+  const ensure = (executable: readonly string[] = cli.command) =>
     client.Service.ensure({
       file:
         process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
@@ -55,7 +56,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
       command: [
-        ...cli.command,
+        ...executable,
         "serve",
         "--service",
         ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
@@ -69,7 +70,21 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const early = mode === "initial" && !isolated ? yield* Effect.promise(sidecarProbe) : undefined
 
   if (early) yield* Effect.sync(() => void ensure().catch(() => undefined))
-  const service = early ?? (yield* Effect.tryPromise(ensure))
+  // Some Windows profiles refuse to run programs from userData, where the staged copy lives. The shipped
+  // executable in the installation then starts the service instead. It stays locked while the service runs, so
+  // an update has to stop the service first; that is why it is not the default.
+  let bundled = false
+  const service =
+    early ??
+    (yield* Effect.tryPromise(() =>
+      ensure().catch((error) => {
+        if (!cli.bundled || !SpawnFailure.is(error)) throw error
+        bundled = true
+        runFork(Effect.logWarning("staged v2 CLI could not be started, using the bundled executable", { error }))
+
+        return ensure([cli.bundled])
+      }),
+    ))
 
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)
@@ -81,9 +96,10 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ...endpoint(url.origin),
   })
 
-  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree.
+  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree, and so does the
+  // bundled one, whose folder the cleanup must not touch.
   // The service now runs the current version, so an older copy at most belongs to a process still exiting.
-  if (mode === "initial" && (app.isPackaged || isolated) && cli.binary)
+  if (mode === "initial" && (app.isPackaged || isolated) && !bundled && cli.binary)
     runFork(
       cleanStages(cli.binary).pipe(
         Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
