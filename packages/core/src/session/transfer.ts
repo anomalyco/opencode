@@ -16,6 +16,7 @@ import { Project } from "../project.js"
 import { upsertProject } from "../project/sql.js"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import { Session } from "../session.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { Slug } from "../util/slug.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
@@ -71,7 +72,9 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
         if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
-        const project = yield* projects.resolve(input.location.directory)
+        // Keep the imported session on the same canonical placement its services are keyed by.
+        const location = LocationServiceMap.canonical(input.location)
+        const project = yield* projects.resolve(location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const importedAt = yield* Clock.currentTimeMillis
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
@@ -95,9 +98,9 @@ const layer = Layer.effect(
               slug: Slug.create(),
               version: app.version,
               projectID: project.id,
-              location: input.location,
+              location,
               subpath: RelativePath.make(
-                path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
+                path.relative(project.directory, location.directory).replaceAll("\\", "/"),
               ),
               title: input.data.info.title,
               agent: input.data.info.agent,
@@ -106,7 +109,7 @@ const layer = Layer.effect(
               permissions: input.data.info.permissions,
             },
             {
-              location: input.location,
+              location,
               commit: (seq) =>
                 Effect.gen(function* () {
                   if (messages.length > 0) {

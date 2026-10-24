@@ -211,7 +211,7 @@ describe("Session.create", () => {
         })
         expect(aliasAdopted).toMatchObject({
           projectID: project.id,
-          location: aliased,
+          location: nested,
           subpath: RelativePath.make("packages/app"),
         })
         // Adoption is a project-domain fact; the session log records nothing new.
@@ -436,6 +436,19 @@ describe("Session.create", () => {
       const child = yield* session.create({ parentID: parent.id, title: "child" })
 
       expect(child).toMatchObject({ parentID: parent.id, location })
+    }),
+  )
+
+  it.effect("normalizes a location that arrives with dot segments", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const raw = "/project/src/.."
+
+      const created = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(raw) }),
+      })
+
+      expect(created.location.directory).toBe(location.directory)
     }),
   )
 
@@ -1362,6 +1375,24 @@ describe("SessionTransfer", () => {
         model,
         native: { redacted: `compaction-native:${completedCompactionID}` },
       })
+    }),
+  )
+
+  it.effect("normalizes an imported location that arrives with dot segments", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location, title: "Exported" })
+
+      const imported = yield* transfer.import({
+        data: {
+          info: { ...template, id: Session.ID.create() },
+          messages: [],
+        },
+        location: Location.Ref.make({ directory: AbsolutePath.make("/project/src/..") }),
+      })
+
+      expect(imported.location.directory).toBe(location.directory)
     }),
   )
 
