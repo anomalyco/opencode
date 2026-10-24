@@ -48,37 +48,6 @@ OpenCode CLI 还提供以下命令。
 
 ---
 
-### attach
-
-将终端连接到已通过 `serve` 或 `web` 命令启动的 OpenCode 后端服务器。
-
-```bash
-opencode attach [url]
-```
-
-这允许将 TUI 与远程 OpenCode 后端配合使用。例如：
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### 标志
-
-| 标志                                     | 简写 | 描述                                                                |
-| ---------------------------------------- | ---- | ------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | 启动 TUI 的工作目录                                                 |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时派生会话（与 `--continue` 或 `--session` 一起使用）           |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | 基本认证密码（默认使用 `OPENCODE_SERVER_PASSWORD`）                 |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | 基本认证用户名（默认使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
-
----
-
 ### auth
 
 管理提供商的凭据和登录信息的命令。

@@ -48,37 +48,6 @@ OpenCode CLI 還提供以下指令。
 
 ---
 
-### attach
-
-將終端機連接到已透過 `serve` 或 `web` 指令啟動的 OpenCode 後端伺服器。
-
-```bash
-opencode attach [url]
-```
-
-這允許將 TUI 與遠端 OpenCode 後端搭配使用。例如：
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### 旗標
-
-| 旗標                                     | 簡寫 | 說明                                                                    |
-| ---------------------------------------- | ---- | ----------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | 啟動 TUI 的工作目錄                                                     |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 繼續上一個工作階段                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要繼續的工作階段 ID                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分支工作階段（與 `--continue` 或 `--session` 一起使用）           |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | 基本驗證密碼（預設使用 `OPENCODE_SERVER_PASSWORD`）                     |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | 基本驗證使用者名稱（預設使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
-
----
-
 ### auth
 
 管理供應商的憑證和登入資訊的指令。

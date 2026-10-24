@@ -48,37 +48,6 @@ opencode CLI는 아래 명령들도 제공합니다.
 
 ---
 
-### attach
-
-`serve` 또는 `web` 명령으로 이미 실행 중인 opencode 백엔드 서버에 터미널을 연결합니다.
-
-```bash
-opencode attach [url]
-```
-
-원격 opencode 백엔드와 TUI를 연결해 사용할 수 있습니다. 예:
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### 플래그
-
-| 플래그                                   | 축약 | 설명                                                                       |
-| ---------------------------------------- | ---- | -------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | TUI를 시작할 작업 디렉터리                                                 |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 마지막 세션 이어서 실행                                                    |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 이어서 실행할 세션 ID                                                      |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 이어서 실행할 때 세션 포크 (`--continue` 또는 `--session`과 함께 사용)     |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `OPENCODE_SERVER_PASSWORD`)                    |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `OPENCODE_SERVER_USERNAME` 또는 `opencode`) |
-
----
-
 ### auth
 
 provider 인증 정보와 로그인을 관리합니다.

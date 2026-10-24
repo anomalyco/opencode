@@ -48,37 +48,6 @@ opencode CLI ayrıca aşağıdaki komutlara da sahiptir.
 
 ---
 
-### attach
-
-`serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir opencode arka uç sunucusuna bir terminal ekleyin.
-
-```bash
-opencode attach [url]
-```
-
-Bu, TUI öğesinin uzak bir opencode arka ucuyla kullanılmasına olanak tanır. Örneğin:
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### Bayraklar
-
-| Bayrak                                   | Kısa | Tanım                                                                                         |
-| ---------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | TUI'yi başlatmak için çalışma dizini                                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                          |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum açma bilgileri                                                            |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu çatalla (`--continue` veya `--session` ile kullanın)                    |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Temel kimlik doğrulama parolası (varsayılan: `OPENCODE_SERVER_PASSWORD`)                      |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Temel kimlik doğrulama kullanıcı adı (varsayılan: `OPENCODE_SERVER_USERNAME` veya `opencode`) |
-
----
-
 ### auth
 
 Sağlayıcılar için kimlik bilgilerini ve oturum açmayı yönetme komutu.

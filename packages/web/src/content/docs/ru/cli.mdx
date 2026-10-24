@@ -48,37 +48,6 @@ CLI opencode также имеет следующие команды.
 
 ---
 
-### attach
-
-Подключите терминал к уже работающему внутреннему серверу opencode, запущенному с помощью команд `serve` или `web`.
-
-```bash
-opencode attach [url]
-```
-
-Это позволяет использовать TUI с удаленным сервером opencode. Например:
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### Флаги
-
-| Флаг                                     | Короткий | Описание                                                                                         |
-| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
-| <nobr><code>{"--dir"}</code></nobr>      |          | Рабочий каталог для запуска TUI                                                                  |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`     | Продолжить последний сеанс                                                                       |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`     | Идентификатор сеанса для продолжения                                                             |
-| <nobr><code>{"--fork"}</code></nobr>     |          | Создать ответвление сеанса при продолжении (используйте с `--continue` или `--session`)          |
-| <nobr><code>{"--password"}</code></nobr> | `-p`     | Пароль базовой аутентификации (по умолчанию `OPENCODE_SERVER_PASSWORD`)                          |
-| <nobr><code>{"--username"}</code></nobr> | `-u`     | Имя пользователя базовой аутентификации (по умолчанию `OPENCODE_SERVER_USERNAME` или `opencode`) |
-
----
-
 ### auth
 
 Команда для управления учетными данными и входом в систему для провайдеров.
