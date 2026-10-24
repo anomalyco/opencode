@@ -353,6 +353,36 @@ describe("HttpApi Server.listen", () => {
     }
   })
 
+  test("answers a request that arrives before the routes finish loading", async () => {
+    // The port accepts connections before the route layers are built and the request handler is
+    // attached. A request sent on the first accepted connection must still be answered.
+    const port = await freePort()
+    Flag.OPENCODE_SERVER_PASSWORD = auth.password
+    Flag.OPENCODE_SERVER_USERNAME = auth.username
+    process.env.OPENCODE_SERVER_PASSWORD = auth.password
+    process.env.OPENCODE_SERVER_USERNAME = auth.username
+    const starting = Server.listen({ hostname: "127.0.0.1", port })
+    let listener: Awaited<typeof starting> | undefined
+    try {
+      const socket = await connectWhenAccepting(port)
+      const status = await withTimeout(
+        new Promise<string>((resolve, reject) => {
+          socket.once("data", (chunk) => resolve(String(chunk).split("\r\n")[0]))
+          socket.once("error", reject)
+          socket.write(
+            `GET /global/health HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: ${authorization()}\r\nConnection: close\r\n\r\n`,
+          )
+        }),
+        10_000,
+        "timed out waiting for an answer to a request sent while the server was starting",
+      ).finally(() => socket.destroy())
+      expect(status).toBe("HTTP/1.1 200 OK")
+    } finally {
+      listener = await starting
+      await stop(listener, "timed out cleaning up early-request listener")
+    }
+  }, 30_000)
+
   test("port 0 prefers 4096 when free", async () => {
     if (!(await isPortFree(4096))) return
     const listener = await startListener()
@@ -462,4 +492,32 @@ function occupyPort(port: number) {
     server.once("error", () => resolve(undefined))
     server.listen(port, "127.0.0.1", () => resolve(server))
   })
+}
+
+function freePort() {
+  return new Promise<number>((resolve, reject) => {
+    const probe = net.createServer()
+    probe.once("error", reject)
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address()
+      probe.close(() => (typeof address === "object" && address ? resolve(address.port) : reject(new Error("no port"))))
+    })
+  })
+}
+
+async function connectWhenAccepting(port: number) {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const socket = await new Promise<net.Socket | undefined>((resolve) => {
+      const candidate = net.connect(port, "127.0.0.1")
+      candidate.once("connect", () => resolve(candidate))
+      candidate.once("error", () => {
+        candidate.destroy()
+        resolve(undefined)
+      })
+    })
+    if (socket) return socket
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error(`port ${port} never accepted a connection`)
 }
