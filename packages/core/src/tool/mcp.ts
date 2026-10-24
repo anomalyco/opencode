@@ -25,6 +25,11 @@ export const name = (server: string, tool: string) => `${namespace(server)}_${to
 export interface Interface {
   /** Wait for the initial MCP tool registration to settle. */
   readonly flush: Effect.Effect<void>
+  /**
+   * Like `flush`, then wait, within each server's `timeout.wait`, for servers still starting, and
+   * register the tools of every connected server. For a session's first model request only.
+   */
+  readonly ready: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpTool") {}
@@ -137,7 +142,19 @@ export const layer = Layer.effect(
       Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
+    const flush = Effect.asVoid(Fiber.await(initial))
+    return Service.of({
+      flush,
+      // Initial connections are asynchronous, and a connected server's tools reach the registry only
+      // with the debounced refresh. Compare with what is connected rather than trusting server status.
+      ready: Effect.gen(function* () {
+        yield* flush
+        yield* mcp.settle()
+        const connected = yield* mcp.tools()
+        if (connected.length !== discovered.length || connected.some((tool, index) => tool !== discovered[index]))
+          yield* reconcile
+      }),
+    })
   }),
 )
 

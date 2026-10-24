@@ -101,6 +101,10 @@ type AttachedEntry = {
 // Bounds re-listing the tools of an attached connection that takes over the top of its stack.
 const FALLBACK_LIST_TIMEOUT = "5 seconds"
 
+// Long enough for a local server that compiles or installs on start, short enough that a hung server
+// only briefly delays a session's first request. Servers that need more set `timeout.wait`.
+const DEFAULT_WAIT_TIMEOUT = 3_000
+
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
@@ -135,6 +139,8 @@ export interface Interface extends State.Transformable<Editor> {
    * name until it closes, then the most recent remaining connection takes over.
    */
   readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
+  /** Waits for servers still starting to connect or fail, each for at most its `timeout.wait`. */
+  readonly settle: () => Effect.Effect<void>
   readonly tools: () => Effect.Effect<Tool[]>
   readonly callTool: (input: {
     readonly server: ServerName | string
@@ -760,6 +766,14 @@ export const layer = (options?: Options) =>
           return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
             .map(([name, entry]): ServerInfo => ({ name, status: entry.status, integrationID: entry.integrationID }))
+        }),
+        settle: Effect.fn("MCP.settle")(function* () {
+          yield* Effect.forEach(
+            Array.from(entries.values()).filter((entry) => entry.status.status === "pending"),
+            (entry) =>
+              entry.startup.await.pipe(Effect.timeoutOption(entry.config.timeout?.wait ?? DEFAULT_WAIT_TIMEOUT)),
+            { concurrency: "unbounded", discard: true },
+          )
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)

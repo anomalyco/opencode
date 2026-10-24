@@ -27,6 +27,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Location } from "@opencode/core/location"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
+import { McpTool } from "@opencode/core/tool/mcp"
 import { ID } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -118,6 +119,15 @@ const discovery = Layer.mock(InstructionDiscovery.Service, {
 const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const references = Layer.mock(ReferenceInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcp = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
+const mcpWaits: Array<"flush" | "ready"> = []
+const mcpTools = Layer.mock(McpTool.Service, {
+  flush: Effect.sync(() => {
+    mcpWaits.push("flush")
+  }),
+  ready: Effect.sync(() => {
+    mcpWaits.push("ready")
+  }),
+})
 const tools = Layer.mock(Tool.Service, {
   snapshot: () =>
     Effect.succeed({
@@ -160,6 +170,7 @@ const it = testEffect(
       SkillInstructions.node.replace(skills),
       ReferenceInstructions.node.replace(references),
       McpInstructions.node.replace(mcp),
+      McpTool.node.replace(mcpTools),
       PluginSupervisor.node.replace(Layer.empty),
       Tool.node.replace(tools),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
@@ -253,6 +264,24 @@ const setup = Effect.gen(function* () {
     }),
   }
 })
+
+it.effect("waits for MCP servers only before a session's first model request", () =>
+  Effect.gen(function* () {
+    mcpWaits.length = 0
+    const { bus } = yield* setup
+    const context = yield* SessionContext.Service
+    yield* context.select(sessionID)
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID: SessionMessage.ID.create(),
+      agent: Agent.ID.make("build"),
+      model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
+      started: 0,
+    })
+    yield* context.select(sessionID)
+    expect(mcpWaits).toEqual(["ready", "flush"])
+  }),
+)
 
 it.effect(
   "generates from fresh settled Session context without durable mutation",
