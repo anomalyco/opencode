@@ -82,6 +82,12 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   const [state, setState] = createStore({ open: false })
   const selected = createMemo(() => props.projects.find((project) => project.worktree === props.selection.directory))
 
+  const currentProjectLabel = () => {
+    const project = selected()
+
+    return project ? displayName(project) : props.language.t("home.projects.all")
+  }
+
   const server = createMemo(() =>
     props.servers.find((server) => ServerConnection.key(server) === props.selection.server),
   )
@@ -97,18 +103,14 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
       >
         <Popover.Trigger
           data-component="home-projects-dropdown"
-          aria-label={props.language.t("home.projects")}
+          aria-label={props.language.t("home.projects.current", { project: currentProjectLabel() })}
           class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
         >
           <Show when={selected()} fallback={<Icon name="folder" size="small" />}>
             {(project) => <HomeProjectAvatar project={project()} />}
           </Show>
           <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
-            <bdi class="truncate">
-              <Show when={selected()} fallback={props.language.t("home.projects.all")}>
-                {(project) => displayName(project())}
-              </Show>
-            </bdi>
+            <bdi class="truncate">{currentProjectLabel()}</bdi>
             <Show when={props.servers.length > 1 && server()}>
               {(server) => (
                 <bdi class="truncate text-v2-text-text-muted opacity-70">

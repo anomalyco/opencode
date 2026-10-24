@@ -336,7 +336,9 @@ test.describe("touch", () => {
   })
 
   test("mobile project selection and drawer navigation preserve session identity", async ({ page }) => {
-    const projects = page.getByRole("button", { name: "Projects", exact: true })
+    const projects = page.getByRole("button", { name: /Projects$/ })
+    // The trigger shows the selected project, so its accessible name has to carry that value.
+    await expect(projects).toHaveAccessibleName("All projects: Projects")
     await projects.click()
     const picker = page.getByRole("dialog", { name: "Projects", exact: true })
     await expect(picker.getByRole("button", { name: "All projects", exact: true })).toBeVisible()

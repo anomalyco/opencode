@@ -316,6 +316,7 @@ export const SettingsProviders: Component<{
     const accounts = () => menuProps.accounts
     const active = () => menuProps.active
     const name = () => menuProps.name
+    const currentAccountLabel = () => active()?.label ?? ""
 
     return (
       <div class="settings-provider-account-actions">
@@ -325,9 +326,12 @@ export const SettingsProviders: Component<{
             size="normal"
             variant="ghost-muted"
             class="settings-provider-account-trigger"
-            aria-label={language.t("settings.providers.account.manage", { provider: name() })}
+            aria-label={language.t("settings.providers.account.current", {
+              account: currentAccountLabel(),
+              provider: name(),
+            })}
           >
-            <span>{active()?.label}</span>
+            <span>{currentAccountLabel()}</span>
             <Icon name="chevron-down" size="small" />
           </Menu.Trigger>
           <Menu.Portal>

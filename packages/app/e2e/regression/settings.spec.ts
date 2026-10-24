@@ -1000,8 +1000,10 @@ test("providers: the account options rename and remove the active account", asyn
   })
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  const trigger = settings.getByRole("button", { name: "Manage OpenAI accounts", exact: true })
+  const trigger = settings.getByRole("button", { name: /Manage OpenAI accounts$/ })
   await expect(trigger).toHaveText("Work")
+  // The trigger shows the active account, so its accessible name has to carry that value.
+  await expect(trigger).toHaveAccessibleName("Work: Manage OpenAI accounts")
 
   await trigger.click()
   await expect(page.getByRole("menuitemradio", { name: "Work", exact: true })).toHaveAttribute("aria-checked", "true")
@@ -1081,7 +1083,7 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
   })
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  const trigger = settings.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  const trigger = settings.getByRole("button", { name: /Manage OpenCode Console accounts$/ })
   await expect(trigger).toHaveText("Anomaly")
   await trigger.click()
 
@@ -1228,7 +1230,7 @@ test("providers: switching Console accounts keeps the list until the new workspa
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   const connected = settings.locator('[data-component="connected-providers-section"]')
-  const trigger = connected.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  const trigger = connected.getByRole("button", { name: /Manage OpenCode Console accounts$/ })
   await expect(trigger).toHaveText("Clara")
   await connected.evaluate((element) => {
     new MutationObserver(() => {
