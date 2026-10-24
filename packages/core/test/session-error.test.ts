@@ -19,6 +19,8 @@ import {
 } from "@opencode/ai"
 import { RequestExecutor } from "@opencode/ai/route"
 import { Permission } from "@opencode/core/permission"
+import { FileSystem } from "@opencode/core/filesystem"
+import { AbsolutePath } from "@opencode/core/schema"
 import { ID } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Provider } from "@opencode/core/provider"
@@ -339,6 +341,19 @@ describe("toSessionError", () => {
 
     expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true, true])
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false])
+  })
+
+  test("maps a missing session directory to an actionable location error", () => {
+    const error = new FileSystem.DirectoryNotFoundError({
+      directory: AbsolutePath.make("/home/user/project"),
+      cause: new Error("ENOENT: no such file or directory"),
+    })
+
+    expect(toSessionError(error)).toEqual({
+      type: "session.location-missing",
+      message:
+        "Project folder not found: /home/user/project. Restore the folder, or move this session to another directory.",
+    })
   })
 
   test("honors provider retry header overrides", () => {

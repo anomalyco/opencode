@@ -1,6 +1,7 @@
 import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
+import { FileSystem } from "../filesystem.js"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
@@ -89,6 +90,11 @@ export function toSessionError(cause: unknown): SessionError.Error {
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
+  if (cause instanceof FileSystem.DirectoryNotFoundError)
+    return {
+      type: "session.location-missing",
+      message: `Project folder not found: ${cause.directory}. Restore the folder, or move this session to another directory.`,
+    }
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
