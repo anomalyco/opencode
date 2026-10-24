@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { lookup } from "mime-types"
+import { Encoding } from "../encoding.js"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
 import { FileSystem } from "../filesystem.js"
@@ -148,6 +149,39 @@ export const read = Effect.fn("ReadTool.read")(function* (
     }
   }
 
+  // Detection truncation tolerance applies only when the first chunk is
+  // actually cut short; a whole-file chunk detects strictly like the mutation
+  // tools, so read and edit agree on the same file.
+  const detected = yield* Encoding.detect(first.bytes, { sample: first.bytes.length < first.info.size })
+  if (detected.encoding === "utf-16le" || detected.encoding === "utf-16be") {
+    // UTF-16 newline units span two bytes, so the byte-rope pager cannot
+    // locate lines; decode the whole file and page the string. BOM-less
+    // UTF-16 never reaches here because its NUL bytes are valid UTF-8 and
+    // binary-check as NULs instead.
+    const parts = [first.bytes]
+    let total = first.bytes.length
+    while (total < first.info.size) {
+      const chunk = yield* readFile(files, input, resource, { offset: total, length: FIRST_CHUNK })
+      if (chunk.bytes.length === 0) break
+      parts.push(chunk.bytes)
+      total += chunk.bytes.length
+    }
+    const result = stringPage(yield* Encoding.decodeText(Buffer.concat(parts), detected), page)
+    if (result.outOfRange) return yield* new OffsetOutOfRangeError({ offset: result.offset, lines: result.total })
+    return new TextPage({
+      type: "text-page",
+      content: result.entries.join("\n"),
+      mime: mimeType(input),
+      offset: result.offset,
+      truncated: result.next !== undefined,
+      ...(result.next === undefined ? {} : { next: result.next }),
+    })
+  }
+  // The byte-rope pager decodes each selected byte range with the detected
+  // encoding; a newline byte is never a legacy multi-byte trail byte, so
+  // range boundaries are always character boundaries.
+  const decodePage = yield* Encoding.pageDecoder(detected)
+
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
@@ -155,14 +189,14 @@ export const read = Effect.fn("ReadTool.read")(function* (
       type: "file" as const,
       uri: pathToFileURL(input).href,
       name: path.basename(input),
-      content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
+      content: decodePage(first.bytes).split("\n").map(clampLine).join("\n"),
       encoding: "utf8" as const,
       mime: mimeType(input),
     }
   }
 
   if (first.bytes.length >= first.info.size) {
-    const result = textPage(first.bytes, true, page)
+    const result = textPage(first.bytes, true, page, decodePage)
     if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
     return yield* makeTextPage(
       input,
@@ -193,7 +227,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
           return [leaf.bytes.subarray(Math.max(0, start - leafStart))]
         }),
       )
-      const result = textPage(selected, eof, { limit })
+      const result = textPage(selected, eof, { limit }, decodePage)
       if (result !== undefined) {
         const translated = {
           ...result,
@@ -288,10 +322,10 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
   })
 }
 
-const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
+const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput, decode: (bytes: Uint8Array) => string) => {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
-  const decoded = new TextDecoder().decode(bytes)
+  const decoded = decode(bytes)
   const split = decoded.split("\n")
   const complete = eof ? (split.at(-1) === "" ? split.slice(0, -1) : split) : split.slice(0, -1)
   const available = complete.map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
@@ -325,6 +359,34 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
 
 const clampLine = (line: string) =>
   line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
+
+// Whole-file-decode paging for encodings whose newline units span multiple
+// bytes (UTF-16); mirrors textPage's budgets over the decoded string.
+const stringPage = (text: string, page: PageInput) => {
+  const offset = page.offset || 1
+  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
+  const lines = text.split("\n").map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
+  if (lines.length > 0 && lines.at(-1) === "") lines.pop()
+  const entries: string[] = []
+  let size = 0
+  let next: number | undefined
+  for (const [index, value] of lines.slice(offset - 1).entries()) {
+    const line = offset + index
+    if (entries.length >= limit || size >= MAX_READ_BYTES) {
+      next = line
+      break
+    }
+    const item = clampLine(value)
+    const lineSize = Buffer.byteLength(item, "utf-8") + (entries.length > 0 ? 1 : 0)
+    if (size + lineSize > MAX_READ_BYTES) {
+      next = line
+      break
+    }
+    entries.push(item)
+    size += lineSize
+  }
+  return { entries, offset, next, total: lines.length, outOfRange: entries.length === 0 && offset !== 1 }
+}
 
 // A trailing newline ends the last line instead of starting an empty one.
 const lineCount = (newlines: number, last: number | undefined) => newlines + (last === undefined || last === 10 ? 0 : 1)

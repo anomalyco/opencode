@@ -6,6 +6,7 @@ import { ToolFailure } from "@opencode/ai"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
+import { Encoding } from "../../encoding.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
@@ -50,6 +51,8 @@ type Prepared =
       readonly content: string
       readonly before: string
       readonly after: string
+      /** New files are written as UTF-8. */
+      readonly source: Encoding.Source
     })
   | (Extract<Patch.Hunk, { readonly type: "delete" }> & {
       readonly target: FileAccess.Target
@@ -62,6 +65,8 @@ type Prepared =
       readonly before: string
       readonly after: string
       readonly moveTarget?: FileAccess.Target
+      /** The encoding the file was detected with, so writes round-trip byte-safely. */
+      readonly source: Encoding.Source
     })
 
 export const Plugin = {
@@ -114,6 +119,7 @@ export const Plugin = {
               }
               const prepared: Prepared[] = []
               const updates = new Map<string, string>()
+              const sources = new Map<string, Encoding.Source>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
@@ -135,6 +141,7 @@ export const Plugin = {
                       content,
                       before: "",
                       after: Bom.split(content).text,
+                      source: { encoding: "utf-8", bom: false, valid: true },
                     })
                     return
                   }
@@ -162,8 +169,18 @@ export const Plugin = {
                             }),
                         ),
                       )
-                      return Bom.join(content.text, content.bom)
+                      if (content.valid === false)
+                        return yield* new ToolFailure({
+                          message: `patch verification failed: Unable to identify the encoding of ${target.resource}; refusing to change it to avoid corruption.`,
+                        })
+                      sources.set(target.absolute, content)
+                      return Encoding.join(content.text, content.bom)
                     }))
+                  const detected = sources.get(target.absolute)
+                  if (!detected)
+                    return yield* new ToolFailure({
+                      message: `patch verification failed: Unable to identify the encoding of ${target.resource}.`,
+                    })
                   const before = Bom.split(original).text
                   const update = yield* Effect.try({
                     try: () => Patch.derive(hunk.path, hunk.chunks, original),
@@ -173,6 +190,7 @@ export const Plugin = {
                   prepared.push({
                     ...hunk,
                     target,
+                    source: { ...detected, bom: detected.bom || update.bom },
                     content: Patch.joinBom(update.content, update.bom),
                     before,
                     after: update.content,
@@ -207,6 +225,7 @@ export const Plugin = {
                 source,
               })
 
+              const appliedSources = new Map<string, Encoding.Source>()
               yield* Effect.forEach(
                 prepared,
                 (change) =>
@@ -224,9 +243,11 @@ export const Plugin = {
                     }
                     if (change.type === "update" && change.moveTarget) {
                       const moveTarget = change.moveTarget
+                      const bytes = yield* Encoding.encodeText(change.content, change.source)
                       yield* environment.files
-                        .write(moveTarget.absolute, new TextEncoder().encode(change.content))
+                        .write(moveTarget.absolute, bytes)
                         .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
+                      appliedSources.set(moveTarget.absolute, change.source)
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(
@@ -241,9 +262,11 @@ export const Plugin = {
                       })
                       return
                     }
+                    const bytes = yield* Encoding.encodeText(change.content, change.source)
                     yield* environment.files
-                      .write(change.target.absolute, new TextEncoder().encode(change.content))
+                      .write(change.target.absolute, bytes)
                       .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
+                    appliedSources.set(change.target.absolute, change.source)
                     applied.push({
                       type: change.type,
                       resource: change.target.resource,
@@ -257,13 +280,15 @@ export const Plugin = {
                 [...new Set(applied.filter((item) => item.type !== "delete").map((item) => item.target))],
                 (target) =>
                   Effect.gen(function* () {
+                    const origin = appliedSources.get(target)
+                    if (!origin) return
                     const current = yield* FileMutation.readText(environment.files, target).pipe(
                       Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
                     )
                     formatted.set(
                       target,
                       (yield* formatter.file(target))
-                        ? yield* FileMutation.syncTextBom(environment.files, target, current.bom).pipe(
+                        ? yield* FileMutation.syncTextEncoding(environment.files, target, origin).pipe(
                             Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
                           )
                         : current.text,
@@ -285,7 +310,11 @@ export const Plugin = {
                 metadata: { files: output.files },
               })),
               Effect.mapError((error) =>
-                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to apply patch", error }),
+                error instanceof ToolFailure
+                  ? error
+                  : error instanceof Encoding.UnrepresentableError
+                    ? new ToolFailure({ message: error.message })
+                    : new ToolFailure({ message: "Unable to apply patch", error }),
               ),
             )
           },

@@ -31,3 +31,4 @@ It is important to remember:
 
 - You must include a header with your intended action (Add/Delete/Update)
 - You must prefix new lines with `+` even when creating a new file
+- Updated files are decoded automatically (BOM, valid UTF-8, or a losslessly detected legacy encoding such as GB18030/Big5/Shift_JIS) and written back in the encoding they were loaded with; new files are created as UTF-8. Files whose encoding cannot be identified are refused.

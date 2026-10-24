@@ -11,6 +11,7 @@ import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
 import { Environment } from "../../environment/index.js"
+import { Encoding } from "../../encoding.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { FileAccess } from "../../file-access.js"
@@ -58,7 +59,7 @@ export const Plugin = {
           name,
           options: { codemode: false, permission: "edit" },
           description:
-            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
+            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nThe file encoding is detected automatically (BOM, valid UTF-8, or a losslessly detected legacy encoding such as GB18030/Big5/Shift_JIS); existing files are written back in the encoding they were detected with, and new files are created as UTF-8. Files whose encoding cannot be identified are refused.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
           input: Input,
           output: Output,
           execute: (input, context) =>
@@ -73,6 +74,11 @@ export const Plugin = {
               const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () => Effect.undefined),
               )
+              if (current?.valid === false)
+                return yield* new ToolFailure({
+                  message: `Unable to identify the encoding of ${input.path}; refusing to write it to avoid corruption.`,
+                })
+              const origin: Encoding.Source = current ?? { encoding: "utf-8", bom: false }
               const next = Bom.split(input.content)
               const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
               yield* permission.assert({
@@ -84,15 +90,20 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
-              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
-              if (yield* formatter.file(target.absolute)) {
-                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
-              }
+              const targetSource = { ...origin, bom: origin.bom || next.bom }
+              const result = yield* fileMutation.writeText({ target, content: input.content, source: targetSource })
+              if (yield* formatter.file(target.absolute))
+                yield* FileMutation.syncTextEncoding(environment.files, target.absolute, targetSource)
               return result
             }).pipe(
               Effect.map((output) => ({ output, content: toModelContent(output) })),
-              Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
+              Effect.mapError((error) =>
+                error instanceof ToolFailure
+                  ? error
+                  : error instanceof Encoding.UnrepresentableError
+                    ? new ToolFailure({ message: `${error.message} (${input.path})` })
+                    : new ToolFailure({ message: `Unable to write ${input.path}`, error }),
+              ),
             ),
         }),
       )

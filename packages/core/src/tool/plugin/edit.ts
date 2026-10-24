@@ -9,9 +9,9 @@ export * as EditTool from "./edit.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai"
 import { FileDiff } from "@opencode/schema/file-diff"
-import { Bom } from "@opencode/util/bom"
 import { Effect, Schema } from "effect"
 import { Environment } from "../../environment/index.js"
+import { Encoding } from "../../encoding.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { Location } from "../../location.js"
@@ -220,7 +220,7 @@ export const Plugin = {
           name,
           options: { codemode: false, permission: "edit" },
           description:
-            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. The file encoding is detected automatically (BOM, valid UTF-8, or a losslessly detected legacy encoding such as GB18030/Big5/Shift_JIS) and the file is written back in the encoding it was loaded with; files whose encoding cannot be identified are refused. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
           input: Input,
           output: Output,
           execute: (input, context) => {
@@ -254,6 +254,10 @@ export const Plugin = {
                     : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
                 ),
               )
+              if (original.valid === false)
+                return yield* new ToolFailure({
+                  message: `Unable to identify the encoding of ${input.path}; refusing to edit it to avoid corruption.`,
+                })
               const source = original.text
               // Strings that differ only in \r ask to change line endings themselves, so they apply to the exact
               // bytes. Every other edit matches the LF view Read shows the model and keeps the file's endings.
@@ -299,13 +303,10 @@ export const Plugin = {
                 })
               }
               const replacementBom = replaced.startsWith("\uFEFF")
-              const result = yield* fileMutation.write({
-                target,
-                content: Bom.join(replaced, original.bom || replacementBom),
-              })
-              const bom = original.bom || replacementBom
+              const targetSource: Encoding.Source = { ...original, bom: original.bom || replacementBom }
+              const result = yield* fileMutation.write({ target, content: replaced, source: targetSource })
               const formatted = (yield* formatter.file(target.absolute))
-                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+                ? yield* FileMutation.syncTextEncoding(environment.files, target.absolute, targetSource)
                 : (yield* FileMutation.readText(environment.files, target.absolute)).text
               return {
                 files: [fileDiff(result.resource, source, formatted)],
@@ -321,7 +322,9 @@ export const Plugin = {
               Effect.mapError((error) =>
                 error instanceof ToolFailure
                   ? error
-                  : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+                  : error instanceof Encoding.UnrepresentableError
+                    ? new ToolFailure({ message: `${error.message} (${input.path})` })
+                    : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
               ),
             )
           },
