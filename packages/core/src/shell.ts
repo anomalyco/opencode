@@ -22,6 +22,7 @@ import { SessionSchema } from "./session/schema.js"
 import { Config } from "./config.js"
 import { ToolOutput } from "./tool-output.js"
 import { ShellResult } from "./shell/result.js"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -140,6 +141,7 @@ const layer = () =>
       const runFork = Effect.runForkWith(context)
       const commands = new Map<Shell.ID, Active>()
       const exitOrder: Shell.ID[] = []
+      const lifecycle = KeyedMutex.makeUnsafe<Shell.ID>()
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
@@ -164,20 +166,23 @@ const layer = () =>
         return command
       })
 
-      const removeCommand = Effect.fnUntraced(function* (id: Shell.ID) {
-        const command = commands.get(id)
-        const index = exitOrder.indexOf(id)
-        if (index !== -1) exitOrder.splice(index, 1)
-        if (!command) return
-        commands.delete(id)
-        if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-        // Unblock any wait still pending when the command is removed before it terminated.
-        yield* Deferred.fail(command.done, new NotFoundError({ id }))
-        yield* Effect.promise(() => unlink(command.file).catch(() => {}))
-        // Every shell reports exactly one exit; removing a running one ends it as killed.
-        if (command.info.status === "running") yield* bus.publish(Shell.Event.Exited, { id, status: "killed" })
-        yield* bus.publish(Shell.Event.Deleted, { id })
-      })
+      const removeCommand = Effect.fnUntraced(
+        function* (id: Shell.ID) {
+          const command = commands.get(id)
+          const index = exitOrder.indexOf(id)
+          if (index !== -1) exitOrder.splice(index, 1)
+          if (!command) return
+          commands.delete(id)
+          if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+          // Unblock any wait still pending when the command is removed before it terminated.
+          yield* Deferred.fail(command.done, new NotFoundError({ id }))
+          yield* Effect.promise(() => unlink(command.file).catch(() => {}))
+          // Every shell reports exactly one exit; removing a running one ends it as killed.
+          if (command.info.status === "running") yield* bus.publish(Shell.Event.Exited, { id, status: "killed" })
+          yield* bus.publish(Shell.Event.Deleted, { id })
+        },
+        (effect, id) => lifecycle.withLock(id)(effect),
+      )
 
       const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
         yield* require(id)
@@ -303,7 +308,7 @@ const layer = () =>
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered command.
         const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
-        runFork(
+        const manager = runFork(
           Effect.scoped(
             Effect.gen(function* () {
               const handle = yield* environment.spawner
@@ -409,33 +414,35 @@ const layer = () =>
                   // Report the terminal status only once captured output is complete, so a reader that
                   // sees it never reads a partial file.
                   yield* outputDone.await
-                  // A removed command already failed its waiters and published its exit and deletion.
-                  if (commands.get(id) !== command) return
-                  command.info = produce(command.info, (draft) => {
-                    draft.status = outcome.status
-                    if (outcome.exit !== undefined) draft.exit = outcome.exit
-                    if (outcome.signal !== undefined) draft.signal = outcome.signal
-                    draft.time.completed = outcome.completed
-                  })
-                  // Resolve waiters before retention eviction, so an evicted command still reports its
-                  // terminal Info rather than the removal NotFoundError.
-                  yield* Deferred.succeed(command.done, command.info)
-                  yield* bus.publish(Shell.Event.Exited, {
-                    id,
-                    ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
-                    status: outcome.status,
-                  })
-                  exitOrder.push(id)
-                  while (exitOrder.length > EXITED_LIMIT) {
-                    const oldest = exitOrder[0]
-                    if (!oldest) break
-                    yield* removeCommand(oldest)
-                  }
-                  // Keep exited history data-only.
-                  const timeoutFiber = command.timeoutFiber
-                  command.timeout = undefined
-                  command.timeoutFiber = undefined
-                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
+                  yield* Effect.gen(function* () {
+                    // A removed command already failed its waiters and published its exit and deletion.
+                    if (commands.get(id) !== command) return
+                    command.info = produce(command.info, (draft) => {
+                      draft.status = outcome.status
+                      if (outcome.exit !== undefined) draft.exit = outcome.exit
+                      if (outcome.signal !== undefined) draft.signal = outcome.signal
+                      draft.time.completed = outcome.completed
+                    })
+                    // Resolve waiters before retention eviction, so an evicted command still reports its
+                    // terminal Info rather than the removal NotFoundError.
+                    yield* Deferred.succeed(command.done, command.info)
+                    yield* bus.publish(Shell.Event.Exited, {
+                      id,
+                      ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
+                      status: outcome.status,
+                    })
+                    exitOrder.push(id)
+                    while (exitOrder.length > EXITED_LIMIT) {
+                      const oldest = exitOrder[0]
+                      if (!oldest) break
+                      yield* removeCommand(oldest)
+                    }
+                    // Keep exited history data-only.
+                    const timeoutFiber = command.timeoutFiber
+                    command.timeout = undefined
+                    command.timeoutFiber = undefined
+                    if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
+                  }).pipe(lifecycle.withLock(id))
                 }),
               )
 
@@ -448,8 +455,10 @@ const layer = () =>
           ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
         )
 
-        const command = yield* Deferred.await(ready)
-        return command.info
+        return yield* Deferred.await(ready).pipe(
+          Effect.map((command) => command.info),
+          Effect.onInterrupt(() => Fiber.interrupt(manager).pipe(Effect.andThen(removeCommand(id)))),
+        )
       })
 
       return Service.of({ create, list, get, wait, result, timeout, output, remove })
