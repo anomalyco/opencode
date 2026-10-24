@@ -118,11 +118,22 @@ export const Plugin = {
             const sessionID = input.sessionID ?? context.sessionID
             const title = input.title.trim()
             if (!title) return Effect.fail(new ToolFailure({ message: "Session title must not be empty" }))
-            return ctx.session.update({ sessionID, title }).pipe(
-              Effect.as({
+            return Effect.gen(function* () {
+              yield* permission.assert({
+                action: "opencode_session_rename",
+                resources: [sessionID],
+                save: ["*"],
+                metadata: { sessionID, title },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+              yield* ctx.session.update({ sessionID, title })
+              return {
                 output: { sessionID, title },
                 content: `Renamed session ${sessionID} to ${title}.`,
-              }),
+              }
+            }).pipe(
               Effect.mapError((error) => new ToolFailure({ message: `Unable to rename session ${sessionID}`, error })),
             )
           },
@@ -137,14 +148,27 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
+              // Resolve against the target session, as the move does, so the approved directory is the one used.
+              const directory = AbsolutePath.make(
+                FileAccess.resolvePath((yield* ctx.session.get({ sessionID })).location.directory, input.directory),
+              )
+              yield* permission.assert({
+                action: "opencode_session_move",
+                resources: [directory.replaceAll("\\", "/")],
+                save: ["*"],
+                metadata: { sessionID, directory },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
               yield* ctx.session.move({
                 sessionID,
-                directory: input.directory,
+                directory,
                 delivery: "steer",
               })
               return {
-                output: { sessionID, directory: input.directory },
-                content: `Moved session ${sessionID} to ${input.directory}.`,
+                output: { sessionID, directory },
+                content: `Moved session ${sessionID} to ${directory}.`,
               }
             }).pipe(
               Effect.mapError(

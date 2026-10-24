@@ -234,7 +234,11 @@ The `opencode` Code Mode namespace contains session utilities:
 Rename this session to "Timeout cleanup", then move it to the new worktree.
 ```
 
-These utilities do not request a built-in permission action.
+`session_rename` uses the `opencode_session_rename` permission with the target
+session ID as its resource. `session_move` uses the `opencode_session_move`
+permission with the resolved absolute destination directory as its resource.
+Deny either action to stop an agent from renaming or moving sessions, including
+its own.
 
 ### Worktrees
 

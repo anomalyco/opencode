@@ -256,3 +256,80 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })
   }),
 )
+
+const sessionApprovals = { assertions: [] as Permission.AssertInput[], deny: false }
+const sessionIt = testEffect(
+  makePluginTestLayer(
+    permissionLayer({
+      assert: (input) =>
+        Effect.sync(() => sessionApprovals.assertions.push(input)).pipe(
+          Effect.andThen(
+            sessionApprovals.deny
+              ? Effect.fail(
+                  new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+                )
+              : Effect.void,
+          ),
+        ),
+    }),
+  ),
+)
+
+sessionIt.live("asks permission before renaming or moving a session", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const sessions = yield* Session.Service
+    const location = yield* Location.Service
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins))
+    const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
+    const other = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
+    const registry = yield* Tool.Service
+    const call = (name: string, input: Record<string, unknown>) =>
+      executeTool(registry, {
+        sessionID: session.id,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: `call-${name}-${JSON.stringify(input)}-${sessionApprovals.deny}`,
+          name: "execute",
+          input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
+        },
+      })
+    const run = (name: string, input: Record<string, unknown>) =>
+      call(name, input).pipe(
+        Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
+      )
+    const destination = path.join(location.directory, "destination")
+    yield* Effect.promise(() => fs.mkdir(destination))
+
+    // A denied rule blocks the change, including for another session selected by ID.
+    sessionApprovals.deny = true
+    expect(yield* call("session_rename", { sessionID: other.id, title: "Renamed" })).toMatchObject({
+      metadata: { error: true },
+    })
+    expect((yield* sessions.get(other.id)).title).not.toBe("Renamed")
+    expect(yield* call("session_move", { sessionID: other.id, directory: "destination" })).toMatchObject({
+      metadata: { error: true },
+    })
+    expect(sessionApprovals.assertions).toMatchObject([
+      { action: "opencode_session_rename", resources: [other.id], save: ["*"], sessionID: session.id },
+      {
+        action: "opencode_session_move",
+        resources: [destination.replaceAll("\\", "/")],
+        save: ["*"],
+        sessionID: session.id,
+      },
+    ])
+
+    sessionApprovals.deny = false
+    sessionApprovals.assertions.length = 0
+    expect(yield* run("session_rename", { title: "Renamed" })).toEqual({ sessionID: session.id, title: "Renamed" })
+    expect((yield* sessions.get(session.id)).title).toBe("Renamed")
+    // Approval comes before the move checks the destination; a successful move would start the session's runner.
+    expect(yield* call("session_move", { directory: "missing" })).toMatchObject({ metadata: { error: true } })
+    expect(sessionApprovals.assertions).toMatchObject([
+      { action: "opencode_session_rename", resources: [session.id] },
+      { action: "opencode_session_move", resources: [path.join(location.directory, "missing").replaceAll("\\", "/")] },
+    ])
+  }),
+)
