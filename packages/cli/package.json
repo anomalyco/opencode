@@ -25,13 +25,16 @@
     "typecheck:tsc": "tsc -b"
   },
   "dependencies": {
+    "@actions/core": "3.0.1",
+    "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "1.6.0",
     "@clack/core": "1.0.0-alpha.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
+    "@octokit/rest": "catalog:",
+    "@opencode-ai/pty": "0.3.1",
     "@opencode/client": "workspace:*",
     "@opencode/plugin": "workspace:*",
-    "@opencode-ai/pty": "0.3.1",
     "@opencode/schema": "workspace:*",
     "@opencode/server": "workspace:*",
     "@opencode/tui": "workspace:*",

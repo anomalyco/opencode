@@ -63,6 +63,10 @@ const Handlers = Runtime.handlers(Commands, {
   mini: () => import("./commands/handlers/mini"),
   run: () => import("./commands/handlers/run"),
   pair: () => import("./commands/handlers/pair"),
+  github: {
+    install: () => import("./commands/handlers/github/install"),
+    run: () => import("./commands/handlers/github/run"),
+  },
   reload: () => import("./commands/handlers/reload"),
   session: {
     list: () => import("./commands/handlers/session/list"),
