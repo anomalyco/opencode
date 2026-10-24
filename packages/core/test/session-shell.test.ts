@@ -278,6 +278,27 @@ describe("Session.shell", () => {
     )
   }
 
+  for (const sample of [
+    { name: "two-byte split", source: "'\\u00E9'.repeat(25601)+'a'", tail: "é".repeat(25599) + "a" },
+    { name: "three-byte split", source: "'\\u4E2D'.repeat(17066)+'\\uFFFD'", tail: "中".repeat(17065) + "�" },
+    { name: "four-byte split", source: "'\\u{1F600}'.repeat(12801)+'a'", tail: "😀".repeat(12799) + "a" },
+    { name: "binary continuation bytes", source: "Buffer.alloc(60000, 0x80)", tail: "�".repeat(51197) },
+  ]) {
+    it.live(`keeps a bounded UTF-8 completion tail: ${sample.name}`, () =>
+      Effect.gen(function* () {
+        const fixture = yield* setup
+        yield* fixture.session.shell({
+          sessionID: fixture.created.id,
+          command: `node -e "process.stdout.write(${sample.source})"`,
+        })
+        const inbox = yield* fixture.session.inbox(fixture.created.id)
+        const completion = inbox[0]
+        if (completion?.type !== "synthetic") return yield* Effect.die("Missing shell completion")
+        expect(completion.payload.text).toContain(`>\n${sample.tail}\n\n[showing lines 1-1 of 1; full output saved to `)
+        expect(completion.payload.text).not.toContain("(no output)")
+      }),
+    )
+  }
   for (const outcome of [
     {
       status: "killed",

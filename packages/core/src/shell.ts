@@ -205,7 +205,11 @@ const layer = () =>
         return command.info
       })
 
-      const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
+      const output = Effect.fnUntraced(function* (
+        id: Shell.ID,
+        input?: Shell.OutputInput,
+        trimPartialCharacter = false,
+      ) {
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
@@ -227,8 +231,13 @@ const layer = () =>
               stream.on("error", () => resolve(0))
             }),
         )
+        let offset = 0
+        // A split UTF-8 character leaves at most three continuation bytes; retain any further binary output.
+        if (trimPartialCharacter && start > 0) {
+          while (offset < Math.min(3, bytesRead) && (buffer[offset]! & 0xc0) === 0x80) offset++
+        }
         return {
-          output: buffer.subarray(0, bytesRead).toString("utf8"),
+          output: buffer.subarray(offset, bytesRead).toString("utf8"),
           cursor: start + bytesRead,
           size: command.size,
           truncated: false,
@@ -246,7 +255,7 @@ const layer = () =>
           const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
           const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
           const latest = yield* output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
+          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes }, true)
           const lines = page.output.split("\n")
           if (page.output.endsWith("\n")) lines.pop()
           const truncated = latest.size > maxBytes || lines.length > maxLines
