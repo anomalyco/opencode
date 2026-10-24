@@ -1660,7 +1660,10 @@ body {
   width: 192px;
   min-width: 192px;
   padding: 0;
-  background: #ffffff;
+  /* Bars behind the tooltip blur and fade through it instead of being cut off at its edge. */
+  background: color-mix(in srgb, #ffffff 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 0;
   box-shadow:
     0 0 0 0.5px #00000024,
@@ -7462,6 +7465,16 @@ body {
 
 [data-page="stats"][data-theme="dark"]
   :is([data-section="top-models"], [data-section="unique-users"])
+  [data-component="chart-tooltip"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  :is([data-section="top-models"], [data-section="unique-users"])
+  [data-component="chart-tooltip"] {
+  background: color-mix(in srgb, #242424 88%, transparent);
+}
+
+[data-page="stats"][data-theme="dark"]
+  :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"]
   > span,
 :root[data-stats-theme="dark"]
@@ -7621,9 +7634,9 @@ body {
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
-    [data-section="top-models"]
+    :is([data-section="top-models"], [data-section="unique-users"])
     [data-component="chart-tooltip"] {
-    background: #242424;
+    background: color-mix(in srgb, #242424 88%, transparent);
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 8px 16px #0000003d,
