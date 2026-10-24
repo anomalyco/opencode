@@ -601,8 +601,7 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
 
 const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
-    const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
-    const response = LLMResponse.complete(state)
+    const response = LLMResponse.fromEvents(yield* Stream.runCollect(stream(request, options)))
     if (response) return response
     return yield* incompleteStreamError(`${request.model.provider}/${request.model.route.id}`)
   })

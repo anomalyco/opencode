@@ -682,6 +682,111 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
   }
 }
 
+interface ContentSlot {
+  readonly type: "text" | "reasoning"
+  text: string
+  providerMetadata?: ProviderMetadata
+}
+
+/**
+ * Same result as completing a fold of `reduceResponseState` over `input`, in linear time: content is accumulated in
+ * mutable slots and the assistant message is built once instead of once per event.
+ */
+const completeEvents = (input: ReadonlyArray<LLMEvent>): LLMResponse | undefined => {
+  const events: LLMEvent[] = []
+  const content: Array<ContentPart | ContentSlot> = []
+  const textSlots = new Map<string, ContentSlot>()
+  const reasoningSlots = new Map<string, ContentSlot>()
+  let usage: Usage | undefined
+  let finishReason: FinishReasonDetails | undefined
+
+  const ensureSlot = (
+    slots: Map<string, ContentSlot>,
+    type: ContentSlot["type"],
+    id: string,
+    providerMetadata: ProviderMetadata | undefined,
+  ) => {
+    const existing = slots.get(id)
+    if (existing) return existing
+    const slot: ContentSlot = { type, text: "", providerMetadata }
+    slots.set(id, slot)
+    content.push(slot)
+    return slot
+  }
+
+  const delta = (slot: ContentSlot, event: TextDelta | ReasoningDelta) => {
+    slot.text = slot.text + event.text
+    slot.providerMetadata = event.providerMetadata ?? slot.providerMetadata
+  }
+
+  const end = (slot: ContentSlot | undefined, event: TextEnd | ReasoningEnd) => {
+    if (!slot) return
+    slot.text = event.text ?? slot.text
+    slot.providerMetadata = event.providerMetadata ?? slot.providerMetadata
+  }
+
+  for (const event of input) {
+    events.push(event)
+    if (event.type !== "provider-error" && "usage" in event && event.usage !== undefined) usage = event.usage
+    switch (event.type) {
+      case "finish":
+        finishReason = event.reason
+        break
+      case "provider-error":
+        finishReason = finishReason ?? { normalized: "error" }
+        break
+      case "compaction":
+        content.push(event)
+        break
+      case "text-start":
+        ensureSlot(textSlots, "text", event.id, event.providerMetadata)
+        break
+      case "text-delta":
+        delta(ensureSlot(textSlots, "text", event.id, event.providerMetadata), event)
+        break
+      case "text-end":
+        end(textSlots.get(event.id), event)
+        break
+      case "reasoning-start":
+        ensureSlot(reasoningSlots, "reasoning", event.id, event.providerMetadata)
+        break
+      case "reasoning-delta":
+        delta(ensureSlot(reasoningSlots, "reasoning", event.id, event.providerMetadata), event)
+        break
+      case "reasoning-end":
+        end(reasoningSlots.get(event.id), event)
+        break
+      case "tool-call":
+        content.push(toolCallContent(event))
+        break
+      case "tool-result":
+        content.push(toolResultContent(event))
+        break
+      case "media":
+        content.push(
+          event.providerMetadata === undefined
+            ? { type: "media", media: event.media }
+            : { type: "media", media: event.media, providerMetadata: event.providerMetadata },
+        )
+        break
+    }
+  }
+
+  if (finishReason === undefined) return undefined
+  return new LLMResponse({
+    message: Message.assistant(
+      content.map((part) => {
+        if (part.type === "text") return textContent(part.text, part.providerMetadata)
+        if (part.type === "reasoning") return reasoningContent(part.text, part.providerMetadata)
+        return part
+      }),
+    ),
+    events,
+    usage,
+    finishReason,
+  })
+}
+
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   message: Message,
   events: Schema.Array(LLMEvent),
@@ -726,7 +831,7 @@ export namespace LLMResponse {
         })
 
   /** Convenience reducer for callers that already have a collected event list. */
-  export const fromEvents = (events: ReadonlyArray<LLMEvent>) => complete(events.reduce(reduce, empty()))
+  export const fromEvents = (events: ReadonlyArray<LLMEvent>) => completeEvents(events)
 
   /** Concatenate assistant text from a response or collected event list. */
   export const text = (response: Output) => responseText(response.events)
