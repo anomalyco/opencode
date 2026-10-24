@@ -56,17 +56,23 @@ ${render(current)}`
   const entriesChanged = diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0
 
   if (!currentComplete) {
-    if (entriesChanged) return replacement
     const namespaces = Instructions.diffByKey(
       previous.namespaces,
       current.namespaces,
       (namespace) => namespace.name,
       (before, after) => before.count !== after.count,
     )
-    const changed = namespaces.added.length > 0 || namespaces.removed.length > 0 || namespaces.changed.length > 0
-    if (!changed) return replacement
+    const namespacesChanged =
+      namespaces.added.length > 0 || namespaces.removed.length > 0 || namespaces.changed.length > 0
+    if (!entriesChanged && !namespacesChanged) return replacement
 
-    const parts = ["The Code Mode tool catalog has changed."]
+    // A partial catalog only lists a slice of each namespace, so a shown entry changing does not
+    // mean the full inventory changed enough to repeat it. Point the model at search instead.
+    const parts = [
+      entriesChanged
+        ? "The Code Mode tool catalog has changed. Re-run `search(...)` before relying on previous results."
+        : "The Code Mode tool catalog has changed.",
+    ]
     if (namespaces.added.length > 0) {
       parts.push(
         `New tool namespaces are available: ${namespaces.added

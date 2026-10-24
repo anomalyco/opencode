@@ -69,6 +69,27 @@ describe("CodeModeInstructions", () => {
     }),
   )
 
+  it.effect("renders a short notice when a partial catalog changes", () =>
+    Effect.gen(function* () {
+      const inventory = (firstDescription: string) => ({
+        tools: Array.from({ length: 60 }, (_, index) => ({
+          type: "tool" as const,
+          name: `bulk.tool${index}`,
+          description: index === 0 ? firstDescription : `Bulk tool ${index}`,
+          signature: `tools.bulk.tool${index}({\n  value: string,\n}): Promise<unknown> // ${"x".repeat(120)}`,
+        })),
+      })
+      const initialized = yield* readInitial(CodeModeInstructions.make(inventory("Bulk tool 0")))
+      expect(initialized.text).toContain("The catalog is partial.")
+
+      const changed = yield* readUpdate(CodeModeInstructions.make(inventory("Changed first tool")), initialized)
+      expect(changed.text).toContain("Re-run `search(...)` before relying on previous results.")
+      expect(changed.text).not.toContain("## Available tools")
+      expect(changed.text).not.toContain("tools.bulk.")
+      expect(changed.text.length).toBeLessThan(200)
+    }),
+  )
+
   it.effect("stores a canonical sorted snapshot so registration order does not churn history", () => {
     const alpha = {
       name: "alpha",
