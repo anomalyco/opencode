@@ -498,14 +498,26 @@ export function Session(props: {
       ensureAllRowsPending.push(continuation)
       return
     }
+    const anchor = isAwayFromBottom() ? anchors.list()[0] : undefined
+    const top = anchor && scroll.scrollTop + anchor.node.y
+    if (anchor) scroll.stickyScroll = false
     const pending = [continuation]
     ensureAllRowsPending = pending
     setHiddenRows(0)
     setVisibleRowsEnd(undefined)
     afterLayout(() => {
-      if (ensureAllRowsPending === pending) ensureAllRowsPending = undefined
-      pending.forEach((continuation) => continuation())
-      updateAwayFromBottom()
+      if (ensureAllRowsPending !== pending) return
+      if (anchor && top !== undefined) {
+        const current = anchors.get(anchor.target)
+        if (current) scroll.scrollBy(scroll.scrollTop + current.node.y - top)
+      }
+      // Navigation reads anchor positions, which settle after the scroll adjustment.
+      afterLayout(() => {
+        if (ensureAllRowsPending !== pending) return
+        ensureAllRowsPending = undefined
+        pending.forEach((continuation) => continuation())
+        updateAwayFromBottom()
+      })
     })
   }
 
