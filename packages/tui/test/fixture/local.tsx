@@ -1,3 +1,8 @@
+import { Model } from "@opencode/schema/model"
+import { Session } from "@opencode/schema/session"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
 import { testRender } from "@opentui/solid"
 import type { AgentInfo, ModelInfo, SessionInfo } from "@opencode/client"
 import path from "node:path"
@@ -116,9 +121,9 @@ async function waitForModel(ready: () => boolean) {
 
 export function model(id: string, variants: string[] = []): ModelInfo {
   return {
-    id,
-    modelID: id,
-    providerID: "provider",
+    id: Model.ID.make(id),
+    modelID: Model.ID.make(id),
+    providerID: Provider.ID.make("provider", { disableChecks: true }),
     name: id,
     status: "active",
     enabled: true,
@@ -126,13 +131,13 @@ export function model(id: string, variants: string[] = []): ModelInfo {
     cost: [],
     limit: { context: 10000, output: 1000 },
     time: { released: 0 },
-    variants: variants.map((id) => ({ id })),
+    variants: variants.map((id) => ({ id: Model.VariantID.make(id) })),
   }
 }
 
 export function agent(id: string, selected?: AgentInfo["model"]): AgentInfo {
   return {
-    id,
+    id: Agent.ID.make(id),
     name: id,
     model: selected,
     mode: "primary",
@@ -144,12 +149,12 @@ export function agent(id: string, selected?: AgentInfo["model"]): AgentInfo {
 
 export function session(id: string, selected?: SessionInfo["model"], agent = "build"): SessionInfo {
   return {
-    id,
-    agent,
+    id: Session.ID.make(id, { disableChecks: true }),
+    agent: Agent.ID.make(agent),
     model: selected,
     title: id,
     location: { directory },
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
