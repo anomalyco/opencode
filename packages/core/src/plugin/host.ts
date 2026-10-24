@@ -571,14 +571,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: (input) => sessions.command({ ...input, command: input.name }),
       compact: sessions.compact,
-      update: Effect.fn(function* (input) {
-        yield* sessions.get(input.sessionID)
-        if (input.title !== undefined) yield* sessions.rename({ sessionID: input.sessionID, title: input.title })
-        if (input.metadata !== undefined)
-          yield* sessions.setMetadata({ sessionID: input.sessionID, metadata: input.metadata })
-        if (input.permissions !== undefined)
-          yield* sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
-      }),
+      update: sessions.update,
       move: sessions.move,
       synthetic: sessions.synthetic,
       interrupt: (input) =>

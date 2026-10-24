@@ -1,6 +1,5 @@
 import { Session } from "@opencode/core/session"
 import { SessionStats } from "@opencode/core/session/stats"
-import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
@@ -225,25 +224,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.update",
         Effect.fn(function* (ctx) {
-          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          if (ctx.payload.title !== undefined) {
-            if (ctx.payload.title) {
-              yield* session
-                .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
-                .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-            } else {
-              const title = yield* SessionTitle.Service
-              yield* title.generate(ctx.params.sessionID)
-            }
-          }
-          if (ctx.payload.metadata !== undefined)
-            yield* session
-              .setMetadata({ sessionID: ctx.params.sessionID, metadata: ctx.payload.metadata })
-              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          if (ctx.payload.permissions !== undefined)
-            yield* session
-              .setPermissions({ sessionID: ctx.params.sessionID, permissions: ctx.payload.permissions })
-              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          yield* session
+            .update({
+              sessionID: ctx.params.sessionID,
+              title: ctx.payload.title,
+              metadata: ctx.payload.metadata,
+              permissions: ctx.payload.permissions,
+            })
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession), locationErrors)
           if (ctx.payload.archived !== undefined)
             yield* (ctx.payload.archived ? session.archive : session.unarchive)(ctx.params.sessionID).pipe(
               Effect.catchTag("Session.NotFoundError", missingSession),
