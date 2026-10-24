@@ -1163,6 +1163,29 @@ test("a chosen mode the session stops offering shows as Git, and comes back when
   await expect(file).toHaveText("beta.ts")
 })
 
+test("refresh reloads the changes and spins until they arrive", async ({ page }) => {
+  const changes = [fileDiff("src/alpha.ts")]
+  await openSession(page, { name: "ReviewRefresh", vcsDiff: () => changes })
+  const panel = page.locator("#review-panel")
+  const file = panel.locator('[data-slot="session-review-v2-file-name"]')
+  const refresh = panel.getByRole("button", { name: "Refresh", exact: true })
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await expect(file).toHaveText("alpha.ts")
+  await expect(refresh).toBeEnabled()
+
+  // No filesystem event reports this change; only the button loads it.
+  changes.splice(0, 1, fileDiff("src/beta.ts"))
+  const request = await holdRoute(page, (url) => url.pathname === "/api/vcs/diff", { method: "GET" })
+  await refresh.click()
+  await request.arrived
+  await expect(refresh).toHaveAttribute("aria-busy", "true")
+  await expect(file).toHaveText("alpha.ts")
+  request.release()
+  await expect(file).toHaveText("beta.ts")
+  await expect(refresh).not.toHaveAttribute("aria-busy")
+})
+
 test("names a single change source and keeps the review header rows at 48px", async ({ page }) => {
   // Turn changes are offered only for Git, so another VCS offers one source.
   await openSession(page, { name: "ReviewHeader", project: { vcs: "hg" }, vcsDiff: [fileDiff("src/alpha.ts")] })

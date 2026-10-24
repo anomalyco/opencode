@@ -25,6 +25,7 @@ const source = {
   "ui.sessionReviewV2.previousFile": "Previous file",
   "ui.sessionReviewV2.nextFile": "Next file",
   "ui.sessionReviewV2.diffView": "Diff view",
+  "ui.sessionReviewV2.refresh": "Refresh",
   "ui.sessionReviewV2.empty.noGit.title": "No tracked changes",
   "ui.sessionReviewV2.empty.noGit.description": "Track, review, and undo changes in this project",
   "ui.sessionReviewV2.empty.noGit.action": "Create Git repository",
