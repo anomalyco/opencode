@@ -6,7 +6,7 @@ import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
 import { createEffect, createMemo, startTransition } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
-import { addProjects } from "./projects/add"
+import { createProjectAdder } from "./projects/add"
 
 export function createHomeController() {
   const layout = useLayout()
@@ -129,12 +129,7 @@ export function createHomeController() {
           return
         setSelection(toggleHomeProjectSelection(selection(), key, directory))
       },
-      add: (conn: ServerConnection.Any, directories: string[]) => {
-        const directory = addProjects(global.ensureServerCtx(conn), directories)
-
-        if (!directory) return
-        setSelection({ server: ServerConnection.key(conn), directory })
-      },
+      add: createProjectAdder((conn) => global.ensureServerCtx(conn), setSelection),
       openNewSession: () => {
         const conn = focusedServer()
         const project = newSessionProject()

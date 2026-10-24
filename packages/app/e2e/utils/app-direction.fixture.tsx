@@ -10,12 +10,24 @@ import { Command } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "../../src/runtime/extension/host"
 import { useCommand } from "../../src/shell/commands/command"
 
+declare global {
+  interface Window {
+    pickDirectory(): Promise<string | string[] | null>
+  }
+}
+
 /**
  * Mounts the app at a route. With `held`, the window's providers and extensions start at once and the app interface
  * mounts only when "Start app" is pressed, over its preloaded route, as the desktop shell mounts it once its server is up.
  * One extension's load also waits for "Finish startup", so the attachment can mount before the routes render.
  */
-export function mount(input: { server: string; route: string; direction: Direction; held?: boolean }) {
+export function mount(input: {
+  server: string
+  route: string
+  direction: Direction
+  held?: boolean
+  desktop?: boolean
+}) {
   const root = document.getElementById("root")
 
   if (!root) throw new Error("Missing fixture root")
@@ -85,7 +97,9 @@ export function mount(input: { server: string; route: string; direction: Directi
     return (
       <Show
         when={started()}
-        fallback={<button onClick={() => void preloadRoute(input.route).then(() => setStarted(true))}>Start app</button>}
+        fallback={
+          <button onClick={() => void preloadRoute(input.route).then(() => setStarted(true))}>Start app</button>
+        }
       >
         <DirectedApp />
       </Show>
@@ -94,7 +108,19 @@ export function mount(input: { server: string; route: string; direction: Directi
 
   render(
     () => (
-      <PlatformProvider value={createWebPlatform("test").platform}>
+      <PlatformProvider
+        value={
+          input.desktop
+            ? {
+                ...createWebPlatform("test").platform,
+                platform: "desktop",
+                os: "windows",
+                windowID: "browser",
+                openDirectoryPickerDialog: () => window.pickDirectory(),
+              }
+            : createWebPlatform("test").platform
+        }
+      >
         <AppBaseProviders locale="en">
           <Startup />
         </AppBaseProviders>

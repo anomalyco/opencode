@@ -5,6 +5,13 @@ export async function openWithDirection(page: Page, route: string, direction: "l
   await page.goto(`/e2e/utils/app-direction.html?${new URLSearchParams({ server: SERVER, route, direction })}`)
 }
 
+export async function openDesktop(page: Page, route: string, pickDirectory: () => Promise<string | string[] | null>) {
+  await page.exposeFunction("pickDirectory", pickDirectory)
+  await page.goto(
+    `/e2e/utils/app-direction.html?${new URLSearchParams({ server: SERVER, route, direction: "ltr", desktop: "" })}`,
+  )
+}
+
 /**
  * Opens the app at a route as the desktop shell starts it: the window's extensions run at once, and the app interface
  * mounts over the preloaded route only when `start` runs, as it does once the desktop's server is up. One extension
@@ -23,6 +30,7 @@ export async function openHeldStart(page: Page, route: string) {
       await start.dispatchEvent("click")
       await expect(page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true })).toBeEnabled()
     },
-    finish: () => page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true }).dispatchEvent("click"),
+    finish: () =>
+      page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true }).dispatchEvent("click"),
   }
 }

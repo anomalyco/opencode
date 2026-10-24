@@ -1,4 +1,4 @@
-import { useDirectoryPicker } from "@/workspaces/selection/picker"
+import { useProjectPicker } from "./add"
 import { useServerActionsController } from "@/servers/registry/controller"
 import { useSettingsCommand } from "@/settings/command"
 import { useSettingsSurface } from "@/settings/surface"
@@ -6,7 +6,7 @@ import { type LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
-import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
+import { closeHomeProject, errorMessage } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -23,7 +23,7 @@ export const HomeServersSchema = Schema.Struct({
 
 export function createHomeProjectsController(home: HomeController) {
   const platform = usePlatform()
-  const pickDirectory = useDirectoryPicker()
+  const choose = useProjectPicker(home.project.add)
   const dialog = useDialog()
   const language = useLanguage()
   const openSettings = useSettingsCommand()
@@ -58,15 +58,6 @@ export function createHomeProjectsController(home: HomeController) {
 
   function directories(project: LocalProject) {
     return [project.worktree, ...(project.sandboxes ?? [])]
-  }
-
-  function choose(conn: ServerConnection.Any) {
-    pickDirectory({
-      server: conn,
-      title: language.t("command.project.open"),
-      multiple: true,
-      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
-    })
   }
 
   return {

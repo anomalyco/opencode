@@ -4,6 +4,7 @@ import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
+import { openDesktop } from "../utils/direction"
 
 test.use({ serviceWorkers: "block" })
 
@@ -18,6 +19,64 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   })
   await page.goto("/")
 }
+
+test("desktop Open Project adds picked directories and leaves cancellation unchanged", async ({ page }) => {
+  await mockStressTimeline(page, { project: { ...fixture.project, name: undefined } })
+  await seed(page, {
+    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
+    lastProject: { local: fixture.directory },
+    tabs: [fixture.targetID],
+  })
+
+  const picks: (string | string[] | null)[] = [
+    null,
+    ["/workspace/new-project", "/workspace/second-project"],
+    "/workspace/third-project",
+  ]
+
+  const calls: number[] = []
+  await openDesktop(page, sessionHref(fixture.targetID), async () => {
+    calls.push(1)
+
+    return picks.shift() ?? null
+  })
+  const home = page.getByRole("button", { name: "Home", exact: true })
+  await expectAppVisible(home)
+  await expect(home).toHaveAttribute("aria-pressed", "false")
+  const menu = page.locator('[data-component="desktop-icon-button"]').getByRole("button")
+  const open = page.getByRole("menuitem", { name: "Open Project", exact: false })
+  await menu.click()
+  await page.getByRole("menuitem", { name: "File", exact: true }).hover()
+  await expect(open).toBeEnabled()
+  await open.click()
+  await expect.poll(() => calls.length).toBe(1)
+  await expect(home).toHaveAttribute("aria-pressed", "false")
+  await menu.click()
+  await page.getByRole("menuitem", { name: "File", exact: true }).hover()
+  await open.click()
+  await expect.poll(() => calls.length).toBe(2)
+  await expect(home).toHaveAttribute("aria-pressed", "true")
+  const projects = page.locator('[data-component="home-project-row"]')
+  await expect(projects.filter({ hasText: "new-project" })).toBeVisible()
+  await expect(projects.filter({ hasText: "new-project" })).toHaveAttribute("aria-current", "page")
+  await expect(projects.filter({ hasText: "second-project" })).toBeVisible()
+  await menu.click()
+  await page.getByRole("menuitem", { name: "File", exact: true }).hover()
+  await open.click()
+  await expect(projects.filter({ hasText: "third-project" })).toHaveAttribute("aria-current", "page")
+})
+
+test("desktop Open Project survives a stale draft route", async ({ page }) => {
+  await mockStressTimeline(page)
+  await seed(page, { projects: { local: [{ worktree: fixture.directory, expanded: true }] } })
+  await openDesktop(page, "/new-session?draftId=missing", async () => null)
+  const home = page.getByRole("button", { name: "Home", exact: true })
+  await expectAppVisible(home)
+  await expect(home).toHaveAttribute("aria-pressed", "true")
+  await page.locator('[data-component="desktop-icon-button"]').getByRole("button").click()
+  await page.getByRole("menuitem", { name: "File", exact: true }).hover()
+  await expect(page.getByRole("menuitem", { name: "Open Project", exact: false })).toBeEnabled()
+})
 
 test("the session context menu renames, exports, and deletes a Home session", async ({ page }) => {
   await openHome(page)
