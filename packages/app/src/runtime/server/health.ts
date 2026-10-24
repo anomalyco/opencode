@@ -1,6 +1,6 @@
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
-import { authTokenFromCredentials } from "./api"
+import { authTokenFromCredentials, devAuthTokenKey } from "./api"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
 import { Accessor, createEffect, createSignal, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -135,7 +135,10 @@ export async function checkServerHealth(
 
     if (signal?.aborted) return { healthy: false }
 
-    if (isUnauthorizedError(current.error)) return { healthy: false, unauthorized: true }
+    if (isUnauthorizedError(current.error)) {
+      if (import.meta.env.DEV) localStorage.removeItem(devAuthTokenKey(server.url))
+      return { healthy: false, unauthorized: true }
+    }
 
     return next(count, current.error)
   }
