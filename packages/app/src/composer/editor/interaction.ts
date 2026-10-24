@@ -231,6 +231,36 @@ export function createComposerEditor(input: {
     return result.handled
   }
 
+  let composing = false
+  let lastCompositionEnd = 0
+  // Safari fires compositionend BEFORE the confirming Enter keydown, so that
+  // keydown reports isComposing=false (keyCode 229 on Safari 26, 13 in older
+  // reports). Treat Enter/Tab within a short window after compositionend as
+  // part of the IME confirmation. The window only has to outlive the browser's
+  // runloop turn between the two events (measured at <=10ms in WKWebView); a
+  // longer window swallows a fast follow-up Enter pressed to send, since the
+  // typematic minimum is ~30ms. The window is scoped to Enter/Tab so Escape,
+  // arrows and Android soft keyboards (keyCode 229 on most keys) are never
+  // affected. Compare with performance.now() rather than event.timeStamp so
+  // the guard never depends on the event clock source.
+  const IME_CONFIRM_WINDOW_MS = 10
+  const imeComposing = (event: KeyboardEvent) =>
+    event.isComposing ||
+    composing ||
+    ((event.key === "Enter" || event.key === "Tab") &&
+      (event.keyCode === 229 || performance.now() - lastCompositionEnd < IME_CONFIRM_WINDOW_MS))
+  // True while a composition is in flight or just ended. The editor DOM must
+  // stay untouched in this window: rewriting the contentEditable DOM or the
+  // selection makes the browser abort the composition and split it into
+  // per-letter micro compositions, after which the confirming Enter arrives
+  // as a plain keyCode 13 that no guard can recognize.
+  const imeActive = () => composing || performance.now() - lastCompositionEnd < IME_CONFIRM_WINDOW_MS
+  // Input events are only gated while a composition is genuinely in flight.
+  // Korean IMEs end the current syllable and insert the next character (a
+  // space, "?", "@", ...) in the same keystroke; that input arrives right
+  // after compositionend with isComposing=false and must reach the store.
+  const imeInserting = (event: InputEvent) => event.isComposing || composing
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (
       state.mode === "normal" &&
@@ -249,7 +279,7 @@ export function createComposerEditor(input: {
       type: "key.down",
       key: event.key,
       ctrl: event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey,
-      composing: event.isComposing,
+      composing: imeComposing(event),
       ids: suggestions().map((item) => item.id),
       empty: draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0),
     })
@@ -371,6 +401,16 @@ export function createComposerEditor(input: {
     suggestions,
     dispatch,
     onKeyDown,
+    imeComposing,
+    imeActive,
+    imeInserting,
+    onCompositionStart() {
+      composing = true
+    },
+    onCompositionEnd() {
+      composing = false
+      lastCompositionEnd = performance.now()
+    },
     value() {
       return draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
     },
