@@ -375,6 +375,32 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("materializes only the selected interior line of a source file", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const source = path.join(directory.path, "big.txt")
+      yield* Effect.promise(() => Bun.write(source, Array.from({ length: 286 }, (_, i) => `line ${i + 1}`).join("\n")))
+      const uri = pathToFileURL(source)
+      uri.searchParams.set("start", "10")
+      uri.searchParams.set("end", "10")
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect this line",
+        files: [{ uri: uri.href, name: "big.txt#10-10" }],
+        resume: false,
+      })
+
+      expect(message.payload.files).toHaveLength(1)
+      expect(Buffer.from(message.payload.files?.[0]?.data ?? "", "base64").toString("utf8")).toBe("line 10")
+      const stored = yield* admitted(message.id)
+      expect(stored?.type).toBe("user")
+      if (stored?.type === "user") expect(stored.payload.files).toEqual(message.payload.files)
+    }),
+  )
+
   it.effect("materializes directories as directory attachments", () =>
     Effect.gen(function* () {
       yield* setup
