@@ -23,6 +23,25 @@ import type { Interpreter } from "./interpreter.js"
 import { toPrimitiveString } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 
+/**
+ * A host error's message as text. A host can store anything there; an object must not cross as itself, and turning it
+ * into text would run its own methods.
+ */
+export const errorMessage = (error: Error): string => {
+  const message: unknown = error.message
+  if (typeof message === "string") return message
+  if (message === undefined || typeof message === "function" || (typeof message === "object" && message !== null)) {
+    return ""
+  }
+  return String(message)
+}
+
+/** A host error's name as a program error type, read once so a getter cannot pass the check and then change. */
+export const errorType = (error: Error): ErrorType => {
+  const name: unknown = error.name
+  return typeof name === "string" && isErrorType(name) ? name : "Error"
+}
+
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof PendingThrow) {
     return {
@@ -62,7 +81,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
     return { kind: "ExecutionFailure", message: `Uncaught: ${message}` }
   }
 
-  if (error instanceof RangeError && /call stack|recursion/i.test(error.message)) {
+  if (error instanceof RangeError && /call stack|recursion/i.test(errorMessage(error))) {
     return {
       kind: "ExecutionFailure",
       message: "Execution exceeded the maximum nesting depth.",
@@ -72,7 +91,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof Error) {
     return {
       kind: error.name === "SyntaxError" ? "ParseError" : "ExecutionFailure",
-      message: error.message,
+      message: errorMessage(error),
     }
   }
 
@@ -92,7 +111,7 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
     return error
   }
   if (error instanceof Error && !(error instanceof ToolError) && !(error instanceof ToolRuntimeError)) {
-    return new PendingThrow(isErrorType(error.name) ? error.name : "Error", error.message, node)
+    return new PendingThrow(errorType(error), errorMessage(error), node)
   }
   return error
 }
@@ -108,8 +127,10 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
     }
     return thrown.value
   }
-  const type = thrown instanceof Error && isErrorType(thrown.name) ? thrown.name : "Error"
-  return createErrorValue(builtins[type], normalizeError(thrown).message)
+  return createErrorValue(
+    builtins[thrown instanceof Error ? errorType(thrown) : "Error"],
+    normalizeError(thrown).message,
+  )
 }
 
 /** Error.prototype.toString: `name: message`, omitting whichever side is empty. */

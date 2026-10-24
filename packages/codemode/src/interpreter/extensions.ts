@@ -1,10 +1,11 @@
 import { Effect } from "effect"
 import type { Extension } from "../extension.js"
 import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
+import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
-import { createErrorValue, isErrorType } from "./intrinsics.js"
-import { MAX_VALUE_DEPTH } from "./limits.js"
-import { PendingThrow, Throw, typeError } from "./model.js"
+import { createErrorValue } from "./intrinsics.js"
+import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
+import { PendingThrow, rangeError, Throw, typeError } from "./model.js"
 import { fn } from "./native.js"
 import {
   define,
@@ -79,18 +80,29 @@ export const extensionGlobals = <R>(
     if (typeof value === "function") return wrap(value, label)
     if (value !== null && typeof value === "object") {
       const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen)
-      if (value instanceof Date) return new DateObj(builtins.Date, value.getTime())
+      // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
+      // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
+      if (value instanceof Date) return new DateObj(builtins.Date, Date.prototype.getTime.call(value))
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
       if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
-      if (value instanceof ArrayBuffer) return new Bytes(builtins.Uint8Array, new Uint8Array(value.slice(0)))
+      if (value instanceof ArrayBuffer) {
+        const view = new Uint8Array(value)
+        // Only a real buffer has bytes to view; anything else would be read as array-like and lose them silently.
+        if (view.buffer !== value)
+          throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
+        return new Bytes(builtins.Uint8Array, new Uint8Array(view))
+      }
       if (value instanceof Error) {
         if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
         seen.add(value)
-        const copied = createErrorValue(builtins[isErrorType(value.name) ? value.name : "Error"], value.message)
+        const copied = createErrorValue(builtins[errorType(value)], errorMessage(value))
         const fields = value as unknown as Record<string, unknown>
         for (const key of new Set(["cause", ...Object.keys(value)])) {
-          if (uncrossed.has(key) || !(key in value) || typeof fields[key] === "function") continue
-          const item = crossing(() => next(fields[key], `${label}.${key}`))
+          if (uncrossed.has(key) || !(key in value)) continue
+          // Read once: a getter could pass the check and then hand back a function.
+          const field = fields[key]
+          if (typeof field === "function") continue
+          const item = crossing(() => next(field, `${label}.${key}`))
           if (item === left) continue
           define(copied, key, item, key === "cause" ? hidden : undefined)
         }
@@ -115,12 +127,18 @@ export const extensionGlobals = <R>(
       if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
       seen.add(value)
       if (Array.isArray(value)) {
-        const copied = new Arr(
-          builtins.Array,
-          value.map((item, index) => next(item, `${label}[${index}]`)),
-        )
+        const length = value.length
+        if (length > MAX_ARRAY_LENGTH) {
+          throw rangeError(`${label} produced an array of ${length} items; at most ${MAX_ARRAY_LENGTH} can cross.`)
+        }
+        // Filled in order so the copy stays a dense array; holes stay holes, as a copy made with `map` would leave them.
+        const items: Array<Value> = []
+        for (let index = 0; index < length; index += 1) {
+          if (index in value) items[index] = next(value[index], `${label}[${index}]`)
+        }
+        items.length = length
         seen.delete(value)
-        return copied
+        return new Arr(builtins.Array, items)
       }
       const prototype = Object.getPrototypeOf(value)
       if (prototype === Object.prototype || prototype === null) {
@@ -136,27 +154,37 @@ export const extensionGlobals = <R>(
   // A host function as a program function. Arguments cross in; a global's call runs inside the host's extension
   // hooks, which see the host's own error on failure; then whatever came back, or was thrown, crosses out so the
   // program catches a copy. Functions inside results are part of a value's API and skip the hooks.
-  const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) =>
-    fn<R>(builtins, value.name, value.length, (_, values) => {
-      const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-      const hooks = ctx.tools.hooks
-      const settle = (run: Effect.Effect<unknown, unknown, R>) =>
-        (describe === undefined
-          ? run
-          : hooked(describe(args), hooks["extension.before"], hooks["extension.after"], run)
-        ).pipe(
-          Effect.mapError((reason) => new Throw(fromHost(reason, label))),
-          Effect.map((settled) => fromHost(settled, label)),
-        )
-      let result: unknown
-      try {
-        result = value.apply(undefined, args)
-      } catch (reason) {
-        return settle(Effect.fail(reason))
-      }
-      if (!(result instanceof Promise)) return settle(Effect.succeed(result))
-      return ctx.pending.createHost(settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })))
-    })
+  const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) => {
+    // The host function's own `name` and `length` can be anything, even getters: each is read once, and only text
+    // and a count cross.
+    const name: unknown = value.name
+    const length: unknown = value.length
+    return fn<R>(
+      builtins,
+      typeof name === "string" ? name : "",
+      typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
+      (_, values) => {
+        const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
+        const hooks = ctx.tools.hooks
+        const settle = (run: Effect.Effect<unknown, unknown, R>) =>
+          (describe === undefined
+            ? run
+            : hooked(describe(args), hooks["extension.before"], hooks["extension.after"], run)
+          ).pipe(
+            Effect.mapError((reason) => new Throw(fromHost(reason, label))),
+            Effect.map((settled) => fromHost(settled, label)),
+          )
+        let result: unknown
+        try {
+          result = value.apply(undefined, args)
+        } catch (reason) {
+          return settle(Effect.fail(reason))
+        }
+        if (!(result instanceof Promise)) return settle(Effect.succeed(result))
+        return ctx.pending.createHost(settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })))
+      },
+    )
+  }
 
   return extensions.flatMap((extension) =>
     Object.entries(extension.globals).map(
@@ -167,10 +195,11 @@ export const extensionGlobals = <R>(
 
 /**
  * An error crosses as its name, message, `cause`, and own enumerable fields, such as Node's `code`, `errno`,
- * `syscall`, and `path`. `stack` stays on its own side, and no field may shadow an Error method. A field that cannot
- * cross (a socket, a handle, a function) is left behind so the error itself always arrives.
+ * `syscall`, and `path`. `stack` stays on its own side, `message` crosses once as text, and no field may shadow an
+ * Error method. A field that cannot cross (a socket, a handle, a function) is left behind so the error itself always
+ * arrives.
  */
-const uncrossed = new Set(["stack", "constructor", "toString", "__proto__"])
+const uncrossed = new Set(["stack", "message", "constructor", "toString", "__proto__"])
 const left = Symbol("left behind")
 const crossing = <T>(convert: () => T): T | typeof left => {
   try {
@@ -201,5 +230,6 @@ const isPrimitive = (value: unknown): value is string | number | boolean | null 
 const describeHost = (value: unknown): string => {
   if (typeof value !== "object" || value === null) return `a ${typeof value}`
   const name = (value as { constructor?: { name?: string } }).constructor?.name
-  return name === undefined || name === "" ? "an object" : `a ${name}`
+  if (name === undefined || name === "") return "an object"
+  return `${/^[AEIO]/.test(name) ? "an" : "a"} ${name}`
 }
