@@ -3,6 +3,8 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/process"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
@@ -129,6 +131,98 @@ describe("Session.create", () => {
         expect((yield* sessions.get(second.id)).location.directory).toBe(clone)
       }),
     ),
+  )
+
+  testEffect(Layer.empty).live(
+    "spawns git once across Location boot and Session.create while picking up external git changes",
+    () =>
+      withTmp((directory) =>
+        Effect.gen(function* () {
+          const nested = AbsolutePath.make(path.join(directory, "packages", "app"))
+          yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
+          let spawns = 0
+          const layer = AppNodeBuilder.build(
+            LayerNode.group([
+              Database.node,
+              Bus.node,
+              Project.node,
+              LocationServiceMap.node,
+              SessionProjector.node,
+              SessionStore.node,
+              Session.node,
+            ]),
+            [
+              Bus.node.replace(Bus.configured({ persist: true })),
+              SessionExecution.node.replace(SessionExecution.noopLayer),
+              offlineModels,
+              CrossSpawnSpawner.node.replace(
+                CrossSpawnSpawner.node.mapLayer((base) =>
+                  Layer.effect(
+                    ChildProcessSpawner.ChildProcessSpawner,
+                    Effect.map(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
+                      ChildProcessSpawner.make((command) => {
+                        spawns++
+                        return spawner.spawn(command)
+                      }),
+                    ),
+                  ).pipe(Layer.provide(base)),
+                ),
+              ),
+            ],
+          )
+
+          yield* Effect.gen(function* () {
+            const locations = yield* LocationServiceMap.Service
+            const sessions = yield* Session.Service
+            const ref = Location.Ref.make({ directory: nested })
+
+            // Boot Location while directory is markerless, then evolve git externally without invalidating Location.
+            yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+            const beforeGit = yield* sessions.create({ location: ref, title: "Before git" })
+            expect(beforeGit.projectID).not.toBe(Project.ID.global)
+
+            const baselineSpawns = spawns
+            yield* Effect.promise(() => initGit(directory))
+            const afterInit = yield* sessions.create({ location: ref, title: "After git init" })
+            expect(afterInit.projectID).toBe(Project.ID.global)
+            expect((yield* sessions.get(beforeGit.id)).projectID).toBe(Project.ID.global)
+            const initSpawns = spawns
+            expect(initSpawns - baselineSpawns).toBe(3)
+
+            // Repeat Session.create with no git change spawns zero git processes.
+            const repeatUnborn = yield* sessions.create({ parentID: afterInit.id, title: "Child unborn" })
+            expect(repeatUnborn.projectID).toBe(Project.ID.global)
+            expect(spawns).toBe(initSpawns)
+
+            yield* Effect.promise(async () => {
+              await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+                .cwd(directory)
+                .quiet()
+            })
+            const rootSha = Project.ID.make(
+              (yield* Effect.promise(() => $`git rev-list --max-parents=0 HEAD`.cwd(directory).text())).trim(),
+            )
+            const afterCommit = yield* sessions.create({ location: ref, title: "After first commit" })
+            expect(afterCommit.projectID).toBe(rootSha)
+            const commitSpawns = spawns
+            expect(commitSpawns - initSpawns).toBe(3)
+
+            yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(directory).quiet())
+            const remoteID = Project.ID.make(Hash.fast("git-remote:github.com/owner/repo"))
+            yield* locations.invalidate(ref)
+            const booted = yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+            const bootSpawns = spawns
+            expect(booted.project.id).toBe(remoteID)
+            expect(bootSpawns - commitSpawns).toBe(2)
+
+            const parent = yield* sessions.create({ location: ref, title: "After remote" })
+            const child = yield* sessions.create({ parentID: parent.id, title: "Child after remote" })
+            expect(parent.projectID).toBe(remoteID)
+            expect(child.projectID).toBe(remoteID)
+            expect(spawns).toBe(bootSpawns)
+          }).pipe(Effect.provide(layer))
+        }),
+      ),
   )
 
   projectIt.live("follows the directory's project identity established after creation", () =>

@@ -2,7 +2,9 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Stream } from "effect"
+import { Effect, Layer, PlatformError, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/process"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -745,6 +747,226 @@ describe("Project.resolve", () => {
         sandboxes: [abs("/preserved-sandbox")],
         time: { created: 1 },
       })
+    }),
+  )
+
+  testEffect(Layer.empty).live(
+    "caches git discovery across repeat, subdirectory, worktree, and concurrent resolves, and invalidates on external git changes",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const main = path.join(tmp.path, "repo")
+        const nested = path.join(main, "packages", "app")
+        const linked = path.join(tmp.path, "linked")
+        const linkedNested = path.join(linked, "packages", "app")
+        yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
+        let spawns = 0
+        const layer = AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node]), [
+          CrossSpawnSpawner.node.replace(
+            CrossSpawnSpawner.node.mapLayer((base) =>
+              Layer.effect(
+                ChildProcessSpawner.ChildProcessSpawner,
+                Effect.map(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
+                  ChildProcessSpawner.make((command) => {
+                    spawns++
+                    return spawner.spawn(command)
+                  }),
+                ),
+              ).pipe(Layer.provide(base)),
+            ),
+          ),
+        ])
+
+        yield* Effect.gen(function* () {
+          const project = yield* Project.Service
+          const mainReal = yield* real(main)
+          const nestedReal = yield* real(nested)
+
+          const markerless = yield* project.resolve(abs(nested))
+          expect(markerless.vcs).toBeUndefined()
+          expect(markerless.directory).toBe(nestedReal)
+          expect(spawns).toBe(0)
+
+          yield* Effect.promise(() => initRepo(main))
+          const unborn = yield* project.resolve(abs(nested))
+          expect(unborn.id).toBe(Project.ID.global)
+          expect(unborn.directory).toBe(mainReal)
+          expect(unborn.vcs?.type).toBe("git")
+          const afterInitSpawns = spawns
+          expect(afterInitSpawns).toBeGreaterThan(0)
+
+          // Repeat and concurrent resolves across root and subdirectory spawn no git processes.
+          const [repeatRoot, repeatNested] = yield* Effect.all(
+            [project.resolve(abs(main)), project.resolve(abs(nested))],
+            { concurrency: "unbounded" },
+          )
+          expect(repeatRoot.id).toBe(Project.ID.global)
+          expect(repeatNested.id).toBe(Project.ID.global)
+          expect(spawns).toBe(afterInitSpawns)
+
+          yield* Effect.promise(() => $`git commit --allow-empty -m root`.cwd(main).quiet())
+          const rootSha = Project.ID.make(yield* Effect.promise(() => rootCommit(main)))
+          const committed = yield* project.resolve(abs(nested))
+          expect(committed.id).toBe(rootSha)
+          const afterCommitSpawns = spawns
+          expect(afterCommitSpawns).toBeGreaterThan(afterInitSpawns)
+
+          expect((yield* project.resolve(abs(main))).id).toBe(rootSha)
+          expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+          expect(spawns).toBe(afterCommitSpawns)
+
+          yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(main).quiet())
+          const originID = remoteID("github.com/owner/repo")
+          const withRemote = yield* project.resolve(abs(nested))
+          expect(withRemote.id).toBe(originID)
+          const afterRemoteSpawns = spawns
+          expect(afterRemoteSpawns).toBeGreaterThan(afterCommitSpawns)
+
+          expect((yield* project.resolve(abs(main))).id).toBe(originID)
+          expect((yield* project.resolve(abs(nested))).id).toBe(originID)
+          expect(spawns).toBe(afterRemoteSpawns)
+
+          yield* Effect.promise(async () => {
+            await $`git worktree add ${linked} -b linked`.cwd(main).quiet()
+            await fs.mkdir(linkedNested, { recursive: true })
+          })
+          const linkedReal = yield* real(linked)
+          // Concurrent first resolves of the linked worktree share one git discovery computation.
+          const [wtFirst, wtSecond] = yield* Effect.all(
+            [project.resolve(abs(linked)), project.resolve(abs(linkedNested))],
+            { concurrency: "unbounded" },
+          )
+          expect(wtFirst).toMatchObject({ id: originID, directory: linkedReal, canonical: mainReal })
+          expect(wtSecond).toMatchObject({ id: originID, directory: linkedReal, canonical: mainReal })
+          const afterWorktreeSpawns = spawns
+          expect(afterWorktreeSpawns - afterRemoteSpawns).toBe(3)
+
+          expect((yield* project.resolve(abs(linked))).id).toBe(originID)
+          expect((yield* project.resolve(abs(linkedNested))).id).toBe(originID)
+          expect(spawns).toBe(afterWorktreeSpawns)
+
+          yield* Effect.promise(() =>
+            $`git remote set-url origin https://github.com/owner/renamed.git`.cwd(main).quiet(),
+          )
+          const renamedID = remoteID("github.com/owner/renamed")
+          expect((yield* project.resolve(abs(linkedNested))).id).toBe(renamedID)
+          expect((yield* project.resolve(abs(nested))).id).toBe(renamedID)
+
+          yield* Effect.promise(() => $`git remote remove origin`.cwd(main).quiet())
+          expect((yield* project.resolve(abs(linkedNested))).id).toBe(rootSha)
+          expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        }).pipe(Effect.provide(layer))
+      }),
+  )
+
+  testEffect(Layer.empty).live("does not cache transient git spawn failures during discovery", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const rootSha = Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path)))
+      const originID = remoteID("github.com/owner/repo")
+      let failRemote = true
+      let spawns = 0
+      const layer = AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node]), [
+        CrossSpawnSpawner.node.replace(
+          CrossSpawnSpawner.node.mapLayer((base) =>
+            Layer.effect(
+              ChildProcessSpawner.ChildProcessSpawner,
+              Effect.map(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
+                ChildProcessSpawner.make((command) => {
+                  spawns++
+                  if (failRemote && command._tag === "StandardCommand" && command.args.includes("remote")) {
+                    failRemote = false
+                    return Effect.fail(
+                      PlatformError.systemError({ _tag: "Busy", module: "ChildProcess", method: "spawn" }),
+                    )
+                  }
+                  return spawner.spawn(command)
+                }),
+              ),
+            ).pipe(Layer.provide(base)),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        // First resolve hits a transient `git remote` spawn failure and falls back to root commit uncached.
+        const degraded = yield* project.resolve(abs(tmp.path))
+        expect(degraded.id).toBe(rootSha)
+
+        // Next resolve retries git discovery without any .git file change and caches the recovered remote ID.
+        const recovered = yield* project.resolve(abs(tmp.path))
+        expect(recovered.id).toBe(originID)
+        const afterRecoverSpawns = spawns
+
+        const cached = yield* project.resolve(abs(tmp.path))
+        expect(cached.id).toBe(originID)
+        expect(spawns).toBe(afterRecoverSpawns)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  testEffect(Layer.empty).live("invalidates cached discovery on first commit and root rewrite in a reftable repo", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const repo = path.join(tmp.path, "reftable")
+      const supported = yield* Effect.promise(async () => {
+        const res = await $`git init -q --ref-format=reftable ${repo}`.nothrow().quiet()
+        if (res.exitCode !== 0) return false
+        await $`git config user.email test@opencode.test`.cwd(repo).quiet()
+        await $`git config user.name Test`.cwd(repo).quiet()
+        await $`git config commit.gpgsign false`.cwd(repo).quiet()
+        return true
+      })
+      if (!supported) return
+
+      let spawns = 0
+      const layer = AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node]), [
+        CrossSpawnSpawner.node.replace(
+          CrossSpawnSpawner.node.mapLayer((base) =>
+            Layer.effect(
+              ChildProcessSpawner.ChildProcessSpawner,
+              Effect.map(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
+                ChildProcessSpawner.make((command) => {
+                  spawns++
+                  return spawner.spawn(command)
+                }),
+              ),
+            ).pipe(Layer.provide(base)),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        const unborn = yield* project.resolve(abs(repo))
+        expect(unborn.id).toBe(Project.ID.global)
+        const afterUnbornSpawns = spawns
+        expect((yield* project.resolve(abs(repo))).id).toBe(Project.ID.global)
+        expect(spawns).toBe(afterUnbornSpawns)
+
+        yield* Effect.promise(() => $`git commit --allow-empty -m first`.cwd(repo).quiet())
+        const firstRoot = Project.ID.make(yield* Effect.promise(() => rootCommit(repo)))
+        expect((yield* project.resolve(abs(repo))).id).toBe(firstRoot)
+        const afterFirstSpawns = spawns
+        expect((yield* project.resolve(abs(repo))).id).toBe(firstRoot)
+        expect(spawns).toBe(afterFirstSpawns)
+
+        yield* Effect.promise(() => $`git commit --amend --allow-empty -m rewritten`.cwd(repo).quiet())
+        const rewrittenRoot = Project.ID.make(yield* Effect.promise(() => rootCommit(repo)))
+        expect(rewrittenRoot).not.toBe(firstRoot)
+        expect((yield* project.resolve(abs(repo))).id).toBe(rewrittenRoot)
+      }).pipe(Effect.provide(layer))
     }),
   )
 })

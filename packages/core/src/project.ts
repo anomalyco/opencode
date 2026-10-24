@@ -1,8 +1,9 @@
 export * as Project from "./project.js"
 
-import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
+import { Cache, Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
+import os from "os"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -10,6 +11,7 @@ import { Database } from "./database/database.js"
 import { Worktree } from "@opencode/schema/worktree"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
+import { gitExecutable } from "./util/git-executable.js"
 import { AppProcess } from "@opencode/util/process"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
@@ -284,12 +286,37 @@ const layer = Layer.effect(
       )
     })
 
+    const gitRun = (cwd: string, args: string[]) =>
+      proc
+        .run(
+          ChildProcess.make(gitExecutable(), args, {
+            cwd,
+            env: { LC_ALL: "C" },
+            extendEnv: true,
+            stdin: "ignore",
+          }),
+        )
+        .pipe(
+          Effect.map((result) => ({
+            exitCode: result.exitCode,
+            text: result.stdout.toString("utf8"),
+            stderr: result.stderr.toString("utf8"),
+          })),
+          Effect.orElseSucceed(() => ({ exitCode: -1, text: "", stderr: "" })),
+        )
+
     const remote = Effect.fnUntraced(function* (repo: Git.Repository) {
-      const origin = yield* git.remote.get(repo)
-      if (!origin) return undefined
-      const normalized = url(origin)
-      if (!normalized) return undefined
-      return ID.make(Hash.fast(`git-remote:${normalized}`))
+      const result = yield* gitRun(repo.worktree, ["remote", "get-url", "origin"])
+      // Exit 0 = origin found; exit 2 = "No such remote 'origin'". Any other code (e.g. spawn
+      // failure or signal) is transient and must not be cached as "no remote".
+      const ok = result.exitCode === 0 || result.exitCode === 2
+      if (result.exitCode !== 0) return { id: undefined, ok }
+      const origin = result.text.trim()
+      const normalized = origin ? url(origin) : undefined
+      return {
+        id: normalized ? ID.make(Hash.fast(`git-remote:${normalized}`)) : undefined,
+        ok,
+      }
     })
 
     function url(input: string) {
@@ -316,8 +343,169 @@ const layer = Layer.effect(
     }
 
     const rootCommit = Effect.fnUntraced(function* (repo: Git.Repository) {
-      const root = (yield* git.history.rootCommits(repo))[0]
-      return root ? ID.make(root) : undefined
+      const result = yield* gitRun(repo.worktree, ["rev-list", "--max-parents=0", "HEAD"])
+      if (result.exitCode !== 0) {
+        const unborn =
+          result.exitCode === 128 &&
+          /ambiguous argument 'HEAD'|unknown revision|bad revision 'HEAD'|needed a single revision/i.test(
+            result.stderr,
+          )
+        return { id: undefined, ok: unborn }
+      }
+      const root = result.text
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .toSorted()[0]
+      return { id: root ? ID.make(root) : undefined, ok: Boolean(root) }
+    })
+
+    const statStamp = (target: string) =>
+      fs.stat(target).pipe(
+        Effect.map((info) =>
+          [
+            info.type,
+            Option.getOrUndefined(info.ino) ?? "",
+            info.size,
+            Option.getOrUndefined(info.mtime)?.getTime() ?? "",
+          ].join(":"),
+        ),
+        Effect.orElseSucceed(() => "missing"),
+      )
+
+    // Key git discovery on a spawn-free filesystem fingerprint of the worktree's .git
+    // metadata (following linked-worktree gitdir + commondir, HEAD + its target ref,
+    // config/config.worktree/global/XDG config, packed-refs, reftable/tables.list, and
+    // opencode) so repeat resolves skip git subprocess spawns while external `git init`,
+    // first commit, or `git remote` changes invalidate immediately.
+    const gitFingerprint = Effect.fnUntraced(function* (dotGit: AbsolutePath) {
+      const dotStat = yield* fs.stat(dotGit).pipe(Effect.orElseSucceed(() => undefined))
+      if (!dotStat) return undefined
+      const worktreeRoot = path.dirname(dotGit)
+      let gitDir: string = dotGit
+      let gitFile = ""
+      if (dotStat.type === "File") {
+        const raw = yield* fs.readFileStringSafe(dotGit).pipe(Effect.orElseSucceed(() => undefined))
+        const match = raw?.match(/^gitdir:\s*(.+)$/m)
+        if (!match?.[1]) return undefined
+        gitFile = match[1].trim()
+        gitDir = yield* fs.resolve(path.resolve(worktreeRoot, gitFile))
+      } else if (dotStat.type !== "Directory") {
+        return undefined
+      }
+
+      const commondirRaw = yield* fs
+        .readFileStringSafe(path.join(gitDir, "commondir"))
+        .pipe(Effect.orElseSucceed(() => undefined))
+      const commondirRel = commondirRaw?.trim()
+      const commonDir = commondirRel ? yield* fs.resolve(path.resolve(gitDir, commondirRel)) : gitDir
+
+      const home = process.env.HOME || os.homedir()
+      const globalConfigPath = process.env.GIT_CONFIG_GLOBAL || path.join(home, ".gitconfig")
+      const xdgConfigPath = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "git", "config")
+      const headPath = path.join(gitDir, "HEAD")
+      const [
+        headRaw,
+        headStamp,
+        configStamp,
+        commonWorktreeConfigStamp,
+        gitWorktreeConfigStamp,
+        globalConfigStamp,
+        xdgConfigStamp,
+        packedRefsStamp,
+        reftableStamp,
+        opencodeStamp,
+      ] = yield* Effect.all([
+        fs.readFileStringSafe(headPath).pipe(Effect.orElseSucceed(() => undefined)),
+        statStamp(headPath),
+        statStamp(path.join(commonDir, "config")),
+        statStamp(path.join(commonDir, "config.worktree")),
+        gitDir === commonDir ? Effect.succeed("") : statStamp(path.join(gitDir, "config.worktree")),
+        statStamp(globalConfigPath),
+        statStamp(xdgConfigPath),
+        statStamp(path.join(commonDir, "packed-refs")),
+        statStamp(path.join(commonDir, "reftable", "tables.list")),
+        statStamp(path.join(commonDir, "opencode")),
+      ])
+      if (headRaw === undefined || headStamp === "missing") return undefined
+
+      const head = headRaw.trim()
+      const refRel = head.startsWith("ref:") ? head.slice(4).trim() : undefined
+      const [commonRefStamp, gitRefStamp] = refRel
+        ? yield* Effect.all([
+            statStamp(path.join(commonDir, refRel)),
+            gitDir === commonDir ? Effect.succeed("") : statStamp(path.join(gitDir, refRel)),
+          ])
+        : ["", ""]
+
+      const dotStamp = [
+        dotStat.type,
+        Option.getOrUndefined(dotStat.ino) ?? "",
+        dotStat.size,
+        Option.getOrUndefined(dotStat.mtime)?.getTime() ?? "",
+      ].join(":")
+
+      return [
+        worktreeRoot,
+        dotStamp,
+        gitFile,
+        gitDir,
+        commondirRel ?? "",
+        commonDir,
+        headStamp,
+        head,
+        refRel ?? "",
+        commonRefStamp,
+        gitRefStamp,
+        configStamp,
+        commonWorktreeConfigStamp,
+        gitWorktreeConfigStamp,
+        globalConfigStamp,
+        xdgConfigStamp,
+        packedRefsStamp,
+        reftableStamp,
+        opencodeStamp,
+      ].join("\u0000")
+    })
+
+    const gitDiscover = Effect.fnUntraced(function* (
+      dotGit: AbsolutePath,
+    ): Effect.fn.Return<{ readonly resolved?: Resolved; readonly cacheable: boolean }> {
+      const repo = yield* git.repo.discover(AbsolutePath.make(path.dirname(dotGit)))
+      if (!repo) return { resolved: undefined, cacheable: false }
+      const previous = yield* cached(repo.commonDirectory)
+      const origin = yield* remote(repo)
+      const root = origin.id || previous ? { id: undefined, ok: true } : yield* rootCommit(repo)
+      const id = origin.id ?? previous ?? root.id
+      let worktreeOk = true
+      const canonical =
+        repo.gitDirectory === repo.commonDirectory
+          ? repo.worktree
+          : yield* git.worktree.list(repo).pipe(
+              Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+              Effect.orElseSucceed(() => {
+                worktreeOk = false
+                return repo.worktree
+              }),
+            )
+      return {
+        resolved: {
+          previous,
+          id: id ?? ID.global,
+          directory: repo.worktree,
+          canonical,
+          vcs: { type: "git" as const, store: repo.commonDirectory },
+        },
+        cacheable: origin.ok && root.ok && worktreeOk,
+      }
+    })
+
+    const gitCache = yield* Cache.make<string, { readonly resolved?: Resolved; readonly cacheable: boolean }>({
+      capacity: 512,
+      lookup: (key) => {
+        const sep = key.indexOf("\u0000")
+        return gitDiscover(AbsolutePath.make(sep === -1 ? key : key.slice(0, sep)))
+      },
     })
 
     // Mercurial identity uses the cached ID or the first root changeset; remote-derived
@@ -362,27 +550,16 @@ const layer = Layer.effect(
         Effect.map((matches) => matches[0]),
         Effect.orElseSucceed(() => undefined),
       )
-      const repo =
-        native && path.basename(native) === ".git"
-          ? yield* git.repo.discover(AbsolutePath.make(path.dirname(native)))
-          : undefined
-      if (repo) {
-        const previous = yield* cached(repo.commonDirectory)
-        const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
-        const canonical =
-          repo.gitDirectory === repo.commonDirectory
-            ? repo.worktree
-            : yield* git.worktree.list(repo).pipe(
-                Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
-                Effect.orElseSucceed(() => repo.worktree),
-              )
-        return yield* save({
-          previous,
-          id: id ?? ID.global,
-          directory: repo.worktree,
-          canonical,
-          vcs: { type: "git" as const, store: repo.commonDirectory },
-        })
+      if (native && path.basename(native) === ".git") {
+        const dotGit = AbsolutePath.make(native)
+        const fp = yield* gitFingerprint(dotGit)
+        const cacheKey = fp ? `${dotGit}\u0000${fp}` : undefined
+        const discovered = cacheKey
+          ? yield* Cache.get(gitCache, cacheKey).pipe(
+              Effect.tap((entry) => (entry.cacheable ? Effect.void : Cache.invalidate(gitCache, cacheKey))),
+            )
+          : yield* gitDiscover(dotGit)
+        if (discovered.resolved) return yield* save(discovered.resolved)
       }
 
       const hg = native && path.basename(native) === ".hg" ? yield* hgDiscover(AbsolutePath.make(native)) : undefined
