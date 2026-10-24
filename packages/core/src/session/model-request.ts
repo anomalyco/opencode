@@ -178,6 +178,55 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
+// Stored history can echo prompt-renderer control tokens (e.g. `<|start|>`,
+// `</rfl:parameter>`) back as visible text. The Console gateway parses them as
+// structure and fails the whole request, so break the delimiter while keeping
+// the text human-readable. Scoped to that gateway like the xAI image rule
+// below: other providers render these strings fine, and rewriting their
+// tool results could corrupt edits copied back into files.
+const CONSOLE_PROVIDER = "opencode"
+const CONTROL_TOKEN = /<\|[A-Za-z0-9_]+\||<\/?rfl:[A-Za-z0-9_]+>/g
+
+const sanitizeText = (text: string) => text.replace(CONTROL_TOKEN, (token) => `<\u200b${token.slice(1)}`)
+
+const sanitizeResultText = (value: unknown) => (typeof value === "string" ? sanitizeText(value) : value)
+
+/**
+ * Neutralizes echoed control tokens in prompt-visible text for Console-routed
+ * requests; messages without them, and all messages for other providers, are
+ * returned unchanged. Stored history and checkpoints keep the original text:
+ * this runs at send time only.
+ */
+export const sanitizeControlTokens = (messages: LLMRequest["messages"], provider?: string) => {
+  if (provider !== CONSOLE_PROVIDER) return messages
+  return messages.map((message) => {
+    const content = message.content.map((part) => {
+      if (part.type === "text" || part.type === "reasoning") {
+        const text = sanitizeText(part.text)
+        return text === part.text ? part : { ...part, text }
+      }
+      if (part.type !== "tool-result") return part
+      const result = part.result
+      if (result.type === "text" || result.type === "error") {
+        const value = sanitizeResultText(result.value)
+        return value === result.value ? part : { ...part, result: { ...result, value } }
+      }
+      if (result.type !== "content") return part
+      const value = result.value.map((item): Content => {
+        if (item.type !== "text") return item
+        const text = sanitizeText(item.text)
+        return text === item.text ? item : { ...item, text }
+      })
+      return value.every((item, index) => item === result.value[index])
+        ? part
+        : { ...part, result: { ...result, value } }
+    })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
+  })
+}
+
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const sizes = messages.flatMap((message) =>
@@ -287,7 +336,13 @@ export const layer = Layer.effect(
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        messages: boundImages(
+          unsupportedParts(
+            sanitizeControlTokens(shaped.messages, model.model.provider),
+            model.capabilities,
+            model.model.provider,
+          ),
+        ),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,
