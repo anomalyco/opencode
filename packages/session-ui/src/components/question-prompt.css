@@ -25,15 +25,12 @@
     0.982,
     1
   );
+  --question-pick: 120ms;
   --question-quick: 200ms;
   --question-settle: 300ms;
 
   max-block-size: var(--question-prompt-max-height, 100dvh);
   font-family: var(--v2-font-family-sans);
-
-  [data-color-scheme="dark"] & [data-slot="question-option"]::before {
-    background-color: var(--v2-background-bg-layer-02);
-  }
 
   [data-slot="question-body"] {
     display: flex;
@@ -50,7 +47,7 @@
     gap: 4px;
     flex-shrink: 0;
     min-inline-size: 0;
-    padding-inline: 4px;
+    padding-inline: 10px;
   }
 
   [data-slot="question-header-top"] {
@@ -211,13 +208,13 @@
   [data-slot="question-options-list"] {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
     position: relative;
     isolation: isolate;
   }
 
-  /* One highlight for the whole list, painted between the cards and their content. It glides to the highlighted
-     answer by its clip; the pick itself shows only as the radio dot or the check. */
+  /* One highlight for the whole list, painted under the answers. It glides to the highlighted answer by its clip; the
+     pick itself shows only on the answer's key. */
   [data-slot="question-highlight"] {
     position: absolute;
     inset: 0;
@@ -248,26 +245,6 @@
     cursor: pointer;
     touch-action: manipulation;
 
-    /* The card is drawn under the list's highlight and its hairline over it, so the highlight never hides an edge. */
-    &::before,
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      pointer-events: none;
-    }
-
-    &::before {
-      z-index: -2;
-      background-color: var(--v2-background-bg-layer-01);
-    }
-
-    &::after {
-      z-index: -1;
-      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
-    }
-
     &:disabled,
     &[data-disabled="true"] {
       cursor: not-allowed;
@@ -279,26 +256,33 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    inline-size: 16px;
+    inline-size: 18px;
     block-size: 20px;
-    flex: 0 0 16px;
+    flex: 0 0 18px;
   }
 
-  [data-slot="question-option-box"] {
+  /* An answer's key is its mark. One answer: a round key with a soft fill. Many: a hollow square key, like a checkbox.
+     Picking fills either solid, with the number in the inverse colour. */
+  [data-slot="question-option-key"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    inline-size: 16px;
-    block-size: 16px;
-    flex: 0 0 16px;
-    padding: 0;
-    border: 0;
+    inline-size: 18px;
+    block-size: 18px;
     position: relative;
     isolation: isolate;
-    border-radius: 4px;
-    background: linear-gradient(180deg, var(--v2-alpha-light-6), var(--v2-alpha-light-0)), var(--v2-background-bg-base);
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
+    border-radius: 50%;
+    background-color: var(--v2-background-bg-layer-03);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    color: var(--v2-text-text-muted);
+    font-size: 11px;
+    font-weight: 530;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transition:
+      color var(--question-pick) var(--question-spring),
+      box-shadow var(--question-pick) var(--question-spring);
 
     &::before {
       content: "";
@@ -306,55 +290,23 @@
       inset: 0;
       z-index: -1;
       border-radius: inherit;
-      background:
-        linear-gradient(180deg, var(--v2-alpha-light-20), var(--v2-alpha-light-0)), var(--v2-background-bg-accent);
+      background-color: var(--v2-background-bg-accent);
       opacity: 0;
-      transition: opacity var(--question-quick) var(--question-spring);
+      transition: opacity var(--question-pick) var(--question-spring);
     }
 
-    [data-slot="icon-svg"] {
-      inline-size: 16px;
-      block-size: 16px;
-      flex: 0 0 16px;
-      opacity: 0;
-      color: var(--v2-icon-icon-contrast);
-      clip-path: inset(0 100% 0 0);
-      transition:
-        opacity var(--question-quick) var(--question-spring),
-        clip-path var(--question-settle) var(--question-spring);
-    }
-
-    &[data-type="radio"] {
-      border-radius: 50%;
-    }
-
-    [data-slot="question-option-radio-dot"] {
-      inline-size: 6px;
-      block-size: 6px;
-      flex: 0 0 6px;
-      border-radius: 50%;
-      background-color: var(--v2-grey-300);
-      box-shadow: var(--v2-elevation-elements);
-      opacity: 0;
-      transform: scale(0.3);
-      transition:
-        opacity var(--question-quick) var(--question-spring),
-        transform var(--question-settle) var(--question-spring);
+    &[data-type="checkbox"] {
+      border-radius: 4px;
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
     }
 
     &[data-picked="true"] {
-      &::before,
-      [data-slot="icon-svg"],
-      [data-slot="question-option-radio-dot"] {
+      color: var(--v2-text-text-contrast);
+      box-shadow: inset 0 0 0 1px transparent;
+
+      &::before {
         opacity: 1;
-      }
-
-      [data-slot="icon-svg"] {
-        clip-path: inset(0);
-      }
-
-      [data-slot="question-option-radio-dot"] {
-        transform: none;
       }
     }
   }
@@ -418,9 +370,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    inline-size: 16px;
+    inline-size: 18px;
     block-size: 20px;
-    flex: 0 0 16px;
+    flex: 0 0 18px;
     margin: 0;
     padding: 0;
     border: 0;
@@ -524,16 +476,6 @@
   :root[data-motion="reduce"] & {
     [data-slot="question-highlight"] {
       transition: none;
-    }
-
-    [data-slot="question-option-box"] [data-slot="icon-svg"] {
-      clip-path: none;
-      transition: opacity var(--question-quick) linear;
-    }
-
-    [data-slot="question-option-radio-dot"] {
-      transform: none;
-      transition: opacity var(--question-quick) linear;
     }
 
     [data-slot="question-progress-bar"]::before {

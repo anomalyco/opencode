@@ -33,13 +33,12 @@ function questionField(field: FormInfo["fields"][number]): field is QuestionFiel
   return field.type === "string" || field.type === "multiselect"
 }
 
-function Mark(props: { multi: boolean; picked: boolean }) {
+// The key that picks an answer is also its mark: round like a radio for one answer, a square like a checkbox for many.
+function Mark(props: { multi: boolean; picked: boolean; shortcut?: string }) {
   return (
     <span data-slot="question-option-check" aria-hidden="true">
-      <span data-slot="question-option-box" data-type={props.multi ? "checkbox" : "radio"} data-picked={props.picked}>
-        <Show when={props.multi} fallback={<span data-slot="question-option-radio-dot" />}>
-          <Icon name="check" size="normal" />
-        </Show>
+      <span data-slot="question-option-key" data-type={props.multi ? "checkbox" : "radio"} data-picked={props.picked}>
+        {props.shortcut}
       </span>
     </span>
   )
@@ -73,7 +72,7 @@ function Option(props: {
       onPointerMove={props.onPointerMove}
       onClick={props.onClick}
     >
-      <Mark multi={props.multi} picked={props.picked} />
+      <Mark multi={props.multi} picked={props.picked} shortcut={props.shortcut} />
       <span data-slot="question-option-main">
         <span data-slot="option-label">
           <bdi>{props.label}</bdi>
@@ -676,10 +675,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
               >
                 <bdi>{question()?.question}</bdi>
               </div>
-              <Show when={!store.minimized}>
-                <div data-slot="question-hint">
-                  {language.t(multi() ? "ui.question.multiHint" : "ui.question.singleHint")}
-                </div>
+              <Show when={!store.minimized && multi()}>
+                <div data-slot="question-hint">{language.t("session.question.pickAny")}</div>
               </Show>
             </div>
           </>
@@ -804,7 +801,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 onFocus={() => setStore("focus", options().length)}
                 onClick={customToggle}
               >
-                <Mark multi={multi()} picked={on()} />
+                <Mark multi={multi()} picked={on()} shortcut={count() <= 9 ? String(count()) : undefined} />
               </button>
               <TextInput
                 ref={(el) => (customInput = el)}

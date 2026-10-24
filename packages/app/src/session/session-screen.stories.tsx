@@ -165,6 +165,17 @@ export const QuestionAnswerCounts = {
   ),
 }
 
+export const QuestionMultiSelect = {
+  render: () => (
+    <SessionPreview
+      title="Choose supporting surfaces"
+      description={description}
+      document={questionPendingDocument}
+      request={{ type: "question", value: { ...activeQuestionRequest, fields: [activeQuestionRequest.fields[1]] } }}
+    />
+  ),
+}
+
 export const WebSearchRequest = {
   render: () => (
     <SessionPreview
