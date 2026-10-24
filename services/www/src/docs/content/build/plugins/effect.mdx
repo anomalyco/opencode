@@ -1466,6 +1466,19 @@ effect: (ctx) =>
   }),
 ```
 
+Resolved hooks run after input repair and request aliases resolve to the actual tool name. Their payload is read-only;
+fail with `Tool.Error` to reject the call before execution.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.resolved", (event) =>
+      event.tool === "execute" ? Effect.fail(new Tool.Error({ message: "Code Mode is disabled" })) : Effect.void,
+    )
+  }),
+```
+
 After hooks may inspect or replace successful results and failures.
 
 ```ts
@@ -1484,13 +1497,24 @@ effect: (ctx) =>
 #### Reference
 
 ```ts
+interface ToolExecuteResolved {
+  readonly tool: string
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly messageID: SessionMessage.ID
+  readonly id: Tool.CallID
+  readonly input: unknown
+}
+
 interface ToolHooks {
   readonly "execute.before": ToolExecuteBefore
+  readonly "execute.resolved": ToolExecuteResolved
   readonly "execute.after": ToolExecuteAfter
 }
 
 interface ToolFailures extends Record<keyof ToolHooks, unknown> {
   readonly "execute.before": Tool.Error
+  readonly "execute.resolved": Tool.Error
   readonly "execute.after": never
 }
 

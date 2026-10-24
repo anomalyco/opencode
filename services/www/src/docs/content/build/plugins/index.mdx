@@ -1740,6 +1740,15 @@ await ctx.tool.hook("execute.before", (event) => {
 })
 ```
 
+Use a resolved hook to inspect the actual tool name after input repair and request alias resolution. Its payload is
+read-only; throwing `Tool.Error` rejects the call before execution.
+
+```ts
+await ctx.tool.hook("execute.resolved", (event) => {
+  if (event.tool === "execute") throw new Tool.Error({ message: "Code Mode is disabled" })
+})
+```
+
 Inspect successful results or failures after execution.
 
 ```ts
@@ -1752,8 +1761,18 @@ await ctx.tool.hook("execute.after", (event) => {
 #### Reference
 
 ```ts
+interface ToolExecuteResolved {
+  readonly tool: string
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly messageID: SessionMessage.ID
+  readonly id: Tool.CallID
+  readonly input: unknown
+}
+
 interface ToolHooks {
   "execute.before": ToolExecuteBefore
+  "execute.resolved": ToolExecuteResolved
   "execute.after": ToolExecuteCompleted | ToolExecuteFailed
 }
 
