@@ -98,6 +98,11 @@ function resourceServer(
     listChanged?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
+    /**
+     * List a tool whose input schema is not an object, and one whose `required` is a string, which
+     * only the 2026-07-28 schema accepts, ahead of the valid tools.
+     */
+    malformedTool?: boolean
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
@@ -147,11 +152,23 @@ function resourceServer(
         protocol.setRequestHandler("tools/list", () => {
           state.toolLists += 1
           return Promise.resolve({
-            tools: input.emptyElicitation
-              ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-              : input.urlElicitation
-                ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-                : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }],
+            tools: [
+              // Servers send raw JSON; the cast lets the fixture send a tool the schema rejects.
+              ...(input.malformedTool
+                ? [
+                    { name: "malformed", inputSchema: { type: "string" } } as unknown as McpClient.Tool,
+                    {
+                      name: "modern-only",
+                      inputSchema: { type: "object", required: "text" },
+                    } as unknown as McpClient.Tool,
+                  ]
+                : []),
+              ...(input.emptyElicitation
+                ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                : input.urlElicitation
+                  ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                  : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }]),
+            ],
           })
         })
         if (input.emptyElicitation) {
@@ -1178,6 +1195,28 @@ describe.each([
           connection.onResourcesChanged(() => Deferred.doneUnsafe(changed, Exit.void))
           yield* Effect.promise(server.sendResourceListChanged)
           yield* Deferred.await(changed)
+        }),
+      ),
+    )
+  })
+
+  test("skips tools the SDK rejects and keeps the rest of the server's tools", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({ modern: era === "modern", resources: false, malformedTool: true })
+          const connection = yield* connect(
+            "malformed",
+            new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
+            import.meta.dir,
+          )
+
+          // Only tools the SDK itself would reject for the negotiated era are skipped.
+          expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(
+            era === "modern" ? ["modern-only", "echo"] : ["echo"],
+          )
+          yield* connection.callTool({ name: "echo", args: { text: "hi" } })
+          expect(server.state.toolCalls.at(-1)).toMatchObject({ name: "echo", arguments: { text: "hi" } })
         }),
       ),
     )
