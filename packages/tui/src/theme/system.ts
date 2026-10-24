@@ -8,6 +8,18 @@ export function terminalMode(colors: TerminalColors): "dark" | "light" | undefin
   return 0.299 * r + 0.587 * g + 0.114 * b > 0.5 ? "light" : "dark"
 }
 
+export async function systemAppearance(): Promise<"dark" | "light" | undefined> {
+  if (process.platform !== "darwin") return
+  const proc = Bun.spawn(["/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  const code = await proc.exited
+  if (code === 0) return "dark"
+  if (code === 1) return "light"
+  return
+}
+
 export function generateSystem(colors: TerminalColors, mode: "dark" | "light") {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
