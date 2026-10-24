@@ -180,6 +180,7 @@ test("preserves migrated v1 keybind defaults", () => {
     ["session.delete", "session_delete"],
     ["session.list", "session_list"],
     ["agent.list", "agent_list"],
+    ["prompt.voice.push_to_talk", "prompt_voice_push_to_talk"],
   ] as const
 
   pairs.forEach(([command, name]) => {

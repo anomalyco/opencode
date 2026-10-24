@@ -110,6 +110,29 @@ Configure mouse capture, scrolling, editor context, pastes, and prompt image pre
 
 </div>
 
+## Voice
+
+Press the `prompt.voice.push_to_talk` key to start recording from the microphone, and press it again to stop and transcribe the recording into the prompt. Presses within a second of the previous one are treated as key repeat, so holding the key does not toggle. Recording needs `ffmpeg` or `sox` installed, and transcription runs your own shell command. OpenCode does not enable terminal key-release reporting, so releasing the key does not stop a recording today.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "prompt.voice.push_to_talk": "ctrl+space"
+  },
+  "voice": {
+    "transcribe_command": "whisper {file} --output -"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Voice settings" tabIndex={0}>
+
+| Setting                    | Values                          | Description                                                                 |
+| -------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `voice.transcribe_command` | string                          | Transcribes recordings. The wav path replaces `{file}`, or is appended when `{file}` is absent. Stdout is inserted into the prompt. |
+
+</div>
+
 ## Sessions
 
 Configure how full-screen TUI sessions are presented and where new sessions start:

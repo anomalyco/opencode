@@ -8,7 +8,9 @@ import {
   measureEditText,
   stripAnsiSequences,
   type KeyEvent,
+  type Renderable,
 } from "@opentui/core"
+import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import path from "path"
 import { useLocal } from "../../context/local"
@@ -38,7 +40,16 @@ import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../pro
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
+import {
+  VoiceRecorder,
+  findRecorder,
+  transcribeAudio,
+  shouldDiscardTap,
+  isRepeatPress,
+  VOICE_MAX_RECORD_MS,
+} from "./voice"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useBindings } from "@opentui/keymap/solid"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -728,6 +739,8 @@ export function Prompt(props: PromptProps) {
 
   onCleanup(() => {
     disposed = true
+    voiceRecorder?.dispose()
+    voiceRecorder = undefined
     if (store.prompt.text) {
       saveDraft(stashSessionID, { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
     }
@@ -942,6 +955,111 @@ export function Prompt(props: PromptProps) {
     enabled: !disabled(),
     commands: stashCommands(),
   }))
+
+  // Push-to-talk voice input: hold the configured key to record, release to transcribe.
+  // Where the terminal never reports releases, pressing the key again stops instead.
+  const [voiceRecording, setVoiceRecording] = createSignal(false)
+  let voiceRecorder: VoiceRecorder | undefined
+  let voiceStartTime = 0
+  let voiceStopTimer: ReturnType<typeof setTimeout> | undefined
+  let voiceStarting = false
+  let voiceLastPress = 0
+
+  async function startVoiceRecording(event?: KeyEvent) {
+    // Holding the key fires this binding again for every auto-repeat, and the
+    // TUI does not enable terminal event reporting, so repeats carry no marker.
+    // Presses that follow the previous one closely are the key being held; only
+    // a fresh press (after a quiet gap) may start or stop a recording.
+    const now = Date.now()
+    const repeating = isRepeatPress(now - voiceLastPress, event?.repeated)
+    voiceLastPress = now
+    if (repeating) return
+    if (voiceRecorder?.recording) {
+      void stopVoiceRecording("")
+      return
+    }
+    if (voiceStarting) return
+    if (!config.voice?.transcribe_command) {
+      toast.show({ variant: "error", message: "Voice input needs voice.transcribe_command to be set" })
+      return
+    }
+    // findRecorder awaits device enumeration on Windows; guard re-entry.
+    voiceStarting = true
+    const spec = await findRecorder()
+    voiceStarting = false
+    if (!spec) {
+      toast.show({ variant: "error", message: "Voice input needs ffmpeg or sox installed to record audio" })
+      return
+    }
+    voiceRecorder = new VoiceRecorder()
+    voiceRecorder.start(spec, () => {
+      voiceRecorder?.dispose()
+      voiceRecorder = undefined
+      setVoiceRecording(false)
+      toast.show({ variant: "error", message: "Voice recorder stopped unexpectedly" })
+    })
+    voiceStartTime = Date.now()
+    setVoiceRecording(true)
+    voiceStopTimer = setTimeout(() => void stopVoiceRecording(""), VOICE_MAX_RECORD_MS)
+  }
+
+  async function stopVoiceRecording(tapInsert: string) {
+    if (voiceStopTimer) {
+      clearTimeout(voiceStopTimer)
+      voiceStopTimer = undefined
+    }
+    const recorder = voiceRecorder
+    voiceRecorder = undefined
+    setVoiceRecording(false)
+    if (!recorder) return
+    const holdMs = Date.now() - voiceStartTime
+    try {
+      const wavFile = await recorder.stop()
+      if (!wavFile) return
+      if (shouldDiscardTap(holdMs)) {
+        if (tapInsert) input.insertText(tapInsert)
+        return
+      }
+      const text = await transcribeAudio(wavFile, config.voice?.transcribe_command ?? "")
+      if (!text) return
+      input.insertText(text.endsWith("\n") ? text : text + " ")
+      setTimeout(() => {
+        if (!input || input.isDestroyed) return
+        input.getLayoutNode().markDirty()
+        renderer.requestRender()
+      }, 0)
+    } catch (error) {
+      toast.error(error)
+    } finally {
+      recorder.dispose()
+    }
+  }
+
+  useBindings(() => {
+    const press = config.keybinds.get("prompt.voice.push_to_talk").filter((binding) => binding.event !== "release")
+    return {
+      target: inputTarget,
+      mode: "base",
+      enabled: inputTarget() !== undefined && !disabled() && press.length > 0,
+      bindings: [
+        ...press.map((binding) => ({
+          ...binding,
+          desc: "Start voice recording (press again to transcribe)",
+          group: "Prompt",
+          cmd: (context: CommandContext<Renderable, KeyEvent>) => void startVoiceRecording(context.event),
+        })),
+        // Releasing the same key stops the recording, so one configured key
+        // covers both halves of push-to-talk without extra configuration.
+        ...press.map((binding) => ({
+          ...binding,
+          event: "release" as const,
+          desc: "Stop voice recording and transcribe",
+          group: "Prompt",
+          cmd: () => stopVoiceRecording(binding.key === "space" ? " " : ""),
+        })),
+      ],
+    }
+  })
 
   Keymap.createLayer(() => {
     return {
@@ -1599,6 +1717,7 @@ export function Prompt(props: PromptProps) {
 
   const placeholderText = createMemo(() => {
     const value = (() => {
+      if (voiceRecording()) return "Recording voice… press the key again to stop"
       if (store.mode === "shell") {
         if (!shell().length) return undefined
         return `Run a command… "${shell()[store.placeholder % shell().length]}"`
