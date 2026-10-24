@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptRows } from "./queue"
+import { extractPromptFromMessage } from "@/composer/prompt"
+import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { queuedPromptAttachments, queuedPromptRows, undoQueuedPrompt } from "./queue"
 
 const queued = [
   {
@@ -72,5 +74,62 @@ describe("queuedPromptAttachments", () => {
         blob: { id: "data:application/pdf;base64,aGk=", url: "data:application/pdf;base64,aGk=" },
       },
     ])
+  })
+
+  test("undoQueuedPrompt rehydrates media:<hash> attachments before inbox.cancel sweeps the server blob", async () => {
+    const hash = "e".repeat(64)
+    const mediaUri = `/api/experimental/media/${hash}`
+    const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    const pngBytes = Uint8Array.from(Buffer.from(pngBase64, "base64"))
+    const blobs = new Map<string, Uint8Array>([[hash, pngBytes]])
+    const events: string[] = []
+
+    const extracted = extractPromptFromMessage({
+      id: "msg_queued_media",
+      text: "queued with image",
+      files: [
+        {
+          uri: mediaUri,
+          mime: "image/png",
+          width: 1,
+          height: 1,
+          bytes: pngBytes.byteLength,
+          name: "shot.png",
+        },
+      ],
+    })
+
+    // The draft keeps the URL-neutral ref, not the route the server sent.
+    expect(extracted.find((part) => part.type === "image")).toMatchObject({
+      blob: { id: `media:${hash}`, url: `media:${hash}` },
+    })
+    expect(JSON.stringify(extracted)).not.toContain("/api/")
+
+    const rehydrated = await undoQueuedPrompt({
+      prompt: extracted,
+      readMedia: async (requestedHash) => {
+        events.push(`readMedia:${requestedHash}`)
+        const found = blobs.get(requestedHash)
+        if (!found) throw new Error(`404 media not found: ${requestedHash}`)
+        return found
+      },
+      cancelInboxItem: async () => {
+        events.push("cancelInboxItem")
+        // Simulates `SessionInbox.projectCancelled` removing `media_ref` and sweeping `media_blob`
+        blobs.delete(hash)
+      },
+    })
+
+    expect(events).toEqual([`readMedia:${hash}`, "cancelInboxItem"])
+    expect(blobs.has(hash)).toBe(false)
+
+    const imagePart = rehydrated.find((part) => part.type === "image")
+    expect(imagePart).toBeDefined()
+    if (imagePart?.type === "image") {
+      const expectedDataUrl = `data:image/png;base64,${pngBase64}`
+      expect(imagePart.blob).toEqual({ id: expectedDataUrl, url: expectedDataUrl })
+      expect(await resolveBlobUrl(imagePart.blob)).toBe(expectedDataUrl)
+      expect(await blobDataUrl(imagePart.blob, imagePart.mime)).toBe(expectedDataUrl)
+    }
   })
 })

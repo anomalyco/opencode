@@ -19,6 +19,8 @@ export function authFromToken(token: string | null) {
   }
 }
 
+export const MEDIA_URI_CAPABILITY = "experimental-media-uri"
+
 export function createApiForServer(input: {
   server: ServerConnection.HttpBase
   fetch?: typeof globalThis.fetch
@@ -26,13 +28,16 @@ export function createApiForServer(input: {
   return OpenCode.make({
     baseUrl: input.server.url,
     fetch: input.fetch,
-    headers: input.server.password
-      ? {
-          Authorization: `Basic ${authTokenFromCredentials({
-            password: input.server.password,
-          })}`,
-        }
-      : undefined,
+    headers: {
+      "X-OpenCode-Capabilities": MEDIA_URI_CAPABILITY,
+      ...(input.server.password
+        ? {
+            Authorization: `Basic ${authTokenFromCredentials({
+              password: input.server.password,
+            })}`,
+          }
+        : {}),
+    },
   })
 }
 

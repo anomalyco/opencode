@@ -1,5 +1,6 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { Option, Schema } from "effect"
+import { mediaHashFromUri, toMediaRef } from "@/runtime/server/media"
 
 export type BlobReference = { id: string; url: string }
 
@@ -51,14 +52,45 @@ const aliases = new Map<string, string>()
 // Fetches image bytes from the store created last. Documents load without their bytes; a consumer
 // that renders or sends an image resolves its URL through here, so a history full of large
 // attachments costs nothing at startup.
+type MediaBlobLoader = (uri: string) => Promise<string | undefined>
+
 let loader: ((id: string) => Promise<string | undefined>) | undefined
+const mediaLoaders = new Map<string, MediaBlobLoader>()
+
+export function setMediaBlobLoader(
+  keyOrLoader: string | MediaBlobLoader | undefined,
+  maybeLoader?: MediaBlobLoader | undefined,
+) {
+  const key = typeof keyOrLoader === "string" ? keyOrLoader : "default"
+  const next = typeof keyOrLoader === "string" ? maybeLoader : keyOrLoader
+  mediaLoaders.delete(key)
+  if (next) mediaLoaders.set(key, next)
+}
+
+async function loadMediaBlobUrl(uri: string, serverKey?: string) {
+  if (serverKey) {
+    const keyed = mediaLoaders.get(serverKey)
+    if (keyed) {
+      const url = await keyed(uri)
+      if (url) return url
+    }
+  }
+  for (const [key, candidate] of [...mediaLoaders.entries()].reverse()) {
+    if (key === serverKey) continue
+    const url = await candidate(uri)
+    if (url) return url
+  }
+  return undefined
+}
 
 /** The object URL for an image reference, loading its bytes from the draft store on first use. */
-export function resolveBlobUrl(blob: { id: string; url?: string }) {
-  if (blob.url) return Promise.resolve(blob.url)
+export function resolveBlobUrl(blob: { id: string; url?: string; server?: string }) {
+  if (blob.url && !mediaHashFromUri(blob.url)) return Promise.resolve(blob.url)
   const existing = retained.get(aliases.get(blob.id) ?? blob.id)
 
   if (existing) return Promise.resolve(existing.url)
+  if (mediaHashFromUri(blob.id) && mediaLoaders.size > 0) return loadMediaBlobUrl(blob.id, blob.server)
+  if (blob.url) return Promise.resolve(blob.url)
 
   return loader?.(blob.id) ?? Promise.resolve(undefined)
 }
@@ -551,6 +583,7 @@ function referenced(json: string) {
 }
 
 export async function blobDataUrl(blob: BlobReference, mime: string) {
+  if (mediaHashFromUri(blob.id)) return toMediaRef(blob.id)
   const kept = retained.get(aliases.get(blob.id) ?? blob.id)
   const url = kept ? undefined : await resolveBlobUrl(blob)
 
@@ -569,5 +602,7 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
 }
 
 export function createLegacyBlobReference(dataUrl: string): BlobReference {
-  return { id: dataUrl, url: dataUrl }
+  const id = toMediaRef(dataUrl)
+
+  return { id, url: id }
 }
