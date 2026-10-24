@@ -8,7 +8,7 @@ import {
 } from "@tanstack/solid-virtual"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode/ui/scroll-view"
 import { Predicate } from "effect"
-import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
+import { Timeline, TimelineRow, type createReactiveTimelineProjection } from "@opencode/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
   batch,
@@ -25,9 +25,7 @@ import {
 } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
-import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { filterVirtualIndexes } from "./virtual-items"
 
 const fallbackItemSize = 60
 
@@ -50,7 +48,7 @@ const cache = new Map<
 >()
 
 type Projection = Pick<
-  ReturnType<typeof createTimelineProjection>,
+  ReturnType<typeof createReactiveTimelineProjection>,
   "activeMessageID" | "messageByID" | "messageLastRowIndex" | "messageRowIndex" | "rowByKey" | "rows"
 >
 
@@ -171,10 +169,9 @@ export function createTimelineVirtualizer(input: Input) {
         ? Array.from({ length: range.count - first }, (_, index) => first + index)
         : defaultRangeExtractor({ ...range, overscan: 2 })
 
-      return filterVirtualIndexes(
-        [...new Set([...indexes, ...[active, anchored].filter((index) => index >= 0)])].sort((a, b) => a - b),
-        range.count,
-      )
+      return [...new Set([...indexes, ...[active, anchored].filter((index) => index >= 0)])]
+        .sort((a, b) => a - b)
+        .filter((index) => index >= 0 && index < range.count)
     }
   })
 

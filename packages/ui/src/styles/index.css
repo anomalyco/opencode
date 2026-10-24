@@ -30,7 +30,6 @@
 @import "../components/sticky-accordion-header.css" layer(components);
 @import "../navigation/tabs/tabs.css" layer(components);
 @import "../components/text-reveal.css" layer(components);
-@import "../components/text-strikethrough.css" layer(components);
 @import "../components/typewriter.css" layer(components);
 
 @import "./utilities.css" layer(utilities);

@@ -91,12 +91,17 @@ test.describe("timeline tool state stability", () => {
       )
     }
 
-    for (const [index, id] of ["skill", "webfetch", "custom", "subagent", "websearch"].entries()) {
-      const key = id as (typeof ids)[number]
-      const metadata = key === "subagent" ? { sessionID: childID } : key === "websearch" ? { provider: "exa" } : {}
-      const output = key === "websearch" ? "Result https://example.com/result" : "Completed"
+    const completions = {
+      skill: { metadata: {}, output: "Completed" },
+      webfetch: { metadata: {}, output: "Completed" },
+      custom: { metadata: {}, output: "Completed" },
+      subagent: { metadata: { sessionID: childID }, output: "Completed" },
+      websearch: { metadata: { provider: "exa" }, output: "Result https://example.com/result" },
+    }
+
+    for (const [index, key] of (["skill", "webfetch", "custom", "subagent", "websearch"] as const).entries()) {
       await timeline.send(
-        partUpdated(toolPart(`prt_state_${key}`, names[key], "completed", inputs[key], { metadata, output })),
+        partUpdated(toolPart(`prt_state_${key}`, names[key], "completed", inputs[key], completions[key])),
         [110, 70, 280, 130, 420][index],
       )
     }
@@ -165,10 +170,6 @@ test.describe("timeline tool state stability", () => {
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
 
     const regions = defineVisualRegions({
-      status: {
-        selector: `${groupSelector} [data-component="tool-status-title"]`,
-        opacitySelectors: ['[data-slot="tool-status-active"]', '[data-slot="tool-status-done"]'],
-      },
       context: { selector: groupSelector, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
         selector: `[data-timeline-part-id="${renderedPartID("prt_ctx_following")}"]`,
@@ -189,7 +190,6 @@ test.describe("timeline tool state stability", () => {
       110,
     )
     await timeline.send(partUpdated(toolPart(ids[2]!, tools[2]!, "completed", inputs[2]!)), 250)
-    await expect(group.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
     await timeline.send(status("idle"), 700)
     const trace = await stopVisualProbe<keyof typeof regions>(page)
     await reportVisualStability(
@@ -207,7 +207,6 @@ test.describe("timeline tool state stability", () => {
         { type: "flow", regions: ["context", "following"] },
       ]),
     )
-    await expect(group.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
     await group.locator('[data-slot="collapsible-trigger"]').click()
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "false")

@@ -9,7 +9,6 @@ import {
   TimelineRow,
   type ReasoningMode,
 } from "@opencode/session-ui/timeline/projection"
-import { createTimelineProjection } from "../src/session/timeline/projection"
 
 const assistant = (id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
   id,
@@ -20,7 +19,7 @@ const assistant = (id: string, content: SessionMessageAssistant["content"]): Ses
   content,
 })
 
-for (const factory of [createTimelineProjection, createReactiveTimelineProjection]) {
+for (const factory of [createReactiveTimelineProjection]) {
   describe(factory.name, () => {
     test("only crosses the renderable boundary on text deltas, while retaining live content", () => {
       createRoot((dispose) => {

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { applyTimelineMessageHandoff, visibleTimelineMessages } from "./controller-projection"
-import { createTimelineProjection } from "./projection"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import { createReactiveTimelineProjection } from "@opencode/session-ui/timeline/projection"
 
 const messages = [
   { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
@@ -59,7 +59,7 @@ describe("visibleTimelineMessages", () => {
     expect(visible[2]).toBe(work)
 
     createRoot((dispose) => {
-      const projection = createTimelineProjection({
+      const projection = createReactiveTimelineProjection({
         sessionMessages: () => visible,
         status: () => ({ type: "busy" }),
         reasoningMode: () => "compact",
