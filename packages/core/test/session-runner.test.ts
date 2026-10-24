@@ -666,8 +666,10 @@ const incompleteStream = () =>
     }),
   })
 
-const INCOMPLETE_STREAM_CONTINUATION =
-  "The previous response was interrupted. Continue from where you left off without repeating completed content."
+const INCOMPLETE_STREAM_CONTINUATION = `<system-reminder>
+This is an automatic continuation from OpenCode, not user input or approval.
+The previous response was interrupted. Continue from where you left off without repeating completed content.
+</system-reminder>`
 
 const invalidRequest = () =>
   new AIError({
@@ -5660,8 +5662,10 @@ describe("SessionRunnerLLM", () => {
 
   for (const type of ["text", "reasoning"] as const) {
     scenario(`continues ${type} after an output token limit`, function* (s) {
-      const nudge =
-        "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
+      const nudge = `<system-reminder>
+This is an automatic continuation from OpenCode, not user input or approval.
+Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces.
+</system-reminder>`
       const partial =
         type === "text"
           ? [
@@ -5753,13 +5757,15 @@ describe("SessionRunnerLLM", () => {
 
   scenario("continues an incomplete stream after observable text", function* (s) {
     const failure = incompleteStream()
-    yield* s.admit("Continue partial output")
+    const prompt = "Review the changes, but wait for my GO before pushing."
+    const partial = "The changes are ready. Reply GO to approve pushing."
+    yield* s.admit(prompt)
     yield* s.llm.push(
       TestLLM.failAfter(
         failure,
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "partial-rate-limit" }),
-        LLMEvent.textDelta({ id: "partial-rate-limit", text: "Partial" }),
+        LLMEvent.textDelta({ id: "partial-rate-limit", text: partial }),
       ),
     )
     yield* s.llm.push(TestLLM.text(" continuation", "continued-text"))
@@ -5773,21 +5779,29 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(s.requests[1]?.messages.at(-2)).toMatchObject({
       role: "assistant",
-      content: [{ type: "text", text: "Partial" }],
+      content: [{ type: "text", text: partial }],
     })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: INCOMPLETE_STREAM_CONTINUATION,
-        },
-      ],
-    })
+    const continuation = userTexts(s.requests[1]).at(-1)
+    expect(continuation).toBe(INCOMPLETE_STREAM_CONTINUATION)
+    expect(continuation).toContain("not user input or approval")
+    for (const route of [OpenAIChat.route, OpenAIResponses.route, AnthropicMessages.route]) {
+      const compiled = yield* compileRequest(
+        LLMRequest.update(s.requests[1], {
+          model: LanguageModel.make({ id: "fake-model", provider: "fake", route }),
+        }),
+      )
+      const messages = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))(
+        compiled.body[route === OpenAIResponses.route ? "input" : "messages"],
+      )
+      expect(messages.at(-1)).toMatchObject({ role: "user" })
+      const text = JSON.stringify(messages.at(-1))
+      expect(text).toContain("not user input or approval")
+      expect(text).toContain("The previous response was interrupted.")
+    }
     const context = yield* s.context
     expect(context).toMatchObject([
-      Expected.user("Continue partial output"),
-      Expected.assistant({ finish: "error", error: { type: "provider.invalid-output" } }, [Expected.text("Partial")]),
+      Expected.user(prompt),
+      Expected.assistant({ finish: "error", error: { type: "provider.invalid-output" } }, [Expected.text(partial)]),
       {
         type: "synthetic",
         text: INCOMPLETE_STREAM_CONTINUATION,

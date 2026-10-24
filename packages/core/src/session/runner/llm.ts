@@ -31,11 +31,15 @@ import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
-const CONTINUE_AFTER_INCOMPLETE_STREAM =
-  "The previous response was interrupted. Continue from where you left off without repeating completed content."
+const CONTINUE_AFTER_INCOMPLETE_STREAM = `<system-reminder>
+This is an automatic continuation from OpenCode, not user input or approval.
+The previous response was interrupted. Continue from where you left off without repeating completed content.
+</system-reminder>`
 
-const CONTINUE_AFTER_OUTPUT_LIMIT =
-  "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
+const CONTINUE_AFTER_OUTPUT_LIMIT = `<system-reminder>
+This is an automatic continuation from OpenCode, not user input or approval.
+Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces.
+</system-reminder>`
 
 const layer = Layer.effect(
   Service,
