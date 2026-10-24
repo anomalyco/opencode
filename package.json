@@ -185,6 +185,7 @@
     "@corvu/drawer@0.2.4": "patches/@corvu%2Fdrawer@0.2.4.patch",
     "app-builder-lib@26.15.7": "patches/app-builder-lib@26.15.7.patch",
     "electron-updater@6.8.9": "patches/electron-updater@6.8.9.patch",
-    "@pierre/trees@1.0.0-beta.6": "patches/@pierre%2Ftrees@1.0.0-beta.6.patch"
+    "@pierre/trees@1.0.0-beta.6": "patches/@pierre%2Ftrees@1.0.0-beta.6.patch",
+    "effect@4.0.1": "patches/effect@4.0.1.patch"
   }
 }
