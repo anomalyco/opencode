@@ -131,8 +131,16 @@ const layer = Layer.effect(
                     ([id, slot]) =>
                       Effect.gen(function* () {
                         active.delete(id)
+                        // One plugin's teardown must not abort the swap. Its registrations are already gone,
+                        // and failing here leaves the new generation unloaded with its builtins unregistered,
+                        // which silently resets their state (#57089).
                         if (slot.activation && !slot.activation.failure)
-                          yield* Scope.close(slot.activation.scope, Exit.void)
+                          yield* Scope.close(slot.activation.scope, Exit.void).pipe(
+                            Effect.catchCauseIf(
+                              (cause) => !Cause.hasInterrupts(cause),
+                              (cause) => Effect.logError("failed to close plugin", { "plugin.id": id, cause }),
+                            ),
+                          )
                       }),
                     { discard: true },
                   )

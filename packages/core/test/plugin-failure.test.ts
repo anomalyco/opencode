@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
 import { Plugin } from "@opencode/core/plugin"
@@ -9,6 +9,42 @@ import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+// A plugin whose teardown throws must not abort the generation swap: the old generation is already
+// closed by then, so aborting leaves the new one unloaded and its builtin transforms unregistered,
+// which silently reset builtin state such as `compaction.auto: false` (#57089).
+it.live("keeps the new generation when a plugin cleanup throws", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const broken = (revision: string): Plugin.Generation => ({
+      id: "broken",
+      revision,
+      effect: () =>
+        Effect.gen(function* () {
+          // Only the revision being replaced has the throwing cleanup, so the generation that survives the
+          // swap tears down normally and the case fails for the swap alone.
+          if (revision === "1")
+            yield* Effect.addFinalizer(() => Effect.die(new ReferenceError("cleanup binding is not defined")))
+        }),
+    })
+    const builtin = (revision: string): Plugin.Generation => ({
+      id: "builtin",
+      revision,
+      // Last in activation order, like `internal.post`, so the reverse close loop reaches it first.
+      effect: (ctx) =>
+        ctx.command.transform((editor) => {
+          editor.add({ name: "builtin", description: revision, execute: () => Effect.void })
+        }),
+    })
+
+    yield* plugins.activate([broken("1"), builtin("1")])
+    expect((yield* commands.get("builtin"))?.description).toBe("1")
+
+    yield* plugins.activate([broken("2"), builtin("2")])
+    expect((yield* commands.get("builtin"))?.description).toBe("2")
+  }),
+)
 
 it.live("removes a failed plugin's hooks and RPC handlers without affecting healthy plugins", () =>
   Effect.gen(function* () {
@@ -301,5 +337,20 @@ it.live("settles readiness before shutdown joins a disabled plugin's finalizers"
     ])
     yield* release
     expect(restarted).toBe(false)
+  }),
+)
+
+// Interruption from a cleanup finalizer is not a plugin failure. Swallowing it would turn a cancel
+// during teardown into a successful activation, so it must keep propagating.
+it.live("preserves interruption during plugin cleanup", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    yield* plugins.activate([
+      { id: "interrupted", revision: "1", effect: () => Effect.addFinalizer(() => Effect.interrupt) },
+    ])
+    const activation = yield* plugins.activate([]).pipe(Effect.forkChild({ startImmediately: true }))
+    const exit = yield* Fiber.await(activation)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.hasInterrupts(exit.cause)).toBe(true)
   }),
 )
