@@ -55,9 +55,10 @@ export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Creden
       }),
   })
 
-const signRequest = (input: {
+export const signRequest = (input: {
   readonly url: string
-  readonly body: string
+  readonly method?: string
+  readonly body?: string
   readonly headers: Headers.Headers
   readonly credentials: Credentials
   readonly service: string
@@ -67,7 +68,7 @@ const signRequest = (input: {
     try: async () => {
       const signed = await new AwsV4Signer({
         url: input.url,
-        method: "POST",
+        method: input.method ?? "POST",
         headers: Object.entries(input.headers),
         body: input.body,
         region: input.credentials.region,
