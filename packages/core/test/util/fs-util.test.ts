@@ -1,5 +1,16 @@
+import os from "node:os"
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import { Effect, FileSystem, Layer, PlatformError } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { testEffect } from "../lib/effect"
@@ -47,4 +58,69 @@ describe("FSUtil", () => {
       expect(exit._tag).toBe("Failure")
     }).pipe(Effect.provide(denied("Unknown", "EIO"))),
   )
+})
+
+const root = mkdtempSync(path.join(os.tmpdir(), "opencode-realpath-"))
+const target = path.join(root, "target")
+const link = path.join(root, "alias")
+mkdirSync(target)
+writeFileSync(path.join(target, "inside.txt"), "synthetic")
+symlinkSync(target, link, process.platform === "win32" ? "junction" : "dir")
+afterAll(() => rmSync(root, { recursive: true, force: true }))
+
+describe("FSUtil.resolve (sync)", () => {
+  test("canonicalizes an existing file through a directory alias", () => {
+    expect(FSUtil.resolve(path.join(link, "inside.txt"))).toBe(realpathSync.native(path.join(target, "inside.txt")))
+  })
+
+  test("resolves its own canonical result again", () => {
+    const physical = FSUtil.resolve(link)
+    expect(FSUtil.resolve(physical)).toBe(physical)
+    expect(physical).toBe(realpathSync.native(target))
+  })
+
+  test("preserves the missing-path fallback", () => {
+    const missing = path.join(root, "missing", "child")
+    expect(FSUtil.resolve(missing)).toBe(path.resolve(missing))
+  })
+
+  test("keeps a junction target outside the selected directory recognizable", () => {
+    const selected = path.join(root, "selected")
+    mkdirSync(selected)
+    const alias = path.join(selected, "outside")
+    symlinkSync(target, alias, process.platform === "win32" ? "junction" : "dir")
+    expect(FSUtil.resolve(alias)).toBe(realpathSync.native(target))
+    expect(FSUtil.contains(FSUtil.resolve(selected), FSUtil.resolve(alias))).toBe(false)
+  })
+
+  test("rejects a directory-alias cycle", () => {
+    const a = path.join(root, "cycle-a")
+    const b = path.join(root, "cycle-b")
+    const type = process.platform === "win32" ? "junction" : "dir"
+    symlinkSync(b, a, type)
+    symlinkSync(a, b, type)
+    try {
+      expect(() => FSUtil.resolve(a)).toThrow()
+    } finally {
+      unlinkSync(a)
+      unlinkSync(b)
+    }
+  })
+
+  // Ordinary host tests cannot create an AppContainer denial by chmod on Windows.
+  // This same file can also run inside an AppContainer with only its temp granted.
+  const denied = (() => {
+    if (process.platform !== "win32") return
+    const drive = path.parse(realpathSync.native(target)).root
+    try {
+      lstatSync(drive)
+    } catch (error) {
+      if (error instanceof Error && "code" in error && (error.code === "EPERM" || error.code === "EACCES")) return drive
+      throw error
+    }
+  })()
+  test.skipIf(!denied)("propagates an actual Windows access denial", () => {
+    if (!denied) throw new Error("A restricted drive root is required")
+    expect(() => FSUtil.resolve(denied)).toThrow()
+  })
 })

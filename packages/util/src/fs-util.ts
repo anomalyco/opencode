@@ -262,9 +262,13 @@ export namespace FSUtil {
   export function resolve(p: string): string {
     const resolved = path.resolve(windowsPath(p))
     try {
-      return normalizePath(realpathSync(resolved))
-    } catch (e: any) {
-      if (["ENOENT", "ENOTDIR", "EPERM", "EACCES"].includes(e?.code)) return normalizePath(resolved)
+      // The JS variant walks every ancestor, including ungranted drive roots in
+      // AppContainers. Native Windows resolution opens the requested path itself.
+      return process.platform === "win32" ? realpathSync.native(resolved) : realpathSync(resolved)
+    } catch (e) {
+      const code = e instanceof Error && "code" in e ? e.code : undefined
+      if (code === "ENOENT" || code === "ENOTDIR") return normalizePath(resolved)
+      if (process.platform !== "win32" && (code === "EPERM" || code === "EACCES")) return normalizePath(resolved)
       throw e
     }
   }
