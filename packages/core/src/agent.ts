@@ -1,9 +1,10 @@
 export * as Agent from "./agent.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Array, Context, Effect, Layer, Types } from "effect"
+import { Array, Context, Effect, Layer, Option, Types } from "effect"
 import { Agent } from "@opencode/schema/agent"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
 import { State } from "./state.js"
 
 export const ID = Agent.ID
@@ -50,6 +51,10 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+    const locationOption = location
+      ? { location: { directory: location.directory, workspaceID: location.workspaceID } }
+      : undefined
     const state = State.create<Data, Editor>({
       name: "agent",
       initial: () => ({ agents: new Map() }),
@@ -69,7 +74,7 @@ const layer = Layer.effect(
           editor.agents.delete(id)
         },
       }),
-      notify: () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Agent.Event.Updated, {}, locationOption).pipe(Effect.asVoid),
     })
     const selectable = (agent: Info | undefined) =>
       agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined

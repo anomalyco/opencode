@@ -11,6 +11,7 @@ import {
   Exit,
   Fiber,
   Layer,
+  Option,
   Schedule,
   Schema,
   Scope,
@@ -20,6 +21,7 @@ import {
 } from "effect"
 import { Integration } from "@opencode/schema/integration"
 import { Credential } from "./credential.js"
+import { Location } from "./location.js"
 import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
@@ -308,6 +310,10 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
+    const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+    const locationOption = location
+      ? { location: { directory: location.directory, workspaceID: location.workspaceID } }
+      : undefined
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
     // Runtime-only: statuses describe the current process's view of a connection and are not persisted.
@@ -376,7 +382,7 @@ const layer = Layer.effect(
           },
         },
       }),
-      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Integration.Event.Updated, {}, locationOption).pipe(Effect.asVoid),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
@@ -795,7 +801,7 @@ const layer = Layer.effect(
           if (Equal.equals(statuses.get(key), input.status)) return
           if (input.status) statuses.set(key, input.status)
           if (!input.status) statuses.delete(key)
-          yield* bus.publish(Integration.Event.Updated, {})
+          yield* bus.publish(Integration.Event.Updated, {}, locationOption)
         }),
       },
       oauth: {

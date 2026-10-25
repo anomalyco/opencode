@@ -260,6 +260,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         bus
           .subscribe()
           .pipe(
+            Stream.provideService(Location.Service, location),
             Stream.filter(
               (event): event is EventManifest.ServerEvent | RpcEvent =>
                 EventManifest.isServer(event) || isRpcEvent(event),

@@ -5,8 +5,9 @@ import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
 import { State } from "./state.js"
 
 export const Info = Command.Info
@@ -54,13 +55,17 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+    const locationOption = location
+      ? { location: { directory: location.directory, workspaceID: location.workspaceID } }
+      : undefined
     const state = State.create<Map<string, Definition>, Editor>({
       name: "command",
       initial: () => new Map(),
       editor: (editor) => ({
         add: (definition) => editor.set(definition.name, definition),
       }),
-      notify: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Command.Event.Updated, {}, locationOption).pipe(Effect.asVoid),
     })
     const info = (definition: Definition) =>
       Info.make({
