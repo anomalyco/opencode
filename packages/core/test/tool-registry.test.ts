@@ -1207,9 +1207,61 @@ describe("Tool", () => {
       expect(executed).toEqual(["old:request"])
       expect(progress).toEqual([
         { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
-        { stage: "old" },
+        { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" }, progress: { stage: "old" } }] },
         { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
       ])
+    }),
+  )
+
+  it.effect("keeps each nested call's progress on its own row and drops it once the call settles", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let late: Effect.Effect<void> = Effect.void
+      yield* transform(service, {
+        slow: {
+          name: "slow",
+          description: "Report progress",
+          input: Schema.Struct({ id: Schema.String }),
+          output: Schema.Struct({ id: Schema.String }),
+          execute: ({ id }, context) =>
+            context.progress({ progress: 1, total: 2, message: `${id} half` }).pipe(
+              Effect.tap(() => Effect.sync(() => (late = context.progress({ progress: 2, message: `${id} late` })))),
+              Effect.as({ output: { id } }),
+            ),
+        },
+      })
+      const toolSet = yield* service.snapshot()
+      const progress: Tool.Metadata[] = []
+      yield* toolSet.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "call-execute",
+          name: "execute",
+          input: { code: 'await tools.slow({ id: "a" }); return await tools.slow({ id: "b" })' },
+        },
+        progress: (update) => Effect.sync(() => progress.push(update)),
+      })
+      yield* late
+
+      expect(progress.every((update) => Array.isArray(update.toolCalls))).toBe(true)
+      expect(progress).toContainEqual({
+        toolCalls: [
+          { tool: "slow", status: "completed", input: { id: "a" } },
+          {
+            tool: "slow",
+            status: "running",
+            input: { id: "b" },
+            progress: { progress: 1, total: 2, message: "b half" },
+          },
+        ],
+      })
+      expect(progress.at(-1)).toEqual({
+        toolCalls: [
+          { tool: "slow", status: "completed", input: { id: "a" } },
+          { tool: "slow", status: "completed", input: { id: "b" } },
+        ],
+      })
     }),
   )
 })

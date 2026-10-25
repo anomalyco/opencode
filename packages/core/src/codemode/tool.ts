@@ -25,6 +25,8 @@ const ExecuteCall = Schema.Struct({
   tool: Schema.String,
   status: Schema.Literals(["running", "completed", "error"]),
   input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
+  // The latest progress the call reported while running, such as an MCP server's notifications/progress.
+  progress: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
 })
 
 type ExecuteCall = typeof ExecuteCall.Type
@@ -92,10 +94,19 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
+        // An update that leaves the rows as they were (a dropped late progress) publishes nothing.
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
-            Ref.updateAndGet(calls, update).pipe(Effect.tap((toolCalls) => context.progress({ toolCalls }))),
+            Effect.gen(function* () {
+              const before = yield* Ref.get(calls)
+              const toolCalls = update(before)
+              if (toolCalls === before) return toolCalls
+              yield* Ref.set(calls, toolCalls)
+              yield* context.progress({ toolCalls })
+              return toolCalls
+            }),
           )
+        const rows = progressHooks(record)
         const result = yield* runtime(inventory)
           .execute(code)
           .pipe(
@@ -103,7 +114,11 @@ export const create = (
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  const executed = yield* executeTool(name, tool, input, context)
+                  // A nested call's progress goes on its own row; the execute call's metadata stays its call list.
+                  const executed = yield* executeTool(name, tool, input, {
+                    ...context,
+                    progress: (update) => rows.progress(input, update),
+                  })
                   const content =
                     typeof executed.content === "string"
                       ? [{ type: "text" as const, text: executed.content }]
@@ -115,7 +130,7 @@ export const create = (
                   const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                   return text === "" ? null : text
                 }),
-              hooks: progressHooks(record),
+              hooks: rows.hooks,
             }),
           )
         const toolCalls = yield* Ref.get(calls)
@@ -154,6 +169,8 @@ export const create = (
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
 function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
   const rows = new WeakMap<object, number>()
+  // Code Mode hands a tool the same input object its tool.before hook saw, so the input finds the call's row.
+  const byInput = new WeakMap<object, number>()
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
       rows.set(call, items.length)
@@ -164,14 +181,32 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     if (index === undefined) return Effect.void
     return record((items) => {
       const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
+      const { progress: _, ...row } = items[index]
+      next[index] = { ...row, status: result.status === "success" ? "completed" : "error" }
       return next
     })
   }
-  return {
+  // Progress for a call with no row, or reported after it settled, is dropped.
+  const progress = (input: unknown, update: Metadata) => {
+    const index = typeof input === "object" && input !== null ? byInput.get(input) : undefined
+    if (index === undefined) return Effect.void
+    return record((items) => {
+      if (items[index]?.status !== "running") return items
+      const next = [...items]
+      next[index] = { ...items[index], progress: update as Record<string, Schema.Json> }
+      return next
+    }).pipe(Effect.asVoid)
+  }
+  const hooks = {
     "tool.before": (call) => {
       const shown = displayInput(call.input)
-      return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
+      return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            if (typeof call.input === "object" && call.input !== null) byInput.set(call.input, rows.get(call)!)
+          }),
+        ),
+      )
     },
     "tool.after": settle,
     // Only listed extension functions get a row; anything else stays out of the TUI.
@@ -185,6 +220,7 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     },
     "extension.after": settle,
   } satisfies CodeMode.Hooks
+  return { hooks, progress }
 }
 
 export const catalog = (inventory: Inventory) => {
