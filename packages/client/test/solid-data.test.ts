@@ -695,6 +695,108 @@ for (const resource of ["provider", "model"] as const) {
   })
 }
 
+test("ignores catalog updates for unloaded locations while refreshing loaded locations", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: Array<[string, string | null]> = []
+  const current = { version: "v1" }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      requests.push([url.pathname, directory])
+      const location = { directory, project: { id: directory, directory, canonical: directory } }
+      if (url.pathname === "/api/vcs")
+        return Response.json({ location, data: { branch: { current: "main", default: "main" } } })
+      if (url.pathname === "/api/provider")
+        return Response.json({
+          location,
+          data: [{ id: "company", name: current.version, activation: "enabled", package: "aisdk:@ai-sdk/openai" }],
+        })
+      if (url.pathname === "/api/model") return Response.json({ location, data: [modelInfo(current.version)] })
+      if (url.pathname === "/api/command")
+        return Response.json({
+          location,
+          data: [{ name: current.version, source: "command", template: "run", hints: [] }],
+        })
+      if (url.pathname === "/api/agent")
+        return Response.json({
+          location,
+          data: [
+            {
+              id: current.version,
+              name: current.version,
+              mode: "primary",
+              hidden: false,
+              request: { headers: {}, body: {} },
+              permissions: [],
+            },
+          ],
+        })
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const emit = (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details }))
+  const loaded = { directory: "/project" }
+  const vcsOnly = { directory: "/vcs-only" }
+  const unloaded = { directory: "/unloaded" }
+
+  try {
+    await Promise.all([
+      setup.data.location.provider.sync(loaded),
+      setup.data.location.model.sync(loaded),
+      setup.data.location.command.sync(loaded),
+      setup.data.location.agent.sync(loaded),
+      setup.data.location.vcs.sync(vcsOnly),
+    ])
+    requests.length = 0
+    current.version = "v2"
+
+    for (const location of [vcsOnly, unloaded]) {
+      for (const type of ["provider.updated", "model.updated", "command.updated", "agent.updated"] as const) {
+        emit({ id: `evt_${type}_${location.directory}`, created: 1, type, location, data: {} })
+      }
+    }
+    await Bun.sleep(20)
+    expect(requests).toEqual([])
+
+    for (const type of ["provider.updated", "model.updated", "command.updated", "agent.updated"] as const) {
+      emit({ id: `evt_${type}_loaded`, created: 2, type, location: loaded, data: {} })
+    }
+    await wait(
+      () =>
+        setup.data.location.provider.list(loaded)?.[0]?.name === "v2" &&
+        setup.data.location.model.list(loaded)?.[0]?.name === "v2" &&
+        setup.data.location.command.list(loaded)?.[0]?.name === "v2" &&
+        setup.data.location.agent.list(loaded)?.[0]?.id === "v2",
+    )
+    expect(requests).toEqual([
+      ["/api/provider", "/project"],
+      ["/api/model", "/project"],
+      ["/api/command", "/project"],
+      ["/api/agent", "/project"],
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates model discovery when an update overtakes an in-flight model list", async () => {
   const started = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
