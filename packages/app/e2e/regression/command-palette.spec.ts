@@ -1,3 +1,4 @@
+import type { OpenCodeEvent } from "@opencode/client/promise"
 import { expect, test } from "@playwright/test"
 import {
   captureConsoleWarnings,
@@ -135,8 +136,8 @@ declare global {
   }
 }
 
-test("titlebar search opens recent sessions in their final order", async ({ page }) => {
-  const stale = { ...paletteSession, time: { ...paletteSession.time } }
+test("titlebar search opens recent sessions in the server's order on every open", async ({ page }) => {
+  const busy = { ...paletteSession, time: { ...paletteSession.time } }
 
   const fresh = {
     ...paletteSession,
@@ -145,9 +146,28 @@ test("titlebar search opens recent sessions in their final order", async ({ page
     time: { created: 1700000001000, updated: 1700000001000 },
   }
 
-  await openPaletteWorkspace(page, true, [stale, fresh])
-  // Activity Home has not seen yet: the server now lists the stale session first.
-  stale.time.updated = 1700000002000
+  const mock = await openPaletteWorkspace(page, true, [busy, fresh])
+  // A step starts after Home loaded its index, so the server now lists the busy session first.
+  busy.time.updated = 1700000002000
+  // SAFETY: a step in a session whose transcript is not open; only its session ID and time matter here.
+  await mock.push([
+    {
+      id: "evt_busy_step",
+      created: busy.time.updated,
+      type: "session.step.started",
+      durable: { aggregateID: busy.id, seq: 1, version: 1 },
+      location: { directory: busy.directory },
+      data: {
+        sessionID: busy.id,
+        assistantMessageID: "msg_busy_step",
+        agent: "build",
+        model: { providerID: "test", id: "test" },
+        started: busy.time.updated,
+      },
+    } as OpenCodeEvent,
+  ])
+  const home = page.getByRole("region", { name: "Recent sessions" }).getByRole("button", { name: /fixture session/ })
+  await expect(home).toHaveText([/Palette fixture session/, /Fresh fixture session/])
 
   await page.evaluate(() => {
     const seen: string[][] = []
@@ -162,11 +182,20 @@ test("titlebar search opens recent sessions in their final order", async ({ page
     }).observe(document.body, { childList: true, subtree: true, characterData: true })
   })
 
-  const listed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/session")
-  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
-  await listed
-  const options = page.getByRole("dialog").getByRole("option")
-  await expect(options).toHaveText([/Palette fixture session/, /Fresh fixture session/])
+  const dialog = page.getByRole("dialog")
+
+  const openAndClose = async () => {
+    const listed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/session")
+    await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+    await listed
+    await expect(dialog.getByRole("option")).toHaveText([/Palette fixture session/, /Fresh fixture session/])
+    await dialog.getByRole("combobox").press("Escape")
+    await expect(dialog).toHaveCount(0)
+  }
+
+  await openAndClose()
+  await openAndClose()
+
   expect(await page.evaluate(() => window.__paletteOrders)).toEqual([[paletteSession.title, fresh.title]])
 })
 
@@ -177,7 +206,7 @@ const olderSession = {
   time: { created: 1699999999000, updated: 1699999999000 },
 }
 
-test("titlebar search adds recent sessions the server lists after the order settles", async ({ page }) => {
+test("titlebar search adds recent sessions only the server lists", async ({ page }) => {
   await openPaletteWorkspace(page, false, [paletteSession, olderSession])
   const release = Promise.withResolvers<void>()
   await page.route("**/api/session?*", async (route) => {

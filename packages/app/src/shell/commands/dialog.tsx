@@ -59,8 +59,6 @@ export function CommandPaletteView(props: {
   placeholder: string
   items: (query: string) => CommandPaletteEntry[]
   sources: ((query: string, signal: AbortSignal) => Promise<CommandPaletteEntry[]>)[]
-  /** Rows are not ready to show yet; the list stays blank instead of reporting no results. */
-  pending?: () => boolean
   highlight: (item: CommandPaletteEntry | undefined) => void
   select: (item: CommandPaletteEntry | undefined) => void
   close: () => void
@@ -95,13 +93,11 @@ export function CommandPaletteView(props: {
           section={groupKey}
           header={(entry) => entry.category || undefined}
           empty={
-            !store.query.trim() && props.pending?.()
-              ? undefined
-              : search.loading()
-                ? language.t("common.loading")
-                : search.failed()
-                  ? language.t("common.requestFailed")
-                  : language.t("palette.empty")
+            search.loading()
+              ? language.t("common.loading")
+              : search.failed()
+                ? language.t("common.requestFailed")
+                : language.t("palette.empty")
           }
           onActive={props.highlight}
           onSelect={props.select}
