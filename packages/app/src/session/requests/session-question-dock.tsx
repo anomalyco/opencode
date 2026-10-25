@@ -676,7 +676,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 <bdi>{question()?.question}</bdi>
               </div>
               <Show when={!store.minimized && multi()}>
-                <div data-slot="question-hint">{language.t("session.question.pickAny")}</div>
+                <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
               </Show>
             </div>
           </>

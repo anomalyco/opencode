@@ -317,8 +317,7 @@ const source = {
   "ui.question.subtitle.answered": "{{count}} answered",
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",
-  "ui.question.multiHint": "Select all answers that apply",
-  "ui.question.singleHint": "Select one answer",
+  "ui.question.multiHint": "Pick any",
   "ui.question.custom.placeholder": "Type your answer…",
   "ui.question.custom.answerPlaceholder": "Type your own answer…",
 } satisfies Record<string, string>
