@@ -46,6 +46,7 @@ import type { Config } from "@opencode/schema/config"
 export type ServerInfoOutput = {
   readonly version: string
   readonly pid: number
+  readonly hostname?: string | undefined
   readonly urls: ReadonlyArray<string>
   readonly paths: { readonly tmp: string }
   readonly capabilities?: { readonly persistentPty?: boolean | undefined } | undefined

@@ -19138,6 +19138,16 @@
             "type": "integer",
             "minimum": 0
           },
+          "hostname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "urls": {
             "type": "array",
             "items": {
