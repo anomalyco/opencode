@@ -1,4 +1,4 @@
-import { hostname, userInfo } from "node:os"
+import { hostname } from "node:os"
 import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -22,7 +22,6 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             version: info.app.version ?? "unknown",
             pid: process.pid ?? 0,
             hostname: hostname() || undefined,
-            username: account(),
             urls: info.urls(),
             paths: info.paths,
             capabilities: { persistentPty: PersistentPty.available },
@@ -57,12 +56,3 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
       )
   }),
 )
-
-// userInfo throws when the process has no account entry, e.g. some containers.
-function account() {
-  try {
-    return userInfo().username || undefined
-  } catch {
-    return undefined
-  }
-}

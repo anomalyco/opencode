@@ -17,29 +17,16 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   await page.goto("/")
 }
 
-test("Home uses the session list for tabs and the session inbox only when selected in Settings", async ({ page }) => {
-  const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
-  const waiting = { id: "ses_home_waiting", title: "Waiting on approval" }
+test("Home keeps the session list in every interface mode", async ({ page }) => {
   const earlier = { id: "ses_home_earlier", title: "Finished earlier" }
-  await mockWorkspace(page, {
-    name: "Home",
-    sessions: [earlier, waiting],
-    sessionStatus: { [waiting.id]: { type: "running" } },
-    sessionPermissions: {
-      [waiting.id]: [
-        { id: "per_home", sessionID: waiting.id, action: "shell", resources: ["git status"], metadata: {}, save: [] },
-      ],
-    },
-    onPermissionReply: (reply) => replies.push(reply),
-  })
+  await mockWorkspace(page, { name: "Home", sessions: [earlier] })
   await page.goto("/")
   const search = page.getByRole("textbox", { name: /Search sessions/ })
-  const inbox = page.locator('[data-slot="start-row"]')
   await expect(search).toBeVisible()
   await expect(row(page, earlier.title)).toBeVisible()
-  await expect(inbox).toHaveCount(0)
 
-  for (const mode of ["Side tabs", "Inbox", "Top tabs", "Inbox"]) {
+  // The Inbox mode moves session tabs into the sidebar inbox; Home stays the session list.
+  for (const mode of ["Side tabs", "Inbox", "Top tabs"]) {
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
     const option = settings.getByRole("radio", { name: mode, exact: true })
@@ -47,31 +34,9 @@ test("Home uses the session list for tabs and the session inbox only when select
     await expect(option).toBeChecked()
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
     await expect(page).toHaveURL("/")
-
-    if (mode === "Inbox") {
-      await expect(inbox.filter({ hasText: earlier.title })).toHaveAttribute("data-status", "ready")
-      await expect(search).toHaveCount(0)
-      await expect(row(page, earlier.title)).toHaveCount(0)
-      continue
-    }
-
     await expect(search).toBeVisible()
     await expect(row(page, earlier.title)).toBeVisible()
-    await expect(inbox).toHaveCount(0)
   }
-
-  await page.reload()
-  const approval = inbox.filter({ hasText: waiting.title })
-  await expect(approval).toHaveAttribute("data-status", "approval")
-  await expect(approval).toContainText("git status")
-  await expect(search).toHaveCount(0)
-  await approval.getByRole("button", { name: "Allow", exact: true }).click()
-  await expect
-    .poll(() => replies)
-    .toEqual([{ sessionID: waiting.id, permissionID: "per_home", body: { decision: "once" } }])
-  await expect(approval).toHaveAttribute("data-status", "working")
-  await inbox.filter({ hasText: earlier.title }).click()
-  await expectPath(page, sessionHref(earlier.id))
 })
 
 test("the session context menu renames, exports, and deletes a Home session", async ({ page }) => {

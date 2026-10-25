@@ -19157,16 +19157,6 @@
               }
             ]
           },
-          "username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "urls": {
             "type": "array",
             "items": {
