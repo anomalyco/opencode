@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "f1f14616-b6a1-483d-87b0-d5b7a9132580",
-  "prevIds": ["76109fbf-f324-4af0-934c-3ae695275099"],
+  "id": "44bd8ca5-689a-410e-a46a-958eb5accd97",
+  "prevIds": ["f1f14616-b6a1-483d-87b0-d5b7a9132580"],
   "ddl": [
     {
       "name": "account_state",
@@ -70,10 +70,6 @@
     },
     {
       "name": "session_message",
-      "entityType": "tables"
-    },
-    {
-      "name": "session_pending",
       "entityType": "tables"
     },
     {
@@ -1136,76 +1132,6 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "session_id",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "type",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "data",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "delivery",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "admitted_seq",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_created",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
       "table": "session_v2"
     },
     {
@@ -1759,17 +1685,6 @@
       "table": "session_message"
     },
     {
-      "columns": ["session_id"],
-      "tableTo": "session_v2",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "fk_session_pending_session_id_session_v2_id_fk",
-      "entityType": "fks",
-      "table": "session_pending"
-    },
-    {
       "columns": ["project_id"],
       "tableTo": "project",
       "columnsTo": ["id"],
@@ -1915,13 +1830,6 @@
       "nameExplicit": false,
       "name": "session_message_pk",
       "table": "session_message",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_pending_pk",
-      "table": "session_pending",
       "entityType": "pks"
     },
     {
@@ -2147,60 +2055,6 @@
       "name": "session_message_time_created_idx",
       "entityType": "indexes",
       "table": "session_message"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
-          "value": "delivery",
-          "isExpression": false
-        },
-        {
-          "value": "admitted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "session_pending_session_delivery_seq_idx",
-      "entityType": "indexes",
-      "table": "session_pending"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": "\"session_pending\".\"type\" = 'compaction'",
-      "origin": "manual",
-      "name": "session_pending_session_compaction_idx",
-      "entityType": "indexes",
-      "table": "session_pending"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
-          "value": "admitted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "origin": "manual",
-      "name": "session_pending_session_admitted_seq_idx",
-      "entityType": "indexes",
-      "table": "session_pending"
     },
     {
       "columns": [

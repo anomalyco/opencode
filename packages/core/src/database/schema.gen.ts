@@ -191,18 +191,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_pending\` (
-          \`id\` text PRIMARY KEY,
-          \`session_id\` text NOT NULL,
-          \`type\` text NOT NULL,
-          \`data\` text NOT NULL,
-          \`delivery\` text,
-          \`admitted_seq\` integer NOT NULL,
-          \`time_created\` integer NOT NULL,
-          CONSTRAINT \`fk_session_pending_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`session_v2\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
@@ -285,15 +273,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         `CREATE INDEX \`session_message_session_time_created_id_idx\` ON \`session_message\` (\`session_id\`,\`time_created\`,\`id\`);`,
       )
       yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
-      yield* tx.run(
-        `CREATE INDEX \`session_pending_session_delivery_seq_idx\` ON \`session_pending\` (\`session_id\`,\`delivery\`,\`admitted_seq\`);`,
-      )
-      yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_pending_session_compaction_idx\` ON \`session_pending\` (\`session_id\`) WHERE "session_pending"."type" = 'compaction';`,
-      )
-      yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_pending_session_admitted_seq_idx\` ON \`session_pending\` (\`session_id\`,\`admitted_seq\`);`,
-      )
       yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
