@@ -1425,13 +1425,11 @@ describe("SessionProjector", () => {
             hash: BlobTable.hash,
             mime: BlobTable.mime,
             bytes: BlobTable.bytes,
-            width: BlobTable.width,
-            height: BlobTable.height,
           })
           .from(BlobTable)
           .all()
           .pipe(Effect.orDie),
-      ).toEqual([{ hash, mime: "image/png", bytes: png.byteLength, width: 1, height: 1 }])
+      ).toEqual([{ hash, mime: "image/png", bytes: png.byteLength }])
       expect(
         yield* db
           .select({ message: BlobRefTable.message_id, hash: BlobRefTable.hash, seq: BlobRefTable.seq })

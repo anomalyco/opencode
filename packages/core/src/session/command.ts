@@ -18,9 +18,10 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   delivery?: SessionInbox.Delivery
 }) {
   const instances = yield* Instance.Service
-  const commands = yield* Plugin.awaitActivation.pipe(Effect.andThen(Command.Service), instances.provide(input.session))
-  yield* commands
-    .execute({
+  yield* Effect.gen(function* () {
+    yield* Plugin.awaitActivation
+    const commands = yield* Command.Service
+    yield* commands.execute({
       name: input.command,
       invocation: {
         sessionID: input.session.id,
@@ -33,5 +34,5 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
         delivery: input.delivery ?? "steer",
       },
     })
-    .pipe(instances.provide(input.session))
+  }).pipe(instances.provide(input.session))
 })

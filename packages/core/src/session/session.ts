@@ -168,7 +168,7 @@ export const make = Effect.fn("Session.make")(function* () {
           // Preparation, the staged revert commit and admission share one acquisition of the session's location
           // services, so projections see its config whoever called prompt.
           return yield* Effect.gen(function* () {
-            const item = yield* restore(SessionPrompt.prepareLocated({ session, messageID, input }))
+            const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
             // Commit a staged revert only after preparation succeeds, before admitting new work.
             if (session.revert) yield* SessionRevert.commit(bus, session)
             return yield* admission.admit({

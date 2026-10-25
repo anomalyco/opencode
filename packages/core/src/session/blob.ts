@@ -8,7 +8,6 @@ import type { FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
 import { Config } from "../config.js"
 import type { Database } from "../database/database.js"
-import { readImageDimensions } from "../image/dimensions.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionSchema } from "./schema.js"
 import { BlobRefTable, BlobTable, SessionInboxTable, SessionMessageTable } from "./sql.js"
@@ -136,17 +135,7 @@ const DATA_URI = /^data:[^,]*;base64,(.*)$/s
 
 function take(pending: Pending, raw: Buffer, mime: string) {
   const hash = hashBytes(raw)
-  if (!pending.has(hash)) {
-    const size = readImageDimensions(raw, mime)
-    pending.set(hash, {
-      hash,
-      mime,
-      bytes: raw.byteLength,
-      width: size?.width ?? null,
-      height: size?.height ?? null,
-      data: raw,
-    })
-  }
+  if (!pending.has(hash)) pending.set(hash, { hash, mime, bytes: raw.byteLength, data: raw })
   return SessionStored.ref(hash)
 }
 
@@ -179,42 +168,33 @@ const save = Effect.fnUntraced(function* (db: DatabaseService, pending: Pending)
     .pipe(Effect.orDie)
 })
 
-const files = Effect.fnUntraced(function* (db: DatabaseService, input: ReadonlyArray<SessionStored.File>) {
+/** {@link externalize} for a user message or pending inbox user payload. */
+export const externalizePayload = Effect.fnUntraced(function* <
+  T extends { readonly files?: ReadonlyArray<SessionStored.File> },
+>(db: DatabaseService, input: T): Effect.fn.Return<T> {
+  if (input.files === undefined || !(yield* writeEnabled)) return input
   const pending: Pending = new Map()
-  const stored = input.map((file) => fileRef(pending, file))
+  const files = input.files.map((file) => fileRef(pending, file))
+  if (pending.size === 0) return input
   yield* save(db, pending)
-  return { files: stored, extracted: pending.size > 0 }
+  return { ...input, files }
 })
 
 /**
  * With `experimental.media_blob` on, moves inline user files and tool `data:` files into `blob` and returns the
- * message to store with refs in their place. Existing refs pass through; `extracted` says whether any new ones
- * appeared. Record the stored row with {@link recordRefs}.
+ * message to store with refs in their place. Existing refs pass through.
  */
 export const externalize = Effect.fnUntraced(function* (
   db: DatabaseService,
   message: SessionMessage.Info | SessionStored.User,
 ) {
-  if (message.type === "user") {
-    if (message.files === undefined || !(yield* writeEnabled)) return { message, extracted: false }
-    const stored = yield* files(db, message.files)
-    return { message: { ...message, files: stored.files }, extracted: stored.extracted }
-  }
-  if (message.type !== "assistant" || !(yield* writeEnabled)) return { message, extracted: false }
+  if (message.type === "user") return yield* externalizePayload(db, message)
+  if (message.type !== "assistant" || !(yield* writeEnabled)) return message
   const pending: Pending = new Map()
   const content = message.content.map((part) => toolPartRefs(pending, part))
-  if (pending.size === 0) return { message, extracted: false }
+  if (pending.size === 0) return message
   yield* save(db, pending)
-  return { message: { ...message, content }, extracted: true }
-})
-
-/** {@link externalize} for a pending inbox user payload. */
-export const externalizePayload = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  payload: SessionStored.UserPayload,
-) {
-  if (payload.files === undefined || !(yield* writeEnabled)) return payload
-  return { ...payload, files: (yield* files(db, payload.files)).files }
+  return { ...message, content }
 })
 
 const hashesOf = (data: MessageRow["data"] | InboxRow["payload"]) => {

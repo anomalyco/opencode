@@ -259,7 +259,7 @@ function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
     const updateMessage = Effect.fnUntraced(function* (message: SessionMessage.Info) {
       const stored = yield* SessionBlob.externalize(db, message)
-      const { id: _, type, ...data } = encodeStored(stored.message)
+      const { id: _, type, ...data } = encodeStored(stored)
       const updated = yield* db
         .update(SessionMessageTable)
         .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
@@ -269,9 +269,10 @@ function run(db: DatabaseService, event: MessageEvent) {
         .pipe(Effect.orDie)
       if (!updated) return
       const owner = { sessionID: event.data.sessionID, messageID: message.id, seq: updated.seq }
-      // Most updates only carry existing refs forward; a content rewrite may also drop some.
+      // Most updates only carry existing refs forward; a content rewrite may also drop some. `externalize` returns
+      // the same message when it extracted nothing, so streaming updates skip the ref tables entirely.
       if (event.type === SessionEvent.MessageContentUpdated.type) yield* SessionBlob.syncRefs(db, owner, data)
-      else if (stored.extracted) yield* SessionBlob.recordRefs(db, owner, data)
+      else if (stored !== message) yield* SessionBlob.recordRefs(db, owner, data)
     })
     const appendMessage = (message: SessionMessage.Info) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
@@ -420,7 +421,7 @@ const insertMessage = Effect.fnUntraced(function* (
   event: SessionEvent.DurableEvent,
   message: SessionMessage.Info | SessionStored.User,
 ) {
-  const { id: _, type, ...data } = encodeStored((yield* SessionBlob.externalize(db, message)).message)
+  const { id: _, type, ...data } = encodeStored(yield* SessionBlob.externalize(db, message))
   yield* db
     .insert(SessionMessageTable)
     .values({
