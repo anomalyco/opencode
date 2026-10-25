@@ -1140,6 +1140,18 @@ describe("SessionProjector", () => {
         type: "user",
         files: [{ data: base64, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" }],
       })
+      // Delivery keeps the ref in the stored row instead of writing the bytes back inline.
+      const delivered = yield* db
+        .select({ data: SessionMessageTable.data })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, inboxID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(delivered?.data).toMatchObject({
+        text: "queued attachment",
+        files: [{ uri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "queued.pdf" }],
+      })
+      expect(JSON.stringify(delivered?.data)).not.toContain(base64)
     }),
   )
 

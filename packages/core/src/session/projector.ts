@@ -398,9 +398,17 @@ function run(db: DatabaseService, event: MessageEvent) {
   })
 }
 
-function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Info) {
+function insertMessage(
+  db: DatabaseService,
+  event: SessionEvent.DurableEvent,
+  message: SessionMessage.Info,
+  /** Stored files to write in place of the encoded ones, so `media:` refs survive delivery. */
+  files?: unknown,
+) {
   const encoded = encodeMessage(message)
-  const { id: _, type, ...data } = encoded
+  const { id: _, type, ...rest } = encoded
+  // SAFETY: `files` is the stored `files` array of the inbox row this message is delivered from.
+  const data = files === undefined ? rest : ({ ...rest, files } as typeof rest)
   return db
     .insert(SessionMessageTable)
     .values({
@@ -639,7 +647,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
       Effect.gen(function* () {
-        const input = yield* SessionInbox.projectDelivered(db, {
+        const { input, files } = yield* SessionInbox.projectDelivered(db, {
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
         })
@@ -666,6 +674,7 @@ const layer = Layer.effectDiscard(
                 metadata: input.payload.metadata,
                 time: { created: DateTime.makeUnsafe(event.created) },
               },
+          files,
         )
       }),
     )

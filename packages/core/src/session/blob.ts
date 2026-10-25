@@ -76,29 +76,32 @@ export function collectHashes(data: Data, target = new Set<string>()) {
 export const unavailableText = (mime: string, name?: string) =>
   `[media unavailable: ${name === undefined ? mime : `${name} (${mime})`}]`
 
-function hydrateData<T extends Data>(
-  data: T,
-  blobs: ReadonlyMap<string, { readonly mime: string; readonly base64: string }>,
-): T {
+type Blobs = ReadonlyMap<string, { readonly mime: string; readonly base64: string }>
+
+/** With `blobs`, restores each ref's bytes; without, empties user file data and leaves tool refs as stored. */
+function hydrateData<T extends Data>(data: T, blobs: Blobs | undefined): T {
+  let result = data
   if ("files" in data && data.files) {
     let changed = false
     const files = (data.files as ReadonlyArray<StoredUserFile>).map((file) => {
       const hash = hashFromUri(file.uri)
       if (!hash) return file
-      const blob = blobs.get(hash)
+      const blob = blobs?.get(hash)
       const { uri: _u, bytes: _b, width: _w, height: _h, origin, source, ...rest } = file
       changed = true
       return {
         ...rest,
-        ...(blob
-          ? { data: blob.base64, mime: file.mime || blob.mime }
-          : { data: Buffer.from(unavailableText(file.mime, file.name)).toString("base64"), mime: "text/plain" }),
+        ...(blobs === undefined
+          ? { data: "", mime: file.mime }
+          : blob
+            ? { data: blob.base64, mime: file.mime || blob.mime }
+            : { data: Buffer.from(unavailableText(file.mime, file.name)).toString("base64"), mime: "text/plain" }),
         source: source ?? origin ?? { type: "inline" as const },
       }
     })
-    return (changed ? { ...data, files } : data) as T
+    if (changed) result = { ...result, files }
   }
-  if (!("content" in data)) return data
+  if (blobs === undefined || !("content" in data)) return result
   let changed = false
   const content = data.content.map((part) => {
     if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) return part
@@ -121,7 +124,7 @@ function hydrateData<T extends Data>(
     changed = true
     return { ...part, state: { ...part.state, content: [items[0]!, ...items.slice(1)] as const } }
   })
-  return (changed ? { ...data, content } : data) as T
+  return changed ? { ...result, content } : result
 }
 
 const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
@@ -134,11 +137,13 @@ const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, hashes: Read
       .where(inArray(BlobTable.hash, all.slice(offset, offset + 500)))
       .all()
       .pipe(Effect.orDie)
-    for (const blob of found)
-      blobs.set(blob.hash, { mime: blob.mime, base64: Buffer.from(blob.data).toString("base64") })
+    for (const blob of found) blobs.set(blob.hash, { mime: blob.mime, base64: view(blob.data).toString("base64") })
   }
   return blobs
 })
+
+const view = (data: Uint8Array) =>
+  Buffer.isBuffer(data) ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength)
 
 /** Restores inline base64 media for any `media:<hash>` refs in `rows`. Rows without refs are returned untouched. */
 export const hydrate = Effect.fnUntraced(function* (db: DatabaseService, rows: ReadonlyArray<MessageRow>) {
@@ -163,3 +168,20 @@ export const hydrateInbox = Effect.fnUntraced(function* (db: DatabaseService, ro
     return payload === row.payload ? row : { ...row, payload }
   })
 })
+
+/**
+ * Makes rows decodable without reading any blob: user files keep their mime, name and source with empty data,
+ * and tool file refs stay as stored. Only for readers that never use file bytes.
+ */
+export const elide = (rows: ReadonlyArray<MessageRow>) =>
+  rows.map((row) => {
+    const data = hydrateData(row.data, undefined)
+    return data === row.data ? row : { ...row, data }
+  })
+
+/** {@link elide} for `session_inbox` rows. */
+export const elideInbox = (rows: ReadonlyArray<InboxRow>) =>
+  rows.map((row) => {
+    const payload = hydrateData(row.payload, undefined)
+    return payload === row.payload ? row : { ...row, payload }
+  })

@@ -345,8 +345,12 @@ export const projectDelivered = Effect.fn("SessionInbox.projectDelivered")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-  const [hydrated] = yield* SessionBlob.hydrateInbox(db, [deleted])
-  return fromRow(hydrated!)
+  // The projected message keeps the stored `media:` refs; `input` is decoded without their bytes.
+  const files =
+    "files" in deleted.payload && deleted.payload.files && SessionBlob.collectHashes(deleted.payload).size > 0
+      ? deleted.payload.files
+      : undefined
+  return { input: fromRow(SessionBlob.elideInbox([deleted])[0]!), files }
 })
 
 export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(function* (
@@ -424,7 +428,8 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   promotable: Promotable,
 ) {
   const steer = (yield* pendingSteers(db, sessionID))[0]
-  if (steer) return fromRow((yield* SessionBlob.hydrateInbox(db, [steer]))[0]!)
+  // Callers only read the type, delivery, id and control payloads, never file bytes.
+  if (steer) return fromRow(SessionBlob.elideInbox([steer])[0]!)
   if (promotable !== "input") return undefined
   const queued = yield* db
     .select()
@@ -434,7 +439,7 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
     .limit(1)
     .get()
     .pipe(Effect.orDie)
-  return queued ? fromRow((yield* SessionBlob.hydrateInbox(db, [queued]))[0]!) : undefined
+  return queued ? fromRow(SessionBlob.elideInbox([queued])[0]!) : undefined
 })
 
 /** Which pending rows count: "input" means any item in either delivery mode. */

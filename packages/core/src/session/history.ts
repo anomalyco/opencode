@@ -185,7 +185,8 @@ const withRecentText = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const kept = yield* decodeMessageRows(db, rows)
+  // The recent text names attachments by mime and name only, so their bytes are never read.
+  const kept = yield* Effect.forEach(SessionBlob.elide(rows), decodeMessageRow)
   const recent = kept.map(SessionRecentText.messageToText).filter(Boolean).join("\n\n")
   return [{ ...first, message: { ...compaction, metadata: { ...compaction.metadata, recent } } }, ...entries.slice(1)]
 })
@@ -244,7 +245,7 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
     .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
 })
 
-/** Returns the session's first user message. */
+/** Returns the session's first user message, with empty data for files stored as `media:` refs. */
 export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
@@ -257,7 +258,7 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
     .get()
     .pipe(Effect.orDie)
   if (!row) return undefined
-  const [message] = yield* decodeMessageRows(db, [row]).pipe(Effect.orElseSucceed(() => []))
+  const message = yield* decodeMessageRow(SessionBlob.elide([row])[0]!).pipe(Effect.orElseSucceed(() => undefined))
   return message?.type === "user" ? message : undefined
 })
 
