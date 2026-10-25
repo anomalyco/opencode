@@ -7,6 +7,8 @@ import { useFileComponent } from "@opencode/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode/util/encode"
+import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
+import { Menu } from "@opencode/ui/menu"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { createKeyed, useExtension, type LineRange, type MountedSession, type SessionScreen } from "../sdk"
 import { artifactKind } from "@opencode/util/artifact"
@@ -29,6 +31,30 @@ function selectionFromLines(range: LineRange): FileSelection {
 }
 
 const selectionSide = (range: LineRange) => range.endSide ?? range.side ?? "additions"
+
+function FileCommentMenu(props: {
+  moreLabel: string
+  editLabel: string
+  deleteLabel: string
+  onEdit: VoidFunction
+  onDelete: VoidFunction
+}) {
+  return (
+    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <Menu gutter={4}>
+        <Menu.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label={props.moreLabel}>
+          <LineCommentOverflowIcon />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    </div>
+  )
+}
 
 type ScrollPos = { x: number; y: number }
 
@@ -329,7 +355,16 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       if (!p) return
       removeCommentFromContext({ id: comment.id, file: p })
     },
-    edit: { submitLabel: ctx.t("common.save"), deleteLabel: ctx.t("common.delete") },
+    editSubmitLabel: ctx.t("common.save"),
+    renderCommentActions: (_, controls) => (
+      <FileCommentMenu
+        moreLabel={ctx.t("common.moreOptions")}
+        editLabel={ctx.t("common.edit")}
+        deleteLabel={ctx.t("common.delete")}
+        onEdit={controls.edit}
+        onDelete={controls.remove}
+      />
+    ),
   })
 
   // Mod+F finds in the shown file.

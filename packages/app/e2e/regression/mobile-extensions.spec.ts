@@ -50,10 +50,9 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
   const comment = files.locator('[data-component="line-comment-v2"][data-variant="display"]')
   await expect(comment).toContainText("Full-width file comment")
   await expect.poll(() => fullWidth(comment)).toBe(true)
-  // The card itself opens its editor, which can also delete the comment.
-  await comment.click()
+  // A click on the card itself opens its editor.
+  await comment.getByText("Full-width file comment", { exact: true }).click()
   await expect(editor.getByRole("textbox", { name: "Comment", exact: true })).toHaveValue("Full-width file comment")
-  await expect(editor.getByRole("button", { name: "Delete", exact: true })).toBeVisible()
   await editor.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(editor).toHaveCount(0)
   await expect(comment).toContainText("Full-width file comment")

@@ -5,41 +5,57 @@ import { useFilteredList } from "../../hooks"
 import { Button } from "@opencode/ui/button"
 import "./line-comment.css"
 
-export interface LineCommentProps extends Omit<ComponentProps<"div">, "onClick" | "onKeyDown"> {
+/** Horizontal “more” glyph for the display-card overflow control (Figma outline-dots). */
+export function LineCommentOverflowIcon(props: ComponentProps<"svg">) {
+  return (
+    <svg
+      {...props}
+      width={props.width ?? 16}
+      height={props.height ?? 16}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden={props["aria-hidden"] ?? "true"}
+    >
+      <path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor" />
+      <path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor" />
+      <path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor" />
+    </svg>
+  )
+}
+
+export interface LineCommentProps extends Omit<ComponentProps<"div">, "onClick"> {
   /** Main comment body (text or rich content). */
   comment: JSX.Element
   /** Optional context under the comment, e.g. the page or element it is about. */
   selection?: JSX.Element
-  /** Makes the whole card a button, e.g. to edit the comment. */
+  /** Typically an overflow menu trigger; use `LineCommentOverflowIcon` inside `line-comment-v2-overflow`. */
+  actions?: JSX.Element
+  /** Opens the comment, e.g. its editor, from a click anywhere on the card. Keep a keyboard path in `actions`. */
   onOpen?: VoidFunction
 }
 
 export function LineComment(props: LineCommentProps) {
-  const [local, rest] = splitProps(props, ["comment", "selection", "onOpen", "class", "classList"])
+  const [local, rest] = splitProps(props, ["comment", "selection", "actions", "onOpen", "class", "classList"])
 
   return (
     <div
       {...rest}
       data-component="line-comment-v2"
       data-variant="display"
-      role={local.onOpen ? "button" : undefined}
-      tabIndex={local.onOpen ? 0 : undefined}
+      data-clickable={local.onOpen ? "" : undefined}
       onClick={() => local.onOpen?.()}
-      onKeyDown={(event) => {
-        if (!local.onOpen || event.target !== event.currentTarget) return
-
-        if (event.key !== "Enter" && event.key !== " ") return
-        event.preventDefault()
-        local.onOpen()
-      }}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
       <div data-slot="line-comment-v2-shell">
-        <div data-slot="line-comment-v2-text">{local.comment}</div>
-        <Show when={local.selection}>{(selection) => <div data-slot="line-comment-v2-meta">{selection()}</div>}</Show>
+        <div data-slot="line-comment-v2-column">
+          <div data-slot="line-comment-v2-text">{local.comment}</div>
+          <Show when={local.selection}>{(selection) => <div data-slot="line-comment-v2-meta">{selection()}</div>}</Show>
+        </div>
+        <Show when={local.actions}>{(actions) => <div data-slot="line-comment-v2-tools">{actions()}</div>}</Show>
       </div>
     </div>
   )
@@ -62,8 +78,6 @@ export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "chi
   rows?: number
   cancelLabel?: string
   submitLabel?: string
-  /** Shows a delete action in the footer, e.g. while editing a saved comment. */
-  deleteAction?: { label: string; onClick: VoidFunction }
   autofocus?: boolean
   mention?: LineCommentEditorMention
 }
@@ -96,7 +110,6 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     "rows",
     "cancelLabel",
     "submitLabel",
-    "deleteAction",
     "autofocus",
     "mention",
     "class",
@@ -307,13 +320,6 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
         <div data-slot="line-comment-v2-footer">
           <Show when={local.selection}>
             {(selection) => <div data-slot="line-comment-v2-footer-meta">{selection()}</div>}
-          </Show>
-          <Show when={local.deleteAction}>
-            {(action) => (
-              <Button type="button" size="small" variant="ghost" onClick={() => action().onClick()}>
-                {action().label}
-              </Button>
-            )}
           </Show>
           <div data-slot="line-comment-v2-footer-actions">
             <Button type="button" size="small" variant="ghost" onClick={() => local.onCancel()}>

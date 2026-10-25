@@ -24,6 +24,8 @@ import type {
 import type { SessionReviewExpandMode } from "./session-review-v2"
 import { createLineCommentControllerV2 } from "./line-comment-annotations-v2"
 import { shouldVirtualizeReviewDiff } from "./session-review-file-preview-v2-virtualize"
+import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
+import { Menu } from "@opencode/ui/menu"
 import "./session-review-v2.css"
 
 type ReviewDiff = (PresentationFileDiff & { file: string }) | FileDiffInfo
@@ -70,6 +72,33 @@ function selectionPreview(diff: ViewDiff, range: SelectedLineRange) {
   if (contents.length === 0) return undefined
 
   return previewSelectedLines(contents, range)
+}
+
+function ReviewCommentMenu(props: {
+  labels: SessionReviewCommentActions
+  onEdit: VoidFunction
+  onDelete: VoidFunction
+}) {
+  return (
+    <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <Menu gutter={4}>
+        <Menu.Trigger
+          as="button"
+          type="button"
+          data-slot="line-comment-v2-overflow"
+          aria-label={props.labels.moreLabel}
+        >
+          <LineCommentOverflowIcon />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.labels.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    </div>
+  )
 }
 
 export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Props) {
@@ -131,10 +160,12 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         file: props.file,
       })
     },
-    edit: props.lineCommentActions && {
-      submitLabel: props.lineCommentActions.saveLabel,
-      deleteLabel: props.lineCommentActions.deleteLabel,
-    },
+    editSubmitLabel: props.lineCommentActions?.saveLabel,
+    renderCommentActions: props.lineCommentActions
+      ? (comment, controls) => (
+          <ReviewCommentMenu labels={props.lineCommentActions!} onEdit={controls.edit} onDelete={controls.remove} />
+        )
+      : undefined,
   })
 
   onCleanup(() => {
