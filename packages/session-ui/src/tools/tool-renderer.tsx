@@ -40,7 +40,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
-import { animate } from "motion"
+import { animate } from "@kitlangton/solid-motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type {
   FileDiffInfo,
@@ -73,7 +73,12 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
       }
 
       if (valueRef) {
-        animate(valueRef, { opacity: 1, filter: "blur(0px)" }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] })
+        valueRef.animate(
+          { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] },
+          { duration: 320, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+        )
+        valueRef.style.opacity = "1"
+        valueRef.style.filter = "blur(0px)"
       }
     })
   })
