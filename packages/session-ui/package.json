@@ -80,7 +80,6 @@
     "motion": "12.34.5",
     "pele": "1.7.0",
     "remend": "catalog:",
-    "solid-js": "catalog:",
-    "strip-ansi": "7.1.2"
+    "solid-js": "catalog:"
   }
 }

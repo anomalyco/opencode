@@ -19,7 +19,6 @@ import {
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Effect, Option, Schema } from "effect"
-import stripAnsi from "strip-ansi"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
@@ -59,6 +58,7 @@ import {
   readImagePath,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
+import { stripAnsi } from "./ansi"
 import { followShellOutput } from "./shell-output"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
