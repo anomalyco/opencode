@@ -186,7 +186,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
       <form
         data-component="composer"
         data-dock-border-underlay={props.borderUnderlay ? "true" : undefined}
-        class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
+        class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-input"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
         }}
@@ -741,11 +741,11 @@ export function ComposerAttachments(props: {
         </div>
         <div
           data-slot="composer-attachments-fade-left"
-          class="pointer-events-none absolute inset-y-0 start-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)]"
+          class="pointer-events-none absolute inset-y-0 start-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-input),transparent)] rtl:bg-[linear-gradient(to_left,var(--v2-background-bg-input),transparent)]"
         />
         <div
           data-slot="composer-attachments-fade-right"
-          class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
+          class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-input),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-input),transparent)]"
         />
       </div>
     </Show>

@@ -4,6 +4,7 @@
 
     /* ── Background ── */
     --v2-background-bg-base: var(--v2-grey-50);
+    --v2-background-bg-input: var(--v2-background-bg-base);
     --v2-background-bg-deep: var(--v2-grey-100);
     --v2-background-bg-layer-01: var(--v2-grey-100);
     --v2-background-bg-layer-02: var(--v2-grey-200);
@@ -146,6 +147,7 @@
       color-scheme: dark;
 
       --v2-background-bg-base: var(--v2-grey-1000);
+      --v2-background-bg-input: var(--v2-background-bg-base);
       --v2-background-bg-deep: var(--v2-grey-1100);
       --v2-background-bg-layer-01: var(--v2-grey-900);
       --v2-background-bg-layer-02: var(--v2-grey-800);
@@ -261,6 +263,7 @@
     color-scheme: light;
 
     --v2-background-bg-base: var(--v2-grey-50);
+    --v2-background-bg-input: var(--v2-background-bg-base);
     --v2-background-bg-deep: var(--v2-grey-100);
     --v2-background-bg-layer-01: var(--v2-grey-100);
     --v2-background-bg-layer-02: var(--v2-grey-200);
@@ -387,6 +390,7 @@
     color-scheme: dark;
 
     --v2-background-bg-base: var(--v2-grey-1100);
+    --v2-background-bg-input: var(--v2-background-bg-base);
     --v2-background-bg-deep: var(--v2-grey-1200);
     --v2-background-bg-layer-01: var(--v2-grey-1000);
     --v2-background-bg-layer-02: var(--v2-grey-900);

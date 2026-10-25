@@ -17,6 +17,7 @@
       "diffDelete": "#e75e78"
     },
     "overrides": {
+      "input-base": "#ffffff",
       "text-weak": "#141414ad",
       "syntax-comment": "#141414ad",
       "syntax-keyword": "#b3003f",
@@ -43,6 +44,9 @@
       "markdown-image": "#206595",
       "markdown-image-text": "#141414ad",
       "markdown-code-block": "#141414"
+    },
+    "v2Overrides": {
+      "v2-background-bg-input": "#ffffff"
     }
   },
   "dark": {
