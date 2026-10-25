@@ -73,7 +73,7 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
       }
 
       if (valueRef) {
-        valueRef.animate(
+        valueRef.animate?.(
           { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] },
           { duration: 320, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
         )

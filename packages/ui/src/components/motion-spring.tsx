@@ -47,7 +47,10 @@ export function useSpring<K>(target: () => number, options?: Opt | (() => Opt), 
     if (eq(config, next)) return
     config = next
     stop()
+    // attachSpring's cleanup only unsubscribes from the source; the running animation keeps ticking until stopped.
+    spring.stop()
     stop = attachSpring(spring, source, next)
+    spring.set(source.get())
     setValue(spring.get())
   })
 
