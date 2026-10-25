@@ -42,7 +42,6 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
       "/api/model",
       "/api/integration",
       `/api/session/${session.id}/permission`,
-      `/api/experimental/session/${session.id}/instructions/entries`,
       `/api/session/${session.id}/form`,
       "/api/session/global/form",
     ]
@@ -70,6 +69,59 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
       ),
     )
     expect(recovered.status).toBe(200)
+  }),
+)
+
+it.live("manages a session whose directory was deleted", () =>
+  Effect.gen(function* () {
+    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-deleted-directory-")))
+    const directory = path.join(config.path, "project")
+    yield* Effect.promise(() => fs.mkdir(directory))
+    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+    const request = (endpoint: string, method: string, body?: unknown) =>
+      Effect.promise(() =>
+        handler(
+          new Request(`http://opencode.local${endpoint}`, {
+            method,
+            headers: { "content-type": "application/json" },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          }),
+        ),
+      )
+    const created = yield* request("/api/session", "POST", { location: { directory } })
+    expect(created.status).toBe(200)
+    const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
+      yield* Effect.promise(() => created.json()),
+    ).data
+    yield* Effect.promise(() => fs.rm(directory, { recursive: true }))
+
+    const statuses = [
+      yield* request(`/api/session/${session.id}`, "PATCH", { title: "Renamed" }),
+      yield* request(`/api/session/${session.id}`, "PATCH", { archived: true }),
+      yield* request(`/api/session/${session.id}/interrupt`, "POST"),
+      yield* request(`/api/experimental/session/${session.id}/instructions/entries`, "GET"),
+    ].map((response) => response.status)
+    expect(statuses).toEqual([204, 204, 200, 200])
+
+    const fetched = yield* request(`/api/session/${session.id}`, "GET")
+    const updated = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
+      yield* Effect.promise(() => fetched.json()),
+    ).data
+    expect(updated.title).toBe("Renamed")
+    expect(updated.time.archived).toBeDefined()
+
+    // Title generation still runs in the session's folder.
+    const generated = yield* request(`/api/session/${session.id}`, "PATCH", { title: "" })
+    expect(generated.status).toBe(404)
+    expect(yield* Effect.promise(() => generated.json())).toEqual({
+      _tag: "LocationNotFoundError",
+      location: { directory },
+      message: `Location not found: ${directory}`,
+    })
+
+    const missing = yield* request("/api/session/ses_missing/interrupt", "POST")
+    expect(missing.status).toBe(404)
+    expect(((yield* Effect.promise(() => missing.json())) as { _tag: string })._tag).toBe("SessionNotFoundError")
   }),
 )
 
