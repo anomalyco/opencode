@@ -53,6 +53,8 @@
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 [data-component="line-comment-v2"][data-variant="display"] [data-slot="line-comment-v2-meta"] {
@@ -148,7 +150,6 @@
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 80px;
   padding: 8px;
   margin: 0;
   resize: vertical;
@@ -202,6 +203,7 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-inline-start: auto;
 }
 
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-list"] {

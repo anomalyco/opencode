@@ -27,8 +27,8 @@ export function LineCommentOverflowIcon(props: ComponentProps<"svg">) {
 export interface LineCommentProps extends ComponentProps<"div"> {
   /** Main comment body (text or rich content). */
   comment: JSX.Element
-  /** Line / selection context (e.g. “Comment on line 40”). */
-  selection: JSX.Element
+  /** Optional context under the comment, e.g. the page or element it is about. */
+  selection?: JSX.Element
   /** Typically an overflow menu trigger; use `LineCommentOverflowIcon` inside `line-comment-v2-overflow`. */
   actions?: JSX.Element
 }
@@ -49,7 +49,7 @@ export function LineComment(props: LineCommentProps) {
       <div data-slot="line-comment-v2-shell">
         <div data-slot="line-comment-v2-column">
           <div data-slot="line-comment-v2-text">{local.comment}</div>
-          <div data-slot="line-comment-v2-meta">{local.selection}</div>
+          <Show when={local.selection}>{(selection) => <div data-slot="line-comment-v2-meta">{selection()}</div>}</Show>
         </div>
         <Show when={local.actions}>{(actions) => <div data-slot="line-comment-v2-tools">{actions()}</div>}</Show>
       </div>
@@ -68,7 +68,8 @@ export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "chi
   onInput: (value: string) => void
   onCancel: () => void
   onSubmit: (value: string) => void
-  selection: JSX.Element
+  /** Optional context in the footer, e.g. the page or element being commented on. */
+  selection?: JSX.Element
   placeholder?: string
   rows?: number
   cancelLabel?: string
@@ -227,7 +228,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
             }}
             data-slot="line-comment-v2-textarea"
             dir="auto"
-            rows={local.rows ?? 3}
+            rows={local.rows ?? 4}
             placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
             value={local.value}
             style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
@@ -314,7 +315,9 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
           </Show>
         </div>
         <div data-slot="line-comment-v2-footer">
-          <div data-slot="line-comment-v2-footer-meta">{local.selection}</div>
+          <Show when={local.selection}>
+            {(selection) => <div data-slot="line-comment-v2-footer-meta">{selection()}</div>}
+          </Show>
           <div data-slot="line-comment-v2-footer-actions">
             <Button type="button" size="normal" variant="ghost" onClick={() => local.onCancel()}>
               {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
