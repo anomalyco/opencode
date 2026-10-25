@@ -321,17 +321,20 @@ export const layer = Layer.effect(
       const http: StreamOptions["http"] = hasHttpHooks
         ? (req, handler) =>
             Effect.gen(function* () {
-              const before = yield* hooks.trigger("session", "http.request", {
-                ...scope,
-                request: yield* HttpClientRequest.toWeb(req),
-              })
-              let sent = HttpClientRequest.fromWeb(before.request)
-              if (before.request.body)
-                sent = HttpClientRequest.bodyUint8Array(
-                  sent,
-                  new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
-                  before.request.headers.get("content-type") ?? undefined,
-                )
+              const request = yield* HttpClientRequest.toWeb(req)
+              const before = yield* hooks.trigger("session", "http.request", { ...scope, request })
+              // A hook that kept the request object cannot have replaced its body, so the original body is sent as is.
+              // Reading it back would hold a second full copy of the request, screenshots included, for the whole call.
+              const sent =
+                before.request === request
+                  ? HttpClientRequest.setBody(HttpClientRequest.fromWeb(request), req.body)
+                  : before.request.body
+                    ? HttpClientRequest.bodyUint8Array(
+                        HttpClientRequest.fromWeb(before.request),
+                        new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
+                        before.request.headers.get("content-type") ?? undefined,
+                      )
+                    : HttpClientRequest.fromWeb(before.request)
               const res = yield* handler(sent)
               const after = yield* hooks.trigger("session", "http.response", {
                 ...scope,

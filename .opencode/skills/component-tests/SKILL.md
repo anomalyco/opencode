@@ -56,7 +56,7 @@ Use these when the contract is not visible in a story, such as construction coun
 
 ## Cold vs warm, and what a mount costs
 
-- **CI is always cold.** Each suite runs in its own leg on a fresh runner (`test.yml:228-229`), so every leg starts Storybook with no cache and runs the full scan.
+- **CI is always cold.** Each suite runs in its own leg on a fresh runner (`check-test.yml:228-229`), so every leg starts Storybook with no cache and runs the full scan.
 - **Do not count the first test.** In one CI run of this harness, the first test per worker took 5.7-7.0 s on Linux and 14-15 s on Windows. Warm tests had a median of 1.5 s (app) and 2.0 s (session-ui) on Linux and 2.4-2.6 s on Windows. A warm `mount` (navigation plus root wait) had a median of 1.0 s (app) and 1.5 s (session-ui) on Linux and 1.7-1.9 s on Windows, which is most of a typical test. Judge cost by warm attempts.
 - **Local reuse.** Playwright reuses whatever answers on the port (`config.ts:20`; default 6006, `config.ts:3`). That hides cold cost and reloads, and with several worktrees another checkout's Storybook can serve your tests its own code. Set `PLAYWRIGHT_STORYBOOK_PORT` or `PLAYWRIGHT_STORYBOOK_URL` (`config.ts:3-4`). On Windows pick a port below 49152: the dynamic range starts there, and Hyper-V and WSL reserve blocks inside it (`netsh int ipv4 show excludedportrange protocol=tcp`). Two Storybooks in one checkout share, and race on, `packages/storybook/node_modules/.cache/storybook/<version>/<hash>/sb-vite`, so a separate port is not enough: use a separate worktree.
 - **Keep mounts few.** Put one scenario in each test, and resize in place with `page.setViewportSize` (`composer.spec.ts:28-29`) instead of mounting again.
@@ -102,15 +102,15 @@ From the owning package (`packages/session-ui` or `packages/app`):
 5. **Windows.** Check platform keys and labels and font-dependent geometry. The Windows component legs are the authoritative check.
    - Do not skip on Windows, and do not raise `config.ts` timeouts, retries or the `mount` wait.
    - If one test does genuinely expensive work, call `story.setTimeout(...)` in that test, with a comment that names the work.
-6. **Confirm CI ran the component legs.** E2E never runs on pushes to dev (`test.yml:28`), so no post-merge run catches a regression.
-   - The `affected` gate filters on `@opencode/app` and `@opencode/storybook` (`test.yml:52-53`). `ui`, `session-ui` and `gui-extensions` count through app's dependencies. `workflow_dispatch` forces the legs on (`test.yml:48-51`).
-   - `test.yml` is listed in `globalDependencies` (`turbo.json:8`), so editing it marks every package affected.
-   - The required `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed (`test.yml:316-335`). Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
+6. **Confirm CI ran the component legs.** E2E never runs on pushes to dev (`check-test.yml:28`), so no post-merge run catches a regression.
+   - The `affected` gate filters on `@opencode/app` and `@opencode/storybook` (`check-test.yml:52-53`). `ui`, `session-ui` and `gui-extensions` count through app's dependencies. `workflow_dispatch` forces the legs on (`check-test.yml:48-51`).
+   - `check-test.yml` is listed in `globalDependencies` (`turbo.json:8`), so editing it marks every package affected.
+   - The required `e2e (linux)` and `e2e (windows)` checks also pass when no leg was needed (`check-test.yml:316-335`). Look for `e2e (<os>, session-ui-components)` and `e2e (<os>, app-components)`.
    - If CI skipped them, report your local cold run in the PR.
 
 ## When CI flakes
 
-- **Download the artifact.** Run `gh run download <run-id> -n playwright-<linux|windows>-<session-ui|app>-components-<attempt> -D <dir>` (`test.yml:301-314`). Results are in `<dir>/session-ui/component-tests/` or `<dir>/app/component-tests/`. Only the first retry has a trace and, in CI, a video: `test-results/<test>-components-retry1/`.
+- **Download the artifact.** Run `gh run download <run-id> -n playwright-<linux|windows>-<session-ui|app>-components-<attempt> -D <dir>` (`check-test.yml:301-314`). Results are in `<dir>/session-ui/component-tests/` or `<dir>/app/component-tests/`. Only the first retry has a trace and, in CI, a video: `test-results/<test>-components-retry1/`.
 - **Find reloads.** Storybook's output reaches the job log with a `[WebServer]` prefix, so grep the log for `optimized dependencies changed`. In the retry trace, a reload shows up as any of:
   - a second `iframe.html` load and a second `[vite] connecting...`;
   - the deps `?v=` hash changing between requests;
