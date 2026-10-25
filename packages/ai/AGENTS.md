@@ -3,6 +3,7 @@
 ## Principles
 
 - **Forward compatibility.** Providers ship new models, options, and values constantly. Accept unknown pass-through values (`Known | (string & {})` for string options); use closed literals only when OpenCode branches on the value.
+- **Tolerate unknowns.** Unknown provider events, statuses, and enum values must not fail a request; ignore them or pass them through. Fail only on errors in the provider's documented shape, malformed known types, or a missing terminal event.
 - **One canonical model.** The Schema classes in `src/schema/` are the data model. Do not add a parallel shape or a second construction path.
 - **Independent of Session.** Auth, permissions, plugins, and orchestration belong in Core. `LLM.stream`/`LLM.generate` run exactly one model call.
 - **Reuse protocols.** Providers compose existing protocols with `Route.make(...)` instead of cloning them.
@@ -11,7 +12,7 @@
 
 - Use `HttpClient`, `Stream`, and Schema codecs instead of `fetch`, async generators, and `JSON.parse`/`JSON.stringify`.
 - `return yield* new MyError(...)` instead of `Effect.fail(...)`; `Effect.void` instead of `Effect.succeed(undefined)`.
-- Only `src/promise.ts` may use Promises.
+- Only `src/index.ts` (the Promise entry) may use Promises.
 
 ## Tests
 

@@ -102,6 +102,7 @@ const setup: Setup<typeof Terminal> = (ctx) => {
       group: ctx.t("command.category"),
       section: "terminal",
       bind: "mod+w",
+      follows: "tab.close",
       hidden: true,
       scope: '[data-component="terminal"]',
       enabled: routed(),

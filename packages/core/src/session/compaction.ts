@@ -13,7 +13,7 @@ import {
   type ToolEntry,
   UnknownProviderError,
   type Usage,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"

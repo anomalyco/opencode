@@ -18,8 +18,12 @@ export const FileSource = Schema.Union([
   .annotate({ identifier: "Prompt.FileSource" })
 export type FileSource = typeof FileSource.Type
 
+// The canonical pattern backtracks on large inputs, so it only supplies metadata (OpenAPI, errors) while an equivalent linear check runs.
 export const Base64 = Schema.String.check(
-  Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u),
+  Schema.makeFilter(
+    (value: string) => value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/u.test(value),
+    Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u).annotations,
+  ),
 ).annotate({ identifier: "Prompt.Base64" })
 export type Base64 = typeof Base64.Type
 

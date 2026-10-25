@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, CompactionPart, LLM, Message, ProviderID, ToolCallPart } from "../src/index.js"
+import { CacheHint, CompactionPart, LLM, Message, ProviderID, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {

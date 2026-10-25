@@ -1462,6 +1462,35 @@ test.describe("compaction", () => {
     await expect(page.locator('[data-component="session-working"]')).toBeVisible()
   })
 
+  test("shows an automatic compaction as one quiet divider with background compaction on", async ({ page }) => {
+    const config = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/config")
+
+    const timeline = await setupTimeline(page, {
+      sessionMessages: [user, completed],
+      sessionStatus: { [sessionID]: { type: "busy" } },
+      configEntries: [{ type: "document", info: { experimental: { background_compaction: true } } }],
+    })
+
+    await config
+
+    await timeline.send(compactionStarted({ sessionID, reason: "auto" }))
+    await timeline.send(compactionDelta({ sessionID, text: "Partial automatic summary." }))
+    const compaction = page.locator('[data-component="session-compaction-message"]')
+    const divider = compaction.locator('[data-slot="session-compaction-divider"]')
+    await expect(divider).toHaveAttribute("data-state", "running")
+    await expect(compaction).not.toContainText("Partial automatic summary.")
+    await expect(compaction).not.toContainText("Session compaction started")
+
+    await timeline.send(
+      compactionEnded({ sessionID, reason: "auto", text: "## Checkpoint\n\nAutomatic details." }),
+    )
+    await expect(divider).toHaveAttribute("data-state", "done")
+    await expect(divider).toHaveAccessibleName("Compacted")
+    await expect(compaction).not.toContainText("Automatic details.")
+    await divider.click()
+    await expect(compaction).toContainText("Automatic details.")
+  })
+
   const outcomes = {
     failed: {
       reason: "auto",

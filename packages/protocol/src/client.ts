@@ -48,6 +48,7 @@ export const groupNames = {
   "server.provider": "provider",
   "server.integration": "integration",
   "server.websearch": "websearch",
+  "server.usage": "usage",
   "server.credential": "credential",
   "server.form": "form",
   "server.permission": "permission",

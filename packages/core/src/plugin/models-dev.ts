@@ -30,6 +30,10 @@ const BEDROCK_PROFILE_ONLY_IDS = [
   "writer.palmyra-x5-v1:0",
 ]
 
+// models.dev lists text input and output for these, but realtime models only run live voice sessions, and embedding
+// and reranking models return vectors and scores, so none of them can answer a chat request.
+const NON_CHAT_TYPES: readonly ModelsDev.CatalogModelType[] = ["realtime", "embedding", "reranking"]
+
 export const ModelsDevPlugin = define({
   id: "opencode.models.dev",
   effect: Effect.fn(function* (ctx) {
@@ -97,6 +101,7 @@ function snapshots(data: readonly ModelsDev.Snapshot[]) {
         (model) =>
           model.status !== "deprecated" &&
           Model.supportsText(model) &&
+          !NON_CHAT_TYPES.includes(provider.types?.get(model.id) ?? "chat") &&
           !(
             provider.info.id === Provider.ID.amazonBedrock &&
             BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)

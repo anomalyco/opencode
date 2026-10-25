@@ -1,12 +1,12 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { SystemOne } from "../protocols/system-one.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
-import { SystemOne } from "../experimental/system-one.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("digitalocean")
@@ -48,17 +48,16 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth,
   })
-  const evaluation = (modelID: string | ModelID) =>
-    SystemOne.model({
-      id: modelID,
-      provider: id,
-      providerMetadataKey: "digitalocean",
-      auth,
-      baseURL: endpoint ?? baseURL,
-      headers: input.headers,
-      http: HttpOptions.make(input.http),
-      rounding: SystemOne.jevRounding,
-    })
+  const decisionRoute = SystemOne.route.with({
+    provider: id,
+    providerMetadataKey: "digitalocean",
+    endpoint: { baseURL: endpoint ?? baseURL },
+    auth,
+    // DigitalOcean serves TypeSafe's Jev, which needs this header for images.
+    headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
+    http: input.http,
+  })
+  const decision = (modelID: string | ModelID) => decisionRoute.model({ id: modelID })
   return {
     id,
     model: (modelID: string | ModelID) =>
@@ -68,13 +67,13 @@ export const configure = (input: LanguageModelOptions = {}) => {
           supportsPromptCacheKey: true,
         },
       }),
-    experimental: { evaluation },
+    decision,
     configure,
   }
 }
 
 export const provider = configure()
-export const experimental = provider.experimental
+export const decision = provider.decision
 
 export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
   modelID,

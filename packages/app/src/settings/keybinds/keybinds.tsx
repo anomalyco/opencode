@@ -4,6 +4,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
+import { Predicate } from "effect"
 import {
   DEFAULT_PALETTE_KEYBIND,
   formatKeybind,
@@ -18,7 +19,7 @@ import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
 
@@ -141,20 +142,18 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
-function keybinds(value: unknown): KeybindMap {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
-
-  return value as KeybindMap
-}
-
 function listFor(command: Pick<CommandContext, "catalog" | "options">, map: KeybindMap, palette: string) {
   const out = new Map<string, KeybindMeta>()
   out.set(PALETTE_ID, { title: palette, group: "General" })
+  // A command that shares another's shortcut is set through that command, unless it already has its own.
+  const follower = (opt: { id: string; follows?: string }) => !!opt.follows && !Predicate.isString(map[opt.id])
 
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
 
     if (opt.hidden) continue
+
+    if (follower(opt)) continue
     out.set(opt.id, { title: opt.title, group: groupFor(opt.id, opt.section) })
   }
 
@@ -162,11 +161,13 @@ function listFor(command: Pick<CommandContext, "catalog" | "options">, map: Keyb
     if (opt.id.startsWith("suggested.")) continue
 
     if (opt.hidden) continue
+
+    if (follower(opt)) continue
     out.set(opt.id, { title: opt.title, group: groupFor(opt.id, opt.section) })
   }
 
   for (const [id, value] of Object.entries(map)) {
-    if (typeof value !== "string") continue
+    if (!Predicate.isString(value)) continue
 
     if (out.has(id)) continue
     out.set(id, { title: id, group: groupFor(id) })
@@ -237,7 +238,7 @@ export function createKeybindSettingsController(
   input: {
     command: Pick<CommandContext, "catalog" | "options" | "keybinds">
     settings: {
-      current: { keybinds: unknown }
+      current: { keybinds?: KeybindMap }
       keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
     }
     target?: Document
@@ -245,8 +246,8 @@ export function createKeybindSettingsController(
   },
   language: Pick<LanguageContext, "locale" | "t"> = useLanguage(),
 ) {
-  const [store, setStore] = createStore({ active: null as string | null })
-  const overrides = createMemo(() => keybinds(input.settings.current.keybinds))
+  const [store, setStore] = createStore<{ active: string | null }>({ active: null })
+  const overrides = createMemo(() => input.settings.current.keybinds ?? {})
 
   const list = createMemo(() => {
     language.locale()
@@ -262,7 +263,7 @@ export function createKeybindSettingsController(
 
     const custom = input.settings.keybinds.get(id)
 
-    if (typeof custom === "string") return custom
+    if (Predicate.isString(custom)) return custom
 
     const live = input.command.options.find((item) => item.id === id)
 
@@ -368,7 +369,7 @@ export function createKeybindSettingsController(
     stop()
   }
 
-  const target = input.target ?? (typeof document === "object" ? document : undefined)
+  const target = input.target ?? (typeof document !== "undefined" ? document : undefined)
 
   if (target) makeEventListener(target, "keydown", handle, { capture: true })
 
@@ -389,7 +390,7 @@ export function createKeybindSettingsController(
       toggle,
     },
     settings: {
-      hasOverrides: () => Object.values(overrides()).some((value) => typeof value === "string"),
+      hasOverrides: () => Object.values(overrides()).some(Predicate.isString),
       reset: () => {
         stop()
         input.settings.keybinds.resetAll()

@@ -5,6 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import type { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
 const route = MediaProtocol.identity({
@@ -20,8 +21,14 @@ const RESERVED_FORM_FIELDS = new Set(["prompt"])
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Native Run API inputs. Step counts are `steps` on FLUX and Lucid Origin and `num_steps` on the other models. */
+/**
+ * Native Run API inputs. Step counts are `steps` on FLUX and Lucid Origin and `num_steps` on the other models;
+ * `aspect` and `resolution` lower to `width` and `height`.
+ */
 export type CloudflareWorkersAIImageOptions = {
+  readonly width?: number
+  readonly height?: number
+  readonly seed?: number
   readonly steps?: number
   readonly num_steps?: number
   readonly guidance?: number
@@ -50,8 +57,7 @@ const fromRequest = Effect.fn("CloudflareWorkersAIImages.fromRequest")(function*
     return yield* route.unsupported("media.n", `${route.name} generates one image per request; call it once per image`)
   const fields = {
     prompt: request.prompt,
-    ...(request.size === undefined ? {} : MediaInput.dimensions(request.size)),
-    seed: request.seed,
+    ...(yield* ImageSizing.exact(route, request, { multiple: 16, minEdge: 256, maxEdge: 2048 })),
   }
   const native = mergeJsonRecords(request.providerOptions, request.http?.body)
   if (!request.model.id.startsWith(MULTIPART_MODEL_PREFIX))
@@ -88,7 +94,7 @@ const decodeResponse = Effect.fn("CloudflareWorkersAIImages.decodeResponse")(fun
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["images", "mask", "aspectRatio", "format"],
+  unsupported: ["images"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

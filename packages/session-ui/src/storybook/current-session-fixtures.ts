@@ -1010,6 +1010,20 @@ export const compactionDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
+export const compactionManualDocument = document([
+  ...compactionPrelude,
+  {
+    id: "msg_compaction_manual",
+    type: "compaction",
+    status: "completed",
+    reason: "manual",
+    summary: "The Session timeline now consumes current nested assistant content.",
+    cost: 0.0142,
+    tokens: { input: 3_180, output: 412, reasoning: 96, cache: { read: 8_704, write: 0 } },
+    time: { created: STORY_TIME + 63_000 },
+  },
+] satisfies SessionMessageInfo[])
+
 export const compactionFailedDocument = document([
   ...compactionPrelude,
   {

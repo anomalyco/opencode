@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest } from "../../src/index.js"
+import { LLM, LLMRequest } from "../../src/effect.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { LLMClient } from "../../src/route.js"
 import {

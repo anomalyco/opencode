@@ -21,9 +21,8 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
-import { resolveTemplate } from "@solid-primitives/i18n"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { pluralCategory } from "@opencode/ui/context/i18n"
+import { pluralCategory, resolveTemplate } from "@opencode/ui/context/i18n"
 import {
   ExtensionContext,
   LifetimeContext,
