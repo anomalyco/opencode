@@ -14,7 +14,7 @@ import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Session } from "@opencode/schema/session"
-import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode/schema/session-inbox"
+import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode/schema/session-inbox"
 import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
@@ -99,31 +99,6 @@ export const SessionMessageTable = sqliteTable(
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
     index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
-  ],
-)
-
-export const SessionPendingTable = sqliteTable(
-  "session_pending",
-  {
-    id: text().$type<SessionMessage.ID>().primaryKey(),
-    session_id: text()
-      .$type<SessionSchema.ID>()
-      .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionInbox.Info["type"]>().notNull(),
-    data: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | Record<string, never>>().notNull(),
-    delivery: text().$type<SessionInbox.Delivery>(),
-    admitted_seq: integer().notNull(),
-    time_created: integer()
-      .notNull()
-      .$default(() => Date.now()),
-  },
-  (table) => [
-    index("session_pending_session_delivery_seq_idx").on(table.session_id, table.delivery, table.admitted_seq),
-    uniqueIndex("session_pending_session_compaction_idx")
-      .on(table.session_id)
-      .where(sql`${table.type} = 'compaction'`),
-    uniqueIndex("session_pending_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
   ],
 )
 
