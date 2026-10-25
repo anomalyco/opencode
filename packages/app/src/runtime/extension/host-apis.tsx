@@ -39,7 +39,7 @@ import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useCurrentRoute, useLayout } from "@/shell/state/layout"
-import { terminalFontFamily, useSettings } from "@/settings/model"
+import { defaultSettings, terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
 import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -64,6 +64,7 @@ type Attached = {
   settings: (page?: string) => void
   project: (server: string, title: string) => void
   font: Accessor<string>
+  fontSize: Accessor<number>
   routing: Accessor<boolean>
   path: Accessor<string>
   keybind: (command: string) => readonly string[]
@@ -259,8 +260,11 @@ export function createHostApis() {
       direction: language.direction,
       setDirection: language.setDirection,
     }),
-    // Before the interface mounts, the default mono font.
-    appearance: () => ({ font: () => current()?.font() ?? terminalFontFamily(undefined) }),
+    // Before the interface mounts, use the default typography.
+    appearance: () => ({
+      font: () => current()?.font() ?? terminalFontFamily(undefined),
+      fontSize: () => current()?.fontSize() ?? defaultSettings.appearance.fontSize,
+    }),
     router: () => ({
       routing: () => current()?.routing() ?? false,
       path: () => current()?.path() ?? "",
@@ -795,6 +799,7 @@ export function createExtensionAttachment(apis: HostApis) {
     scoped: layout.sessionState.track,
     project: (server, title) => setProjects((pending) => [...pending, { server, title }]),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),
+    fontSize: settings.appearance.fontSize,
     routing: useIsRouting(),
     path: () => `${location.pathname}${location.search}`,
     keybind: command.keybindParts,

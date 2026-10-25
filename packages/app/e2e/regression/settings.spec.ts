@@ -94,6 +94,27 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
+test("font size and line height survive refresh", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+  const size = settings.getByRole("spinbutton", { name: "Font size", exact: true })
+  const height = settings.getByRole("spinbutton", { name: "Line height", exact: true })
+  await expect(size).toHaveValue("14")
+  await expect(height).toHaveValue("20")
+
+  await size.fill("16")
+  await size.press("Tab")
+  await expect(size).toHaveValue("16")
+
+  await height.fill("22")
+  await height.press("Tab")
+  await expect(height).toHaveValue("22")
+
+  await page.reload()
+  await expect(size).toHaveValue("16")
+  await expect(height).toHaveValue("22")
+})
+
 test("another server's settings page survives refresh", async ({ page }) => {
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
   const { settings } = await open(page)

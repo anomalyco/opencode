@@ -86,6 +86,8 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "dark mode light mode system",
   },
   { tab: "appearance", label: "settings.general.row.theme.title", target: "settings-theme" },
+  { tab: "appearance", label: "settings.appearance.fontSize.title", target: "settings-font-size" },
+  { tab: "appearance", label: "settings.appearance.lineHeight.title", target: "settings-line-height" },
   {
     tab: "appearance",
     label: "settings.general.row.uiFont.title",
