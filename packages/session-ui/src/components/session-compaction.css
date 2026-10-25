@@ -1,0 +1,199 @@
+/* The quiet automatic compaction divider. Every state keeps the same box: only opacity, transforms and the light's
+   position move, so the timeline never shifts. */
+[data-component="session-compaction-message"][data-quiet] {
+  --session-compaction-delay: 0ms;
+
+  &[data-enter="grace"] {
+    --session-compaction-delay: 400ms;
+  }
+
+  &[data-enter] [data-slot="session-compaction-divider"] {
+    animation: session-compaction-fade 320ms ease-out var(--session-compaction-delay) both;
+  }
+
+  [data-slot="session-compaction-divider"] {
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+    }
+  }
+
+  [data-slot="session-compaction-line"] {
+    position: relative;
+    overflow: hidden;
+
+    &[data-side="end"] {
+      transform: scaleX(-1);
+    }
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--v2-border-border-strong);
+      opacity: 0.6;
+      transition: opacity 360ms ease-out;
+    }
+  }
+
+  /* Each light starts at the outer end and travels to the label, cooling before it arrives. */
+  [data-slot="session-compaction-light"] {
+    position: absolute;
+    inset: 0;
+    transition:
+      opacity 360ms ease-out,
+      display 360ms allow-discrete;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      left: 0;
+      width: 40%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--v2-text-text-muted) 55%, transparent) 65%,
+        transparent
+      );
+      animation: session-compaction-gather 4s cubic-bezier(0.45, 0, 0.25, 1) var(--session-compaction-delay) infinite
+        backwards;
+    }
+  }
+
+  [data-slot="session-compaction-label"] > span {
+    grid-area: 1 / 1;
+    transition: opacity 280ms ease-out;
+  }
+
+  [data-slot="session-compaction-running"] {
+    position: relative;
+  }
+
+  /* The label warms as each light lands on it, and fades with the label when the compaction ends. */
+  [data-slot="session-compaction-glint"] {
+    position: absolute;
+    inset: 0;
+    color: var(--v2-text-text-muted);
+    opacity: 0;
+    animation: session-compaction-glint 4s ease-in-out var(--session-compaction-delay) infinite backwards;
+  }
+
+  [data-slot="session-compaction-done"] {
+    opacity: 0;
+    transition:
+      opacity 280ms ease-out,
+      color 150ms ease-out;
+  }
+
+  [data-state="done"] {
+    [data-slot="session-compaction-line"]::before {
+      opacity: 1;
+    }
+
+    [data-slot="session-compaction-light"] {
+      display: none;
+      opacity: 0;
+    }
+
+    [data-slot="session-compaction-running"] {
+      opacity: 0;
+    }
+
+    [data-slot="session-compaction-glint"] {
+      animation-play-state: paused;
+    }
+
+    [data-slot="session-compaction-done"] {
+      opacity: 1;
+    }
+
+    &:not(:disabled):hover [data-slot="session-compaction-done"],
+    &[aria-expanded="true"] [data-slot="session-compaction-done"] {
+      color: var(--v2-text-text-muted);
+    }
+  }
+
+  /* The summary is reference material, so its body sits a step quieter than the conversation around it. */
+  [data-slot="session-compaction-summary"] {
+    padding-bottom: 8px;
+    animation: session-compaction-fade 200ms ease-out both;
+
+    [data-component="markdown"] {
+      color: var(--v2-text-text-muted);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="session-compaction-line"]::before {
+      opacity: 1;
+      transition: none;
+    }
+
+    [data-slot="session-compaction-light"],
+    [data-slot="session-compaction-glint"] {
+      display: none;
+    }
+
+    &[data-enter] [data-slot="session-compaction-divider"] {
+      animation-duration: 200ms;
+    }
+  }
+}
+
+:dir(rtl) [data-component="session-compaction-message"][data-quiet] [data-slot="session-compaction-line"] {
+  transform: scaleX(-1);
+
+  &[data-side="end"] {
+    transform: none;
+  }
+}
+
+@keyframes session-compaction-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes session-compaction-gather {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  64%,
+  100% {
+    transform: translateX(250%);
+    opacity: 0;
+  }
+}
+
+@keyframes session-compaction-glint {
+  0%,
+  48% {
+    opacity: 0;
+  }
+  64% {
+    opacity: 0.7;
+  }
+  92%,
+  100% {
+    opacity: 0;
+  }
+}

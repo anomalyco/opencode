@@ -630,39 +630,116 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
   const label = createMemo(() => [i18n.t(outcome()), usage()].filter(Boolean).join(" · "))
 
   return (
-    <div data-component="session-compaction-message">
-      <CompactionDivider label={i18n.t("ui.messagePart.compaction.started")} />
-      <Show when={summary().trim()}>
-        <div data-component="text-part" data-timeline-part-id={props.message.id}>
-          <div data-slot="text-part-body">
-            <PacedMarkdown
-              text={summary()}
-              cacheKey={props.message.id}
-              streaming={props.message.status === "running"}
+    <Show
+      when={props.message.reason === "manual" || props.message.status === "failed"}
+      fallback={
+        <QuietCompaction
+          id={props.message.id}
+          created={props.message.time.created}
+          running={props.message.status === "running"}
+          summary={summary()}
+          usage={usage()}
+        />
+      }
+    >
+      <div data-component="session-compaction-message">
+        <CompactionDivider label={i18n.t("ui.messagePart.compaction.started")} />
+        <Show when={summary().trim()}>
+          <div data-component="text-part" data-timeline-part-id={props.message.id}>
+            <div data-slot="text-part-body">
+              <PacedMarkdown
+                text={summary()}
+                cacheKey={props.message.id}
+                streaming={props.message.status === "running"}
+              />
+            </div>
+          </div>
+        </Show>
+        <Show when={props.message.status === "running"}>
+          <div role="status" class="py-2">
+            <BasicTool
+              icon="archive"
+              trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
+              status="running"
+              locked
+              hideDetails
             />
           </div>
+        </Show>
+        <Show when={props.message.status !== "running"}>
+          <div class="py-2">
+            <TimelineSeparator label={label()} />
+          </div>
+        </Show>
+        <Show when={error()}>
+          <Card variant="error" class="error-card">
+            {error()}
+          </Card>
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
+/**
+ * An automatic compaction, drawn as one divider that reads Compacting, then Compacted. Its height never changes, and
+ * clicking it opens the summary.
+ */
+function QuietCompaction(props: { id: string; created: number; running: boolean; summary: string; usage: string }) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(false)
+  // One that finishes within the grace never shows Compacting. A finished one only fades in when it is new, not when
+  // it loads with the history.
+  const enter = props.running ? "grace" : Date.now() - props.created < 10_000 ? "now" : undefined
+  const expandable = () => !props.running && !!props.summary.trim()
+
+  return (
+    <div data-component="session-compaction-message" data-quiet="" data-enter={enter}>
+      <div class="py-2">
+        <button
+          type="button"
+          data-slot="session-compaction-divider"
+          data-state={props.running ? "running" : "done"}
+          class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint"
+          disabled={!expandable()}
+          aria-busy={props.running}
+          aria-expanded={expandable() ? open() : undefined}
+          aria-controls={expandable() ? `${props.id}-summary` : undefined}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span data-slot="session-compaction-line" data-side="start" class="h-px min-w-0 flex-1">
+            <span data-slot="session-compaction-light" />
+          </span>
+          <span
+            data-slot="session-compaction-label"
+            class="grid shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
+          >
+            <span data-slot="session-compaction-running" aria-hidden={!props.running}>
+              {i18n.t("ui.messagePart.compaction.running")}
+              <span data-slot="session-compaction-glint" aria-hidden="true">
+                {i18n.t("ui.messagePart.compaction.running")}
+              </span>
+            </span>
+            <span data-slot="session-compaction-done" aria-hidden={props.running}>
+              {i18n.t("ui.messagePart.compaction.done")}
+            </span>
+          </span>
+          <span data-slot="session-compaction-line" data-side="end" class="h-px min-w-0 flex-1">
+            <span data-slot="session-compaction-light" />
+          </span>
+        </button>
+      </div>
+      <Show when={expandable() && open()}>
+        <div id={`${props.id}-summary`} data-slot="session-compaction-summary">
+          <div data-component="text-part" data-timeline-part-id={props.id}>
+            <div data-slot="text-part-body">
+              <PacedMarkdown text={props.summary} cacheKey={props.id} streaming={false} />
+            </div>
+          </div>
+          <Show when={props.usage}>
+            <div class="mt-2 text-[13px] leading-text-compact text-v2-text-text-faint tabular-nums">{props.usage}</div>
+          </Show>
         </div>
-      </Show>
-      <Show when={props.message.status === "running"}>
-        <div role="status" class="py-2">
-          <BasicTool
-            icon="archive"
-            trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
-            status="running"
-            locked
-            hideDetails
-          />
-        </div>
-      </Show>
-      <Show when={props.message.status !== "running"}>
-        <div class="py-2">
-          <TimelineSeparator label={label()} />
-        </div>
-      </Show>
-      <Show when={error()}>
-        <Card variant="error" class="error-card">
-          {error()}
-        </Card>
       </Show>
     </div>
   )
