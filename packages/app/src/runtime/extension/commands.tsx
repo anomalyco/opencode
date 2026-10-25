@@ -17,27 +17,31 @@ export function ExtensionCommands() {
     host
       .items(Command)
       .toSorted((a, b) => order(a.extension) - order(b.extension))
-      .map((item) => ({
-        id: `${item.extension}.${item.value.id}`,
-        title: item.value.title,
-        description: item.value.description,
-        category: item.value.group,
-        section: item.value.section,
-        keybind: item.value.bind,
-        slash: item.value.slash?.name,
-        slashArguments: item.value.slash?.arguments,
-        slashAfter: item.value.slash?.after,
-        suggested: item.value.suggested,
-        featured: item.value.featured,
-        disabled: item.value.enabled === false,
-        hidden: item.value.hidden,
-        editable: item.value.editable,
-        when: item.value.scope
-          ? (event: KeyboardEvent) =>
-              event.target instanceof Element && !!event.target.closest(item.value.scope as string)
-          : undefined,
-        onSelect: (_source: unknown, input?: string) => item.value.run(input),
-      })),
+      .map((item) => {
+        const scope = item.value.scope
+
+        return {
+          id: `${item.extension}.${item.value.id}`,
+          title: item.value.title,
+          description: item.value.description,
+          category: item.value.group,
+          section: item.value.section,
+          keybind: item.value.bind,
+          follows: item.value.follows,
+          slash: item.value.slash?.name,
+          slashArguments: item.value.slash?.arguments,
+          slashAfter: item.value.slash?.after,
+          suggested: item.value.suggested,
+          featured: item.value.featured,
+          disabled: item.value.enabled === false,
+          hidden: item.value.hidden,
+          editable: item.value.editable,
+          when: scope
+            ? (event: KeyboardEvent) => event.target instanceof Element && !!event.target.closest(scope)
+            : undefined,
+          onSelect: (_source, input) => item.value.run(input),
+        }
+      }),
   )
 
   return null

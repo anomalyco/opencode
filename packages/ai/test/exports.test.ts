@@ -3,6 +3,8 @@ import { Effect, Layer } from "effect"
 import {
   AIClient,
   AIError,
+  Decision,
+  DecisionClient,
   Generation,
   Image,
   ImageClient,
@@ -17,7 +19,7 @@ import {
   TranscriptionClient,
   Video,
   VideoClient,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
@@ -58,7 +60,6 @@ import {
 } from "@opencode/ai/protocols"
 import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode/ai/testing"
-import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
 
 describe("public exports", () => {
   test("modality, provider, and protocol entrypoints load first in a fresh process", async () => {
@@ -95,9 +96,9 @@ describe("public exports", () => {
     expect(TestLLM.layer).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
-    expect(Evaluation.run).toBeFunction()
-    expect(EvaluationClient.layer).toBeDefined()
-    expect(EvaluationClient.fetchLayer).toBeDefined()
+    expect(Decision.generate).toBeFunction()
+    expect(DecisionClient.layer).toBeDefined()
+    expect(DecisionClient.fetchLayer).toBeDefined()
   })
 
   test("AIClient.layerWith shares one executor across every client", async () => {
@@ -149,13 +150,13 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
-    expect(OpenRouter.experimental.evaluation).toBeFunction()
-    expect(TypeSafeAI.experimental.evaluation).toBeFunction()
-    expect(OpenCode.experimental.evaluation).toBeFunction()
-    expect(VercelAIGateway.experimental.evaluation).toBeFunction()
-    expect(Baseten.experimental.evaluation).toBeFunction()
-    expect(DigitalOcean.experimental.evaluation).toBeFunction()
-    expect(OpenAI.experimental.evaluation("gpt-6-luna").route.id).toBe("openai-decisions")
+    expect(OpenRouter.decision).toBeFunction()
+    expect(TypeSafeAI.decision).toBeFunction()
+    expect(OpenCode.decision).toBeFunction()
+    expect(VercelAIGateway.decision("typesafe-ai/jev").route.id).toBe("openai-decisions")
+    expect(Baseten.decision).toBeFunction()
+    expect(DigitalOcean.decision).toBeFunction()
+    expect(OpenAI.decision("gpt-6-luna").route.id).toBe("openai-decisions")
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)

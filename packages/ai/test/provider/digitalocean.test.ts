@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src/index.js"
+import { CacheHint, LLM } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { it } from "../lib/effect.js"

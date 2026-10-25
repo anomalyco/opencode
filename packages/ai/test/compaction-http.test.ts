@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
-import { LLM, LLMRequest, Message } from "../src/index.js"
+import { LLM, LLMRequest, Message } from "../src/effect.js"
 import { LLMClient } from "../src/route/client.js"
 import { OpenAI } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"

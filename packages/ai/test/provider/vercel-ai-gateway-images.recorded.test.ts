@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src/index.js"
+import { Image } from "../../src/effect.js"
 import { VercelAIGateway } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -21,7 +21,7 @@ describe("Vercel AI Gateway Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat black circle centered on a plain white background.",
-        format: "webp",
+        providerOptions: { outputFormat: "webp" },
       })
 
       expect(response.images).toHaveLength(1)

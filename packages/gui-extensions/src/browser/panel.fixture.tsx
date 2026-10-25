@@ -72,6 +72,8 @@ type PaneFixtureState = {
   error: string | undefined
   layouts: Record<string, BridgeLayout | undefined>
   covered: boolean
+  /** Whether a host dialog is open over the app. */
+  dialog: boolean
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
@@ -131,6 +133,7 @@ export function mountBrowserPane(input: PaneHost) {
       error: undefined,
       layouts: {},
       covered: false,
+      dialog: false,
       captures: 0,
       holdCapture: false,
       picker: {},
@@ -184,7 +187,7 @@ export function mountBrowserPane(input: PaneHost) {
     }
 
     // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
-    const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
+    const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => store.dialog })
 
     const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
       (messages.get(key) ?? language.t(key)).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
@@ -468,6 +471,7 @@ export function mountBrowserPane(input: PaneHost) {
             <button onClick={() => setStore("holdCapture", true)}>Hold capture</button>
             <button onClick={() => held.splice(0).forEach((resolve) => resolve())}>Release capture</button>
             <button onClick={() => setStore("covered", (covered) => !covered)}>Toggle popover</button>
+            <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
             <button onClick={pick}>Pick element</button>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>

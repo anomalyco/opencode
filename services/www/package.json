@@ -8,7 +8,6 @@
     "build": "bun run generate && astro build && bun script/pagefind.ts && bun run validate && bun script/prepare-cloudflare.ts",
     "deploy": "wrangler deploy --config dist/server/wrangler.json",
     "generate": "bun script/generate-openapi.ts && bun --cwd ../../packages/cli script/schema.ts ../../services/www/public/cli.json",
-    "check:generated": "bun script/generate-openapi.ts --check",
     "validate": "bun script/validate-links.ts",
     "typecheck": "astro check",
     "typecheck:tsc": "astro check"

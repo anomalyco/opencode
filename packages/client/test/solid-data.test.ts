@@ -811,10 +811,55 @@ test("refreshes references for the location an update names", async () => {
   }
 })
 
+test("reloads VCS info when the branch changes", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const location = { directory: "/worktree", project: { id: "project", directory: "/worktree", canonical: "/main" } }
+  // A location's first read can land before its VCS provider loads, and so has no branches.
+  const responses = [{ branch: {} }, { provider: "git", branch: { current: "feature", default: "dev" } }]
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => Response.json({ location, data: responses.shift() }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: location.directory,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.location.vcs.sync()
+    expect(setup.data.location.vcs.info()).toEqual({ branch: {} })
+
+    const updated: OpenCodeEvent = {
+      id: "evt_vcs.branch.updated",
+      created: 1,
+      type: "vcs.branch.updated",
+      location: { directory: location.directory },
+      data: { branch: "feature" },
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+    await wait(() => setup.data.location.vcs.info()?.provider === "git")
+    expect(setup.data.location.vcs.info()).toEqual({ provider: "git", branch: { current: "feature", default: "dev" } })
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("preserves sibling catalogs through location preload, branch, shell, and websearch updates", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const location = { directory: "/project", project: { id: "project", directory: "/project", canonical: "/project" } }
   const requests: string[] = []
+  let branch = "main"
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
@@ -824,7 +869,7 @@ test("preserves sibling catalogs through location preload, branch, shell, and we
       if (pathname === "/api/project") return Response.json([])
       if (pathname === "/api/location") return Response.json(location)
       if (pathname === "/api/vcs")
-        return Response.json({ location, data: { branch: { current: "main", default: "main" } } })
+        return Response.json({ location, data: { branch: { current: branch, default: "main" } } })
       if (pathname === "/api/reference")
         return Response.json({
           location,
@@ -871,7 +916,9 @@ test("preserves sibling catalogs through location preload, branch, shell, and we
     expect(references?.map((reference) => [reference.name, reference.path])).toEqual([["docs", "/docs"]])
     expect(setup.data.shell.get(shell.id)).toBe(first)
 
+    branch = "feature"
     emit({ type: "vcs.branch.updated", location, data: { branch: "feature" } })
+    await wait(() => setup.data.location.vcs.info()?.branch.current === "feature")
     expect(setup.data.location.vcs.info()?.branch).toEqual({ current: "feature", default: "main" })
     expect(setup.data.location.reference.list()).toBe(references)
     emit({ type: "shell.created", location, data: { info: { ...shell, id: "sh_second" } } })
@@ -896,6 +943,8 @@ test("preserves sibling catalogs through location preload, branch, shell, and we
       "/api/project",
       "/api/reference",
       "/api/session/active",
+      // The branch update reloads VCS info.
+      "/api/vcs",
       "/api/vcs",
       "/api/websearch/provider",
     ])
@@ -1137,6 +1186,21 @@ test.each([
   }
 })
 
+test("adds running sessions created while disconnected to their family", async () => {
+  const root = { ...session(0), id: "ses_root" }
+  const child = { ...session(0), id: "ses_child", parentID: "ses_root" }
+  const setup = activityFixture(() => Response.json({ data: { ses_child: { type: "running" } } }), [child])
+
+  try {
+    setup.data.session.remember(root)
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.family("ses_root").includes("ses_child"))
+    expect(setup.data.session.status("ses_child")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("ignores activity snapshots from an older connection", async () => {
   const reads: ReturnType<typeof Promise.withResolvers<Response>>[] = []
   const setup = activityFixture(() => {
@@ -1208,7 +1272,7 @@ function modelInfo(name: string): ModelInfo {
   }
 }
 
-function activityFixture(read: () => Response | Promise<Response>) {
+function activityFixture(read: () => Response | Promise<Response>, sessions: SessionInfo[] = []) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
@@ -1216,6 +1280,8 @@ function activityFixture(read: () => Response | Promise<Response>) {
       const request = input instanceof Request ? input : new Request(input, init)
       const path = new URL(request.url).pathname
       if (path === "/api/session/active") return read()
+      const known = sessions.find((item) => path === `/api/session/${item.id}`)
+      if (known) return Response.json({ data: known })
       if (path === "/api/project") return Response.json([])
       if (path === "/api/location") return Response.json({ directory: "/project" })
       return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })

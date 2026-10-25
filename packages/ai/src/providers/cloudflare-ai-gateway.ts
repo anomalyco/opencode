@@ -1,13 +1,12 @@
 import type { Config, Redacted } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
-import { CloudflareRunEvaluation } from "../experimental/cloudflare-run-evaluation.js"
-import { SystemOne } from "../experimental/system-one.js"
+import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../protocols/index.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { AtLeastOne, ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
-import { HttpOptions, ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
@@ -132,16 +131,17 @@ export const configure = (input: LanguageModelOptions) => {
   const responses = responsesRoute.with(passthrough("openai"))
   const messages = messagesRoute.with(passthrough("anthropic/v1"))
   const chat = route.with(rest)
-  const evaluation = (value: string | ModelID) =>
-    CloudflareRunEvaluation.model({
-      id: value,
-      provider: id,
-      auth: rest.auth,
-      baseURL: runBaseURL(input),
-      headers: rest.headers,
-      http: HttpOptions.make(input.http),
-      rounding: SystemOne.jevRounding,
-    })
+  // The Run API base is derived per call so a chat-only configuration without an account still constructs.
+  const decision = (value: string | ModelID) =>
+    CloudflareRunDecisions.route
+      .with({
+        provider: id,
+        endpoint: { baseURL: runBaseURL(input) },
+        auth: rest.auth,
+        headers: rest.headers,
+        http: input.http,
+      })
+      .model({ id: value })
   return {
     id,
     model: (value: string | ModelID) => {
@@ -155,7 +155,7 @@ export const configure = (input: LanguageModelOptions) => {
         return chat.model<OpenAIProviderOptionsInput>({ id: value.slice("workers-ai/".length) })
       return chat.model<OpenAIProviderOptionsInput>({ id: value })
     },
-    experimental: { evaluation },
+    decision,
     configure,
   }
 }

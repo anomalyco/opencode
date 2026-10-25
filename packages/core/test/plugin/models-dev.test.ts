@@ -706,6 +706,64 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  it.effect("omits realtime, embedding, and reranking models even when they list text input and output", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
+      const providerID = Provider.ID.make("acme")
+      const ids = ["gpt-5.5", "gpt-audio", "jev-1.13", "gpt-realtime-2.1", "text-embedding-3-large", "rerank-v3.5"].map(
+        (id) => Model.ID.make(id),
+      )
+      const model = {
+        providerID,
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        variants: [],
+        time: { released: Date.parse("2026-01-01") },
+        cost: [],
+        status: "active",
+        enabled: true,
+        limit: { context: 128_000, output: 32_000 },
+      } satisfies Omit<Model.Info, "id" | "modelID" | "name">
+      const snapshot = {
+        info: {
+          id: providerID,
+          name: "Acme",
+          activation: "auto",
+          package: "@opencode/ai/providers/openai-compatible",
+        },
+        environment: [],
+        models: ids.map((id) => ({ ...model, id, modelID: id, name: id })),
+        // gpt-5.5 has no type, which models.dev treats as chat.
+        types: new Map<Model.ID, ModelsDev.CatalogModelType>([
+          [Model.ID.make("gpt-audio"), "chat"],
+          [Model.ID.make("jev-1.13"), "decision"],
+          [Model.ID.make("gpt-realtime-2.1"), "realtime"],
+          [Model.ID.make("text-embedding-3-large"), "embedding"],
+          [Model.ID.make("rerank-v3.5"), "reranking"],
+        ]),
+      } satisfies ModelsDev.Snapshot
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          provider: providerHost(providers),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed([snapshot]), refresh: () => Effect.void }),
+        ),
+      )
+
+      yield* activate(providers)
+      const listed = yield* Effect.forEach(ids, (id) => modelState.get(providerID, id))
+      expect(listed.flatMap((item) => item?.id ?? [])).toEqual(
+        ["gpt-5.5", "gpt-audio", "jev-1.13"].map((id) => Model.ID.make(id)),
+      )
+    }),
+  )
+
   it.effect("registers key methods for providers with environment variables", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

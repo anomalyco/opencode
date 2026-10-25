@@ -3,14 +3,7 @@ import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./gen
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import {
-  AIError,
-  HttpOptions,
-  MediaUsage,
-  ProviderMetadata,
-  ProviderOptions,
-  type OpenString,
-} from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
@@ -79,7 +72,7 @@ export class VideoRequest extends Schema.Class<VideoRequest>("Video.Request")({
   /** Source video for edit or extension routes. */
   video: Schema.optional(Media.AssetSchema),
   durationSeconds: Schema.optional(Schema.Number),
-  aspectRatio: Schema.optional(VideoAspectRatio),
+  aspect: Schema.optional(VideoAspectRatio),
   resolution: Schema.optional(Schema.String),
   /** Whether to generate an audio track; routes whose audio is always on fail typed on `false`. */
   audio: Schema.optional(Schema.Boolean),
