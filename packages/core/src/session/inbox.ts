@@ -23,6 +23,7 @@ import { SessionEvent } from "./event.js"
 import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
+import { SessionStored } from "./stored.js"
 import { SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
@@ -50,6 +51,7 @@ export {
 export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
+const decodeStoredUser = Schema.decodeUnknownSync(SessionStored.UserPayload)
 const encodeUser = Schema.encodeSync(UserPayload)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticPayload)
 const encodeSynthetic = Schema.encodeSync(SyntheticPayload)
@@ -345,13 +347,20 @@ export const projectDelivered = Effect.fn("SessionInbox.projectDelivered")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-  // The projected message keeps the stored `media:` refs; `input` is decoded without their bytes.
-  const files =
-    "files" in deleted.payload && deleted.payload.files && SessionBlob.collectHashes(deleted.payload).size > 0
-      ? deleted.payload.files
-      : undefined
-  return { input: fromRow(SessionBlob.elideInbox([deleted])[0]!), files }
+  return delivered(deleted)
 })
+
+/** A consumed row with its payload as stored, so user file refs reach the message without their blobs. */
+export type Delivered =
+  | { readonly id: SessionMessage.ID; readonly type: "user"; readonly payload: SessionStored.UserPayload }
+  | { readonly id: SessionMessage.ID; readonly type: "synthetic"; readonly payload: SyntheticPayload }
+  | { readonly id: SessionMessage.ID; readonly type: "compaction" | "move" }
+
+const delivered = (row: typeof SessionInboxTable.$inferSelect): Delivered => {
+  if (row.type === "user") return { id: row.id, type: "user", payload: decodeStoredUser(row.payload) }
+  if (row.type === "synthetic") return { id: row.id, type: "synthetic", payload: decodeSynthetic(row.payload) }
+  return { id: row.id, type: row.type }
+}
 
 export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(function* (
   db: DatabaseService,
@@ -428,8 +437,7 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   promotable: Promotable,
 ) {
   const steer = (yield* pendingSteers(db, sessionID))[0]
-  // Callers only read the type, delivery, id and control payloads, never file bytes.
-  if (steer) return fromRow(SessionBlob.elideInbox([steer])[0]!)
+  if (steer) return promotion(steer)
   if (promotable !== "input") return undefined
   const queued = yield* db
     .select()
@@ -439,8 +447,18 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
     .limit(1)
     .get()
     .pipe(Effect.orDie)
-  return queued ? fromRow(SessionBlob.elideInbox([queued])[0]!) : undefined
+  return queued ? promotion(queued) : undefined
 })
+
+/** What a boundary decides on: prompts are promoted by id, so only a move's payload is read. */
+export type Promotion =
+  | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic" | "compaction"; readonly delivery: Delivery }
+  | { readonly id: SessionMessage.ID; readonly type: "move"; readonly delivery: Delivery; readonly payload: MovePayload }
+
+const promotion = (row: typeof SessionInboxTable.$inferSelect): Promotion =>
+  row.type === "move"
+    ? { id: row.id, type: "move", delivery: row.delivery, payload: decodeMove(row.payload) }
+    : { id: row.id, type: row.type, delivery: row.delivery }
 
 /** Which pending rows count: "input" means any item in either delivery mode. */
 export type Scope = "input" | Delivery

@@ -12,11 +12,13 @@ import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
 import { SessionRecentText } from "./recent-text.js"
 import { SessionMessageTable } from "./sql.js"
+import { SessionStored } from "./stored.js"
 
 type DatabaseService = Database.Interface["db"]
 
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
+const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
 
 /**
  * Which completed compactions bound a history read. Local summaries always do. Native
@@ -90,16 +92,20 @@ const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
 
 export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
 
+const decodeError = (row: typeof SessionMessageTable.$inferSelect) => () =>
+  new MessageDecodeError({
+    sessionID: row.session_id,
+    messageID: row.id,
+  })
+
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
-  decode(rowInput(row)).pipe(
-    Effect.mapError(
-      () =>
-        new MessageDecodeError({
-          sessionID: row.session_id,
-          messageID: row.id,
-        }),
-    ),
-  )
+  decode(rowInput(row)).pipe(Effect.mapError(decodeError(row)))
+
+/** Decodes a row without its blobs, so user files may stay refs. Only for readers that never use file bytes. */
+const decodeStoredRow = (
+  row: typeof SessionMessageTable.$inferSelect,
+): Effect.Effect<SessionMessage.Info | SessionStored.User, MessageDecodeError> =>
+  row.type === "user" ? decodeStoredUser(rowInput(row)).pipe(Effect.mapError(decodeError(row))) : decodeMessageRow(row)
 
 /** Decodes rows after restoring media stored in `blob`. Reads that return media must use this. */
 export const decodeMessageRows = Effect.fnUntraced(function* (
@@ -186,7 +192,7 @@ const withRecentText = Effect.fnUntraced(function* (
     .all()
     .pipe(Effect.orDie)
   // The recent text names attachments by mime and name only, so their bytes are never read.
-  const kept = yield* Effect.forEach(SessionBlob.elide(rows), decodeMessageRow)
+  const kept = yield* Effect.forEach(rows, decodeStoredRow)
   const recent = kept.map(SessionRecentText.messageToText).filter(Boolean).join("\n\n")
   return [{ ...first, message: { ...compaction, metadata: { ...compaction.metadata, recent } } }, ...entries.slice(1)]
 })
@@ -245,21 +251,22 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
     .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
 })
 
-/** Returns the session's first user message, with empty data for files stored as `media:` refs. */
+/** The id and text of the session's first user message. */
 export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
   const row = yield* db
-    .select()
+    .select({
+      id: SessionMessageTable.id,
+      text: sql<unknown>`json_extract(${SessionMessageTable.data}, '$.text')`,
+    })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
     .orderBy(asc(SessionMessageTable.seq))
     .get()
     .pipe(Effect.orDie)
-  if (!row) return undefined
-  const message = yield* decodeMessageRow(SessionBlob.elide([row])[0]!).pipe(Effect.orElseSucceed(() => undefined))
-  return message?.type === "user" ? message : undefined
+  return typeof row?.text === "string" ? { id: row.id, text: row.text } : undefined
 })
 
 export * as SessionHistory from "./history.js"

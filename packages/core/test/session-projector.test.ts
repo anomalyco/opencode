@@ -23,6 +23,8 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { fromRow } from "@opencode/core/session/info"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionStore } from "@opencode/core/session/store"
+import { SessionStored } from "@opencode/core/session/stored"
+import { SessionHistory } from "@opencode/core/session/history"
 import { Shell } from "@opencode/schema/shell"
 import {
   InstructionStateTable,
@@ -1042,7 +1044,7 @@ describe("SessionProjector", () => {
             time_created: 1,
             data: {
               text: "user attachment",
-              files: [{ uri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "spec.pdf" }] as any,
+              files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "spec.pdf" })],
               time: { created: 1 },
             },
           },
@@ -1065,9 +1067,9 @@ describe("SessionProjector", () => {
                     status: "completed",
                     input: { path: "spec.pdf" },
                     content: [
-                      { type: "file", uri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "spec.pdf" },
+                      SessionStored.ToolFileRef.make({ type: "file", uri, mime: "application/pdf", name: "spec.pdf" }),
                       { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
-                    ] as any,
+                    ],
                   },
                   time: { created: 2, ran: 2, completed: 2 },
                 },
@@ -1087,7 +1089,7 @@ describe("SessionProjector", () => {
           type: "user",
           payload: {
             text: "queued attachment",
-            files: [{ uri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "queued.pdf" }] as any,
+            files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" })],
           },
           delivery: "queue",
           enqueued_seq: 3,
@@ -1134,6 +1136,13 @@ describe("SessionProjector", () => {
         },
       })
 
+      expect(yield* SessionHistory.firstUserMessage(db, sessionID)).toEqual({ id: userID, text: "user attachment" })
+      expect(yield* SessionInbox.nextPromotable(db, sessionID, "input")).toEqual({
+        id: inboxID,
+        type: "user",
+        delivery: "queue",
+      })
+
       yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })
       expect((yield* store.message(inboxID))?.message).toMatchObject({
         id: inboxID,
@@ -1149,7 +1158,7 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       expect(delivered?.data).toMatchObject({
         text: "queued attachment",
-        files: [{ uri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "queued.pdf" }],
+        files: [{ uri, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" }],
       })
       expect(JSON.stringify(delivered?.data)).not.toContain(base64)
     }),
@@ -1165,6 +1174,12 @@ describe("SessionProjector", () => {
       const assistantID = SessionMessage.ID.make("msg_missing_assistant")
       const inboxID = SessionMessage.ID.make("msg_missing_inbox")
       const placeholder = Buffer.from("[media unavailable: shot.png (image/png)]").toString("base64")
+      const ref = SessionStored.FileRef.make({
+        uri: `media:${hash}`,
+        mime: "image/png",
+        source: { type: "inline" },
+        name: "shot.png",
+      })
 
       yield* db
         .insert(SessionMessageTable)
@@ -1177,7 +1192,7 @@ describe("SessionProjector", () => {
             time_created: 1,
             data: {
               text: "gone",
-              files: [{ uri: `media:${hash}`, mime: "image/png", bytes: 10, name: "shot.png" }] as any,
+              files: [ref],
               time: { created: 1 },
             },
           },
@@ -1199,7 +1214,7 @@ describe("SessionProjector", () => {
                   state: {
                     status: "completed",
                     input: { path: "shot.png" },
-                    content: [{ type: "file", uri: `media:${hash}`, mime: "image/png", bytes: 10 }] as any,
+                    content: [SessionStored.ToolFileRef.make({ type: "file", uri: ref.uri, mime: "image/png" })],
                   },
                   time: { created: 2, ran: 2, completed: 2 },
                 },
@@ -1216,7 +1231,7 @@ describe("SessionProjector", () => {
           id: inboxID,
           session_id: sessionID,
           type: "user",
-          payload: { text: "queued", files: [{ uri: `media:${hash}`, mime: "image/png", name: "shot.png" }] as any },
+          payload: { text: "queued", files: [ref] },
           delivery: "queue",
           enqueued_seq: 3,
           time_created: 3,
@@ -1235,6 +1250,57 @@ describe("SessionProjector", () => {
       const listed = yield* inbox.list(sessionID)
       expect(listed[0]).toMatchObject({ payload: { files: [{ data: placeholder, mime: "text/plain" }] } })
       expect(JSON.stringify([messages, listed])).not.toContain(hash)
+    }),
+  )
+
+  it.effect("names ref attachments in kept text without reading their blobs", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const store = yield* SessionStore.Service
+      const userID = SessionMessage.ID.make("msg_kept_user")
+      const compactionID = SessionMessage.ID.make("msg_kept_compaction")
+      const { id: _, type: __, ...compaction } = encodeMessage(
+        SessionMessage.CompactionCompleted.make({
+          id: compactionID,
+          type: "compaction",
+          status: "completed",
+          reason: "manual",
+          summary: "summary",
+          metadata: { keepID: userID },
+          time: { created },
+        }),
+      )
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: userID,
+            session_id: sessionID,
+            type: "user",
+            seq: 1,
+            time_created: 1,
+            data: {
+              text: "look",
+              files: [
+                SessionStored.FileRef.make({
+                  uri: `media:${"c".repeat(64)}`,
+                  mime: "image/png",
+                  source: { type: "inline" },
+                  name: "shot.png",
+                }),
+              ],
+              time: { created: 1 },
+            },
+          },
+          { id: compactionID, session_id: sessionID, type: "compaction", seq: 2, time_created: 2, data: compaction },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      // The blob is missing, so a hydrated read would name a text/plain placeholder instead.
+      expect(yield* store.context(sessionID)).toMatchObject([
+        { id: compactionID, metadata: { recent: "[User]: look\n[Attached image/png: shot.png]" } },
+      ])
     }),
   )
 })

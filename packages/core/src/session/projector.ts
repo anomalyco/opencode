@@ -13,6 +13,7 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -32,6 +33,7 @@ type MessageEvent = Exclude<
 >
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
+const encodeStoredUser = Schema.encodeSync(SessionStored.User)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -401,14 +403,9 @@ function run(db: DatabaseService, event: MessageEvent) {
 function insertMessage(
   db: DatabaseService,
   event: SessionEvent.DurableEvent,
-  message: SessionMessage.Info,
-  /** Stored files to write in place of the encoded ones, so `media:` refs survive delivery. */
-  files?: unknown,
+  message: SessionMessage.Info | SessionStored.User,
 ) {
-  const encoded = encodeMessage(message)
-  const { id: _, type, ...rest } = encoded
-  // SAFETY: `files` is the stored `files` array of the inbox row this message is delivered from.
-  const data = files === undefined ? rest : ({ ...rest, files } as typeof rest)
+  const { id: _, type, ...data } = message.type === "user" ? encodeStoredUser(message) : encodeMessage(message)
   return db
     .insert(SessionMessageTable)
     .values({
@@ -647,35 +644,31 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
       Effect.gen(function* () {
-        const { input, files } = yield* SessionInbox.projectDelivered(db, {
+        const input = yield* SessionInbox.projectDelivered(db, {
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
         })
-        if (input.type === "compaction" || input.type === "move") return
-        yield* insertMessage(
-          db,
-          event,
-          input.type === "user"
-            ? {
-                id: input.id,
-                type: "user",
-                metadata: input.payload.metadata,
-                text: input.payload.text,
-                files: input.payload.files,
-                agents: input.payload.agents,
-                skills: input.payload.skills,
-                time: { created: DateTime.makeUnsafe(event.created) },
-              }
-            : {
-                id: input.id,
-                type: "synthetic",
-                text: input.payload.text,
-                description: input.payload.description,
-                metadata: input.payload.metadata,
-                time: { created: DateTime.makeUnsafe(event.created) },
-              },
-          files,
-        )
+        const time = { created: DateTime.makeUnsafe(event.created) }
+        if (input.type === "user")
+          yield* insertMessage(db, event, {
+            id: input.id,
+            type: "user",
+            metadata: input.payload.metadata,
+            text: input.payload.text,
+            files: input.payload.files,
+            agents: input.payload.agents,
+            skills: input.payload.skills,
+            time,
+          })
+        if (input.type === "synthetic")
+          yield* insertMessage(db, event, {
+            id: input.id,
+            type: "synthetic",
+            text: input.payload.text,
+            description: input.payload.description,
+            metadata: input.payload.metadata,
+            time,
+          })
       }),
     )
     yield* bus.project(SessionEvent.InboxEnqueued, (event) =>

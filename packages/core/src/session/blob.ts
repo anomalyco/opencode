@@ -1,143 +1,75 @@
 export * as SessionBlob from "./blob.js"
 
-import { createHash } from "node:crypto"
 import { inArray } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { map } from "effect/Array"
+import type { FileAttachment } from "@opencode/schema/prompt"
+import type { Tool } from "@opencode/schema/tool"
 import type { Database } from "../database/database.js"
 import { BlobTable, SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionStored } from "./stored.js"
 
 type DatabaseService = Database.Interface["db"]
 type MessageRow = typeof SessionMessageTable.$inferSelect
 type InboxRow = typeof SessionInboxTable.$inferSelect
-type Data = MessageRow["data"] | InboxRow["payload"]
+type Part = Extract<MessageRow["data"], { readonly content: unknown }>["content"][number]
+/** Base64 bytes by blob hash. */
+type Blobs = ReadonlyMap<string, string>
 
-/** A blob's hash is the lowercase hex SHA-256 of its raw (decoded) bytes. */
-export const hashBytes = (raw: Uint8Array) => createHash("sha256").update(raw).digest("hex")
-export const HASH_PATTERN = /^[0-9a-f]{64}$/
+const isFileRef = Schema.is(SessionStored.FileRef)
+const isToolFileRef = Schema.is(SessionStored.ToolFileRef)
 
-/**
- * Stored rows reference a blob as `media:<hash>` in the existing `uri` field, next to `data:` and `file:` URIs.
- * The ref names no server route; clients that opt in see a fetchable path only in the response projection.
- */
-export const REF_SCHEME = "media:"
+const toolItems = (part: Part): ReadonlyArray<Tool.Content> =>
+  part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")
+    ? (part.state.content ?? [])
+    : []
 
-export const ref = (hash: string) => `${REF_SCHEME}${hash}`
-
-type StoredUserFile = {
-  readonly data?: string
-  readonly uri?: string
-  readonly mime: string
-  readonly bytes?: number
-  readonly width?: number
-  readonly height?: number
-  readonly source?: unknown
-  readonly origin?: unknown
-  readonly name?: string
-  readonly description?: string
-  readonly mention?: unknown
+function collect(data: MessageRow["data"] | InboxRow["payload"], hashes: Set<string>) {
+  if ("files" in data)
+    for (const file of data.files ?? []) if (isFileRef(file)) hashes.add(SessionStored.refHash(file.uri))
+  if ("content" in data)
+    for (const part of data.content)
+      for (const item of toolItems(part)) if (isToolFileRef(item)) hashes.add(SessionStored.refHash(item.uri))
 }
 
-type StoredToolFile = {
-  readonly type: "file"
-  readonly uri: string
-  readonly mime: string
-  readonly bytes?: number
-  readonly width?: number
-  readonly height?: number
-  readonly name?: string
-}
-
-export const hashFromUri = (uri: string | undefined) => {
-  const hash = uri?.startsWith(REF_SCHEME) ? uri.slice(REF_SCHEME.length) : undefined
-  return hash !== undefined && HASH_PATTERN.test(hash) ? hash : undefined
-}
-
-export function collectHashes(data: Data, target = new Set<string>()) {
-  if ("files" in data && data.files) {
-    for (const file of data.files as ReadonlyArray<StoredUserFile>) {
-      const hash = hashFromUri(file.uri)
-      if (hash) target.add(hash)
-    }
-  }
-  if ("content" in data) {
-    for (const part of data.content) {
-      if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) continue
-      for (const item of part.state.content ?? []) {
-        if (item.type !== "file") continue
-        const hash = hashFromUri(item.uri)
-        if (hash) target.add(hash)
-      }
-    }
-  }
-  return target
-}
-
-/** Stands in for a ref whose blob is gone, so readers and the model never see a bare `media:` ref. */
-export const unavailableText = (mime: string, name?: string) =>
+/** A ref whose blob is gone reads as this text, so clients and the model never see a bare ref. */
+const unavailable = (mime: string, name?: string) =>
   `[media unavailable: ${name === undefined ? mime : `${name} (${mime})`}]`
 
-type Blobs = ReadonlyMap<string, { readonly mime: string; readonly base64: string }>
-
-/** With `blobs`, restores each ref's bytes; without, empties user file data and leaves tool refs as stored. */
-function hydrateData<T extends Data>(data: T, blobs: Blobs | undefined): T {
-  let result = data
-  if ("files" in data && data.files) {
-    let changed = false
-    const files = (data.files as ReadonlyArray<StoredUserFile>).map((file) => {
-      const hash = hashFromUri(file.uri)
-      if (!hash) return file
-      const blob = blobs?.get(hash)
-      const { uri: _u, bytes: _b, width: _w, height: _h, origin, source, ...rest } = file
-      changed = true
-      return {
-        ...rest,
-        ...(blobs === undefined
-          ? { data: "", mime: file.mime }
-          : blob
-            ? { data: blob.base64, mime: file.mime || blob.mime }
-            : { data: Buffer.from(unavailableText(file.mime, file.name)).toString("base64"), mime: "text/plain" }),
-        source: source ?? origin ?? { type: "inline" as const },
-      }
-    })
-    if (changed) result = { ...result, files }
-  }
-  if (blobs === undefined || !("content" in data)) return result
-  let changed = false
-  const content = data.content.map((part) => {
-    if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) return part
-    if (!part.state.content) return part
-    let partChanged = false
-    const items = part.state.content.map((item) => {
-      if (item.type !== "file") return item
-      const hash = hashFromUri(item.uri)
-      if (!hash) return item
-      const blob = blobs.get(hash)
-      partChanged = true
-      if (!blob) return { type: "text" as const, text: unavailableText(item.mime, item.name) }
-      const { bytes: _b, width: _w, height: _h, ...rest } = item as StoredToolFile
-      return {
-        ...rest,
-        uri: `data:${item.mime || blob.mime};base64,${blob.base64}`,
-      }
-    })
-    if (!partChanged) return part
-    changed = true
-    return { ...part, state: { ...part.state, content: [items[0]!, ...items.slice(1)] as const } }
-  })
-  return changed ? { ...result, content } : result
+function inlineFile(file: SessionStored.File, blobs: Blobs): FileAttachment {
+  if (!isFileRef(file)) return file
+  const { uri, ...rest } = file
+  const data = blobs.get(SessionStored.refHash(uri))
+  if (data === undefined)
+    return { ...rest, data: Buffer.from(unavailable(file.mime, file.name)).toString("base64"), mime: "text/plain" }
+  return { ...rest, data }
 }
 
-const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
+function inlineToolItem(item: Tool.Content, blobs: Blobs): Tool.Content {
+  if (!isToolFileRef(item)) return item
+  const data = blobs.get(SessionStored.refHash(item.uri))
+  if (data === undefined) return { type: "text", text: unavailable(item.mime, item.name) }
+  return { ...item, uri: `data:${item.mime};base64,${data}` }
+}
+
+function inlinePart(part: Part, blobs: Blobs): Part {
+  if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) return part
+  const content = part.state.content
+  if (!content?.some(isToolFileRef)) return part
+  return { ...part, state: { ...part.state, content: map(content, (item) => inlineToolItem(item, blobs)) } }
+}
+
+const load = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
   const all = [...hashes]
-  const blobs = new Map<string, { readonly mime: string; readonly base64: string }>()
+  const blobs = new Map<string, string>()
   for (let offset = 0; offset < all.length; offset += 500) {
     const found = yield* db
-      .select({ hash: BlobTable.hash, mime: BlobTable.mime, data: BlobTable.data })
+      .select({ hash: BlobTable.hash, data: BlobTable.data })
       .from(BlobTable)
       .where(inArray(BlobTable.hash, all.slice(offset, offset + 500)))
       .all()
       .pipe(Effect.orDie)
-    for (const blob of found) blobs.set(blob.hash, { mime: blob.mime, base64: view(blob.data).toString("base64") })
+    for (const blob of found) blobs.set(blob.hash, view(blob.data).toString("base64"))
   }
   return blobs
 })
@@ -145,43 +77,31 @@ const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, hashes: Read
 const view = (data: Uint8Array) =>
   Buffer.isBuffer(data) ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength)
 
-/** Restores inline base64 media for any `media:<hash>` refs in `rows`. Rows without refs are returned untouched. */
+/** Restores inline media for the refs in `session_message` rows. Rows without refs are returned untouched. */
 export const hydrate = Effect.fnUntraced(function* (db: DatabaseService, rows: ReadonlyArray<MessageRow>) {
   const hashes = new Set<string>()
-  for (const row of rows) collectHashes(row.data, hashes)
+  for (const row of rows) collect(row.data, hashes)
   if (hashes.size === 0) return rows
-  const blobs = yield* loadBlobs(db, hashes)
-  return rows.map((row) => {
-    const data = hydrateData(row.data, blobs)
-    return data === row.data ? row : { ...row, data }
+  const blobs = yield* load(db, hashes)
+  return rows.map((row): MessageRow => {
+    const data = row.data
+    if ("files" in data && data.files?.some(isFileRef))
+      return { ...row, data: { ...data, files: data.files.map((file) => inlineFile(file, blobs)) } }
+    if ("content" in data && data.content.some((part) => toolItems(part).some(isToolFileRef)))
+      return { ...row, data: { ...data, content: data.content.map((part) => inlinePart(part, blobs)) } }
+    return row
   })
 })
 
-/** Restores inline base64 media for any `media:<hash>` refs in `session_inbox` rows. */
+/** Restores inline media for the refs in `session_inbox` rows. Rows without refs are returned untouched. */
 export const hydrateInbox = Effect.fnUntraced(function* (db: DatabaseService, rows: ReadonlyArray<InboxRow>) {
   const hashes = new Set<string>()
-  for (const row of rows) collectHashes(row.payload, hashes)
+  for (const row of rows) collect(row.payload, hashes)
   if (hashes.size === 0) return rows
-  const blobs = yield* loadBlobs(db, hashes)
-  return rows.map((row) => {
-    const payload = hydrateData(row.payload, blobs)
-    return payload === row.payload ? row : { ...row, payload }
+  const blobs = yield* load(db, hashes)
+  return rows.map((row): InboxRow => {
+    const payload = row.payload
+    if (!("files" in payload) || !payload.files?.some(isFileRef)) return row
+    return { ...row, payload: { ...payload, files: payload.files.map((file) => inlineFile(file, blobs)) } }
   })
 })
-
-/**
- * Makes rows decodable without reading any blob: user files keep their mime, name and source with empty data,
- * and tool file refs stay as stored. Only for readers that never use file bytes.
- */
-export const elide = (rows: ReadonlyArray<MessageRow>) =>
-  rows.map((row) => {
-    const data = hydrateData(row.data, undefined)
-    return data === row.data ? row : { ...row, data }
-  })
-
-/** {@link elide} for `session_inbox` rows. */
-export const elideInbox = (rows: ReadonlyArray<InboxRow>) =>
-  rows.map((row) => {
-    const payload = hydrateData(row.payload, undefined)
-    return payload === row.payload ? row : { ...row, payload }
-  })
