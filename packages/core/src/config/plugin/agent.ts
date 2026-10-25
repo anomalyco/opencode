@@ -41,32 +41,47 @@ export const Plugin = define({
     const global = yield* Global.Service
     const watcher = yield* Effect.serviceOption(Watcher.Service)
     const watches = yield* FiberMap.make<string>()
-    const externalDirectories = new Set<string>()
 
     const syncExternalWatches = Effect.fnUntraced(function* () {
       const entries = yield* config.entries()
-      const current = new Set<string>()
+      const currentDirs = new Set<string>()
+      const currentFiles = new Set<string>()
+
       for (const entry of entries) {
         if (entry.type !== "directory") continue
         for (const name of sourceDirectories) {
           const sourcePath = path.join(entry.path, name)
           const resolved = yield* fs.realPath(sourcePath).pipe(Effect.orElseSucceed(() => undefined))
           if (resolved && !FSUtil.contains(entry.path, resolved)) {
-            current.add(resolved)
+            currentDirs.add(resolved)
+          }
+        }
+        const files = yield* discover(fs, entry.path)
+        for (const file of files) {
+          const resolved = yield* fs.realPath(file.filepath).pipe(Effect.orElseSucceed(() => undefined))
+          if (resolved && !FSUtil.contains(entry.path, resolved)) {
+            currentFiles.add(resolved)
           }
         }
       }
-      externalDirectories.clear()
-      for (const dir of current) externalDirectories.add(dir)
 
       if (Option.isSome(watcher)) {
         const w = watcher.value
-        for (const key of Array.from(watches, ([key]) => key)) {
-          if (!current.has(key)) yield* FiberMap.remove(watches, key)
+        for (const [key] of Array.from(watches)) {
+          if (!currentDirs.has(key) && !currentFiles.has(key)) {
+            yield* FiberMap.remove(watches, key)
+          }
         }
-        for (const dir of current) {
+        for (const dir of currentDirs) {
           const updates = yield* w.subscribe({ path: dir, type: "directory", ignore: FSUtil.ignoreGlobs })
           yield* FiberMap.run(watches, dir, updates.pipe(Stream.runForEach(notify)), {
+            onlyIfMissing: true,
+            startImmediately: true,
+          })
+        }
+        for (const file of currentFiles) {
+          const updates = yield* w.subscribe({ path: file, type: "file" })
+          yield* FiberMap.run(watches, file, updates.pipe(Stream.runForEach(notify)), {
             onlyIfMissing: true,
             startImmediately: true,
           })
@@ -101,9 +116,7 @@ export const Plugin = define({
     const changes = yield* PubSub.sliding<void>(1)
     const notify = () => PubSub.publish(changes, undefined)
     yield* config.changes().pipe(
-      Stream.filterEffect((update) =>
-        Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path, externalDirectories)),
-      ),
+      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
       Stream.runForEach(notify),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -167,14 +180,9 @@ export const Plugin = define({
   }),
 })
 
-// Matches anything at or under <root>/{agent,agents,mode,modes} or external targets of those directories.
-// No file-suffix check: directory-level events such as renames carry no per-file paths.
-function isAgentSource(entries: Entry[], file: string, external?: ReadonlySet<string>) {
-  if (external) {
-    for (const dir of external) {
-      if (FSUtil.contains(dir, file)) return true
-    }
-  }
+// Matches anything at or under <root>/{agent,agents,mode,modes}. No file-suffix
+// check: directory-level events such as renames carry no per-file paths.
+function isAgentSource(entries: Entry[], file: string) {
   return entries.some(
     (entry) =>
       entry.type === "directory" &&

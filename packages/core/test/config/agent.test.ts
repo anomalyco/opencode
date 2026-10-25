@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Fiber, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -12,6 +12,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Permission } from "@opencode/core/permission"
 import { AgentPlugin } from "@opencode/core/plugin/agent"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -22,7 +23,12 @@ import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])))
+const it = testEffect(
+  Layer.merge(
+    AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])),
+    Watcher.testLayer,
+  ),
+)
 const decode = Schema.decodeUnknownSync(Info)
 
 function migrateV1(input: unknown) {
@@ -713,7 +719,7 @@ Mixed fields.`,
           })
 
           const agents = yield* Agent.Service
-          const configTest = yield* Config.Test
+          const watcher = yield* Watcher.Test
           let reloads = 0
           yield* ConfigAgentPlugin.Plugin.effect(
             host({
@@ -725,9 +731,55 @@ Mixed fields.`,
           )
 
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Initial prompt" })
+          expect(yield* watcher.subscriptions()).toContainEqual({
+            path: external,
+            type: "directory",
+            ignore: FSUtil.ignoreGlobs,
+          })
 
           yield* Effect.promise(() => fs.writeFile(path.join(external, "reviewer.md"), "Updated prompt"))
-          yield* configTest.emitChange({ type: "update", path: path.join(external, "reviewer.md") })
+          yield* watcher.emit({ type: "update", path: path.join(external, "reviewer.md") })
+          yield* advance(() => reloads >= 1)
+          expect(reloads).toBe(1)
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Updated prompt" })
+        }).pipe(Effect.provide(Config.testLayer([directoryEntry(path.join(tmp.path, "config-root"))]))),
+      ),
+    ),
+  )
+
+  it.effect("rebuilds on an update to an agent file through a single-file symlink", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const external = path.join(tmp.path, "external-file.md")
+          const agentsDir = path.join(tmp.path, "config-root", "agents")
+          const linkedFile = path.join(agentsDir, "reviewer.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(agentsDir, { recursive: true })
+            await fs.writeFile(external, "Initial prompt")
+            await fs.symlink(external, linkedFile, "file")
+          })
+
+          const agents = yield* Agent.Service
+          const watcher = yield* Watcher.Test
+          let reloads = 0
+          yield* ConfigAgentPlugin.Plugin.effect(
+            host({
+              agent: {
+                ...agentHost(agents),
+                reload: () => agents.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Initial prompt" })
+          expect(yield* watcher.subscriptions()).toContainEqual({
+            path: external,
+            type: "file",
+          })
+
+          yield* Effect.promise(() => fs.writeFile(external, "Updated prompt"))
+          yield* watcher.emit({ type: "update", path: external })
           yield* advance(() => reloads >= 1)
           expect(reloads).toBe(1)
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Updated prompt" })
