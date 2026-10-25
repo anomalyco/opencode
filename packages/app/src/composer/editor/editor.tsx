@@ -18,7 +18,7 @@ import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
-import { resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { attachmentThumbnail } from "../attachments/thumbnail"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
@@ -685,8 +685,9 @@ export function ComposerAttachments(props: {
                     }
                   >
                     {(image) => {
-                      // Restored drafts and history carry image ids only; bytes load when shown.
-                      const [url] = createResource(() => image().blob, resolveBlobUrl)
+                      const preview = attachmentThumbnail(image().blob)
+                      onCleanup(preview.release)
+                      const [url] = createResource(() => preview.ready)
 
                       return (
                         <>
@@ -694,6 +695,7 @@ export function ComposerAttachments(props: {
                           <Suspense fallback={<div class="w-[58px] h-[46px]" />}>
                             <img
                               src={url() ?? ""}
+                              decoding="async"
                               alt={attachment.filename}
                               class="w-[58px] h-[46px] rounded-[6px] object-cover"
                               onClick={() => props.onAttachmentClick?.(attachment)}
