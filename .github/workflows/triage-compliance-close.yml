@@ -1,4 +1,4 @@
-name: compliance-close
+name: triage-compliance-close
 
 on:
   schedule:

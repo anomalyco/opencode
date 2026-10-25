@@ -1,4 +1,4 @@
-name: nix-eval
+name: check-nix
 
 on:
   push:

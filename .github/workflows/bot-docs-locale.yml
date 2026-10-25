@@ -1,4 +1,4 @@
-name: docs-locale-sync
+name: bot-docs-locale
 
 on:
   push:

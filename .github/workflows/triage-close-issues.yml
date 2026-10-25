@@ -1,4 +1,4 @@
-name: close-issues
+name: triage-close-issues
 
 on:
   schedule:
