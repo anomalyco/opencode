@@ -127,6 +127,27 @@ story("warms the label only once the gathering light reaches it", async ({ mount
   expect(cooled).toEqual([0, 0])
 })
 
+story("keeps the full record for a running automatic compaction with background compaction off", async ({ mount }) => {
+  const timeline = await mount(`${rows}--compaction-in-progress`, { args: { backgroundCompaction: false } })
+  const message = timeline.locator('[data-component="session-compaction-message"]')
+
+  await expect(message).not.toHaveAttribute("data-quiet")
+  await expect(message.locator('[data-slot="session-compaction-divider"]')).toHaveCount(0)
+  await expect(message).toContainText("Session compaction started")
+  await expect(message.getByRole("status")).toBeVisible()
+})
+
+story("keeps the full record for a finished automatic compaction with background compaction off", async ({ mount }) => {
+  const timeline = await mount(`${rows}--compaction-and-continuation`, { args: { backgroundCompaction: false } })
+  const message = timeline.locator('[data-component="session-compaction-message"]')
+
+  await expect(message).not.toHaveAttribute("data-quiet")
+  await expect(message.locator('[data-slot="session-compaction-divider"]')).toHaveCount(0)
+  await expect(message).toContainText("Session compaction started")
+  await expect(message).toContainText("The Session timeline now consumes current nested assistant content.")
+  await expect(message).toContainText("Session compacted · 11.9K in · 508 out")
+})
+
 story("keeps the full record for a manual compaction", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-manual`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
