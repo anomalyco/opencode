@@ -61,7 +61,7 @@ test.each(["root", "child"])("a permission-declined %s stays interrupted after a
   expect(recovered.messages).toEqual(declined.messages)
 })
 
-test.each(["root", "child"])("a %s pending on a permission at graceful shutdown keeps its claim", async (kind) => {
+test.each(["root", "child"])("a %s pending on a permission at graceful shutdown resumes in a new process", async (kind) => {
   await using directory = await tmpdir("permission-shutdown-")
   const path = `${directory.path}/shutdown.db`
   const run = async (mode: "shutdown" | "resume") => {
@@ -78,7 +78,14 @@ test.each(["root", "child"])("a %s pending on a permission at graceful shutdown 
     expect(stderr, stdout).toBe("")
     expect(code).toBe(0)
     return Schema.decodeUnknownSync(
-      Schema.fromJsonString(Schema.Struct({ requests: Schema.Number, restarts: Schema.optional(Schema.Number) })),
+      Schema.fromJsonString(
+        Schema.Struct({
+          requests: Schema.Number,
+          restarts: Schema.optional(Schema.Number),
+          pending: Schema.optional(Schema.Number),
+          notices: Schema.optional(Schema.Array(Schema.Struct({ metadata: Schema.Struct({ state: Schema.String }) }))),
+        }),
+      ),
     )(stdout.trim().split("\n").at(-1))
   }
   expect(await run("shutdown")).toEqual({ requests: 1 })
@@ -87,6 +94,12 @@ test.each(["root", "child"])("a %s pending on a permission at graceful shutdown 
   expect(database.query("SELECT id FROM session_v2 WHERE time_suspended IS NOT NULL").all()).toEqual([
     { id: "ses_declined" },
   ])
+  // A background child also keeps the marker its parent's completion notice needs.
+  expect(database.query("SELECT key FROM kv WHERE key LIKE 'job.background/%'").all()).toHaveLength(
+    kind === "child" ? 1 : 0,
+  )
   database.close()
-  if (kind === "root") expect(await run("resume")).toMatchObject({ requests: 1, restarts: 1 })
+  const resumed = await run("resume")
+  expect(resumed).toMatchObject({ requests: kind === "child" ? 2 : 1, restarts: 1, pending: 0 })
+  expect(resumed.notices?.map((notice) => notice.metadata.state)).toEqual(kind === "child" ? ["completed"] : [])
 })

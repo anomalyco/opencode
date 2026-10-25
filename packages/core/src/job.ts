@@ -42,6 +42,7 @@ export type Info = {
   type: string
   title?: string
   status: Status
+  cancellationReason?: "shutdown"
   started_at: number
   completed_at?: number
   output?: string
@@ -131,7 +132,8 @@ export interface Interface {
   readonly block: (input: BlockInput) => Effect.Effect<BlockResult | undefined>
   readonly background: (id: string) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
-  readonly cancel: (id: string) => Effect.Effect<Info | undefined>
+  /** Preserve recovery only when the execution owner's scope is closing for shutdown. */
+  readonly cancel: (id: string, options?: { resume?: boolean }) => Effect.Effect<Info | undefined>
   readonly pendingBackground: Effect.Effect<readonly Background[]>
   readonly runningBackground: Effect.Effect<readonly Recovery[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
@@ -409,7 +411,7 @@ export const make = Effect.gen(function* () {
     return result.map((item) => item.info)
   })
 
-  const cancel: Interface["cancel"] = Effect.fn("Job.cancel")(function* (id) {
+  const cancel: Interface["cancel"] = Effect.fn("Job.cancel")(function* (id, options) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
@@ -423,10 +425,13 @@ export const make = Effect.gen(function* () {
           info: {
             ...job.info,
             status: "cancelled" as const,
+            ...(options?.resume ? { cancellationReason: "shutdown" as const } : {}),
             completed_at,
           },
         }
-        yield* persistBackground(next)
+        // Only the execution owner can establish shutdown. Keep its running marker
+        // for the next process, while resolving local observers with that evidence.
+        if (!options?.resume) yield* persistBackground(next)
         return [
           { info: snapshot(next), done: job.done, scope: job.scope, generation: job.scope },
           new Map(jobs).set(id, next),

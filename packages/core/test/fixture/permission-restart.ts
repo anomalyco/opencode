@@ -171,7 +171,7 @@ const result = await Effect.runPromise(
     if (mode === "recover" || mode === "resume") {
       yield* restart.resumeSuspendedSessions
       // Recovery forks resumed drains; wait for the model before awaiting idle.
-      if (mode === "resume") yield* model.wait(1)
+      if (mode === "resume") yield* model.wait(kind === "child" ? 2 : 1)
       yield* execution.awaitIdle(sessionID)
       if (kind === "child") yield* execution.awaitIdle(parentID)
       yield* restart.resumeSuspendedSessions

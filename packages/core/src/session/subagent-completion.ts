@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import type { Job } from "../job.js"
 import type { Session } from "../session.js"
 import type { SessionMessage } from "./message.js"
+import type { SessionSchema } from "./schema.js"
 
 export const NO_TEXT = "Subagent completed without a text response."
 
@@ -18,15 +19,32 @@ export function text(message: SessionMessage.Info | undefined) {
   )
 }
 
+/** Live and recovered subagent jobs read the child's result the same way. */
+export const output = (sessions: Pick<Session.Interface, "messages">, sessionID: SessionSchema.ID) =>
+  sessions
+    .messages({ sessionID, order: "desc", limit: 20 })
+    .pipe(
+      Effect.map((messages) =>
+        text(
+          messages.find(
+            (message) =>
+              message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+          ),
+        ),
+      ),
+    )
+
 export const deliver = Effect.fnUntraced(function* (
   sessions: Pick<Session.Interface, "synthetic">,
   jobs: Pick<Job.Interface, "completeBackground">,
-  input: Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
+  input: Pick<Job.Info, "status" | "output" | "error" | "notificationID" | "cancellationReason"> & {
     recovery: Extract<Job.Recovery, { kind: "subagent" }>
     resume?: boolean
   },
 ) {
   if (input.status === "running") return
+  // Shutdown is not a result: retain the running marker for the next process.
+  if (input.cancellationReason === "shutdown") return
   const recovery = input.recovery
   const text =
     input.status === "completed"
