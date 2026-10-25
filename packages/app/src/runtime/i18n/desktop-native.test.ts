@@ -63,6 +63,10 @@ describe("desktop native locale detection", () => {
     [["nn-NO"], "no"],
     [["he"], "he"],
     [["he-IL"], "he"],
+    [["pt-PT"], "pt"],
+    [["pt-AO"], "pt"],
+    [["pt-BR"], "br"],
+    [["pt"], "br"],
   ])("uses Unicode likely subtags to map %p to %p", (tags, locale) => {
     expect<string | undefined>(detectDesktopNativeLocale([...tags])).toBe(locale)
   })
