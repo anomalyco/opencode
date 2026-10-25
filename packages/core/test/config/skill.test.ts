@@ -53,8 +53,10 @@ const startEntries = Effect.fnUntraced(function* (
     claude: [],
     agents: [],
   },
+  remote = false,
 ) {
   const service = yield* Skill.Service
+  const bus = yield* Bus.Service
   const pluginHost = host({
     skill: {
       list: () => Effect.die("unused skill.list"),
@@ -65,6 +67,13 @@ const startEntries = Effect.fnUntraced(function* (
   yield* ConfigCompatibilityPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
   )
+  // Activation registers the skill transform and publishes once; a configured URL source pulls
+  // forked after activation and publishes once more through reload. Await both for remote tests
+  // so they observe settled startup state.
+  const settled = remote
+    ? yield* bus.subscribe(Skill.Event.Updated).pipe(Stream.take(2), Stream.runDrain, Effect.forkScoped)
+    : undefined
+  yield* Effect.yieldNow
   yield* ConfigSkillPlugin.Plugin.effect(
     pluginHost,
   ).pipe(
@@ -73,10 +82,11 @@ const startEntries = Effect.fnUntraced(function* (
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     Effect.provideService(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
   )
+  if (settled) yield* Fiber.join(settled).pipe(Effect.timeout("5 seconds"))
   return service
 })
 
-const start = (skills: string[], directory: string, discovery = emptyDiscovery) =>
+const start = (skills: string[], directory: string, discovery = emptyDiscovery, remote = false) =>
   startEntries(
     [
       new Document({
@@ -87,6 +97,8 @@ const start = (skills: string[], directory: string, discovery = emptyDiscovery) 
     directory,
     directory,
     discovery,
+    undefined,
+    remote,
   )
 
 const discover = (directory: string, global: string) =>
@@ -237,7 +249,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
             },
           })
 
-          const skill = yield* start([first, "https://example.test/skills/"], tmp.path, discovery)
+          const skill = yield* start([first, "https://example.test/skills/"], tmp.path, discovery, true)
           expect((yield* skill.list()).map((item) => item.id).toSorted()).toEqual([
             Skill.ID.make("deploy"),
             Skill.ID.make("review"),
@@ -295,7 +307,25 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const url = "https://unreachable.example.test/skills/"
           const discovery = SkillDiscovery.Service.of({ pull: () => Effect.die(`failed to pull ${url}`) })
 
-          const skill = yield* start([tmp.path, url], tmp.path, discovery)
+          const skill = yield* start([tmp.path, url], tmp.path, discovery, true)
+          expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Available")
+        }),
+      ),
+    ),
+  )
+
+  it.live("activates with directory skills while a URL source hangs", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "review"), { recursive: true })
+            await write(tmp.path, "review", "Available")
+          })
+          const discovery = SkillDiscovery.Service.of({ pull: () => Effect.never })
+
+          // The forked catalog pull never settles; activation must still return with local skills.
+          const skill = yield* start([tmp.path, "https://hung.example.test/skills/"], tmp.path, discovery)
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Available")
         }),
       ),

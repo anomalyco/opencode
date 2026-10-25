@@ -181,6 +181,9 @@ export const OpencodePlugin = define<
     } = { remote: undefined, connection: undefined, organization: undefined }
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
+    // Whether the last load fell back without a Console answer, so the boot re-check only chases
+    // config the Console never delivered (a 404 is an answer: no managed config).
+    let failed = false
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     // When the last Console config load started, so rejected inference can reuse a recent status.
     let checked = Number.NEGATIVE_INFINITY
@@ -211,9 +214,19 @@ export const OpencodePlugin = define<
             })),
           )
         }),
-        Effect.tap(() => status(undefined)),
+        // Generous enough for a cold TLS and auth round trip on a slow network: a spurious
+        // timeout at boot starts the server without the organization policies this config carries.
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(15),
+          orElse: () => Effect.fail(new Error("OpenCode Console config request timed out")),
+        }),
+        Effect.tap(() => {
+          failed = false
+          return status(undefined)
+        }),
         Effect.catch((cause) =>
           Effect.gen(function* () {
+            failed = true
             // Only well-formed Console errors change the connection status; anything else may be transient.
             const next = connectionStatus(cause)
             if (next) yield* status(next)
@@ -420,6 +433,16 @@ export const OpencodePlugin = define<
       )
     })
     yield* guard(snapshot)
+
+    // A connection whose config load failed runs without the organization policies the Console
+    // may carry; re-check ahead of the periodic loop so a slow or briefly unreachable Console
+    // converges to managed in seconds rather than a minute.
+    if (failed)
+      yield* check().pipe(
+        Effect.delay(Duration.seconds(15)),
+        Effect.repeat({ times: 2, until: () => !failed }),
+        Effect.forkScoped,
+      )
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.

@@ -147,23 +147,23 @@ export const Plugin = define({
     })
 
     const refresh = Effect.fn("ConfigSkillPlugin.refresh")(
-      function* (file?: string) {
+      function* (input?: { readonly file?: string; readonly remote?: boolean }) {
         yield* FiberMap.clear(watches)
         const skills = new Map<Skill.ID, Skill.Info>()
-        const current = sources()
+        const current = input?.remote === false ? sources().filter((source) => source.type === "directory") : sources()
         for (const source of current) {
           for (const skill of yield* load(source)) skills.set(skill.id, skill)
         }
         loaded.skills = Array.from(skills.values())
-        if (file) {
+        if (input?.file) {
           yield* Effect.logInfo("skills rescanned", {
-            file,
+            file: input.file,
             sources: current.map(Skill.Source.key),
             skills: loaded.skills.map((skill) => skill.id),
           })
         }
       },
-      (effect, ..._args: [file?: string]) => lock.withPermit(effect),
+      (effect, ..._args: [input?: { readonly file?: string; readonly remote?: boolean }]) => lock.withPermit(effect),
     )
 
     // Editor saves arrive as bursts of watcher events; settle before rescanning once. Subscribe
@@ -171,10 +171,13 @@ export const Plugin = define({
     const updates = yield* PubSub.subscribe(changes)
     yield* Stream.fromSubscription(updates).pipe(
       Stream.debounce("100 millis"),
-      Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(ctx.skill.reload()))),
+      Stream.runForEach((file) => refresh({ file }).pipe(Effect.andThen(ctx.skill.reload()))),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh()
+    // A URL source waits on the network, which must not count against the plugin setup bound.
+    // Register locally available skills now; the first catalog pull runs the way a config update
+    // does: forked and publishing through reload.
+    yield* refresh({ remote: false })
     yield* ctx.skill.transform((editor) => {
       for (const skill of loaded.skills) editor.add(skill)
     })
@@ -189,5 +192,7 @@ export const Plugin = define({
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    if (sources().some((source) => source.type === "url"))
+      yield* refresh().pipe(Effect.andThen(ctx.skill.reload()), Effect.forkScoped({ startImmediately: true }))
   }),
 })

@@ -732,7 +732,7 @@ const layer = Layer.effect(
           if (!implementation?.refresh) return credential.value
           const now = yield* Clock.currentTimeMillis
           if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
+          const value = yield* authorize(implementation.refresh(credential.value).pipe(Effect.timeout("10 seconds")))
           yield* credentials.update(credential.id, { value })
           return value
         }),

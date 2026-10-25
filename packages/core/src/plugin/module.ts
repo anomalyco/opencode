@@ -4,7 +4,7 @@ import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { Host } from "@opencode/plugin/host"
 import { createPluginSources } from "@opencode/plugin/source"
 import { Npm } from "@opencode/util/npm"
-import { Deferred, Effect, FiberSet, PubSub, Schema, Stream } from "effect"
+import { Deferred, Duration, Effect, FiberSet, PubSub, Schema, Stream } from "effect"
 import path from "path"
 import { stat } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -95,6 +95,11 @@ export class LoadError extends Schema.TaggedError<LoadError>()("PluginModule.Loa
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+// On offline hosts a cold install hangs in npm's retry ladder while the activation generation
+// awaits it. Bound the wait so the plugin reports failed and the rest of the generation
+// proceeds; a config change or the periodic refresh retries the install.
+const installTimeout = Duration.seconds(30)
+
 const load = Effect.fn("PluginModule.load")(function* (
   operation: Extract<ConfigPluginSource.Operation, { type: "add" }>,
   sources: ReturnType<typeof createPluginSources>,
@@ -106,7 +111,17 @@ const load = Effect.fn("PluginModule.load")(function* (
     ? undefined
     : options?.install === false
       ? yield* npm.resolve(operation.target)
-      : yield* npm.add(operation.target)
+      : yield* npm.add(operation.target).pipe(
+          Effect.timeoutOrElse({
+            duration: installTimeout,
+            orElse: () =>
+              Effect.fail(
+                new LoadError({
+                  message: `Plugin install did not finish within ${Duration.format(installTimeout)}; check network connectivity or npm offline configuration`,
+                }),
+              ),
+          }),
+        )
   // Legacy auto-discovery still admits standalone server sources. Configured
   // local plugins always arrive here as directories.
   const entrypoints: Host.Entrypoints =

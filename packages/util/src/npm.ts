@@ -2,7 +2,7 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
-import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Clock, Duration, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -32,6 +32,16 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
+
+// npm bounds each registry fetch per attempt and retries on its own schedule, and Git transports
+// have no deadline at all, so a hung registry or black-holed connection stalls installs for many
+// minutes. These bound each whole network operation instead.
+export const Timeouts = Context.Reference<{
+  readonly install: Duration.Duration
+  readonly check: Duration.Duration
+}>("@opencode/Npm/Timeouts", {
+  defaultValue: () => ({ install: Duration.minutes(2), check: Duration.seconds(15) }),
+})
 
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
 
@@ -223,22 +233,39 @@ const layer = Layer.effect(
           savePrefix: "",
           ignoreScripts: true,
         })
-        return yield* Effect.tryPromise({
-          try: () =>
-            arborist.reify({
-              ...options,
-              add,
-              update: input.update,
-              save: true,
-              saveType: "prod",
-            }),
-          catch: (cause) =>
-            new InstallFailedError({
-              cause,
-              add,
-              dir: input.dir,
-            }),
-        }) as Effect.Effect<ArboristTree, InstallFailedError>
+        const timeouts = yield* Timeouts
+        return yield* (
+          Effect.tryPromise({
+            try: () =>
+              arborist.reify({
+                ...options,
+                add,
+                update: input.update,
+                save: true,
+                saveType: "prod",
+              }),
+            catch: (cause) =>
+              new InstallFailedError({
+                cause,
+                add,
+                dir: input.dir,
+              }),
+          }) as Effect.Effect<ArboristTree, InstallFailedError>
+        ).pipe(
+          Effect.timeoutOrElse({
+            duration: timeouts.install,
+            orElse: () =>
+              Effect.fail(
+                new InstallFailedError({
+                  add,
+                  dir: input.dir,
+                  cause: new Error(
+                    `Package install did not finish within ${Duration.format(timeouts.install)}; check network connectivity or npm offline configuration`,
+                  ),
+                }),
+              ),
+          }),
+        )
       }).pipe(
         Effect.withSpan("Npm.reify", {
           attributes: input,
@@ -379,11 +406,25 @@ const layer = Layer.effect(
         // Pacote spawns Git directly rather than through AppProcess.
         windowsHide: true,
       }
+      const timeouts = yield* Timeouts
       const available = yield* Effect.tryPromise({
         try: async () =>
           target.type === "git" ? gitRevision(await resolve(pkg, options)) : (await manifest(pkg, options)).version,
         catch: (cause) => new InstallFailedError({ dir: root, cause }),
-      })
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: timeouts.check,
+          orElse: () =>
+            Effect.fail(
+              new InstallFailedError({
+                dir: root,
+                cause: new Error(
+                  `Package check did not finish within ${Duration.format(timeouts.check)}; check network connectivity or npm offline configuration`,
+                ),
+              }),
+            ),
+        }),
+      )
       if (!available)
         return yield* new InstallFailedError({ dir: root, cause: new Error(`Package revision not found: ${pkg}`) })
       return installed !== available

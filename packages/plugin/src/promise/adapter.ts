@@ -617,9 +617,13 @@ export function fromPromise(plugin: Plugin) {
           },
         }
 
+        // Interruptible, or the registry's setup bound can never abandon a hung setup promise:
+        // an uninterruptible acquire makes the timeout wait for the promise it is bounding.
+        // Cleanup registers only once setup resolves, and an abandoned setup never returned one.
         yield* Effect.acquireRelease(
           Effect.promise(() => Promise.resolve(plugin.setup(context2))),
           (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+          { interruptible: true },
         )
       }),
   })
