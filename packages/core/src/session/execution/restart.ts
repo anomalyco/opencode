@@ -1,6 +1,6 @@
 export * as SessionRestart from "./restart.js"
 
-import { Context, Effect, Layer } from "effect"
+import { Array, Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../../bus.js"
 import { Job } from "../../job.js"
@@ -52,15 +52,29 @@ export interface Interface {
  * Recovery is at-least-once: local coordination prevents concurrent drains,
  * not repeated external side effects after a crash.
  *
- * The sweep assumes every orphaned claim's owner is dead. The managed-server
- * protocol guarantees this: a successor is only spawned after the previous
- * process is confirmed dead (client service `kill`/`evict` poll the PID), the
- * registration lock admits one managed server at a time, and unregistered
- * servers sharing the database never sweep. The service is inert until called
- * — the managed server invokes it at boot; embedders may call it from their
- * own start-up.
+ * A claim is orphaned when its owner is dead. The managed-server protocol
+ * guarantees this for the previous managed server: a successor is only spawned
+ * after it is confirmed dead (client service `kill`/`evict` poll the PID) and
+ * the registration lock admits one managed server at a time. Unregistered
+ * servers sharing the database never sweep, but they do hold claims while
+ * running, so claims record their owner's PID and the sweep leaves claims of a
+ * live process alone. The service is inert until called — the managed server
+ * invokes it at boot; embedders may call it from their own start-up.
  */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRestart") {}
+
+// Only ESRCH means the owner is gone; EPERM is a live process this user cannot signal. Claims
+// without a PID predate this check or come from a runtime without one, and sweep as before;
+// so do PIDs 0 and 1, which `kill(pid, 0)` always answers for (own process group, init).
+// This process's own claims are never "elsewhere": its live executions are excluded separately.
+const liveElsewhere = (pid: number | undefined) => {
+  if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1 || pid === process.pid) return Effect.succeed(false)
+  if (typeof process.kill !== "function") return Effect.succeed(false)
+  return Effect.try({ try: () => process.kill(pid, 0), catch: (cause) => cause }).pipe(
+    Effect.as(true),
+    Effect.catch((cause) => Effect.succeed(!(cause instanceof Error && "code" in cause && cause.code === "ESRCH"))),
+  )
+}
 
 export const layer = (options?: Options) =>
   Layer.effect(
@@ -189,20 +203,36 @@ export const layer = (options?: Options) =>
         )
       })
 
+      // Claims and job records written by another process that is still running are not orphans:
+      // an unregistered server sharing the database (for example a standalone `opencode serve`)
+      // may own them, and resuming its Sessions here would drain them twice.
+      const orphaned = <T extends { readonly pid?: number | undefined }>(records: ReadonlyArray<T>) =>
+        Effect.filter(records, (record) => liveElsewhere(record.pid).pipe(Effect.map((live) => !live)))
+      const listOrphanedSessions = store
+        .listSuspended()
+        .pipe(Effect.flatMap(orphaned), Effect.map(Array.map((claim) => claim.sessionID)))
+
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
           const active = yield* execution.active
-          const pending = yield* jobs.pendingBackground
+          const background = yield* jobs.pendingBackground
+          const pending = yield* orphaned(background)
           const children = pending.flatMap((background) =>
+            background.status === "running" && background.recovery.kind === "subagent"
+              ? [background.recovery.childSessionID]
+              : [],
+          )
+          const childClaims = background.flatMap((background) =>
             background.status === "running" && background.recovery.kind === "subagent"
               ? [background.recovery.childSessionID]
               : [],
           )
           // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
           const suspended = new Set(
-            [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
+            [...(yield* listOrphanedSessions), ...children].filter((sessionID) => !active.has(sessionID)),
           )
-          yield* store.releaseChildClaims(children)
+          // Keep claims for every running subagent job, including ones still owned by a live process.
+          yield* store.releaseChildClaims(childClaims)
           yield* Effect.forEach(
             // Admit shell outcomes before a recovered child can start its first model request.
             pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
@@ -219,7 +249,7 @@ export const layer = (options?: Options) =>
           // Background completion can wake a parent, so inspect local ownership only after recovery.
           const resumed = yield* execution.active
           yield* Effect.forEach(
-            (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
+            (yield* listOrphanedSessions).filter((sessionID) => !resumed.has(sessionID)),
             (sessionID) =>
               execution
                 .resume(sessionID)

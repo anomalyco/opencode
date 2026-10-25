@@ -64,7 +64,7 @@ describe("SessionExecution lifecycle", () => {
       // Children recover through background Job records, never through the root claim sweep.
       yield* seedSessions(database, [child], { time_suspended: Date.now(), parent_id: parent })
 
-      expect(yield* store.listSuspended()).toEqual([parent])
+      expect(yield* store.listSuspended()).toEqual([{ sessionID: parent, pid: undefined }])
 
       // The sweep clears orphaned child claims outright; parents keep theirs.
       yield* store.releaseChildClaims([])
@@ -288,6 +288,73 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("records the claiming process so another server can tell the claim is held", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const sessionID = Session.ID.make("ses_claim_owner")
+      yield* seedSessions(database, [sessionID])
+
+      const running = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      yield* Context.get(context, SessionExecution.Service).resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(running)
+
+      expect(yield* store.listSuspended()).toEqual([{ sessionID, pid: process.pid }])
+      yield* Scope.close(scope, Exit.void)
+      expect(yield* store.listSuspended()).toEqual([{ sessionID, pid: process.pid }])
+    }),
+  )
+
+  it.effect("leaves claims held by another live process alone and sweeps the rest", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const live = Session.ID.make("ses_owner_live")
+      const dead = Session.ID.make("ses_owner_dead")
+      const self = Session.ID.make("ses_owner_self")
+      const unknown = Session.ID.make("ses_owner_unknown")
+      // An unregistered server sharing the database is still running its turn: the test runner's
+      // parent stands in for it. A claim from an exited process, from this process (which is not
+      // executing it), or from before owners were recorded is an orphan.
+      yield* seedSessions(database, [live], { time_suspended: Date.now(), suspended_pid: process.ppid })
+      yield* seedSessions(database, [dead], { time_suspended: Date.now(), suspended_pid: yield* exitedPid })
+      yield* seedSessions(database, [self], { time_suspended: Date.now(), suspended_pid: process.pid })
+      yield* seedSessions(database, [unknown], { time_suspended: Date.now() })
+
+      const drained: Session.ID[] = []
+      const continued: Session.ID[] = []
+      const orphansDraining = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        Effect.sync(() => {
+          drained.push(sessionID)
+          if (drained.length === 3) Deferred.doneUnsafe(orphansDraining, Effect.void)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* bus.project(SessionEvent.Synthetic, (event) =>
+        Effect.sync(() => void continued.push(event.data.sessionID)),
+      )
+
+      // The sweep forks resumed drains, so completion is observed through the executions.
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Deferred.await(orphansDraining)
+      yield* Effect.forEach([dead, self, unknown], execution.awaitIdle, { discard: true })
+
+      expect(drained.toSorted()).toEqual([dead, self, unknown].toSorted())
+      expect(continued.toSorted()).toEqual([dead, self, unknown].toSorted())
+      expect(yield* execution.isActive(live)).toBe(false)
+      expect(yield* claims(database)).toEqual({ [live]: true, [dead]: false, [self]: false, [unknown]: false })
+      expect(yield* attempts(database, live)).toBe(0)
+    }),
+  )
+
   it.effect("terminalizes a turn that exhausts its resume budget instead of crash-looping", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -481,7 +548,61 @@ describe("SessionRestart background recovery", () => {
 
       expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toEqual([])
       expect(yield* jobs.get("call-running-shell")).toMatchObject({ status: "running" })
-      expect(yield* jobs.pendingBackground).toHaveLength(1)
+      expect(yield* jobs.pendingBackground).toMatchObject([{ id: "call-running-shell", pid: process.pid }])
+    }),
+  )
+
+  it.effect("leaves background work owned by another live process alone", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const kv = yield* KV.Service
+      const parent = Session.ID.make("ses_background_foreign_parent")
+      const child = Session.ID.make("ses_background_foreign_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        time_suspended: Date.now(),
+        suspended_pid: process.ppid,
+      })
+      // Persisted by a server that is still running (the test runner's parent stands in for it).
+      const notificationID = SessionMessage.ID.create()
+      yield* kv.set(`job.background/${notificationID}`, {
+        id: "sh_foreign",
+        notificationID,
+        recovery: { kind: "shell", sessionID: parent, shellID: "sh_foreign", command: "sleep 60" },
+        status: "running",
+        pid: process.ppid,
+      })
+      const childNotificationID = SessionMessage.ID.create()
+      yield* kv.set(`job.background/${childNotificationID}`, {
+        id: child,
+        notificationID: childNotificationID,
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Inspect recovery",
+        },
+        status: "running",
+        pid: process.ppid,
+      })
+      expect(yield* jobs.pendingBackground).toHaveLength(2)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Context.get(context, SessionExecution.Service).awaitIdle(parent)
+
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toEqual([])
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      const pending = yield* jobs.pendingBackground
+      expect(pending.find((job) => job.id === "sh_foreign")).toMatchObject({ status: "running" })
+      expect(pending.find((job) => job.id === child)).toMatchObject({ status: "running" })
+      expect(yield* claims(database)).toMatchObject({ [child]: true })
     }),
   )
 
@@ -1284,7 +1405,9 @@ function seedInbox(
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
+  values: Partial<
+    Pick<typeof SessionTable.$inferInsert, "time_suspended" | "suspended_pid" | "resume_attempts" | "parent_id">
+  > = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
@@ -1310,6 +1433,13 @@ function seedSessions(
       .pipe(Effect.orDie)
   })
 }
+
+/** A PID whose process has already exited, standing in for a server that died mid-turn. */
+const exitedPid = Effect.promise(async () => {
+  const child = Bun.spawn([process.execPath, "--version"], { stdout: "ignore", stderr: "ignore" })
+  await child.exited
+  return child.pid
+})
 
 function claims(database: Database.Service["Service"]) {
   return database.db
