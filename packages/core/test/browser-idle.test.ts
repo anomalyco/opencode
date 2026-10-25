@@ -57,6 +57,50 @@ const it = testEffect(
   ),
 )
 
+it.live("a draft browser attachment stays unsaved and grants access only after its reserved session is created", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+    const locations = yield* LocationServiceMap.Service
+    const context = yield* locations.contextEffect(ref)
+
+    yield* Plugin.awaitActivation.pipe(Effect.provideContext(context))
+    const sessions = yield* Session.Service
+    const id = Session.ID.create()
+    const rpc = Context.get(context, Rpc.Service).client(Browser.Definition)
+    const attachment = { sessionID: id, connectionID: crypto.randomUUID() }
+    const pending = yield* rpc.attach({ ...attachment, version: 5, draft: true }).pipe(Effect.forkScoped)
+
+    yield* rpc.state({ ...attachment, state: { tabs: [], focusedTabID: null } }).pipe(
+      Effect.retry({
+        while: (error) => "type" in error && error.type === "unavailable",
+        schedule: Schedule.spaced("10 millis"),
+      }),
+      Effect.timeout("5 seconds"),
+    )
+    expect((yield* sessions.list()).data.some((session) => session.id === id)).toBe(false)
+    expect(pending.pollUnsafe()).toBeUndefined()
+
+    yield* sessions.create({ id, location: ref })
+    const saved = yield* sessions.get(id).pipe(
+      Effect.flatMap((session) =>
+        session.permissions?.some((rule) => rule.action === "browser" && rule.effect === "allow")
+          ? Effect.succeed(session)
+          : Effect.fail(new Error("Browser grant has not reached the saved Session")),
+      ),
+      Effect.retry({ schedule: Schedule.spaced("10 millis") }),
+      Effect.timeout("5 seconds"),
+    )
+
+    expect(saved.id).toBe(id)
+    expect(pending.pollUnsafe()).toBeUndefined()
+    yield* Fiber.interrupt(pending)
+    expect(
+      (yield* sessions.get(id)).permissions?.some((rule) => rule.action === "browser" && rule.effect === "allow"),
+    ).toBe(false)
+  }),
+)
+
 it.live(
   "idle eviction ends the browser attachment and permits a fresh attachment",
   () =>

@@ -48,7 +48,7 @@ export function SideRegion(props: {
   const layout = useLayout()
   const language = useLanguage()
   const host = useExtensionHost()
-  const { tabs, view, params } = useSessionLayout()
+  const { tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const tabsOpen = createMemo(() => isDesktop() && view().side.opened())
@@ -90,7 +90,7 @@ export function SideRegion(props: {
   })
 
   return (
-    <Show when={isDesktop() && !!params.id}>
+    <Show when={isDesktop()}>
       <aside
         ref={root}
         id="review-panel"

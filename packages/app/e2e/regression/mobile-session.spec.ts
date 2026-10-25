@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { seed, sessionHref, type SeedInput } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
-import { fileNode } from "../utils/workspace"
+import { fileNode, openFileBrowser } from "../utils/workspace"
 
 // The source and target sessions; the child session is not a home row.
 const rows = 2
@@ -244,14 +244,14 @@ test("the summary's changes row switches the view and keeps the side tabs", asyn
   await openStress(page, { lastProject: { local: fixture.directory } })
   await page.goto(sessionHref(fixture.targetID))
 
-  // One click previews the file in place of the Open file tab.
+  // One click previews the file in place of the File Browser tab.
   const panel = page.locator("#review-panel")
   const readme = panel.getByRole("tab", { name: "README.md", exact: true })
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
-  await panel.getByRole("button", { name: "Open file", exact: true }).click()
+  await openFileBrowser(page)
   await panel.getByRole("button", { name: "README.md", exact: true }).click()
   await expect(readme).toHaveAttribute("aria-selected", "true")
-  await expect(panel.getByRole("tab", { name: "Open file", exact: true })).toHaveCount(0)
+  await expect(panel.getByRole("tab", { name: "File Browser", exact: true })).toHaveCount(0)
 
   await page.setViewportSize({ width: 390, height: 844 })
   const tabs = page.getByRole("tablist", { name: "Session view", exact: true })
@@ -272,9 +272,9 @@ test("the summary's changes row switches the view and keeps the side tabs", asyn
   await page.setViewportSize({ width: 1280, height: 900 })
   await expect(readme).toHaveAttribute("aria-selected", "true")
 
-  // After a reload forgets the preview, a stored Open file tab is still the slot a narrow-screen file open replaces.
-  const launcher = panel.getByRole("tab", { name: "Open file", exact: true })
-  await panel.getByRole("button", { name: "Open file", exact: true }).click()
+  // After a reload forgets the preview, a stored File Browser tab is still the slot a narrow-screen file open replaces.
+  const launcher = panel.getByRole("tab", { name: "File Browser", exact: true })
+  await openFileBrowser(page)
   await expect(launcher).toHaveAttribute("aria-selected", "true")
   await expect(readme).toHaveCount(0)
   await page.reload()

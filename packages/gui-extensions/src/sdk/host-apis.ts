@@ -39,6 +39,8 @@ export interface SessionRef {
   readonly key: string
   /** The session's id on its server. */
   readonly id: string
+  /** An unsent draft with a reserved id, not a saved server Session. Omitted or false for saved Sessions. */
+  readonly draft?: boolean
   /** The key of the shell tab that owns the session. */
   readonly tab: string
   /** The session's server. */
@@ -595,28 +597,44 @@ export interface SessionScreen {
   readonly composer: Composer
 }
 
+/** Which shell tabs a session or screen lookup includes. */
+export interface SessionLookup {
+  /** Include unsent drafts with reserved Session ids. Defaults to false; no server Session is created by a lookup. */
+  readonly drafts?: boolean
+}
+
 /** The session screen, while it routes the mounted session. */
 export interface Screen {
   /**
    * The mounted session screen: the same object for as long as it stays mounted, whichever session it routes. Defined
-   * exactly when `Sessions.current()` is, after the screen's first render; undefined on Home, on a draft,
+   * exactly when `Sessions.current(options)` is, after the screen's first render; undefined on Home, on a draft unless
+   * `options.drafts` is true,
    * while the route has left the mounted screen, and before the app interface mounts. Panel callbacks and session
    * slots receive a non-null screen directly. Reactive.
+   *
+   * @param options - Whether to include the current unsent draft.
    */
-  current(): SessionScreen | undefined
+  current(options?: SessionLookup): SessionScreen | undefined
 }
 
 /** The sessions of open shell tabs. */
 export interface Sessions {
-  /** Sessions owned by open shell tabs. Empty until the app interface mounts. Reactive. */
-  list(): readonly SessionRef[]
   /**
-   * The routed, mounted session: a new object each time a session is routed. Undefined on Home, on a draft, and
-   * before the app interface mounts and during the screen's first render. Defined exactly when `Screen.current()`
-   * is, after that first render. Panel and session-slot inputs are available during render directly.
-   * Reactive.
+   * Sessions owned by open shell tabs. Empty until the app interface mounts. Reactive.
+   *
+   * @param options - Whether to include unsent drafts, whose `draft` field is true.
    */
-  current(): MountedSession | undefined
+  list(options?: SessionLookup): readonly SessionRef[]
+  /**
+   * The routed, mounted session: a new object each time a session is routed. Undefined on Home, on a draft unless
+   * `options.drafts` is true, and
+   * before the app interface mounts and during the screen's first render. Defined exactly when `Screen.current()`
+   * is with the same options, after that first render. Panel and session-slot inputs are available during render directly.
+   * Reactive.
+   *
+   * @param options - Whether to include the current unsent draft. Its id is reserved until the first message is sent.
+   */
+  current(options?: SessionLookup): MountedSession | undefined
 }
 
 /**
@@ -682,8 +700,9 @@ export interface Layout {
    *
    * @param key - `${extension}:${tab id}`.
    * @param session - The session whose strip changes.
+   * @param options - Placement when opening; ignored when closing an already visible tab.
    */
-  toggle(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef, options?: OpenOptions): void
   /**
    * Where a key stands. "closed" while the session's location is unknown and before the app interface mounts.
    * Reactive.

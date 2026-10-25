@@ -202,7 +202,7 @@ export function createLatest<S extends KeyedSource, T>(
  */
 export function createVisitState<T>(initial: T) {
   const sessions = useExtension().sessions
-  const visit = () => sessions.current()?.visit
+  const visit = () => sessions.current({ drafts: true })?.visit
 
   const [state, setState] = createSignal<{ readonly visit: object | undefined; readonly value: T }>({
     visit: undefined,

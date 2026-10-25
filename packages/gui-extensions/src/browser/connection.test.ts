@@ -53,7 +53,7 @@ function fixture(strip: string[] = []) {
     focus: [],
   }
 
-  const target = { server: "browser-test", session: "ses_browser" }
+  const target: ReturnType<Input["target"]> = { server: "browser-test", session: "ses_browser" }
   // The Ipc is gone while the pane's main extension reloads or is disabled.
   // An endpoint main cannot resolve, e.g. an SSH server's while it reconnects, makes register reject.
   const ipc: IpcStub = { available: true }
@@ -160,6 +160,23 @@ test("highlights of picked elements reach the page", async () => {
       { binding, tabID, ref: element.ref },
       { binding, tabID },
     ])
+  } finally {
+    app.connection.dispose()
+  }
+})
+
+test("changing a draft workspace retargets the network while retaining browser tabs", () => {
+  const app = fixture()
+
+  try {
+    app.target.draft = { directory: "/other-worktree" }
+    app.connection.retarget()
+    expect(app.calls).toHaveLength(2)
+    expect(app.calls[1].input).toMatchObject({ draft: { directory: "/other-worktree" }, restore: browser })
+    expect(app.calls[1].input.binding).not.toBe(app.calls[0].input.binding)
+    expect(app.states.at(-1)?.browser).toEqual(browser)
+    app.emit(0, { type: "state", state: null, error: "browser.pane.registration.closed" })
+    expect(app.states.at(-1)?.browser).toEqual(browser)
   } finally {
     app.connection.dispose()
   }

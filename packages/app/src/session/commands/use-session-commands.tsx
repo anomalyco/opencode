@@ -449,9 +449,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const viewCmds = () => [
     viewCommand({
-      id: "review.toggle",
-      title: language.t("command.review.toggle"),
-      keybind: "mod+shift+r",
+      id: "panel.toggle",
+      title: language.t("command.panel.toggle"),
       onSelect: () => actions.session.layout.view().side.toggle(),
     }),
     ...(shown()

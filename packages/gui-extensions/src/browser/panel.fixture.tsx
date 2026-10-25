@@ -604,9 +604,11 @@ type RegionHost = {
 
 type RegionFixtureState = {
   session: string
+  /** The draft's reserved id is committed without replacing its browser attachment. */
+  draftSaved: boolean
   strips: Record<string, { all: string[]; active?: string }>
   /** Each registration of a pane binding, with how many tabs it asked main to restore. */
-  registrations: { binding: string; session: string; restore: number }[]
+  registrations: { binding: string; session: string; restore: number; draft: boolean }[]
   /** The pane's Ipc is gone, as while its main extension reloads or is disabled. */
   away: boolean
   /** Whether the fixture's shell session was closed by its fallback shortcut. */
@@ -629,13 +631,16 @@ export function mountBrowserRegion(input: RegionHost) {
   function Fixture() {
     const alpha = "browser-test\nses_alpha"
     const beta = "browser-test\nses_beta"
+    const draft = "browser-test\nses_draft"
     const tabID = Browser.TabID.make("tab_33333333-3333-3333-3333-333333333333")
 
     const [store, setStore] = createStore<RegionFixtureState>({
       session: alpha,
+      draftSaved: false,
       strips: {
         [alpha]: { all: ["file://alpha.ts"], active: "file://alpha.ts" },
         [beta]: { all: ["file://beta.ts", `browser:${tabID}`], active: `browser:${tabID}` },
+        [draft]: { all: [] },
       },
       registrations: [],
       away: false,
@@ -672,11 +677,21 @@ export function mountBrowserRegion(input: RegionHost) {
 
     const location = { directory: "/repo" }
 
-    const refs = [alpha, beta].map(
+    const refs = [alpha, beta, draft].map((key) => {
       // SAFETY: the extensions read only these fields of a listed session, and of its server the ones `server` has.
       // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-      (key) => ({ key, id: key.split("\n")[1], tab: key, server, pending: false, location }) as unknown as SessionRef,
-    )
+      return {
+        key,
+        id: key.split("\n")[1],
+        tab: key,
+        server,
+        pending: false,
+        location,
+        get draft() {
+          return key === draft && !store.draftSaved
+        },
+      } as unknown as SessionRef
+    })
 
     // The session screen's file model, which follows the route.
     const file = {
@@ -693,7 +708,7 @@ export function mountBrowserRegion(input: RegionHost) {
 
     // One object per routed session, as the host gives each its own.
     const views = new Map(
-      [alpha, beta].map((key) => {
+      [alpha, beta, draft].map((key) => {
         const routed = {
           key,
           id: key.split("\n")[1],
@@ -701,6 +716,9 @@ export function mountBrowserRegion(input: RegionHost) {
           visit: {},
           server,
           pending: false,
+          get draft() {
+            return key === draft && !store.draftSaved
+          },
           location,
           directory: "/repo",
           local: true,
@@ -797,16 +815,28 @@ export function mountBrowserRegion(input: RegionHost) {
       register: async (value) => {
         setStore("registrations", (items) => [
           ...items,
-          { binding: value.binding, session: value.session, restore: value.restore?.tabs.length ?? 0 },
+          {
+            binding: value.binding,
+            session: value.session,
+            restore: value.restore?.tabs.length ?? 0,
+            draft: !!value.draft,
+          },
         ])
       },
       load: async () => undefined,
       command: async (value) => {
+        if (value.command.type === "tabs.open") {
+          inventory(value.binding, true)
+          listeners.forEach((listener) => listener({ binding: value.binding, event: { type: "focus", tabID } }))
+
+          return
+        }
+
         if (value.command.type !== "tabs.close") return
 
-        const tabID = value.command.tabID
+        const closedID = value.command.tabID
 
-        setStore("closes", (items) => [...items, tabID])
+        setStore("closes", (items) => [...items, closedID])
         listeners.forEach((listener) =>
           listener({ binding: value.binding, event: { type: "state", state: { tabs: [], focusedTabID: null } } }),
         )
@@ -838,8 +868,13 @@ export function mountBrowserRegion(input: RegionHost) {
       desktop: () => ({ zoom: () => 1 }),
       embeds: () => ({ View: () => null, capture: async () => undefined }),
       system: () => ({ copy: async () => undefined, openExternal() {}, save: async () => false }),
-      sessions: () => ({ list: () => refs, current: view }),
-      screen: () => ({ current: () => screen }),
+      sessions: () => ({
+        list: (options: { drafts?: boolean } = {}) => refs.filter((ref) => options.drafts || !ref.draft),
+        current: (options: { drafts?: boolean } = {}) => (options.drafts || !view().draft ? view() : undefined),
+      }),
+      screen: () => ({
+        current: (options: { drafts?: boolean } = {}) => (options.drafts || !view().draft ? screen : undefined),
+      }),
       layout,
       storage,
     }
@@ -847,15 +882,13 @@ export function mountBrowserRegion(input: RegionHost) {
     const latest = () => store.registrations.filter((item) => item.session === "ses_beta").at(-1)
 
     // The desktop answers Beta's latest registration with the tab it restored.
-    const inventory = () => {
-      const binding = latest()?.binding
-
+    const inventory = (binding = latest()?.binding, blank = store.blank) => {
       if (!binding) return
 
       const tab = {
         id: tabID,
-        url: store.blank ? "about:blank" : "http://localhost:4173/",
-        title: store.blank ? "" : "Preview",
+        url: blank ? "about:blank" : "http://localhost:4173/",
+        title: blank ? "" : "Preview",
         loading: false,
         canGoBack: false,
         canGoForward: false,
@@ -964,7 +997,9 @@ export function mountBrowserRegion(input: RegionHost) {
             <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>
             <nav style={{ display: "flex", gap: "12px", margin: "16px 0" }}>
               <button onClick={() => setStore({ session: beta, closed: false })}>Beta</button>
-              <button onClick={inventory}>First inventory</button>
+              <button onClick={() => setStore({ session: draft, closed: false })}>Draft</button>
+              <button onClick={() => setStore("draftSaved", true)}>Save draft</button>
+              <button onClick={() => inventory()}>First inventory</button>
               <button
                 onClick={() => {
                   setStore("blank", true)
@@ -977,6 +1012,8 @@ export function mountBrowserRegion(input: RegionHost) {
               <button onClick={() => setStore("away", false)}>Pane back</button>
             </nav>
             <p>Registrations: {store.registrations.length}</p>
+            <p data-testid="draft-state">{store.draftSaved ? "saved" : "draft"}</p>
+            <p data-testid="draft-bindings">{store.registrations.filter((item) => item.draft).length}</p>
             <p>Beta restores: {latest()?.restore ?? 0}</p>
             <p data-testid="tree">{JSON.stringify(tree())}</p>
             <p data-testid="session-state">{store.closed ? "closed" : "open"}</p>

@@ -1,4 +1,4 @@
-import { useParams } from "@solidjs/router"
+import { useParams, useSearchParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { useLayout } from "@/shell/state/layout"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
@@ -10,23 +10,36 @@ import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 
 export const useSessionKey = () => {
   const params = useParams()
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const tabs = useTabs()
+
+  const draft = createMemo(() => tabs.store.find((tab) => tab.type === "draft" && tab.draftID === search.draftId))
+
+  const sessionID = createMemo(() => params.id ?? draft()?.sessionId)
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const scope = createMemo(() => serverSDK.scope)
   const directory = createMemo(() => base64Encode(sdk().directory))
   const workspaceKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory())))
-  const sessionKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory(), params.id)))
 
-  return { params, sessionKey, workspaceKey }
+  const sessionKey = createMemo(() =>
+    SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory(), sessionID())),
+  )
+
+  return { params, sessionID, draft, sessionKey, workspaceKey }
 }
 
 export const useSessionLayout = () => {
   const layout = useLayout()
   const tabs = useTabs()
-  const { params, sessionKey, workspaceKey } = useSessionKey()
+  const { params, sessionID, draft, sessionKey, workspaceKey } = useSessionKey()
   const serverSDK = useServerSDK()
 
   const currentTab = createMemo(() => {
+    const current = draft()
+
+    if (current) return current
+
     if (!params.id) return
 
     return findSessionTab(tabs.store, ServerConnection.key(serverSDK.server), params.id)
@@ -45,6 +58,7 @@ export const useSessionLayout = () => {
 
   return {
     params,
+    sessionID,
     sessionKey,
     workspaceKey,
     tabKey: createMemo(() => {

@@ -13,7 +13,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   const [model, setModel] = createSignal<Model>()
   // Settings > Shortcuts lists the command on every platform; it stays disabled until the pane can open.
   ctx.add(Command, (): Command | undefined => {
-    const view = sessions.current()
+    const view = sessions.current({ drafts: true })
 
     if (!view) return undefined
     const value = model()
@@ -36,7 +36,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   ctx.add(Style, barStyles)
   // Everything here serves a mounted session, so the attachment model and the pane's protocol
   // schemas load when the first session opens instead of at startup.
-  const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
+  const opened = createMemo((seen: boolean) => seen || !!sessions.current({ drafts: true }), false)
   createKeyed(opened, () => {
     const owner = getOwner()
     void import("./model").then((module) => {
@@ -124,7 +124,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   })
 
   ctx.add(MenuItem, (): MenuItem | undefined => {
-    const view = sessions.current()
+    const view = sessions.current({ drafts: true })
     const value = model()
 
     if (!view || !value?.available(view)) return undefined
@@ -187,6 +187,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   ctx.add(Panel, {
     id: "main",
     region: "side",
+    drafts: true,
     list(input) {
       // While the model loads, the stored tabs hold the strip and its selection, as before the first inventory.
       const ids = model()?.tabs(input.session, input.open) ?? input.open

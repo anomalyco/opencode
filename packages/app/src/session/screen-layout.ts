@@ -9,14 +9,14 @@ import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-wi
 
 /** wide asks for the wider session minimum; sidebar is whether any extension fills the side panel sidebar. */
 export function createSessionScreenLayout(
-  session: SessionModel,
-  input: { wide: Accessor<boolean>; sidebar: Accessor<boolean> },
+  session: Pick<SessionModel, "layout" | "isDesktop">,
+  input: { wide: Accessor<boolean>; sidebar: Accessor<boolean>; tabs: Accessor<boolean> },
 ) {
   const layout = useLayout()
   const settings = useSettings()
   const size = createSizing()
   const view = session.layout.view
-  const tabsOpen = createMemo(() => session.isDesktop() && view().side.opened() && !!session.identity.params.id)
+  const tabsOpen = createMemo(() => session.isDesktop() && view().side.opened() && input.tabs())
   const dockOpen = createMemo(() => view().dock.opened())
   const dockSide = createMemo(() => session.isDesktop() && settings.general.terminalPlacement() === "side")
   const dockBottom = createMemo(() => session.isDesktop() && settings.general.terminalPlacement() === "bottom")

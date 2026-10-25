@@ -57,8 +57,8 @@ export const PaneEvent = Schema.Union([
 export type PaneEvent = typeof PaneEvent.Type
 
 /**
- * The native browser pane in the main process. A binding is one registration of a session's pane
- * by a window; its events go to that window only.
+ * The native browser pane in the main process. A binding is one window's registration of a Session or an unsent
+ * draft's reserved Session id; its events go to that window only. A draft supplies its workspace, not a saved record.
  */
 export const BrowserPane = Ipc.define({
   id: "browser.pane",
@@ -68,6 +68,7 @@ export const BrowserPane = Ipc.define({
         binding,
         server: text(16_384),
         session: text(256).check(Schema.isStartingWith("ses")),
+        draft: Schema.optionalKey(Schema.Struct({ directory: text(16_384) })),
         restore: Schema.optionalKey(Browser.State),
       }),
     },

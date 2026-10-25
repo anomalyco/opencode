@@ -120,6 +120,24 @@ story.beforeEach(async ({ mount, page }) => {
   }, modules)
 })
 
+story("opens Browser on an unsent draft and keeps its native binding when the draft is saved", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Draft", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  const modifier = await page.evaluate(() => (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+Shift+b`)
+  await expect(root.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toBeFocused()
+  await expect(root.getByTestId("draft-bindings")).toHaveText("1")
+  await root.getByRole("button", { name: "Save draft", exact: true }).click()
+  await expect(root.getByTestId("draft-state")).toHaveText("saved")
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await expect(root.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
 story("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })

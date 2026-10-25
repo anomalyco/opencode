@@ -9,6 +9,7 @@ import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@/runtime/persistence/uuid"
+import { Session } from "@opencode/schema/session"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
@@ -148,6 +149,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       )
     }
 
+    const moveRegions = (from: string, to: string) => {
+      const current = regions[from]
+
+      if (!current) return
+      setRegions(to, { ...current })
+      removeRegions(from)
+    }
+
     onCleanup(memory.dispose)
 
     // A contributed server that is unlisted or whose extension is down is still known: only its removal drops its tabs.
@@ -264,9 +273,19 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         return tab
       },
+      reserveDraft(draftID: string) {
+        const draft = actions.draft(draftID)
+
+        if (draft.sessionId) return draft.sessionId
+        const id = Session.ID.create()
+
+        setStore((tab) => tab.type === "draft" && tab.draftID === draftID, "sessionId", id)
+
+        return id
+      },
       async newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string, model?: PromptModel) {
         const draftID = uuid()
-        const tab = { type: "draft" as const, draftID, ...draft }
+        const tab = { type: "draft" as const, draftID, sessionId: Session.ID.create(), ...draft }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
         await startTransition(() => {
           setStore(
@@ -300,7 +319,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         // after its backing draft tab has been removed from the store.
         const active = location.pathname === "/new-session" && location.query.draftId === draftID
         const next = { type: "session" as const, ...session }
+        const from = `draft:${draftID}`
+
         void startTransition(() => {
+          moveRegions(from, tabKey(next))
+
           setStore(
             produce((tabs) => {
               const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
@@ -331,6 +354,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const composer = createMemoryComposerState()
 
         const ready = startTransition(() => {
+          moveRegions(tabKey(draft), key)
           setPending(key, { draft, ...preview, composer })
           const index = store.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
 
@@ -378,6 +402,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               if (index !== -1) {
                 const restored = worktree === undefined ? draft : { ...draft, worktree, branch: undefined }
                 const route = currentRoute()
+                moveRegions(key, tabKey(restored))
                 setStore(
                   produce((tabs) => {
                     tabs[index] = restored

@@ -1,4 +1,7 @@
 import { expect, type Page } from "@playwright/test"
+import { base64Encode } from "@opencode/util/encode"
+import { Schema } from "effect"
+import type { ProjectListOutput } from "@opencode/client/promise"
 import {
   NO_PROVIDER,
   REMOTE_SERVER,
@@ -12,7 +15,7 @@ import {
   type SeedInput,
   type TabSeed,
 } from "./app"
-import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
+import { mockOpenCodeServer, type MockServerConfig, type MockSession } from "./mock-server"
 import { APP_READY_TIMEOUT, expectSessionTitle } from "./waits"
 
 export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "project" | "sessions" | "server">> & {
@@ -20,9 +23,9 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
   name: string
   directory?: string
   // Merged over the default project.
-  project?: Record<string, unknown>
+  project?: Partial<ProjectListOutput[number]> & { worktree?: string }
   // Defaults to one session titled `name`. Omitted fields come from `session()`.
-  sessions?: ({ id: string; title?: string } & Record<string, unknown>)[]
+  sessions?: (MockSession & { title?: string })[]
   // Merged over the default seed: the project expanded and last opened, and a tab for every session.
   seed?: SeedInput
 }
@@ -31,7 +34,7 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
 export async function mockWorkspace(page: Page, input: WorkspaceInput) {
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
-  const projectID = typeof input.project?.id === "string" ? input.project.id : `proj_${slug}`
+  const projectID = input.project?.id ?? `proj_${slug}`
 
   const sessions = (input.sessions ?? [{ id: `ses_${slug}`, title: input.name }]).map((item) =>
     session({ directory, projectID, ...item }),
@@ -45,6 +48,23 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
     project: project({ id: projectID, directory, name: input.name, ...input.project }),
     sessions,
   })
+
+  // `review: true` explicitly restores Review, rather than relying on an automatically pinned tab.
+  const reviewed = sessions.filter((session) => input.seed?.panes?.[session.id]?.review === true)
+
+  if (reviewed.length)
+    await seed(page, {
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: Object.fromEntries(
+            reviewed.map((session) => [
+              `local\u0000${base64Encode(session.directory)}/${session.id}`,
+              { all: ["review:changes"], active: "review:changes" },
+            ]),
+          ),
+        },
+      },
+    })
 
   await seed(page, {
     projects: { local: [{ worktree: directory, expanded: true }] },
@@ -70,6 +90,22 @@ export async function openSession(page: Page, input: WorkspaceInput & { sessionI
   return { ...workspace, session: target, editor }
 }
 
+export async function openFileBrowser(page: Page) {
+  await page.locator("#review-panel").getByRole("button", { name: "Add tab", exact: true }).click()
+  await page.getByRole("menuitem", { name: /^File Browser/ }).click()
+}
+
+export async function toggleSidePanel(page: Page) {
+  const modifier = await page.evaluate(() => (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+k`)
+  const palette = page.getByRole("dialog")
+
+  await palette.getByRole("textbox").fill("Toggle side panel")
+  await palette.getByRole("option", { name: "Toggle side panel", exact: true }).click()
+  await expect(palette).toHaveCount(0)
+}
+
 // Opens a new-session draft (no sessions by default) and waits until its composer accepts input.
 export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
   const draftID = input.draftID ?? `draft_${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`
@@ -90,16 +126,16 @@ export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: 
 export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
   const worktree = Promise.withResolvers<{ status: number; json: unknown }>()
   const calls: string[] = []
-  const worktreeRequests: { url: URL; body: Record<string, unknown> }[] = []
-  const creates: Record<string, unknown>[] = []
-  const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
+  const worktreeRequests: { url: URL; body: Schema.JsonObject }[] = []
+  const creates: Parameters<NonNullable<MockServerConfig["onSessionCreate"]>>[0][] = []
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0][] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const url = new URL(request.url())
 
     if (url.pathname === "/api/worktree") {
       calls.push("worktree")
-      worktreeRequests.push({ url, body: request.postDataJSON() })
+      worktreeRequests.push({ url, body: Schema.decodeUnknownSync(Schema.JsonObject)(request.postDataJSON()) })
     }
 
     if (url.pathname === "/api/session") calls.push("session")

@@ -135,6 +135,15 @@ flowchart LR
 - `ctx.screen.current()` and `ctx.sessions.current()` are published together in one batched effect after the screen's first render, with v2's original session-mount timing. Renders already receive their owning screen and session directly. Both public accessors are undefined during the first render, on Home, on a draft, before the interface mounts and once the route leaves the mounted screen. The screen has no `session` property.
 - All panel callbacks take one named input: `list({ session, screen, open })`, `render({ tab, session, screen })`, `focus({ tab, session, screen, restored })`, `close({ tab, session, screen })`, `normalize({ id, session, screen })`. Session fields are getters; the screen is the constant owning screen. Render tab fields are live getters too; lifecycle callbacks receive their event's tab. Stored ids and `restored` describe that call. Do not destructure live getters. Every `session.*` slot gets a non-null `screen`; `window.bottom` does not.
 - Render effects can run before public publication too: change-list views call `Changes.watch(input.screen, source)`, not `ctx.screen.current()`, so their first demand is never lost.
+- Workspace panes can opt into unsent drafts with `Panel.drafts: true` and read them with
+  `ctx.sessions.current({ drafts: true })`, `ctx.sessions.list({ drafts: true })`, and
+  `ctx.screen.current({ drafts: true })`. The default lookups still return saved Sessions only, so session-only
+  extensions never receive a draft accidentally.
+- A draft has `session.draft === true`, a reserved Session id and the selected workspace's location, but no server
+  Session record. File and Git APIs can use its location; Session APIs must wait until it is saved. Its first message
+  creates the Session with the same id and keeps the side tabs. `createVisitState` follows visits of drafts too.
+- The browser's draft attachment uses the workspace's existing network path without granting agent tools or creating
+  a Session. The same attachment becomes available to the agent once the reserved Session is created.
 - `fallback: true` opts a tab into selection when the stored selection is missing or cannot be selected; false or omission opts out. The host takes the first eligible regular tab, then a `first` tab, then a pinned tab, preserving order within each tier. Closing a tab still selects its neighbour.
 
 ```ts

@@ -534,7 +534,7 @@ export const TunnelRead = Schema.Struct({ data: bytes, eof: Schema.Boolean })
 export type TunnelRead = typeof TunnelRead.Type
 const errors = { unavailable: Schema.Struct({}) }
 export const Control = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(4) }),
+  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literals([4, 5]) }),
   Schema.Struct({
     type: Schema.Literal("command"),
     connectionID: Schema.String,
@@ -549,7 +549,7 @@ export const Definition = Rpc.define({
   id: "experimental.browser",
   methods: {
     attach: {
-      input: Schema.Struct({ ...attachment, version: Schema.Literal(4) }),
+      input: Schema.Struct({ ...attachment, version: Schema.Literals([4, 5]), draft: optional(Schema.Boolean) }),
       output: Schema.Literals(["closed", "replaced"]),
       errors,
     },

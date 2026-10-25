@@ -14,7 +14,12 @@ import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
 import { createBrowserRestoreStore } from "./restore"
 
-type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
+type Target = {
+  readonly server: string
+  readonly session: string
+  readonly draft?: { readonly directory: string }
+  readonly restore?: Browser.State
+}
 
 type Entry = {
   binding: string
@@ -152,13 +157,17 @@ export function createBrowserPane(input: {
               ),
             )
 
-            const session = yield* client.session.get({ sessionID })
+            const location = target.draft
+              ? yield* client.location
+                  .get({ location: { directory: target.draft.directory } })
+                  .pipe(Effect.map((location) => ({ directory: location.directory, workspaceID: undefined })))
+              : (yield* client.session.get({ sessionID })).location
 
             // The agent can already read this workspace, so showing its files adds no access.
-            if (server.local) entry.fileRoots = [session.location.directory]
+            if (server.local) entry.fileRoots = [location.directory]
 
             const options = {
-              location: { directory: session.location.directory, workspace: session.location.workspaceID },
+              location: { directory: location.directory, workspace: location.workspaceID },
             }
 
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
@@ -281,7 +290,12 @@ export function createBrowserPane(input: {
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
               Deferred.await(connected).pipe(
-                Effect.andThen(rpc.attach({ ...attachment, version: 4 }, options)),
+                Effect.andThen(
+                  rpc.attach(
+                    { ...attachment, version: target.draft ? 5 : 4, draft: target.draft ? true : undefined },
+                    options,
+                  ),
+                ),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     if (result === "replaced") reason = "browser.pane.replaced"
