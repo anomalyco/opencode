@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { GenerationOptions, LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai/effect"
+import {
+  GenerationOptions,
+  LLMClient,
+  LLMEvent,
+  LanguageModel,
+  ToolDefinition,
+  type LLMRequest,
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -34,6 +41,7 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
+let replies: LLMEvent[][] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
 let beforeResponse: Effect.Effect<void> = Effect.void
 const model = LanguageModel.make({
@@ -54,26 +62,29 @@ const cost = [
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
+    const reply = replies.shift()
     return Stream.fromEffect(beforeResponse).pipe(
       Stream.drain,
       Stream.concat(
         Stream.make(
-          LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
-          LLMEvent.stepFinish({
-            index: 0,
-            reason: { normalized: "stop" },
-            usage: {
-              inputTokens: 15,
-              outputTokens: 6,
-              nonCachedInputTokens: 10,
-              cacheReadInputTokens: 3,
-              cacheWriteInputTokens: 2,
-              reasoningTokens: 2,
-            },
-          }),
-          LLMEvent.finish({
-            reason: { normalized: "stop" },
-          }),
+          ...(reply ?? [
+            LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
+            LLMEvent.stepFinish({
+              index: 0,
+              reason: { normalized: "stop" },
+              usage: {
+                inputTokens: 15,
+                outputTokens: 6,
+                nonCachedInputTokens: 10,
+                cacheReadInputTokens: 3,
+                cacheWriteInputTokens: 2,
+                reasoningTokens: 2,
+              },
+            }),
+            LLMEvent.finish({
+              reason: { normalized: "stop" },
+            }),
+          ]),
         ),
       ),
     )
@@ -1102,4 +1113,49 @@ it.effect("compaction summarizes as usual when the background summary no longer 
     }
     expect(yield* compactAfterPrecompute(history.due, switched)).toContain("Third answer")
   }),
+)
+
+const summaryReply = (text: string) => [
+  LLMEvent.textDelta({ id: "summary", text }),
+  LLMEvent.finish({ reason: { normalized: "stop" } }),
+]
+
+it.effect("compaction rejects template-wrapped summaries and retries without storing them", () =>
+  Effect.gen(function* () {
+    requests = []
+    const wrapped = summaryReply('<TEMPLATE data-kind="summary">\n## Objective\n- factual summary\n</TEMPLATE>')
+    replies = [wrapped, wrapped]
+    const session = yield* insertSession(Session.ID.make("ses_wrapped_summary_rejected"))
+
+    const outcome = yield* compactManually(session, [textUser("Repair defect")])
+
+    expect(outcome.status).toBe("failed")
+    if (outcome.status === "failed")
+      expect(outcome.error.message).toBe("Compaction summary did not match the required template")
+    expect(requests).toHaveLength(2)
+    expect(JSON.stringify(requests[1]?.messages)).toContain("Do not call tools or include <template> wrapper tags.")
+    const store = yield* SessionStore.Service
+    expect(JSON.stringify(yield* store.context(session.id))).not.toContain("<TEMPLATE")
+  }).pipe(Effect.ensuring(Effect.sync(() => (replies = [])))),
+)
+
+it.effect("compaction accepts an unwrapped summary on its corrective retry", () =>
+  Effect.gen(function* () {
+    requests = []
+    replies = [
+      summaryReply("<template>\n## Objective\n- factual summary\n</template>"),
+      summaryReply("## Objective\n- factual summary"),
+    ]
+    const session = yield* insertSession(Session.ID.make("ses_wrapped_summary_retry"))
+
+    expect(yield* compactManually(session, [textUser("Repair defect")])).toMatchObject({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    const store = yield* SessionStore.Service
+    expect(yield* store.context(session.id)).toContainEqual(
+      expect.objectContaining({
+        type: "compaction",
+        summary: "## Objective\n- factual summary",
+      }),
+    )
+  }).pipe(Effect.ensuring(Effect.sync(() => (replies = [])))),
 )

@@ -231,7 +231,7 @@ export const buildPrompt = (update: boolean, legacy = false) => {
 }
 
 const NUDGE =
-  "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template."
+  "The previous response did not fill in the required summary template. Do not call tools or include <template> wrapper tags. Return the summary as text using the exact section headings from the template."
 
 /** Summaries written with the previous template carry this catch-all heading. */
 const LEGACY_HEADING = "## Additional Context"
@@ -453,7 +453,9 @@ export const layer = Layer.effect(
       const previous = previousCompaction(messages)
       const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
-      const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
+      const filled = (text: string) =>
+        !/<\s*\/?\s*template(?=\s|\/?>)[^>]*>/i.test(text) &&
+        text.split("\n").some((line) => headings.includes(line.trim()))
       const prepared = yield* prepare(context, messages, budget)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
