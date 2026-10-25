@@ -83,6 +83,8 @@ export const ToolResultValue = withStatics(toolResultValueSchema, {
   make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
     if (isToolResultValue(value)) return value
     if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
+    // A json result must stay JSON-encodable; `undefined` has no encoding and would abort request lowering later.
+    if (type === "json" && value === undefined) return { type, value: null }
     return { type, value }
   },
 })
