@@ -60,6 +60,13 @@ export function TabNavItem(props: {
 
   const unread = () => !!props.session && !props.active && props.unread
 
+  const markUnread = () => {
+    const session = props.session
+
+    if (!session) return
+    serverCtx()?.notification.session.markUnread(session.id)
+  }
+
   const project = createMemo(() => {
     const session = props.session
 
@@ -412,6 +419,9 @@ export function TabNavItem(props: {
             openRename()
           }}
         >
+          <Show when={!!props.session && !props.active && !unread()}>
+            <Menu.Item onSelect={markUnread}>{language.t("common.markUnread")}</Menu.Item>
+          </Show>
           <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>

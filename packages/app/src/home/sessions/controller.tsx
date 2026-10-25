@@ -376,6 +376,9 @@ export function createHomeSessionsController(home: HomeController) {
             }),
         })
       },
+      markUnread: (session: SessionInfo) => {
+        home.server.focusedContext()?.notification.session.markUnread(session.id)
+      },
       rename,
       export: exportSession,
       showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
@@ -408,7 +411,10 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
-  const day = (record: HomeSessionRecord) => localDay(new Date(record.session.time.updated ?? record.session.time.created))
+
+  const day = (record: HomeSessionRecord) =>
+    localDay(new Date(record.session.time.updated ?? record.session.time.created))
+
   const todaySessions = records.filter((record) => day(record) === today)
   const yesterdaySessions = records.filter((record) => day(record) === yesterday)
   const olderSessions = records.filter((record) => day(record) !== today && day(record) !== yesterday)

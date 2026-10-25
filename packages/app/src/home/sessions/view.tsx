@@ -38,7 +38,7 @@ const HOME_SESSION_LONG_PRESS_MS = 500
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: /(Mac|iPod|iPhone|iPad)/.test(globalThis.navigator?.platform ?? ""),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -68,6 +68,7 @@ export type HomeSessionsViewProps = {
   onCreateSession: () => void
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
   onArchiveSession: (session: SessionInfo) => Promise<void>
+  onMarkUnread: (session: SessionInfo) => void
   onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
   onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
@@ -779,6 +780,18 @@ function HomeSessionRow(
               requestAnimationFrame(() => rowButton()?.focus())
             }}
           >
+            <HomeSessionStatusController
+              server={props.server}
+              record={props.record}
+              isOpenTab={props.isOpenTab}
+              render={(state) => (
+                <Show when={!state.unread()}>
+                  <Menu.Item onSelect={() => props.onMarkUnread(props.record.session)}>
+                    {props.language.t("common.markUnread")}
+                  </Menu.Item>
+                </Show>
+              )}
+            />
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
             <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
               {props.language.t("common.export")}…

@@ -100,6 +100,47 @@ test.each([
   dispose()
 })
 
+test("deleting a session drops its manual unread mark", async () => {
+  const listeners = new Array<(event: OpenCodeEvent) => void>()
+  const session = { id: "marked", time: { idle: 2, viewed: 2 }, location: { directory: "/project" } }
+
+  const dispose = createRoot((dispose) => {
+    const state = createState({
+      sdk: {
+        scope: ServerScope.local,
+        event: {
+          listen: (listener: (event: OpenCodeEvent) => void) => {
+            listeners.push(listener)
+
+            return () => {}
+          },
+        },
+      },
+      data: {
+        session: {
+          get: (id: string) => (id === session.id ? session : undefined),
+          root: (id: string) => id,
+        },
+      },
+      coordinator: {},
+    })
+
+    return { dispose, state }
+  })
+
+  const state = dispose.state
+  state.session.markUnread("marked")
+  expect(state.session.unread("marked")).toBe(true)
+
+  listeners.forEach((listener) =>
+    // SAFETY: the deleted event only carries the session ID the state reads.
+    listener({ type: "session.deleted", id: "event-1", data: { sessionID: "marked" } } as never),
+  )
+
+  expect(state.session.unread("marked")).toBe(false)
+  dispose.dispose()
+})
+
 test("unread state and viewing follow the server's idle and viewed watermarks", async () => {
   const views: { sessionID: string; idle: number }[] = []
   const failures = { remaining: 1 }
@@ -159,6 +200,14 @@ test("unread state and viewing follow the server's idle and viewed watermarks", 
   // Unread reads the root session; children and archived sessions never mark a project unread.
   expect(["root", "child", "read", "other"].map((id) => state.session.unread(id))).toEqual([true, true, false, true])
   expect(state.project.hasUnread("/project")).toBe(true)
+
+  // A manual mark makes a read session unread until the client views it again.
+  state.session.markUnread("read")
+  expect(state.session.unread("read")).toBe(true)
+  setStore("viewing", "read")
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(state.session.unread("read")).toBe(false)
+  expect(views).toEqual([])
 
   // Viewing a child acknowledges its root's idle watermark; a failed report retries after a backoff.
   setStore("viewing", "child")

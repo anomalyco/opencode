@@ -42,6 +42,12 @@ const LegacyNotificationStore = Persistence.struct({
   started: Schema.optional(Schema.Finite),
 })
 
+// Sessions marked unread by hand. This is client-local on purpose: the server's viewed watermark is monotone, so a
+// manual mark is merged into the computed state instead of rewriting `time.viewed`.
+const ManualUnreadStore = Persistence.struct({
+  sessions: Persistence.array(Schema.String),
+})
+
 // The carry-over waits this long after connecting so it doesn't compete with startup requests.
 const LEGACY_MIGRATION_DELAY = 5_000
 
@@ -74,6 +80,8 @@ export function createServerNotificationState(input: {
 
   const legacyTarget = Persist.serverGlobal(input.sdk.scope, "notification")
   const [legacy, setLegacy, , legacyReady] = persisted(legacyTarget, LegacyNotificationStore, {}, platform)
+  const manualTarget = Persist.serverGlobal(input.sdk.scope, "notification.manual-unread")
+  const [manual, setManual] = persisted(manualTarget, ManualUnreadStore, { sessions: [] }, platform)
   const started = Date.now()
   const legacyStarted = () => legacy.started ?? started
 
@@ -89,11 +97,17 @@ export function createServerNotificationState(input: {
   // Idle watermarks the carry-over reported, so rows drawn from an older fetched copy of a session stay read.
   const legacyReported = new Map<string, number>()
 
+  const manuallyUnread = (sessionID: string) => manual.sessions.includes(sessionID)
+
   const unread = (session?: Pick<SessionInfo, "id" | "time">) => {
-    const idle = session?.time.idle
+    if (!session) return false
+
+    if (manuallyUnread(session.id)) return true
+
+    const idle = session.time.idle
 
     // Until the old list is read, a session it had read could flash unread.
-    if (!legacyReady() || !session || idle === undefined || !isSessionUnread(session)) return false
+    if (!legacyReady() || idle === undefined || !isSessionUnread(session)) return false
 
     if (idle <= (legacyReported.get(session.id) ?? -Infinity)) return false
     const unseen = legacyUnseen()
@@ -177,6 +191,10 @@ export function createServerNotificationState(input: {
   const view = (sessionID: string) => {
     void state.viewRetry
     const root = input.data.session.root(sessionID)
+
+    // Opening a manually marked session clears the mark before the usual viewed-watermark logic runs.
+    if (manuallyUnread(root)) setManual("sessions", (sessions) => sessions.filter((id) => id !== root))
+
     const session = input.data.session.get(root)
     const idle = session?.time.idle
 
@@ -202,6 +220,12 @@ export function createServerNotificationState(input: {
         }, delay)
       },
     )
+  }
+
+  // Only a confirmed deletion drops a mark. Rows disappearing from a filtered or paginated list are not deletions.
+  const forget = (sessionID: string) => {
+    if (!manual.sessions.includes(sessionID)) return
+    setManual("sessions", (sessions) => sessions.filter((id) => id !== sessionID))
   }
 
   // Loading the session keeps a background completion visible in the server-derived unread state.
@@ -265,6 +289,12 @@ export function createServerNotificationState(input: {
   }
 
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "session.deleted") {
+      forget(event.data.sessionID)
+
+      return
+    }
+
     if (event.type === "session.execution.failed") {
       handleSessionError(event.data.sessionID, event.id)
 
@@ -290,6 +320,13 @@ export function createServerNotificationState(input: {
       },
       /** Reports the session's latest idle transition to the server as viewed. */
       markViewed: view,
+      /** Marks the session's root unread until this client views it. */
+      markUnread(sessionID: string) {
+        const root = input.data.session.root(sessionID)
+
+        if (manuallyUnread(root)) return
+        setManual("sessions", (sessions) => [...sessions, root])
+      },
     },
     project: {
       hasUnread(directory: string) {
