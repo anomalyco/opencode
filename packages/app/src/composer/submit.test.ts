@@ -511,18 +511,28 @@ describe("Composer submission", () => {
 
   describe("steering while foreground work runs", () => {
     // A long shell command blocks the run; moving it resolves only the move, never the admission.
-    function running(input: { fail?: boolean; prompt?: () => Promise<void> } = {}) {
+    // `unstarted` moves before the shell's job starts, so the server finds nothing to move and the call still blocks.
+    function running(input: { fail?: boolean; unstarted?: boolean; prompt?: () => Promise<void> } = {}) {
       const calls: string[] = []
       const failures: string[] = []
       const state = createMemoryComposerState({ prompt: "use Beta instead" }).capture()
+      const blocking = { parts: [{ partID: "prt_shell" }] }
 
       const claim = createSteerBackground({
         sessionID: () => "session-1",
-        blocking: () => [{ partID: "prt_shell" }],
+        blocking: () => blocking.parts,
         move: async () => {
           calls.push("background")
 
           if (input.fail) throw new Error("server unavailable")
+
+          if (input.unstarted) {
+            input.unstarted = false
+
+            return
+          }
+
+          blocking.parts = []
         },
       })
 
@@ -556,6 +566,14 @@ describe("Composer submission", () => {
 
       await run.submit()
       expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
+
+    test("a steer moves work that its previous steer's move missed", async () => {
+      const run = running({ unstarted: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
     })
 
     test("leaves the work alone for a queued prompt or an idle session", async () => {

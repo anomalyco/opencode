@@ -19,13 +19,23 @@ function setup(input: { fail?: boolean } = {}) {
 }
 
 describe("createSteerBackground", () => {
-  test("claims each blocking work item once", async () => {
+  test("claims each blocking work item once while its move is in flight", async () => {
     const { claim, moves, state } = setup()
 
-    await claim("ses_alpha")?.move()
+    const first = claim("ses_alpha")
     expect(claim("ses_alpha")).toBeUndefined()
 
     state.blocking = [{ partID: "prt_shell" }, { partID: "prt_subagent" }]
+    await Promise.all([first?.move(), claim("ses_alpha")?.move()])
+    expect(moves).toEqual(["ses_alpha", "ses_alpha"])
+  })
+
+  // The server moves only work that already blocks the run: a call that starts its shell or subagent just after the
+  // move still blocks, and the next steer must move it.
+  test("work still blocking after a move is moved by the next steer", async () => {
+    const { claim, moves } = setup()
+
+    await claim("ses_alpha")?.move()
     await claim("ses_alpha")?.move()
     expect(moves).toEqual(["ses_alpha", "ses_alpha"])
   })
