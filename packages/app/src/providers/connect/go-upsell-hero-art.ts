@@ -23,15 +23,15 @@ const COUNTER = 0.15
 // The OpenCode pixel letters (packages/tui/src/logo.ts `go`): 4×5 units per letter, s = shadow.
 const GO = ["GGGG.OOOO", "G....O..O", "GsGG.OssO", "GssG.OssO", "GGGG.OOOO"]
 
-const LOGO_COLS = 18
+export const LOGO_COLS = 18
 
-const LOGO_ROWS = 10
+export const LOGO_ROWS = 10
 
-type Kind = 0 | 1 | 2 // G, O, shadow
+export type Kind = 0 | 1 | 2 // G, O, shadow
 
-type LogoCell = { col: number; row: number; kind: Kind }
+export type LogoCell = { col: number; row: number; kind: Kind }
 
-const LOGO: LogoCell[] = GO.flatMap((line, uy) =>
+export const LOGO: LogoCell[] = GO.flatMap((line, uy) =>
   Array.from(line).flatMap((ch, ux) => {
     if (ch === ".") return []
     let kind: Kind = 2
