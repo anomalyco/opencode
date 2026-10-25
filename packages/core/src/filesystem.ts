@@ -79,6 +79,7 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   include: Schema.optionalKey(Schema.String),
   literal: Schema.optionalKey(Schema.Boolean),
   caseSensitive: Schema.optionalKey(Schema.Boolean),
+  pcre2: Schema.optionalKey(Schema.Boolean),
   limit: Schema.optionalKey(PositiveInt),
 }) {}
 

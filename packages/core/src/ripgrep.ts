@@ -76,6 +76,8 @@ export interface GrepInput {
   readonly include?: string
   readonly literal?: boolean
   readonly caseSensitive?: boolean
+  /** Enable ripgrep's PCRE2 engine so patterns may use look-around and backreferences. */
+  readonly pcre2?: boolean
   readonly limit: number
   readonly signal?: AbortSignal
 }
@@ -228,6 +230,8 @@ const layer = Layer.effect(
             ...(input.caseSensitive === false ? ["--ignore-case"] : []),
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--glob=!**/.git/**",
+            // PCRE2 is opt-in; it is the only engine switch exposed because it enables look-around/backreferences.
+            ...(input.pcre2 ? ["--pcre2"] : []),
             "--",
             input.pattern,
             input.file ?? ".",

@@ -32,6 +32,10 @@ export const Input = Schema.Struct({
   caseSensitive: FileSystem.GrepInput.fields.caseSensitive.annotate({
     description: "Use case-sensitive matching (default: true).",
   }),
+  pcre2: FileSystem.GrepInput.fields.pcre2.annotate({
+    description:
+      "Search with ripgrep's PCRE2 engine (default: false). Required when `pattern` uses look-around or backreferences.",
+  }),
   limit: FileSystem.GrepInput.fields.limit.annotate({
     description: `Maximum number of matching lines to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
@@ -76,7 +80,7 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description:
-            "Search file contents using ripgrep's regular expression syntax or literal text matching. Use it to locate specific code, symbols, or text patterns, and narrow searches with `path` or `include`. Returns matching file paths, line numbers, and line previews.",
+            "Search file contents using ripgrep's regular expression syntax or literal text matching. Use it to locate specific code, symbols, or text patterns, and narrow searches with `path` or `include`. Patterns with look-around or backreferences need `pcre2: true`. Returns matching file paths, line numbers, and line previews.",
           input: Input,
           output: Output,
           execute: (input, context) =>
@@ -94,6 +98,7 @@ export const Plugin = {
                   include: input.include,
                   literal: input.literal,
                   caseSensitive: input.caseSensitive,
+                  pcre2: input.pcre2,
                   limit: input.limit,
                 },
                 sessionID: context.sessionID,
@@ -116,6 +121,7 @@ export const Plugin = {
                   include: input.include,
                   literal: input.literal,
                   caseSensitive: input.caseSensitive,
+                  pcre2: input.pcre2,
                   limit: limit + 1,
                 })
                 .pipe(
