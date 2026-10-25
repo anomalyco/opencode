@@ -160,6 +160,11 @@ ctx.add(Command, {
 
 ## Primitives
 
+Client slash commands may opt into attached images with `slash: { name: "btw", arguments: true, images: true }`.
+The host passes captured data-URI files as the second `run(input, files)` argument. Resolve only after accepting
+them; rejection retains the draft. Commands without `images` leave image attachments in the composer. The `/btw`
+extension keeps files in memory for retries while mounted. Reload restores the question and answer, but not its images.
+
 | Primitive                                        | Use it for                                                                          |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `Extension.define(definition)`                   | The manifest, typed so `Setup<typeof definition>` sees the declarations             |

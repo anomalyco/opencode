@@ -15,6 +15,187 @@ import { createAppFixture } from "./fixture/app"
 import { waitForHighlightedFrame } from "./fixture/frame"
 import type { PluginInfo } from "@opencode/client"
 
+test.each(["answer", "restore", "followup"])(
+  "/btw releases the composer before generation completes (%s)",
+  async (mode) => {
+    await using files = await tmpdir()
+    const image = path.join(files.path, "diagram.png")
+    await Bun.write(
+      image,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    )
+    const response = Promise.withResolvers<Response>()
+    const requested = Promise.withResolvers<unknown>()
+    const sessionID = `ses_btw_${mode}`
+    await using setup = await createAppFixture({
+      args: { sessionID },
+      fetch: async (url, request) => {
+        if (url.pathname === `/api/session/${sessionID}`)
+          return json({
+            data: {
+              id: sessionID,
+              projectID: "proj_fixture",
+              title: "Side question",
+              location: { directory },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 0, updated: 0 },
+            },
+          })
+        if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+        if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+        if (url.pathname === `/api/session/${sessionID}/generate`) {
+          requested.resolve(await request.json())
+          return response.promise
+        }
+        return undefined
+      },
+    })
+    try {
+      await setup.ready
+      await setup.waitFor(() => !!setup.renderer.currentFocusedEditor)
+      await setup.mockInput.typeText("/btw explain ")
+      await setup.mockInput.pasteBracketedText(image)
+      await setup.waitForFrame((frame) => frame.includes("[Image 1]"))
+      const submitted = setup.renderer.currentFocusedEditor?.plainText
+      setup.mockInput.pressEnter()
+      expect(await requested.promise).toMatchObject({ files: [expect.objectContaining({ name: "diagram.png" })] })
+      await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === "")
+      if (mode === "followup") await setup.mockInput.typeText("keep my next question")
+      response.resolve(
+        mode === "answer"
+          ? json({ data: { text: "Image answer" } })
+          : json({ _tag: "ServiceUnavailableError", message: "Generation unavailable" }, { status: 503 }),
+      )
+      if (mode === "answer") {
+        await setup.waitForFrame((frame) => frame.includes("Image answer"))
+        setup.mockInput.pressEscape()
+        await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === "")
+      }
+      if (mode === "restore") {
+        await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === submitted)
+        expect(setup.captureCharFrame()).toContain("[Image 1]")
+      }
+      if (mode === "followup") {
+        await setup.waitForFrame((frame) => frame.includes("Generation unavailable"))
+        expect(setup.renderer.currentFocusedEditor?.plainText).toBe("keep my next question")
+      }
+    } finally {
+      response.resolve(new Response("Unavailable", { status: 503 }))
+    }
+  },
+)
+
+function btwSessionFetch(sessionID: string, routes: (url: URL, request: Request) => Promise<Response | undefined>) {
+  return async (url: URL, request: Request) => {
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_fixture",
+          title: "Side question",
+          location: { directory },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+    return routes(url, request)
+  }
+}
+
+test("/btw sends every attachment and leaves none behind for the next prompt", async () => {
+  await using files = await tmpdir()
+  const image = path.join(files.path, "diagram.png")
+  const pdf = path.join(files.path, "notes.pdf")
+  await Bun.write(
+    image,
+    Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
+  )
+  await Bun.write(pdf, "%PDF-1.4\n%%EOF\n")
+  const generated: { files?: { name?: string }[] }[] = []
+  const sessionID = "ses_btw_attachments"
+  await using setup = await createAppFixture({
+    args: { sessionID },
+    fetch: btwSessionFetch(sessionID, async (url, request) => {
+      if (url.pathname === `/api/session/${sessionID}/generate`) {
+        generated.push(await request.json())
+        return json({ data: { text: `Answer ${generated.length}` } })
+      }
+      return undefined
+    }),
+  })
+  await setup.ready
+  await setup.waitFor(() => !!setup.renderer.currentFocusedEditor)
+  await setup.mockInput.typeText("/btw explain ")
+  await setup.mockInput.pasteBracketedText(image)
+  await setup.waitForFrame((frame) => frame.includes("[Image 1]"))
+  await setup.mockInput.pasteBracketedText(pdf)
+  await setup.waitForFrame((frame) => frame.includes("[PDF 1]"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Answer 1"))
+  expect(generated[0]?.files?.map((file) => file.name).sort()).toEqual(["diagram.png", "notes.pdf"])
+  setup.mockInput.pressEscape()
+  await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === "")
+  // A second question carries whatever attachments the prompt still holds, including hidden ones.
+  await setup.mockInput.typeText("/btw again")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Answer 2"))
+  expect(generated[1]?.files ?? []).toEqual([])
+})
+
+test("/btw needs a question besides attachment labels", async () => {
+  await using files = await tmpdir()
+  const image = path.join(files.path, "diagram.png")
+  await Bun.write(
+    image,
+    Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
+  )
+  const generated: unknown[] = []
+  const sessionID = "ses_btw_label_only"
+  await using setup = await createAppFixture({
+    args: { sessionID },
+    fetch: btwSessionFetch(sessionID, async (url, request) => {
+      if (url.pathname === `/api/session/${sessionID}/generate`) {
+        generated.push(await request.json())
+        return json({ data: { text: "Unexpected answer" } })
+      }
+      return undefined
+    }),
+  })
+  await setup.ready
+  await setup.waitFor(() => !!setup.renderer.currentFocusedEditor)
+  await setup.mockInput.typeText("/btw ")
+  await setup.mockInput.pasteBracketedText(image)
+  await setup.waitForFrame((frame) => frame.includes("[Image 1]"))
+  const draft = setup.renderer.currentFocusedEditor?.plainText
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Add a question about the attachments"))
+  expect(setup.renderer.currentFocusedEditor?.plainText).toBe(draft)
+  expect(generated).toEqual([])
+})
+
+test("/btw without a question keeps its question dialog open", async () => {
+  const sessionID = "ses_btw_dialog"
+  await using setup = await createAppFixture({
+    args: { sessionID },
+    fetch: btwSessionFetch(sessionID, async () => undefined),
+  })
+  await setup.ready
+  await setup.waitFor(() => !!setup.renderer.currentFocusedEditor)
+  await setup.mockInput.typeText("/btw ")
+  await setup.waitForFrame((frame) => frame.includes("/btw"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Ask anything"))
+  await Bun.sleep(100)
+  expect(setup.captureCharFrame()).toContain("Ask anything")
+})
+
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
   const requested = Promise.withResolvers<void>()

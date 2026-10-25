@@ -1,4 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
+import type { PromptInput } from "@opencode/schema/prompt-input"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -116,6 +117,7 @@ export interface CommandOption {
   follows?: string
   slash?: string
   slashArguments?: boolean
+  slashImages?: boolean
   /** Listed right after the option whose slash name this is, when one is registered. */
   slashAfter?: string
   suggested?: boolean
@@ -128,7 +130,11 @@ export interface CommandOption {
   when?: (event: KeyboardEvent) => boolean
   /** The keybind leaves this event to its target, as if the command had no keybind. */
   skip?: (event: KeyboardEvent) => boolean
-  onSelect?: (source?: "palette" | "keybind" | "slash", input?: string) => void | Promise<void>
+  onSelect?: (
+    source?: "palette" | "keybind" | "slash",
+    input?: string,
+    files?: PromptInput.Prompt["files"],
+  ) => void | Promise<void>
   onHighlight?: () => (() => void) | void
 }
 
@@ -491,10 +497,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       return map
     })
 
-    const run = (id: string, source?: CommandSource, input?: string) => {
+    const run = (id: string, source?: CommandSource, input?: string, files?: PromptInput.Prompt["files"]) => {
       const option = optionMap().get(id)
 
-      return option?.onSelect?.(source, input)
+      return option?.onSelect?.(source, input, files)
     }
 
     const showPalette = () => {
@@ -564,8 +570,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     return {
       register,
-      trigger(id: string, source?: CommandSource, input?: string) {
-        return run(id, source, input)
+      trigger(id: string, source?: CommandSource, input?: string, files?: PromptInput.Prompt["files"]) {
+        return run(id, source, input, files)
       },
       keybind(id: string) {
         const config = keybindConfig(id)

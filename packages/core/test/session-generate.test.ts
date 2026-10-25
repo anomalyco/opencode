@@ -19,6 +19,7 @@ import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
@@ -35,6 +36,8 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionContext } from "@opencode/core/session/context"
 import { SessionGenerate } from "@opencode/core/session/generate"
+import { Image } from "@opencode/core/image"
+import { Base64 } from "@opencode/schema/prompt"
 import { InstructionState } from "@opencode/core/session/instruction-state"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
@@ -141,6 +144,7 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
+      FSUtil.node,
       Bus.node,
       Project.node,
       SessionProjector.node,
@@ -248,6 +252,7 @@ const setup = Effect.gen(function* () {
           Layer.mergeAll(
             Layer.succeed(SessionContext.Service, context),
             Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
+            Layer.mock(Image.Service, { normalize: (_resource, content) => Effect.succeed(content) }),
           ) as Layer.Layer<Instance.Services>,
         ),
     }),
@@ -267,7 +272,21 @@ it.effect(
       yield* bus.publish(SessionEvent.InboxEnqueued, {
         sessionID,
         inboxID: existing,
-        item: { type: "user", payload: { text: "Existing durable context" }, delivery: "steer" },
+        item: {
+          type: "user",
+          payload: {
+            text: "Existing durable context",
+            files: [
+              {
+                data: Base64.make("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="),
+                mime: "image/gif",
+                source: { type: "inline" },
+                name: "context.gif",
+              },
+            ],
+          },
+          delivery: "steer",
+        },
       })
       yield* bus.publish(SessionEvent.InboxDelivered, {
         sessionID,
@@ -327,9 +346,11 @@ it.effect(
       instruction = "Changed context"
       const before = yield* durableState(db, sessionID)
 
-      const result = yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
-        Effect.provideService(Instance.Service, instances),
-      )
+      const result = yield* SessionGenerate.generate({
+        session,
+        prompt: "Summarize privately",
+        files: [{ uri: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", name: "fresh.gif" }],
+      }).pipe(Effect.provideService(Instance.Service, instances))
 
       expect(result).toBe("Transient answer")
       expect(requests).toHaveLength(1)
@@ -346,6 +367,25 @@ it.effect(
       expect(instructionUpdates?.[0]).toContain("Changed context")
       expect(instructionUpdates?.[0]).toContain("tools.captured.lookup(): Promise<string>")
       expect(userTexts(requests[0])).toEqual(["Existing durable context", "Summarize privately"])
+      expect(
+        requests[0].messages
+          .filter((message) => message.role === "user")
+          .map((message) => message.content.filter((part) => part.type === "media")),
+      ).toEqual(
+        ["context.gif", "fresh.gif"].map((filename) => [
+          expect.objectContaining({
+            filename,
+            media: expect.objectContaining({
+              mediaType: "image/gif",
+              source: {
+                type: "base64",
+                mediaType: "image/gif",
+                data: "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+              },
+            }),
+          }),
+        ]),
+      )
       expect(
         requests[0]?.messages.flatMap((message) =>
           message.role === "assistant"

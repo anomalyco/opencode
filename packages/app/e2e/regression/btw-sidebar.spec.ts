@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { sessionHref } from "../utils/app"
+import { provider, sessionHref } from "../utils/app"
 import { openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -66,18 +66,39 @@ test("keeps separate one-shot /btw answers and restores them after reload", asyn
   expect(prompts).toEqual([])
 })
 
-test("isolates concurrent side questions and makes an interrupted reload retryable", async ({ page }) => {
+test("retries large images in memory and restores interrupted questions after reload", async ({ page }, testInfo) => {
   const held = Promise.withResolvers<void>()
+  const failed = Promise.withResolvers<void>()
   const attempts: string[] = []
   const prompts: unknown[] = []
+  const images: string[][] = []
+
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAeElEQVR4nO3PUQkAIBTAwBfHiLbXEH4cwmABbnP2+rrhgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAseu01Q8Xia6FluAAAAAElFTkSuQmCC"
+
+  // Valid PNG with trailing bytes, large enough that persisting its data URI would exceed localStorage's quota.
+  const buffer = Buffer.concat([Buffer.from(png, "base64"), Buffer.alloc(6 * 1024 * 1024)])
+  const uri = `data:image/png;base64,${buffer.toString("base64")}`
 
   const { editor } = await openSession(page, {
     name: "BtwConcurrent",
+    provider: provider({
+      id: "vision",
+      name: "Vision",
+      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    }),
     onPrompt: (input) => prompts.push(input),
     generate: async (input) => {
       attempts.push(input.prompt)
+      images.push(input.files?.map((file) => file.uri) ?? [])
 
       if (input.prompt.includes("slow question") && attempts.length === 1) {
+        await failed.promise
+
+        throw new Error("Generation failed")
+      }
+
+      if (input.prompt.includes("slow question") && attempts.length === 3) {
         await held.promise
 
         return { text: "Abandoned answer" }
@@ -88,9 +109,13 @@ test("isolates concurrent side questions and makes an interrupted reload retryab
   })
 
   const panel = page.locator('[data-slot="session-btw-panel"]')
+  await expect(page.locator('[data-action="composer-model"]')).toContainText("Vision")
+  await page.locator('input[type="file"]').setInputFiles({ name: "diagram.png", mimeType: "image/png", buffer })
+  await expect(page.getByRole("img", { name: "diagram.png", exact: true })).toBeVisible()
   await editor.fill("/btw slow question")
   await editor.press("Enter")
   await expect(panel.getByRole("status")).toContainText("Working")
+  await expect(page.getByRole("img", { name: "diagram.png", exact: true })).toHaveCount(0)
   await editor.fill("/btw fast question")
   await editor.press("Enter")
   await expect(panel.getByText("Fast answer", { exact: true })).toBeVisible()
@@ -98,15 +123,27 @@ test("isolates concurrent side questions and makes an interrupted reload retryab
   await expect(panel.getByRole("status")).toContainText("Working")
   await expect(panel.getByText("Fast answer", { exact: true })).toHaveCount(0)
 
+  failed.resolve()
+  await expect(panel.getByText("Couldn’t answer that question", { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "Retry", exact: true }).click()
+  await expect(panel.getByRole("status")).toContainText("Working")
+  await expect.poll(() => images.length).toBe(3)
+  expect(images).toEqual([[uri], [], [uri]])
+  expect(await page.evaluate(() => Object.values(localStorage).some((value) => value.includes("data:image/")))).toBe(
+    false,
+  )
+
   await page.reload()
   await expect(panel.getByText("Couldn’t answer that question", { exact: true })).toBeVisible()
   await expect(panel.getByRole("status")).toHaveCount(0)
-  expect(attempts).toHaveLength(2)
+  expect(attempts).toHaveLength(3)
   await panel.getByRole("button", { name: "Retry", exact: true }).click()
   await expect(panel.getByText("Retried answer", { exact: true })).toBeVisible()
-  expect(attempts).toHaveLength(3)
-  expect(attempts[2]).toContain("slow question")
-  expect(attempts[2]).not.toContain("fast question")
+  expect(attempts).toHaveLength(4)
+  expect(images).toEqual([[uri], [], [uri], []])
+  await page.screenshot({ path: testInfo.outputPath("retried-image.png") })
+  expect(attempts[3]).toContain("slow question")
+  expect(attempts[3]).not.toContain("fast question")
   held.resolve()
   await page.getByRole("tab", { name: "fast question", exact: true }).click()
   await expect(panel.getByText("Fast answer", { exact: true })).toBeVisible()

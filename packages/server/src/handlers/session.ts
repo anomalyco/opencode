@@ -574,7 +574,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.generate",
         Effect.fn(function* (ctx) {
           const text = yield* session
-            .generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })
+            .generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt, files: ctx.payload.files })
             .pipe(
               Effect.mapError((error) =>
                 error._tag === "Session.NotFoundError"

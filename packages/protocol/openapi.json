@@ -3871,6 +3871,12 @@
                 "properties": {
                   "prompt": {
                     "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.FileAttachment"
+                    }
                   }
                 },
                 "required": ["prompt"],

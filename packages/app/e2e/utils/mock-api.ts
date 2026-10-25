@@ -2,6 +2,7 @@ import { Predicate, Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Pty } from "@opencode/schema/pty"
 import { Worktree } from "@opencode/schema/worktree"
+import { PromptInput } from "@opencode/schema/prompt-input"
 
 // Handlers answer plain fixture data: undefined properties are dropped, and other non-JSON values become null.
 const Json = Schema.Json.pipe(
@@ -375,7 +376,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionGenerate", "/api/session/:sessionID/generate", {
       params: SessionParams,
-      payload: Schema.Struct({ prompt: Schema.String }),
+      payload: Schema.Struct({ prompt: Schema.String, files: PromptInput.Prompt.fields.files }),
       success: Json,
     }),
   )

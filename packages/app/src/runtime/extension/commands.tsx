@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js"
 import { Command } from "@opencode/gui-extensions/sdk"
+import type { PromptInput } from "@opencode/schema/prompt-input"
 import { useCommand, type CommandSource } from "@/shell/commands/command"
 import { useSettings } from "@/settings/model"
 import { migrateKeybinds } from "@/settings/keybinds/migration"
@@ -28,6 +29,7 @@ export function ExtensionCommands() {
         follows: item.value.follows,
         slash: item.value.slash?.name,
         slashArguments: item.value.slash?.arguments,
+        slashImages: item.value.slash?.images,
         slashAfter: item.value.slash?.after,
         suggested: item.value.suggested,
         featured: item.value.featured,
@@ -35,7 +37,8 @@ export function ExtensionCommands() {
         hidden: item.value.hidden,
         editable: item.value.editable,
         when: item.value.scope ? scopedTo(item.value.scope) : undefined,
-        onSelect: (_source?: CommandSource, input?: string) => item.value.run(input),
+        onSelect: (_source?: CommandSource, input?: string, files?: PromptInput.Prompt["files"]) =>
+          item.value.run(input, files),
       })),
   )
 

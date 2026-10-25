@@ -24,6 +24,7 @@ import type {
   VcsInfo,
 } from "@opencode/client"
 import type { ResolvedTheme } from "@opencode/theme/tui"
+import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
@@ -425,11 +426,13 @@ export interface KeymapCommand {
     readonly aliases?: string[]
     /** Keeps the slash command in the prompt and passes its raw input to run. */
     readonly arguments?: true
+    /** Receives the prompt's attachments on slash submission. Commands without it clear them with the prompt. */
+    readonly images?: true
   }
   /** Promotes the command in discovery UI. */
   readonly suggested?: boolean | (() => boolean)
   /** Executes the command. Keyboard dispatch includes its event; programmatic dispatch does not. Return false to continue. */
-  readonly run: (input?: string, event?: KeyEvent) => void | false | Promise<void>
+  readonly run: (input?: string, event?: KeyEvent, files?: PromptInput.Prompt["files"]) => void | false | Promise<void>
 }
 
 export interface KeymapLayer {

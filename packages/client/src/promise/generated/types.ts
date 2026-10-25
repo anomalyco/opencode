@@ -3980,7 +3980,24 @@ export type SessionInstructionsEntryRemoveOutput = void
 
 export type SessionGenerateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly prompt: { readonly prompt: string }["prompt"]
+  readonly prompt: {
+    readonly prompt: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+  }["prompt"]
+  readonly files?: {
+    readonly prompt: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+  }["files"]
 }
 
 export type SessionGenerateOutput = SessionGenerateResponse["data"]

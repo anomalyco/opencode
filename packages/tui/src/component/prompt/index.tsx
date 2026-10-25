@@ -1147,6 +1147,38 @@ export function Prompt(props: PromptProps) {
       return true
     }
     if (slash) {
+      const files = store.prompt.files ?? []
+      // Attachment labels such as "[Image 1]" are not a question.
+      const question = files
+        .reduce((text, file) => (file.mention?.text ? text.replace(file.mention.text, "") : text), slash.input ?? "")
+        .trim()
+      if (slash.command.slash?.images && files.length > 0 && !question) {
+        toast.show({ message: "Add a question about the attachments", variant: "warning" })
+        return false
+      }
+      if (slash.command.slash?.images && question) {
+        const captured = { ...store.prompt, files: files.slice() }
+        clearPrompt()
+        void (async () => {
+          try {
+            await slash.command.run(slash.input, undefined, captured.files)
+          } catch {
+            // Restore only the untouched cleared draft; a follow-up belongs to the user.
+            if (
+              disposed ||
+              input.isDestroyed ||
+              input.plainText !== "" ||
+              (["files", "agents", "skills"] as const).some((key) => (store.prompt[key]?.length ?? 0) > 0)
+            )
+              return
+            input.setText(captured.text)
+            setStore("prompt", captured)
+            restoreExtmarksFromPrompt(captured)
+            input.gotoBufferEnd()
+          }
+        })()
+        return true
+      }
       clearPrompt()
       await slash.command.run(slash.input)
       return true

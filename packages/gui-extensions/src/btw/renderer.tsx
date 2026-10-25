@@ -35,11 +35,11 @@ const setup: Setup<typeof Btw> = (ctx) => {
       description: ctx.t("command.description"),
       group: ctx.t("command.category.session"),
       section: "session",
-      slash: { name: "btw", arguments: true },
+      slash: { name: "btw", arguments: true, images: true },
       hidden: true,
       // Offered only while a session is open in a desktop-width window.
       enabled: !layout.narrow() && mounted(),
-      run: (input) => btw.ask(input),
+      run: (input, files) => btw.ask(input, files),
     }),
   )
 
