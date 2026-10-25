@@ -36,7 +36,6 @@ import {
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionHeaderGap } from "@/session/header/drag-area"
 import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
-import { messageMenu } from "@/session/timeline/message-menu"
 
 type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
@@ -172,8 +171,7 @@ function MessageTimelineView(
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
-  // The message menu experiment reserves a 28px trailing gutter (24px button + 4px gap) for its ⋯ button.
-  const turnPadding = () => (messageMenu() ? "ps-4 pe-11 md:ps-6 md:pe-13" : "px-4 md:px-6")
+  const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID

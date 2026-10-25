@@ -25,7 +25,6 @@ import { springStyle } from "@opencode/ui/motion/solid"
 import { Dynamic } from "solid-js/web"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
-import { useMessageMenu } from "../context/message-menu"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { TimelineSeparator } from "../components/timeline-separator"
@@ -104,7 +103,6 @@ export function createSessionTimelineRowRenderer(input: {
 }) {
   const i18n = useI18n()
   const data = useData()
-  const menu = useMessageMenu()
   const sourcesHost = useSources()
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
@@ -897,10 +895,9 @@ export function createSessionTimelineRowRenderer(input: {
   function TurnGap(props: { messageID: string }) {
     let element: HTMLDivElement | undefined
     const joined = run(props.messageID)
-    const turn = () => (menu() ? 24 : 16)
     springStyle(
       () => element,
-      () => ({ height: joined()?.above ? 4 : turn() }),
+      () => ({ height: joined()?.above ? 4 : 16 }),
       (el, value) => {
         el.style.height = `${value.height}px`
       },
@@ -913,7 +910,7 @@ export function createSessionTimelineRowRenderer(input: {
         ref={element}
         data-timeline-row="TurnGap"
         aria-hidden="true"
-        style={{ height: untrack(joined)?.above ? "4px" : `${untrack(turn)}px` }}
+        style={{ height: untrack(joined)?.above ? "4px" : "16px" }}
       />
     )
   }
@@ -1191,8 +1188,10 @@ export function createSessionTimelineRowRenderer(input: {
     // A budget pauses paid models, or only the ones it covers, until it resets at the start of a month.
     const budgetLimit = createMemo(() => {
       const kind = current().kind
+
       if (kind !== "budget-limit" && kind !== "model-budget-limit") return
       const at = current().resetAt
+
       const time =
         at === undefined
           ? undefined
@@ -1203,6 +1202,7 @@ export function createSessionTimelineRowRenderer(input: {
               minute: "2-digit",
               timeZoneName: "shortOffset",
             }).format(at)
+
       if (kind === "budget-limit")
         return {
           text: time
@@ -1210,6 +1210,7 @@ export function createSessionTimelineRowRenderer(input: {
             : i18n.t("ui.sessionTurn.budgetLimit.allUntilReset"),
           action: i18n.t("ui.sessionTurn.budgetLimit.useFreeModel"),
         }
+
       return {
         text: time
           ? i18n.t("ui.sessionTurn.budgetLimit.models", { time })

@@ -1,7 +1,5 @@
 import { DataProvider } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
-import { MessageMenuProvider } from "@opencode/session-ui/context/message-menu"
-import { messageMenu } from "@/session/timeline/message-menu"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
@@ -142,7 +140,7 @@ export function SessionUIProvider(
         }
       >
         <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
-          <MessageMenuProvider enabled={messageMenu()}>{props.children}</MessageMenuProvider>
+          {props.children}
         </MarkdownProvider>
       </DataProvider>
     </LocalProvider>
