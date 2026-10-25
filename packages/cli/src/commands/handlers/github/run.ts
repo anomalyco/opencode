@@ -117,7 +117,10 @@ export default Runtime.handler(Commands.commands.github.commands.run, (input) =>
           } else {
             await octokit.reactions.createForIssueComment({ owner, repo, comment_id: commentId, content: "eyes" })
           }
-        } catch {}
+        } catch (e: any) {
+          // Reactions may fail due to permissions; non-fatal
+          console.warn(`Could not add reaction: ${e?.message || e}`)
+        }
       })
     }
 

@@ -77,6 +77,7 @@ jobs:
       contents: read
       pull-requests: read
       issues: read
+      reactions: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
