@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { parseMarkdownNodes } from "./markdown-solid"
+import { parseMarkdownNodes, settleMarkdownWords, unwrapMarkdownWords } from "./markdown-solid"
 
 beforeAll(() => GlobalRegistrator.register())
 
@@ -86,4 +86,89 @@ test("marks words for animation only when requested", () => {
     text: "Hello",
     animate: true,
   })
+})
+
+test("unwraps word spans in place while retaining elements and selection", () => {
+  const container = document.createElement("div")
+  container.innerHTML =
+    '<div id="settled"><p>Earlier block</p></div><div id="live"><p><span data-markdown-word="">Hello</span> <strong><span data-markdown-word="">world</span></strong> <span data-markdown-word="" data-markdown-enter="">again</span></p></div>'
+  document.body.appendChild(container)
+
+  const settledText = container.querySelector("#settled p")!.firstChild!
+  const block = container.querySelector<HTMLElement>("#live")!
+  const paragraph = block.querySelector("p")!
+  const strong = block.querySelector("strong")!
+  const wordSpan = strong.querySelector("[data-markdown-word]")!
+  const range = document.createRange()
+  range.selectNodeContents(wordSpan)
+  const selection = window.getSelection()!
+  selection.removeAllRanges()
+  selection.addRange(range)
+  expect(selection.toString()).toBe("world")
+
+  unwrapMarkdownWords(block)
+
+  expect(block.querySelector("p")).toBe(paragraph)
+  expect(block.querySelector("strong")).toBe(strong)
+  expect(block.querySelectorAll("[data-markdown-word]").length).toBe(0)
+  expect(block.querySelectorAll("[data-markdown-enter]").length).toBe(0)
+  expect(window.getSelection()?.toString()).toBe("world")
+
+  // Cross-block selection anchored in Text nodes also survives unwrapping.
+  block.innerHTML =
+    '<p><span data-markdown-word="">Hello</span> <strong><span data-markdown-word="">world</span></strong></p>'
+  const crossRange = document.createRange()
+  crossRange.setStart(settledText, 8)
+  crossRange.setEnd(block.querySelector("strong [data-markdown-word]")!.firstChild!, 3)
+  selection.removeAllRanges()
+  selection.addRange(crossRange)
+  const expectedCross = selection.toString()
+  unwrapMarkdownWords(block)
+  expect(window.getSelection()?.toString()).toBe(expectedCross)
+
+  // A backward selection keeps its anchor after the focus. (happy-dom doesn't move ranges through
+  // normalize(), so the words sit in separate elements here; the Chromium spec covers merged text.)
+  block.innerHTML =
+    '<p><em><span data-markdown-word="">Hello</span></em> <strong><span data-markdown-word="">world</span></strong></p>'
+  const [hello, world] = Array.from(block.querySelectorAll("[data-markdown-word]"), (span) => span.firstChild!)
+  selection.setBaseAndExtent(world, 3, hello, 1)
+  unwrapMarkdownWords(block)
+  expect(selection.toString()).toBe("ello wor")
+  expect([selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset]).toEqual([
+    world,
+    3,
+    hello,
+    1,
+  ])
+
+  // Without an active selection inside the block, unwrapped text nodes are normalized.
+  selection.removeAllRanges()
+  block.innerHTML = '<p><span data-markdown-word="">Hello</span> <span data-markdown-word="">world</span></p>'
+  unwrapMarkdownWords(block)
+  expect(block.querySelector("p")?.childNodes.length).toBe(1)
+  container.remove()
+})
+
+test("waits for running enter animations before unwrapping word spans", async () => {
+  const block = document.createElement("div")
+  block.dataset.markdownHash = "1"
+  block.dataset.markdownMode = "full"
+  block.innerHTML = '<p><span data-markdown-word="" data-markdown-enter="">Hello</span></p>'
+  document.body.appendChild(block)
+
+  const { promise: finished, resolve: finish } = Promise.withResolvers<void>()
+  const enter = block.querySelector<HTMLElement>("[data-markdown-enter]")!
+
+  Object.defineProperty(enter, "getAnimations", {
+    value: () => [{ playState: "running", finished }],
+  })
+
+  settleMarkdownWords(block)
+  expect(block.querySelectorAll("[data-markdown-word]").length).toBe(1)
+
+  finish()
+  await finished
+  await Promise.resolve()
+  expect(block.querySelectorAll("[data-markdown-word]").length).toBe(0)
+  block.remove()
 })
