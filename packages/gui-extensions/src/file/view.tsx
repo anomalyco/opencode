@@ -219,7 +219,12 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     return file.get(p)
   })
 
-  const contents = createMemo(() => current()?.content?.content ?? "")
+  const contents = createMemo(() => {
+    const content = current()?.content
+
+    return content?.type === "text" ? content.content : ""
+  })
+
   const cacheKey = createMemo(() => sampledChecksum(contents()))
 
   // Plain text keeps the code view; every other kind is rendered by ArtifactView.
@@ -252,7 +257,8 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   }
 
   const buildPreview = (filePath: string, lines: LineRange) => {
-    const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
+    const content = file.get(filePath)?.content
+    const source = filePath === path() ? contents() : content?.type === "text" ? content.content : undefined
 
     if (!source) return undefined
 
@@ -503,17 +509,25 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     <div class="mt-3 relative h-full min-h-0 flex flex-col">
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
-          {(value) => (
-            <Show when={artifact()} fallback={codeView(value().content)}>
-              <ArtifactView
-                session={props.session}
-                path={path() ?? ""}
-                content={value()}
-                cacheKey={cacheKey()}
-                source={codeView(value().content)}
-              />
-            </Show>
-          )}
+          {(value) => {
+            const text = () => {
+              const content = value()
+
+              return content.type === "text" ? content.content : ""
+            }
+
+            return (
+              <Show when={artifact()} fallback={codeView(text())}>
+                <ArtifactView
+                  session={props.session}
+                  path={path() ?? ""}
+                  content={value()}
+                  cacheKey={cacheKey()}
+                  source={codeView(text())}
+                />
+              </Show>
+            )
+          }}
         </Match>
         <Match when={current()?.loading}>
           <div class="px-6 py-4 text-text-weak">{ctx.t("common.loading")}…</div>
