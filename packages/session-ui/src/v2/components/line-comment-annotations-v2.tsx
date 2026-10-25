@@ -5,14 +5,14 @@ import {
   createLineCommentGutterRenderer,
   createLineCommentState,
   createManagedLineCommentAnnotationRenderer,
-  type LineCommentShape,
+  type SavedLineComment,
   type LineCommentStateProps,
 } from "../../components/line-comment-annotations"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { cloneSelectedLineRange } from "../../pierre/selection-bridge"
 import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode/ui/line-comment"
 
-type LineCommentControllerV2Props<T extends LineCommentShape> = {
+type LineCommentControllerV2Props<T extends SavedLineComment> = {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
@@ -93,7 +93,7 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
   )
 }
 
-export function createLineCommentControllerV2<T extends LineCommentShape>(props: LineCommentControllerV2Props<T>) {
+export function createLineCommentControllerV2<T extends SavedLineComment>(props: LineCommentControllerV2Props<T>) {
   const i18n = useI18n()
   const note = createLineCommentState<string>(props.state)
 
