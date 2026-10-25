@@ -1136,23 +1136,42 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
-      case "session.revert.committed":
+      case "session.revert.committed": {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
+        // Messages are in server sequence order, but IDs do not sort by it (forked IDs end in `_<seq>`, and iOS
+        // mints mixed-case IDs), so cut by position. With older pages unloaded, a missing boundary is older than the
+        // whole loaded tail; with everything loaded, it was already removed (a sync applied the revert first).
+        const cursor = store.session.messageCursor[event.data.sessionID]
+        const cut =
+          messageIndex.get(event.data.sessionID)?.get(event.data.to) ?? (cursor === undefined ? undefined : 0)
+        const removed = new Set<string>()
+        if (cut !== undefined)
+          message.update(event.data.sessionID, (draft, index) => {
+            for (const item of draft.splice(cut)) {
+              index.delete(item.id)
+              removed.add(item.id)
+            }
+          })
+        // Cutting from the first loaded message deletes the cursor's anchor, so older pages must be read afresh.
+        if (cut === 0 && cursor !== undefined) {
+          sync.invalidate(`session.message:${event.data.sessionID}`)
+          refresh(() => result.session.message.sync(event.data.sessionID))
+        }
+        if (!store.session.pending[event.data.sessionID]?.length) return
         setStore(
           "session",
           "pending",
           event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
+          (store.session.pending[event.data.sessionID] ?? []).filter((item) => !removed.has(item.id)),
         )
-        message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
-          for (const item of draft.splice(position)) index.delete(item.id)
-        })
+        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event. Only the
+        // server knows their enqueue order, so reread the inbox.
+        result.session.pending.invalidate(event.data.sessionID)
+        refresh(() => result.session.pending.sync(event.data.sessionID))
         return
+      }
       case "session.compaction.delta":
         if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {

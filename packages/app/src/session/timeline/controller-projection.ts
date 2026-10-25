@@ -1,5 +1,6 @@
 import type { ModelRef, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { SessionMessageHandoff } from "@/session/handoff"
+import { messagesBefore } from "@/session/session-domain"
 
 // Projects a submitted prompt, and the agent and model switches it makes, until the server's echoes replace them.
 // The session's live selection takes each switch's echo, so a switch projects only while the session still differs.
@@ -79,8 +80,8 @@ export function visibleTimelineMessages(
 
   if (queued.size === 0 && inputs.size === 0 && !revertMessageID) return messages
 
-  const visible = messages.filter(
-    (message) => !queued.has(message.id) && (!revertMessageID || message.id < revertMessageID),
+  const visible = (revertMessageID ? messagesBefore(messages, revertMessageID) : messages).filter(
+    (message) => !queued.has(message.id),
   )
 
   if (inputs.size === 0) return visible

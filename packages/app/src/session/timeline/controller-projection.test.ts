@@ -181,6 +181,20 @@ describe("visibleTimelineMessages", () => {
     expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
   })
 
+  test("hides the revert boundary by list position for forked and mixed-case IDs", () => {
+    // Forked IDs end in `_<seq>`, where `_10` sorts before `_9`; iOS mints uppercase IDs.
+    const forked = ["msg_fork_9", "msg_fork_10", "msg_fork_11"].map(
+      (id) => ({ id, type: "user", text: id, time: { created: 0 } }) satisfies SessionMessageInfo,
+    )
+
+    const mixed = ["msg_d4f1", "msg_A47D", "msg_e2b9"].map(
+      (id) => ({ id, type: "user", text: id, time: { created: 0 } }) satisfies SessionMessageInfo,
+    )
+
+    expect(visibleTimelineMessages(forked, [], "msg_fork_10").map((message) => message.id)).toEqual(["msg_fork_9"])
+    expect(visibleTimelineMessages(mixed, [], "msg_A47D").map((message) => message.id)).toEqual(["msg_d4f1"])
+  })
+
   test("keeps a pre-promotion failed idle marker after the pending input that triggered it", () => {
     const failed = [
       { id: "msg_3", type: "user", text: "queued", time: { created: 3 } },

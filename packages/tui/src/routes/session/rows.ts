@@ -44,6 +44,14 @@ export async function completeGroupBoundary(input: {
   }
 }
 
+// Messages are in server sequence order, but IDs do not sort by it (forked IDs end in `_<seq>`, and iOS mints
+// mixed-case IDs), so a revert boundary cuts by position. A boundary outside the loaded list hides nothing.
+export function messagesBefore<T extends { id: string }>(messages: T[], boundary: string | undefined) {
+  if (!boundary) return messages
+  const index = messages.findIndex((message) => message.id === boundary)
+  return index === -1 ? messages : messages.slice(0, index)
+}
+
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
@@ -61,9 +69,8 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
     )
     const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
-    const boundary = revertBoundary()
     const rows = reduceSessionRows(
-      boundary ? visible.filter((message) => message.id < boundary) : visible,
+      messagesBefore(visible, revertBoundary()),
       inputs,
       turnTokens(),
       verbosity(),

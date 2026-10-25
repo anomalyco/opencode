@@ -5,11 +5,22 @@ import { createStore } from "solid-js/store"
 import {
   cacheReuseDrop,
   messageBoundaryIDs,
+  messagesBefore,
   reduceSessionRows,
   sessionRowID,
   turnDuration,
   turnTokensPerSecond,
 } from "../../../src/routes/session/rows"
+
+// The server orders by sequence. Forked IDs end in `_<seq>`, where `_10` sorts before `_9`, and iOS mints
+// uppercase IDs, which sort before lowercase ones.
+test.each([
+  [["msg_fork_8", "msg_fork_9", "msg_fork_10", "msg_fork_11"], "msg_fork_10", ["msg_fork_8", "msg_fork_9"]],
+  [["msg_d4f1", "msg_A47D", "msg_e2b9"], "msg_A47D", ["msg_d4f1"]],
+  [["msg_a", "msg_b"], "msg_missing", ["msg_a", "msg_b"]],
+])("hides messages from the revert boundary by list position: %p at %s", (ids, boundary, visible) => {
+  expect(messagesBefore(ids.map((id) => ({ id })), boundary).map((message) => message.id)).toEqual(visible)
+})
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])

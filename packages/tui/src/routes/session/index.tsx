@@ -105,6 +105,7 @@ import {
   createSessionRows,
   legacyTurns,
   messageBoundaryIDs,
+  messagesBefore,
   resolvePart,
   sessionRowID,
   turnDuration,
@@ -177,12 +178,7 @@ export function Session(props: {
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
   const legacy = createMemo(() => legacyTurns(messages()))
-  const messagesBeforeRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return messages()
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? messages() : messages().slice(0, index)
-  }
+  const messagesBeforeRevert = () => messagesBefore(messages(), session()?.revert?.messageID)
   const messagesFromRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return []

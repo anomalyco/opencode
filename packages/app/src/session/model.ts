@@ -72,7 +72,7 @@ export function useSessionModel() {
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
 
   const visibleUserMessages = createMemo(
-    () => selectVisibleSessionUserMessages(userMessages(), revertMessageID()),
+    () => selectVisibleSessionUserMessages(messages(), revertMessageID()),
     emptyUserMessages,
     { equals: same },
   )
