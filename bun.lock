@@ -75,7 +75,6 @@
         "@sentry/solid": "catalog:",
         "@solid-primitives/event-bus": "1.1.2",
         "@solid-primitives/event-listener": "catalog:",
-        "@solid-primitives/i18n": "2.2.1",
         "@solid-primitives/keyed": "1.5.3",
         "@solid-primitives/media": "catalog:",
         "@solid-primitives/resize-observer": "catalog:",
@@ -2673,8 +2672,6 @@
     "@solid-primitives/event-bus": ["@solid-primitives/event-bus@1.1.2", "", { "dependencies": { "@solid-primitives/utils": "^6.3.2" }, "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-l+n10/51neGcMaP3ypYt21bXfoeWh8IaC8k7fYuY3ww2a8S1Zv2N2a7FF5Qn+waTu86l0V8/nRHjkyqVIZBYwA=="],
 
     "@solid-primitives/event-listener": ["@solid-primitives/event-listener@2.4.6", "", { "dependencies": { "@solid-primitives/utils": "^6.4.1" }, "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-5I0YJcTVYIWoMmgBSROBZGcz+ymhew/pGTg2dHW74BUjFKsV8Li4bOZYl0YAGP4mHw5o4UBd9/BEesqBci3wxw=="],
-
-    "@solid-primitives/i18n": ["@solid-primitives/i18n@2.2.1", "", { "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-TnTnE2Ku11MGYZ1JzhJ8pYscwg1fr9MteoYxPwsfxWfh9Jp5K7RRJncJn9BhOHvNLwROjqOHZ46PT7sPHqbcXw=="],
 
     "@solid-primitives/keyed": ["@solid-primitives/keyed@1.5.3", "", { "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-zNadtyYBhJSOjXtogkGHmRxjGdz9KHc8sGGVAGlUABkE8BED2tbIZoxkwSqzOwde8OcUEH0bb5DLZUWIMvyBSA=="],
 

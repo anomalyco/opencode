@@ -1,4 +1,3 @@
-import { flatten, resolveTemplate, translator, type Flatten } from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
@@ -7,6 +6,7 @@ import {
   I18nProvider,
   type UiI18n,
   pluralCategory,
+  resolveTemplate,
   type UiI18nPluralLookupKey,
   type UiI18nPluralKey,
   type UiPluralCategory,
@@ -38,7 +38,7 @@ function localeDirection(locale: Locale): Direction {
 
 type RawDictionary = typeof en & typeof dict
 
-type Dictionary = Flatten<RawDictionary>
+type Dictionary = RawDictionary
 
 type AppI18nKey = Extract<keyof typeof en, string>
 
@@ -96,12 +96,13 @@ const StoredLocaleSchema = Schema.Struct({
 
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
-const base = flatten({ ...en, ...dict })
+const base: Dictionary = { ...en, ...dict }
 
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>
-  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
+  // SAFETY: a locale module exports a flat string map for the keys of the English dictionaries (`language.test.ts`).
+  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...a.dict, ...b.dict }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   zh: () => merge(import("@/runtime/i18n/zh"), import("@opencode/ui/i18n/zh")),
@@ -188,6 +189,7 @@ export function loadLocaleDict(locale: Locale) {
 }
 
 function detectLocale(): Locale {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
   if (typeof navigator !== "object") return "en"
 
   return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
@@ -202,6 +204,7 @@ export const languageSchema = Persistence.struct({
 })
 
 function readStoredLocale() {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
   if (typeof localStorage !== "object") return
 
   try {
@@ -241,6 +244,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const locale = createMemo(() => store.locale)
     const intl = createMemo(() => INTL[locale()])
+    // SAFETY: widens the initial `undefined` so a direction can be stored later.
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
 
@@ -255,18 +259,22 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       initialValue: dicts.get(initial) ?? base,
     })
 
-    const t = translator(() => dictionary() ?? base, resolveTemplate) as <
-      Key extends Extract<keyof Dictionary, string>,
-    >(
+    const t = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
       params?: Record<string, string | number | boolean>,
-    ) => string
+    ) => {
+      const template: string | undefined = (dictionary() ?? base)[key]
+
+      // A key outside the dictionary translates to nothing, as it did with the package translator.
+      return template === undefined ? template : resolveTemplate(template, params)
+    }
 
     const pluralForm = (
       key: PluralKey,
       category: UiPluralCategory,
       params?: Record<string, string | number | boolean>,
     ) => {
+      // SAFETY: every dictionary value is a string (`language.test.ts`).
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
@@ -287,6 +295,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       key: TranslationKey<Key>,
       params: Record<string, JSX.Element>,
     ) => {
+      // SAFETY: every dictionary value is a string (`language.test.ts`).
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
 
       return richTemplateParts(current[key] ?? key, params)
@@ -297,6 +306,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
       if (typeof document !== "object") return
       const value = locale()
       document.documentElement.lang = intl()
@@ -346,6 +356,7 @@ export function UiI18nBridge(props: { children?: JSX.Element }) {
       value={{
         locale: language.intl,
         layoutLocale: language.layoutLocale,
+        // SAFETY: `t` accepts the UI keys, which are a subset of the app dictionary.
         t: language.t as UiI18n["t"],
         plural: language.plural,
         pluralForm: language.pluralForm,

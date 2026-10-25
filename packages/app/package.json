@@ -72,7 +72,6 @@
     "@sentry/solid": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
     "@solid-primitives/event-listener": "catalog:",
-    "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/keyed": "1.5.3",
     "@solid-primitives/media": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
