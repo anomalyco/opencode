@@ -1041,16 +1041,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       mapUsage(choice?.usage, state.providerMetadataKey) ??
       state.usage
     const rawFinishReason = choice?.finish_reason
-    // The first terminal chunk records the finish reason. Later chunks that
-    // repeat one are documentary trailing chatter and must not rewrite the
-    // settled outcome of the stream.
-    const finishReason =
-      rawFinishReason && state.finishReason === undefined
-        ? {
-            normalized: yield* mapFinishReason(event, rawFinishReason),
-            raw: choice?.native_finish_reason ?? rawFinishReason,
-          }
-        : state.finishReason
+    const finishReason = rawFinishReason
+      ? {
+          normalized: yield* mapFinishReason(event, rawFinishReason),
+          raw: choice?.native_finish_reason ?? rawFinishReason,
+        }
+      : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
