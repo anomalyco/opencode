@@ -114,6 +114,10 @@ lists. V1 files still load; see
 `tool.use` statements hard-deny a [permission](/permissions) check. The resource is
 `<action>:<value>`, matched against every resource the tool checks.
 
+Code Mode `execute` is checked before its JavaScript runs. Use `execute:*` (or
+`execute`) to block the whole runtime, including nested tool calls and HTTP requests.
+The wildcard `*` also blocks it. These are tool-wide checks, not JavaScript patterns.
+
 ```jsonc
 {
   "policies": [

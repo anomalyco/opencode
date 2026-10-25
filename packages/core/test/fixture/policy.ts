@@ -36,6 +36,12 @@ export const registerIntegrationPolicy = Effect.fn(function* (input: {
         transform: (callback) => input.skill?.transform(callback) ?? Effect.succeed({ dispose: Effect.void }),
         reload: () => input.skill?.reload() ?? Effect.void,
       },
+      tool: {
+        hook: () => Effect.succeed({ dispose: Effect.void }),
+        transform: () => Effect.die("unused tool.transform"),
+        reload: () => Effect.die("unused tool.reload"),
+        list: () => Effect.die("unused tool.list"),
+      },
       permission: {
         hook: () => Effect.succeed({ dispose: Effect.void }),
         list: () => Effect.die("unused permission.list"),

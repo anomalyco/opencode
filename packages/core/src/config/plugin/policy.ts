@@ -1,6 +1,7 @@
 export * as ConfigPolicyPlugin from "./policy.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
+import { Tool } from "@opencode/schema/tool"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { ManagedPolicy } from "../../managed-policy.js"
@@ -52,6 +53,20 @@ export const Plugin = define({
         if (ManagedPolicy.decision(current, "integration.use", `skill:${skill.id}`) === "deny") skills.remove(skill.id)
       }
     })
+    yield* ctx.tool.hook("execute.resolved", (event) =>
+      Effect.gen(function* () {
+        // Code Mode can run without calling a permission-checking child tool.
+        // Use the resolved tool name after request aliases and input-repair hooks.
+        // Enforce its tool-wide policy before any JavaScript or nested calls run.
+        if (event.tool !== "execute") return
+        const policy = policies().findLast(
+          (policy) =>
+            policy.action === "tool.use" &&
+            (Wildcard.match("execute", policy.resource) || Wildcard.match("execute:*", policy.resource)),
+        )
+        if (policy?.effect === "deny") return yield* new Tool.Error({ message: policy.message })
+      }),
+    )
     yield* ctx.permission.hook("evaluate", (event) =>
       Effect.sync(() => {
         const current = policies()

@@ -11,9 +11,11 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { Tool } from "@opencode/core/tool"
 import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
+import { toolIdentity } from "../lib/tool"
 
 const it = testEffect(PluginTestLayer)
 const decode = Schema.decodeUnknownSync(Info)
@@ -48,6 +50,79 @@ const evaluate = Effect.fn(function* (action: string, resources: string[], effec
 })
 
 describe("ConfigPolicyPlugin.Plugin", () => {
+  for (const resource of ["execute:*", "execute", "*"]) {
+    it.effect(`blocks Code Mode and its child calls with ${resource}`, () =>
+      Effect.gen(function* () {
+        yield* addPlugin([document(tool("deny", resource))])
+        const registry = yield* Tool.Service
+        yield* registry.transform((tools) =>
+          tools.add({
+            name: "probe",
+            description: "Must not run",
+            input: Schema.Struct({}),
+            execute: () => Effect.die("Denied Code Mode reached a child tool"),
+          }),
+        )
+        const snapshot = yield* registry.snapshot()
+        for (const code of ["return 1 + 1", "return await tools.probe({})"]) {
+          const error = yield* snapshot
+            .execute({
+              ...toolIdentity,
+              sessionID: Session.ID.make("ses_policy"),
+              call: { type: "tool-call", id: "call_policy", name: "execute", input: { code } },
+            })
+            .pipe(Effect.flip)
+          expect(error.message).toBe("Blocked by configuration policy")
+        }
+      }),
+    )
+  }
+
+  it.effect("blocks renamed Code Mode after request aliases and repair hooks resolve", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(tool("deny", "execute:*"))])
+      const registry = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const snapshot = yield* registry.snapshot()
+      const definition = snapshot.definitions.find((tool) => tool.name === "execute")!
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool === "repair_js") event.tool = "run_js"
+        }),
+      )
+      for (const name of ["run_js", "repair_js"]) {
+        const error = yield* snapshot
+          .execute({
+            ...toolIdentity,
+            sessionID: Session.ID.make("ses_policy"),
+            definitions: new Map([["run_js", definition]]),
+            call: { type: "tool-call", id: "call_alias", name, input: { code: "return 2" } },
+          })
+          .pipe(Effect.flip)
+        expect(error.message).toBe("Blocked by configuration policy")
+      }
+    }),
+  )
+
+  it.effect("applies ordered and organization Code Mode policies at execution time", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(tool("deny", "*"), tool("allow", "execute:*"))])
+      const registry = yield* Tool.Service
+      const snapshot = yield* registry.snapshot()
+      const call = {
+        ...toolIdentity,
+        sessionID: Session.ID.make("ses_policy"),
+        call: { type: "tool-call" as const, id: "call_policy", name: "execute", input: { code: "return 2" } },
+      }
+      expect((yield* snapshot.execute(call)).output).toMatchObject({ output: "2" })
+      const managed = yield* ManagedPolicy.Service
+      yield* managed.set({ statements: [tool("deny", "execute:*")], organization: "Acme" })
+      expect((yield* snapshot.execute(call).pipe(Effect.flip)).message).toBe("Blocked by Acme's policy")
+      yield* managed.set({ statements: [tool("allow", "execute")] })
+      expect((yield* snapshot.execute(call)).output).toMatchObject({ output: "2" })
+    }),
+  )
+
   it.effect("preserves last-match precedence for tool.use without granting approvals", () =>
     Effect.gen(function* () {
       yield* addPlugin([

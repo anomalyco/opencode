@@ -636,11 +636,12 @@ const toolError = (error: unknown) =>
     ? error
     : new Tool.Error({ message: error instanceof Error ? error.message : String(error), error })
 
-// Only execute.before may reject a call; a rejection fails that call alone, like an Effect hook.
+// Pre-execution hooks may reject a call; a rejection fails that call alone, like an Effect hook.
 const toolHook: {
   readonly [Name in keyof ToolHooks]: (run: () => Promise<void>) => Effect.Effect<void, ToolFailures[Name]>
 } = {
   "execute.before": (run) => Effect.tryPromise({ try: run, catch: toolError }),
+  "execute.resolved": (run) => Effect.tryPromise({ try: run, catch: toolError }),
   "execute.after": (run) => Effect.promise(run),
 }
 
