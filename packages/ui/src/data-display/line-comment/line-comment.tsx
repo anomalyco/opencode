@@ -5,53 +5,41 @@ import { useFilteredList } from "../../hooks"
 import { Button } from "@opencode/ui/button"
 import "./line-comment.css"
 
-/** Horizontal “more” glyph for the display-card overflow control (Figma outline-dots). */
-export function LineCommentOverflowIcon(props: ComponentProps<"svg">) {
-  return (
-    <svg
-      {...props}
-      width={props.width ?? 16}
-      height={props.height ?? 16}
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden={props["aria-hidden"] ?? "true"}
-    >
-      <path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor" />
-      <path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor" />
-      <path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor" />
-    </svg>
-  )
-}
-
-export interface LineCommentProps extends ComponentProps<"div"> {
+export interface LineCommentProps extends Omit<ComponentProps<"div">, "onClick" | "onKeyDown"> {
   /** Main comment body (text or rich content). */
   comment: JSX.Element
   /** Optional context under the comment, e.g. the page or element it is about. */
   selection?: JSX.Element
-  /** Typically an overflow menu trigger; use `LineCommentOverflowIcon` inside `line-comment-v2-overflow`. */
-  actions?: JSX.Element
+  /** Makes the whole card a button, e.g. to edit the comment. */
+  onOpen?: VoidFunction
 }
 
 export function LineComment(props: LineCommentProps) {
-  const [local, rest] = splitProps(props, ["comment", "selection", "actions", "class", "classList"])
+  const [local, rest] = splitProps(props, ["comment", "selection", "onOpen", "class", "classList"])
 
   return (
     <div
       {...rest}
       data-component="line-comment-v2"
       data-variant="display"
+      role={local.onOpen ? "button" : undefined}
+      tabIndex={local.onOpen ? 0 : undefined}
+      onClick={() => local.onOpen?.()}
+      onKeyDown={(event) => {
+        if (!local.onOpen || event.target !== event.currentTarget) return
+
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        local.onOpen()
+      }}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
       <div data-slot="line-comment-v2-shell">
-        <div data-slot="line-comment-v2-column">
-          <div data-slot="line-comment-v2-text">{local.comment}</div>
-          <Show when={local.selection}>{(selection) => <div data-slot="line-comment-v2-meta">{selection()}</div>}</Show>
-        </div>
-        <Show when={local.actions}>{(actions) => <div data-slot="line-comment-v2-tools">{actions()}</div>}</Show>
+        <div data-slot="line-comment-v2-text">{local.comment}</div>
+        <Show when={local.selection}>{(selection) => <div data-slot="line-comment-v2-meta">{selection()}</div>}</Show>
       </div>
     </div>
   )
@@ -62,8 +50,8 @@ export type LineCommentEditorMention = {
 }
 
 export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "children" | "onInput" | "onSubmit"> {
-  /** Visible field label above the textarea (default: “Comment”). */
-  heading?: JSX.Element | string
+  /** Accessible name of the text field (default: “Comment”). */
+  label?: string
   value: string
   onInput: (value: string) => void
   onCancel: () => void
@@ -74,6 +62,8 @@ export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "chi
   rows?: number
   cancelLabel?: string
   submitLabel?: string
+  /** Shows a delete action in the footer, e.g. while editing a saved comment. */
+  deleteAction?: { label: string; onClick: VoidFunction }
   autofocus?: boolean
   mention?: LineCommentEditorMention
 }
@@ -96,7 +86,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
   const [mentionOpen, setMentionOpen] = createSignal(false)
 
   const [local, rest] = splitProps(props, [
-    "heading",
+    "label",
     "value",
     "onInput",
     "onCancel",
@@ -106,13 +96,13 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     "rows",
     "cancelLabel",
     "submitLabel",
+    "deleteAction",
     "autofocus",
     "mention",
     "class",
     "classList",
   ])
 
-  const heading = () => local.heading ?? i18n.t("ui.lineComment.submit")
   const canSubmit = () => local.value.trim().length > 0
 
   const closeMention = () => {
@@ -221,12 +211,12 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     >
       <div data-slot="line-comment-v2-shell">
         <div data-slot="line-comment-v2-field">
-          <div data-slot="line-comment-v2-label">{heading()}</div>
           <textarea
             ref={(el) => {
               textareaRef = el
             }}
             data-slot="line-comment-v2-textarea"
+            aria-label={local.label ?? i18n.t("ui.lineComment.submit")}
             dir="auto"
             rows={local.rows ?? 4}
             placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
@@ -318,11 +308,18 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
           <Show when={local.selection}>
             {(selection) => <div data-slot="line-comment-v2-footer-meta">{selection()}</div>}
           </Show>
+          <Show when={local.deleteAction}>
+            {(action) => (
+              <Button type="button" size="small" variant="ghost" onClick={() => action().onClick()}>
+                {action().label}
+              </Button>
+            )}
+          </Show>
           <div data-slot="line-comment-v2-footer-actions">
-            <Button type="button" size="normal" variant="ghost" onClick={() => local.onCancel()}>
+            <Button type="button" size="small" variant="ghost" onClick={() => local.onCancel()}>
               {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
             </Button>
-            <Button type="button" size="normal" variant="contrast" disabled={!canSubmit()} onClick={submit}>
+            <Button type="button" size="small" variant="contrast" disabled={!canSubmit()} onClick={submit}>
               {local.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </div>

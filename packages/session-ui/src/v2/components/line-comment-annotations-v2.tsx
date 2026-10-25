@@ -21,16 +21,16 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
   onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
   onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
   onDelete?: (comment: T) => void
-  renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
-  editSubmitLabel?: string
+  /** Makes saved comments open their editor on click, with these labels. */
+  edit?: { submitLabel: string; deleteLabel: string }
   mention?: LineCommentEditorMention
 }
 
 type CommentProps = {
   id?: string
   comment: JSX.Element
-  actions?: JSX.Element
   editor?: DraftProps
+  onOpen?: VoidFunction
   onClick?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>
 }
@@ -42,6 +42,7 @@ type DraftProps = {
   onSubmit: (value: string) => void
   cancelLabel?: string
   submitLabel?: string
+  deleteAction?: { label: string; onClick: VoidFunction }
   mention?: LineCommentEditorMention
 }
 
@@ -57,7 +58,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
           onClick={view().onClick}
           onMouseEnter={view().onMouseEnter}
         >
-          <LineComment comment={view().comment} actions={view().actions} />
+          <LineComment comment={view().comment} onOpen={view().onOpen} />
         </div>
       }
     >
@@ -69,6 +70,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
           onSubmit={view().editor!.onSubmit}
           cancelLabel={view().editor!.cancelLabel}
           submitLabel={view().editor!.submitLabel}
+          deleteAction={view().editor!.deleteAction}
           mention={view().editor!.mention}
         />
       </div>
@@ -120,9 +122,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       return {
         id: comment.id,
         comment: comment.comment,
-        get actions() {
-          return props.renderCommentActions?.(comment, { edit, remove })
-        },
+        onOpen: props.edit ? edit : undefined,
         get editor() {
           return note.isEditing(comment.id)
             ? {
@@ -140,7 +140,9 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
                   note.cancelDraft()
                 },
                 cancelLabel: i18n.t("ui.lineComment.cancel"),
-                submitLabel: props.editSubmitLabel,
+                submitLabel: props.edit?.submitLabel,
+                deleteAction:
+                  props.edit && props.onDelete ? { label: props.edit.deleteLabel, onClick: remove } : undefined,
                 mention: props.mention,
               }
             : undefined
@@ -150,7 +152,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
           note.hoverComment(comment.selection)
         },
         onClick: () => {
-          if (note.isEditing(comment.id)) return
+          if (props.edit || note.isEditing(comment.id)) return
           note.toggleComment(comment.id, comment.selection)
         },
       }
