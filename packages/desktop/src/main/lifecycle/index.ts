@@ -98,7 +98,9 @@ const runtime = Layer.effect(
 
       if (shutdownReady) return
       event.preventDefault()
-      runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
+      // A quit re-issued before the cancelled one unwinds is lost on macOS Cmd+Q: the window closes but
+      // the app never reaches will-quit. A timer tick lets the cancelled quit finish first.
+      runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => setTimeout(() => app.quit(), 0)))))
     }
 
     const willQuit = () => {
