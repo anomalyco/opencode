@@ -101,6 +101,10 @@ const normalizePath = (value: string) =>
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
+// `pcre2: true` against an rg built without PCRE2 exits 2 before searching. Recognize it as a
+// failure, otherwise the empty stdout is reported as a successful "No matches found".
+const isPcre2Unavailable = (stderr: string) => stderr.includes("PCRE2 is not available")
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -144,7 +148,7 @@ const layer = Layer.effect(
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
-          if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
+          if (input.pattern && code === 2 && (isInvalidPattern(stderr) || isPcre2Unavailable(stderr))) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
           if (code !== 0 && code !== 1 && code !== 2) {
