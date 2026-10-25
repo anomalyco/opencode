@@ -62,6 +62,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     turnDiff?: TurnDiffSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
+    backgroundCompaction?: boolean
   }) => {
     return {
       get store() {
@@ -72,6 +74,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       get sessionID() {
         return props.sessionID
+      },
+      get backgroundCompaction() {
+        return props.backgroundCompaction === true
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

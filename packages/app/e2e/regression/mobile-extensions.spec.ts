@@ -50,6 +50,12 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
   const comment = files.locator('[data-component="line-comment-v2"][data-variant="display"]')
   await expect(comment).toContainText("Full-width file comment")
   await expect.poll(() => fullWidth(comment)).toBe(true)
+  // A click on the card itself opens its editor.
+  await comment.getByText("Full-width file comment", { exact: true }).click()
+  await expect(editor.getByRole("textbox", { name: "Comment", exact: true })).toHaveValue("Full-width file comment")
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(editor).toHaveCount(0)
+  await expect(comment).toContainText("Full-width file comment")
 
   await page.setViewportSize({ width: 390, height: 844 })
   // Its composer chip reveals the comment without leaving the conversation.

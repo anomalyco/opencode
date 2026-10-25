@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src/index.js"
+import { Image } from "../../src/effect.js"
 import { CloudflareWorkersAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -28,9 +28,9 @@ describe("Cloudflare Workers AI Images recorded", () => {
       const response = yield* Image.generate({
         model: workers.image("@cf/bytedance/stable-diffusion-xl-lightning"),
         prompt: "A red apple on a wooden table",
-        size: "256x256",
-        seed: 3,
-        providerOptions: { num_steps: 1 },
+        aspect: "1:1",
+        resolution: "0.25K",
+        providerOptions: { seed: 3, num_steps: 1 },
       })
 
       // The Run API labels this response image/png, but the bytes are JPEG.
@@ -46,9 +46,7 @@ describe("Cloudflare Workers AI Images recorded", () => {
         const response = yield* Image.generate({
           model: workers.image("@cf/black-forest-labs/flux-2-klein-4b"),
           prompt: "A red apple on a wooden table",
-          size: "64x64",
-          seed: 3,
-          providerOptions: { steps: 1 },
+          providerOptions: { width: 64, height: 64, seed: 3, steps: 1 },
         })
 
         expect(response.image.mediaType).toBe("image/jpeg")

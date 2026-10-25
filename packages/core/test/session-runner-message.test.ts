@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message, Media } from "@opencode/ai"
+import { Message, Media } from "@opencode/ai/effect"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { SessionMessage } from "@opencode/core/session/message"

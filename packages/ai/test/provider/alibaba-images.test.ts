@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../../src/index.js"
+import { Image, ImageClient, Media } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -24,9 +24,9 @@ describe("Alibaba Images", () => {
         prompt: "Put the clock from image 1 into image 2",
         images: [Media.url("https://example.test/clock.png"), Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
         n: 2,
-        size: "1024x768",
-        seed: 7,
         providerOptions: {
+          size: "1024*768",
+          seed: 7,
           negativePrompt: "blurry",
           watermark: false,
           thinkingMode: true,
@@ -139,15 +139,18 @@ describe("Alibaba Images", () => {
         Effect.provide(layer),
         Effect.flip,
       )
-      const mask = yield* Image.generate({
-        model,
-        prompt: "test",
-        images: [Media.url("https://example.test/a.png")],
-        mask: Media.url("https://example.test/mask.png"),
-      }).pipe(Effect.provide(layer), Effect.flip)
+      const tooLarge = yield* Image.generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" }).pipe(
+        Effect.provide(layer),
+        Effect.flip,
+      )
 
       expect(ref.reason._tag).toBe("InvalidRequest")
-      expect(mask.reason._tag).toBe("UnsupportedOperation")
+      expect(tooLarge.reason).toMatchObject({
+        _tag: "UnsupportedOperation",
+        operation: "media.resolution",
+        message:
+          "Alibaba Images can't render 1:1 at 4K; the closest size it takes is 2048x2048 (1:1). Change aspect or resolution, or set the size in providerOptions",
+      })
     }),
   )
 

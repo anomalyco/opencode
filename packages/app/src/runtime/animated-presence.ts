@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
-import createPresence from "solid-presence"
+import { createPresence } from "./presence"
 
 export function createAnimatedPresence<T>(
   value: Accessor<T | undefined>,

@@ -5,11 +5,13 @@ import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
-import { createData } from "@opencode/client/solid"
+import { createData, createSessionRetention } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
+import { useCurrentRoute } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
@@ -168,6 +170,8 @@ function createServerController(
 ) {
   const language = useLanguage()
   const settings = useSettings()
+  const tabs = useTabs()
+  const currentRoute = useCurrentRoute()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
 
@@ -192,6 +196,22 @@ function createServerController(
   const data = createDesktopData({
     data: source,
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
+  })
+
+  createSessionRetention({
+    session: data.session,
+    current: () => {
+      const route = currentRoute()
+
+      return route.type === "session" && route.server === connKey ? route.sessionId : undefined
+    },
+    keep: () =>
+      tabs.store.flatMap((tab) =>
+        tab.type === "session" && tab.server === connKey
+          ? [tab.sessionId, ...(tab.routeSessionId ? [tab.routeSessionId] : [])]
+          : [],
+      ),
+    limit: 3,
   })
 
   const sync = createServerSyncContext(sdk, data)

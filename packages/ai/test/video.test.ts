@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { Media, Video, VideoClient, type GenerationEvent, type VideoEvent } from "../src/index.js"
+import { Media, Video, VideoClient, type GenerationEvent, type VideoEvent } from "../src/effect.js"
 import { Fal, Google, Runway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"
@@ -38,7 +38,7 @@ describe("Video / Google Veo", () => {
           },
           references: [Media.bytes(Uint8Array.from([7, 8, 9]), "image/png")],
           durationSeconds: 8,
-          aspectRatio: "16:9",
+          aspect: "16:9",
           resolution: "1080p",
           negativePrompt: "text, watermark",
           seed: 42,
@@ -262,7 +262,7 @@ describe("Video / xAI", () => {
           },
           references: [Media.ref("xai", "file_1")],
           durationSeconds: 10,
-          aspectRatio: "16:9",
+          aspect: "16:9",
           resolution: "720p",
           audio: false,
           providerOptions: { reference_audios: [{ voice_id: "eve" }], future_option: true },
@@ -477,7 +477,7 @@ describe("Video / fal", () => {
           frames: { first: Media.url("https://example.test/first.png") },
           negativePrompt: "blur",
           seed: 7,
-          aspectRatio: "9:16",
+          aspect: "9:16",
           resolution: "1080p",
           audio: true,
           providerOptions: { duration: "8s", safety_tolerance: "4" },
@@ -664,7 +664,7 @@ describe("Video / Runway", () => {
             first: Media.url("https://example.test/first.png"),
             last: Media.ref("runway", "runway://upload-token"),
           },
-          aspectRatio: "1280:720",
+          aspect: "1280:720",
           durationSeconds: 5,
           seed: 3,
           audio: true,

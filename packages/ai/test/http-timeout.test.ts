@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { HttpOptions, LLM, mergeHttpOptions } from "../src/index.js"
+import { HttpOptions, LLM, mergeHttpOptions } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
 import { configure } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"

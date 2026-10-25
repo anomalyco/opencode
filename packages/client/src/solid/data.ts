@@ -34,6 +34,7 @@ import type {
   SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
+  UsageLimitsInfo,
   VcsInfo,
   OpenCodeEvent,
   OpenCodeClient,
@@ -103,6 +104,9 @@ type LocationData = {
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
+  // The Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to; null when it
+  // isn't signed in.
+  usageLimits?: UsageLimitsInfo | null
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellWithLocation>
@@ -466,6 +470,7 @@ export function createData(config: CreateDataInput) {
     // Streaming events target one assistant message and, within it, the latest part of a kind.
     // A missing target means the row was never loaded or was evicted; the event is dropped.
     editAssistant(sessionID: string, messageID: string, fn: (assistant: SessionMessageAssistant) => void) {
+      if (!messageIndex.get(sessionID)?.has(messageID)) return
       message.update(sessionID, (draft, index) => {
         const position = index.get(messageID)
         const item = position === undefined ? undefined : draft[position]
@@ -876,6 +881,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.shell.ended":
+        if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const match = message.shell(draft, event.data.shell.id)
           if (!match) return
@@ -938,6 +944,12 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.step.failed":
+        // A budget refusal means the cached usage limits are out of date, which is what the refusal sends people to.
+        if (
+          event.location &&
+          (event.data.error.type === "provider.budget-limit" || event.data.error.type === "provider.model-budget-limit")
+        )
+          refreshUsageLimits(event.location)
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.completed = event.created
           assistant.finish = event.data.finish ?? "error"
@@ -1142,6 +1154,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.delta":
+        if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const current = message.compaction(draft)
           if (current?.status === "running") current.summary += event.data.text
@@ -1221,6 +1234,7 @@ export function createData(config: CreateDataInput) {
       Object.keys(store.location).forEach((key) => {
         const ref = JSON.parse(key) as [string, string | null]
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+        refreshUsageLimits(location)
         if (event.type === "credential.updated") {
           result.location.integration.invalidate(location)
           refresh(() => result.location.integration.sync(location))
@@ -1270,14 +1284,10 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.location.skill.sync(location))
         break
       case "vcs.branch.updated":
-        setStore("location", locationKey(location), (data) => ({
-          vcs: {
-            branch: {
-              ...data?.vcs?.branch,
-              current: event.data.branch,
-            },
-          },
-        }))
+        // The event names only the current branch. Reload the rest: the default branch and provider can change with
+        // it, and a read served before the location's VCS provider loaded has neither.
+        result.location.vcs.invalidate(location)
+        refresh(() => result.location.vcs.sync(location))
         break
       case "form.created":
         if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
@@ -1305,6 +1315,7 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.location.reference.sync(location))
         break
       case "integration.updated":
+        refreshUsageLimits(location)
         result.location.integration.invalidate(location)
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
@@ -1342,6 +1353,15 @@ export function createData(config: CreateDataInput) {
   // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
   // effective location, and publishes under the server's canonical location; `alias`
   // also publishes under the requested key when the two differ.
+  // Reloads usage limits only where something has read them, since each load asks OpenCode Console.
+  function refreshUsageLimits(location: LocationRef) {
+    const loaded =
+      store.location[locationKey(location)]?.usageLimits !== undefined ||
+      sync.has(`location.usageLimits:${locationKey(location)}`)
+    usageLimits.invalidate(location)
+    if (loaded) refresh(() => usageLimits.sync(location))
+  }
+
   function locationResource<Field extends keyof LocationData>(
     field: Field,
     load: (location: ReturnType<typeof locationQuery>) => Promise<{ location: LocationRef; data: LocationData[Field] }>,
@@ -1365,6 +1385,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
+  const usageLimits = locationResource("usageLimits", (location) => api().usage.limits({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -1966,6 +1987,7 @@ export function createData(config: CreateDataInput) {
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      usage: { limits: usageLimits.list, sync: usageLimits.sync, invalidate: usageLimits.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
       config: locationResource("config", async (location) => ({

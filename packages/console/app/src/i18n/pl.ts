@@ -199,6 +199,7 @@ export const dict = {
     "Wszystkie modele Zen są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie wykorzystują Twoich danych do trenowania modeli, z",
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro jest już dostępny w Go.",
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
   "go.meta.description":
     "Go kosztuje $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
@@ -278,10 +279,9 @@ export const dict = {
     "ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API.",
   "go.faq.a5.gptRetention":
     "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
-  "go.faq.a5.geminiRetention":
-    "Twoje prompty i odpowiedzi mogą być wykorzystywane do trenowania przyszłych modeli Google.",
   "go.faq.a5.learnMore": "Dowiedz się więcej",
-  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 października 2026 r.",
+  "go.faq.a5.deepseekRetention":
+    "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 października 2026 r.",
   "go.faq.a5.museRetention":
     "Znacznie obniżone ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi do trenowania przyszłych modeli Meta.",
 

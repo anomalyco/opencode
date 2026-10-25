@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../../src/index.js"
+import { Image, ImageClient, Media } from "../../src/effect.js"
 import { CloudflareWorkersAI } from "../../src/providers.js"
 import { ProviderConfigurationError } from "../../src/schema/index.js"
 import { it } from "../lib/effect.js"
@@ -26,9 +26,7 @@ describe("Cloudflare Workers AI Images", () => {
       const response = yield* Image.generate({
         model: workers.image("@cf/leonardo/lucid-origin"),
         prompt: "A red apple",
-        size: "512x256",
-        seed: 7,
-        providerOptions: { steps: 4, guidance: 3 },
+        providerOptions: { width: 512, height: 256, seed: 7, steps: 4, guidance: 3 },
         http: { body: { guidance: 5 } },
       })
 
