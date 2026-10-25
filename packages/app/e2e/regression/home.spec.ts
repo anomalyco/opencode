@@ -10,12 +10,18 @@ test.use({ serviceWorkers: "block" })
 const row = (page: Page, title: string) =>
   page.locator('[data-component="home-session-row"]').filter({ hasText: title })
 
-async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>[1] = {}) {
+async function openHome(
+  page: Page,
+  input: Parameters<typeof mockStressTimeline>[1] = {},
+  storage?: Record<string, unknown>,
+) {
   await mockStressTimeline(page, input)
   await seed(page, {
     projects: { local: [{ worktree: fixture.directory, expanded: true }] },
     lastProject: { local: fixture.directory },
   })
+  // A second seed merges into the server entry written above instead of replacing it.
+  if (storage) await seed(page, { storage })
   await page.goto("/")
 }
 
@@ -75,6 +81,14 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await dialog.getByRole("button", { name: "Delete session" }).click()
   await removed
   await expect(renamedRow).toBeHidden()
+})
+
+test("Home shows projects and sessions when stored state hides every server", async ({ page }) => {
+  await openHome(page, {}, { "opencode.global.dat:server": { hidden: { [fixture.serverKey]: true } } })
+  await expect(
+    page.locator('[data-component="home-project-row"]').filter({ hasText: fixture.project.name }),
+  ).toBeVisible()
+  await expect(row(page, fixture.expected.targetTitle)).toBeVisible()
 })
 
 test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {

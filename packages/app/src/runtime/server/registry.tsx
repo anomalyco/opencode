@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { batch, createMemo } from "solid-js"
+import { batch, createEffect, createMemo } from "solid-js"
 import { type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { pathKey } from "@/workspaces/path-key"
@@ -145,6 +145,12 @@ export function canRemoveServer(input: {
   return input.stored.some((server) => server.http.url === input.key)
 }
 
+// The server Home falls back to when persisted state hides every server: the built-in one it
+// manages, otherwise whichever connection comes first.
+function fallbackServer(servers: Array<ServerConnection.Any>) {
+  return servers.find(ServerConnection.builtin) ?? servers[0]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string; label?: string }
 
@@ -229,7 +235,34 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       return resolveServerList({ stored: store.list, props: props.servers })
     })
 
-    const visibleServers = createMemo(() => allServers().filter((conn) => !store.hidden[ServerConnection.key(conn)]))
+    const visibleServers = createMemo(() => {
+      const servers = allServers()
+      const visible = servers.filter((conn) => !store.hidden[ServerConnection.key(conn)])
+
+      if (visible.length > 0) return visible
+
+      // Home derives the project list and the focused session context from the visible servers, so
+      // hiding all of them would leave it loading forever. Fall back to the built-in server until
+      // the persisted state heals below.
+      const fallback = fallbackServer(servers)
+
+      return fallback ? [fallback] : []
+    })
+
+    // The UI never hides the last visible server, but persisted state can still end up hiding every
+    // server: an older build, a hand-edited store, or removing the server that kept a hidden one
+    // visible. Restore the one Home needs instead of rendering an empty app until the user finds
+    // the server settings.
+    createEffect(() => {
+      if (!hydrated()) return
+      const servers = allServers()
+
+      if (servers.length === 0) return
+      if (servers.some((conn) => !store.hidden[ServerConnection.key(conn)])) return
+      const fallback = fallbackServer(servers)
+
+      if (fallback) setStore("hidden", ServerConnection.key(fallback), false)
+    })
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
