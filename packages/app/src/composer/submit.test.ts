@@ -512,11 +512,19 @@ describe("Composer submission", () => {
   describe("steering while foreground work runs", () => {
     // A long shell command blocks the run; moving it resolves only the move, never the admission.
     // `unstarted` moves before the shell's job starts, so the server finds nothing to move and the call still blocks.
-    function running(input: { fail?: boolean; unstarted?: boolean; prompt?: () => Promise<void> } = {}) {
+    function running(
+      input: {
+        fail?: boolean
+        failOnce?: boolean
+        unstarted?: boolean
+        blocking?: { partID: string }[]
+        prompt?: () => Promise<void>
+      } = {},
+    ) {
       const calls: string[] = []
       const failures: string[] = []
       const state = createMemoryComposerState({ prompt: "use Beta instead" }).capture()
-      const blocking = { parts: [{ partID: "prt_shell" }] }
+      const blocking = { parts: input.blocking ?? [{ partID: "prt_shell" }] }
 
       const claim = createSteerBackground({
         sessionID: () => "session-1",
@@ -525,6 +533,11 @@ describe("Composer submission", () => {
           calls.push("background")
 
           if (input.fail) throw new Error("server unavailable")
+
+          if (input.failOnce) {
+            input.failOnce = false
+            throw new Error("server unavailable")
+          }
 
           if (input.unstarted) {
             input.unstarted = false
@@ -555,7 +568,7 @@ describe("Composer submission", () => {
         await new Promise((resolve) => setTimeout(resolve, 0))
       }
 
-      return { calls, failures, submit }
+      return { calls, failures, submit, blocking }
     }
 
     test("moves the work to the background once the steer is admitted, and only once", async () => {
@@ -574,6 +587,40 @@ describe("Composer submission", () => {
       await run.submit()
       await run.submit()
       expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer sent while the previous one is admitted moves the work when the previous move fails", async () => {
+      const admitted = Promise.withResolvers<void>()
+      const attempts = { count: 0 }
+
+      const run = running({
+        failOnce: true,
+        prompt: async () => {
+          attempts.count++
+
+          if (attempts.count === 1) await admitted.promise
+        },
+      })
+
+      await run.submit()
+      await run.submit()
+      admitted.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("moves a shell that starts while the steer is admitted", async () => {
+      const run = running({
+        blocking: [],
+        prompt: async () => {
+          run.blocking.parts = [{ partID: "prt_shell" }]
+        },
+      })
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+      expect(run.blocking.parts).toEqual([])
     })
 
     test("leaves the work alone for a queued prompt or an idle session", async () => {

@@ -5,7 +5,7 @@ function setup(input: { fail?: boolean } = {}) {
   const moves: string[] = []
   const state = { sessionID: "ses_alpha", blocking: [{ partID: "prt_shell" }] }
 
-  const claim = createSteerBackground({
+  const steer = createSteerBackground({
     sessionID: () => state.sessionID,
     blocking: () => state.blocking,
     move: async (sessionID) => {
@@ -15,49 +15,52 @@ function setup(input: { fail?: boolean } = {}) {
     },
   })
 
-  return { claim, moves, state }
+  return { steer, moves, state }
 }
 
 describe("createSteerBackground", () => {
-  test("claims each blocking work item once while its move is in flight", async () => {
-    const { claim, moves, state } = setup()
+  test("reads the blocking work when the move runs, after admission", async () => {
+    const { steer, moves, state } = setup()
+    state.blocking = []
+    const background = steer("ses_alpha")
 
-    const first = claim("ses_alpha")
-    expect(claim("ses_alpha")).toBeUndefined()
+    state.blocking = [{ partID: "prt_shell" }]
+    await background?.move()
+    expect(moves).toEqual(["ses_alpha"])
 
-    state.blocking = [{ partID: "prt_shell" }, { partID: "prt_subagent" }]
-    await Promise.all([first?.move(), claim("ses_alpha")?.move()])
-    expect(moves).toEqual(["ses_alpha", "ses_alpha"])
+    state.blocking = []
+    await steer("ses_alpha")?.move()
+    expect(moves).toEqual(["ses_alpha"])
   })
 
   // The server moves only work that already blocks the run: a call that starts its shell or subagent just after the
   // move still blocks, and the next steer must move it.
   test("work still blocking after a move is moved by the next steer", async () => {
-    const { claim, moves } = setup()
+    const { steer, moves } = setup()
 
-    await claim("ses_alpha")?.move()
-    await claim("ses_alpha")?.move()
+    await steer("ses_alpha")?.move()
+    await steer("ses_alpha")?.move()
     expect(moves).toEqual(["ses_alpha", "ses_alpha"])
   })
 
-  test("claims nothing without blocking work or for another session", () => {
-    const { claim, state } = setup()
+  test("overlapping steers each move, so a failed move leaves nothing behind", async () => {
+    const { steer, moves } = setup({ fail: true })
+    const first = steer("ses_alpha")
+    const second = steer("ses_alpha")
 
-    expect(claim("ses_beta")).toBeUndefined()
-    state.blocking = []
-    expect(claim("ses_alpha")).toBeUndefined()
+    await Promise.all([first?.move(), second?.move()])
+    expect(moves).toEqual(["ses_alpha", "ses_alpha"])
   })
 
-  test("a released claim or failed move lets a later steer move the work", async () => {
-    const released = setup()
+  test("moves nothing for another session, and keeps a switched-away steer to its own work", async () => {
+    const { steer, moves, state } = setup()
 
-    released.claim("ses_alpha")?.release()
-    expect(released.claim("ses_alpha")).toBeDefined()
+    expect(steer("ses_beta")).toBeUndefined()
 
-    const failed = setup({ fail: true })
-
-    await failed.claim("ses_alpha")?.move()
-    await failed.claim("ses_alpha")?.move()
-    expect(failed.moves).toEqual(["ses_alpha", "ses_alpha"])
+    const background = steer("ses_alpha")
+    state.sessionID = "ses_beta"
+    state.blocking = []
+    await background?.move()
+    expect(moves).toEqual(["ses_alpha"])
   })
 })

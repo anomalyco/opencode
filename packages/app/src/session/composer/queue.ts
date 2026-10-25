@@ -141,10 +141,7 @@ export function createSessionQueue(input: {
       if (!pending.some((item) => item.id === change.original && item.type === "user" && item.delivery === "queue"))
         throw new Error("Queued prompt was delivered before the edit")
       const background = input.background()
-      await data.session.prompt(admission).catch((error) => {
-        background?.release()
-        throw error
-      })
+      await data.session.prompt(admission)
       void background?.move()
       setState("sent", (edit) => edit.original === change.original, "admitted", true)
       // Cancelling is a no-op once the original is gone, so one retry is safe.
@@ -316,10 +313,7 @@ export function createSessionQueue(input: {
         void background?.move()
         hide([id])
       },
-      () => {
-        background?.release()
-        notify()
-      },
+      () => notify(),
     )
   }
 

@@ -196,11 +196,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
             return { ok: true as const }
           },
-          (error) => {
-            background?.release()
-
-            return { ok: false as const, error }
-          },
+          (error) => ({ ok: false as const, error }),
         )
 
         await started.cleanupReady
