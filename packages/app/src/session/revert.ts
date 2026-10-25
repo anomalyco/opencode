@@ -6,6 +6,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
+import { pinPromptMedia } from "@/composer/media"
 import { promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
@@ -20,24 +21,32 @@ export function createSessionRevert(input: {
   const location = useWorkspaceLocation()
   const language = useLanguage()
 
+  const fail = (error: unknown) =>
+    showToast({
+      title: language.t("common.requestFailed"),
+      description: error instanceof Error ? error.message : String(error),
+    })
+
   const request = async <A>(action: () => Promise<A>) =>
     action()
       .then(() => true)
       .catch((error) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
-        })
+        fail(error)
 
         return false
       })
 
-  const restore = (target: ReturnType<typeof prompt.capture>, message: SessionMessageUser) => {
-    const restored = extractPromptFromMessage(message, {
+  const draft = (message: SessionMessageUser) =>
+    extractPromptFromMessage(message, {
       directory: location().directory,
       attachmentName: language.t("common.attachment"),
     })
 
+  const restore = (
+    target: ReturnType<typeof prompt.capture>,
+    message: SessionMessageUser,
+    restored = draft(message),
+  ) => {
     const context = extractPromptContext(message, { directory: location().directory })
 
     target.set(restored, promptLength(restored))
@@ -55,8 +64,17 @@ export function createSessionRevert(input: {
     // An undelivered prompt has no history to rewind. Withdraw it like the TUI
     // instead of interrupting the work it is waiting behind.
     if (data.session.input.has(sessionID, message.id)) {
+      // The cancel releases the prompt's blob refs and sweeps blobs nothing else references, so the draft takes
+      // local copies of its media first; if they cannot load, the prompt stays queued.
+      const restored = await pinPromptMedia(draft(message)).catch((error) => {
+        fail(error)
+
+        return undefined
+      })
+
+      if (!restored) return
       if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
-      restore(target, message)
+      restore(target, message, restored)
       owner.run(() => input.setActiveMessage(previous))
 
       return

@@ -630,6 +630,22 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
   })
 }
 
+/**
+ * A local copy of the bytes behind a `media:<hash>` reference, loaded through the media loader, for a draft about to
+ * outlive the server's copy: cancelling an inbox item sweeps blobs nothing else references. Other references return
+ * unchanged; a ref nothing serves anymore throws, so the caller can stop before dropping the last server copy.
+ */
+export async function pinMediaBlob(blob: BlobReference): Promise<BlobReference> {
+  const ref = [blob.id, blob.url].find((uri) => mediaHashFromUri(uri))
+
+  if (!ref) return blob
+  const data = await loadMediaBlob(ref)
+
+  if (!data) throw new Error(`Attachment ${ref} is no longer available`)
+
+  return createBlobReference(data)
+}
+
 export function createLegacyBlobReference(dataUrl: string): BlobReference {
   return { id: dataUrl, url: dataUrl }
 }

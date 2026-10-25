@@ -9,9 +9,9 @@ import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
-import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { mediaHashFromUri } from "@/runtime/server/media"
+import { type BlobReference, blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { readPromptPresentation } from "@/composer/comment-note"
+import { pinPromptMedia } from "@/composer/media"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -62,11 +62,8 @@ export function createSessionQueue(input: {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
 
       if (change.type === "undo") {
-        // Rehydrate `media:<hash>` attachments before cancelling: cancelling the inbox item
-        // removes its media_ref and sweeps unreferenced blobs from `media_blob`.
         const rehydrated = await undoQueuedPrompt({
           prompt: change.prompt,
-          readMedia: (hash) => server.api.experimental.media.get({ hash }),
           cancelInboxItem: () =>
             server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id }),
         })
@@ -278,12 +275,28 @@ export function createSessionQueue(input: {
       },
     })
     const text = queuedPromptText(item)
+    const attachments = queuedPromptAttachments(item)
     input.draft.mode.set("normal")
-    input.draft.set(
-      [{ type: "text", content: text, start: 0, end: text.length }, ...queuedPromptAttachments(item)],
-      text.length,
-    )
+    input.draft.set([{ type: "text", content: text, start: 0, end: text.length }, ...attachments], text.length)
     input.restoreFocus(text.length)
+    // The edit cancels the original once its replacement is admitted, so the draft takes local copies of the
+    // queued media as soon as they load; images the user removed meanwhile stay removed.
+    void pinPromptMedia(attachments).then(
+      (pinned) => {
+        if (state.editing?.id !== id) return
+        const blobs = new Map<string, BlobReference>()
+        for (const part of pinned) if (part.type === "image") blobs.set(part.id, part.blob)
+        const current = input.draft.current()
+        input.draft.set(
+          current.map((part) => {
+            const blob = part.type === "image" ? blobs.get(part.id) : undefined
+            return blob && part.type === "image" ? { ...part, blob } : part
+          }),
+          input.draft.cursor() ?? promptLength(current),
+        )
+      },
+      () => undefined,
+    )
 
     return true
   }
@@ -407,7 +420,8 @@ export function queuedPromptText(item: QueuedPrompt) {
 // return as path parts. Mentions and `file://` context stay in the payload; see
 // editedPromptInput.
 export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
-  const files = (item.payload.files ?? []) as QueuedPromptFile[]
+  // Opted-in reads leave stored files as `media:` refs, which the generated inbox type does not describe.
+  const files: readonly QueuedPromptFile[] = item.payload.files ?? []
   return [
     ...files
       .filter((file) => isComposerAttachment(file))
@@ -432,42 +446,15 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
   ]
 }
 
-function encodeBase64Bytes(bytes: Uint8Array) {
-  const chunkSize = 0x8000
-  let binary = ""
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
-  }
-  return btoa(binary)
-}
-
-export async function rehydrateQueuedPromptMedia(
-  prompt: Prompt,
-  readMedia: (hash: string) => Promise<Uint8Array>,
-): Promise<Prompt> {
-  return Promise.all(
-    prompt.map(async (part) => {
-      if (part.type !== "image") return part
-      const hash = mediaHashFromUri(part.blob.id) ?? mediaHashFromUri(part.blob.url)
-      if (!hash) return part
-      const bytes = await readMedia(hash)
-      const dataUrl = `data:${part.mime};base64,${encodeBase64Bytes(bytes)}`
-      return {
-        ...part,
-        blob: createLegacyBlobReference(dataUrl),
-      }
-    }),
-  )
-}
-
+// Pin `media:<hash>` attachments before cancelling: the cancel releases the item's blob refs and sweeps blobs
+// nothing else references, so a pin that fails leaves the item queued.
 export async function undoQueuedPrompt(input: {
   prompt: Prompt
-  readMedia: (hash: string) => Promise<Uint8Array>
   cancelInboxItem: () => Promise<unknown>
 }): Promise<Prompt> {
-  const rehydrated = await rehydrateQueuedPromptMedia(input.prompt, input.readMedia)
+  const pinned = await pinPromptMedia(input.prompt)
   await input.cancelInboxItem()
-  return rehydrated
+  return pinned
 }
 
 // A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its

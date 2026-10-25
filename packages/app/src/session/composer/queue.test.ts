@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { extractPromptFromMessage } from "@/composer/prompt"
-import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
 import { queuedPromptAttachments, queuedPromptRows, undoQueuedPrompt } from "./queue"
 
 const queued = [
@@ -76,7 +76,7 @@ describe("queuedPromptAttachments", () => {
     ])
   })
 
-  test("undoQueuedPrompt rehydrates media:<hash> attachments before inbox.cancel sweeps the server blob", async () => {
+  test("undoQueuedPrompt pins media:<hash> attachments locally before inbox.cancel sweeps the server blob", async () => {
     const hash = "e".repeat(64)
     const mediaUri = `media:${hash}`
     const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -105,31 +105,44 @@ describe("queuedPromptAttachments", () => {
     })
     expect(JSON.stringify(extracted)).not.toContain("/api/")
 
-    const rehydrated = await undoQueuedPrompt({
-      prompt: extracted,
-      readMedia: async (requestedHash) => {
-        events.push(`readMedia:${requestedHash}`)
-        const found = blobs.get(requestedHash)
-        if (!found) throw new Error(`404 media not found: ${requestedHash}`)
-        return found
-      },
-      cancelInboxItem: async () => {
-        events.push("cancelInboxItem")
-        // Simulates `SessionInbox.projectCancelled` removing `media_ref` and sweeping `media_blob`
-        blobs.delete(hash)
-      },
+    // The server's media cache, as `client.tsx` registers it: a URL for the bytes while the server still has them.
+    setMediaBlobLoader("queue-test", async (uri) => {
+      events.push(`load:${uri}`)
+      const found = blobs.get(uri.slice("media:".length))
+      return found ? `data:image/png;base64,${Buffer.from(found).toString("base64")}` : undefined
     })
 
-    expect(events).toEqual([`readMedia:${hash}`, "cancelInboxItem"])
-    expect(blobs.has(hash)).toBe(false)
+    try {
+      const pinned = await undoQueuedPrompt({
+        prompt: extracted,
+        cancelInboxItem: async () => {
+          events.push("cancelInboxItem")
+          // The cancel releases the item's blob refs and sweeps the blob nothing else references.
+          blobs.delete(hash)
+        },
+      })
 
-    const imagePart = rehydrated.find((part) => part.type === "image")
-    expect(imagePart).toBeDefined()
-    if (imagePart?.type === "image") {
-      const expectedDataUrl = `data:image/png;base64,${pngBase64}`
-      expect(imagePart.blob).toEqual({ id: expectedDataUrl, url: expectedDataUrl })
-      expect(await resolveBlobUrl(imagePart.blob)).toBe(expectedDataUrl)
-      expect(await blobDataUrl(imagePart.blob, imagePart.mime)).toBe(expectedDataUrl)
+      expect(events).toEqual([`load:${mediaUri}`, "cancelInboxItem"])
+      expect(blobs.has(hash)).toBe(false)
+
+      const imagePart = pinned.find((part) => part.type === "image")
+      expect(imagePart?.type).toBe("image")
+      if (imagePart?.type !== "image") return
+      expect(imagePart.blob.id).not.toStartWith("media:")
+      expect(await blobDataUrl(imagePart.blob, imagePart.mime)).toBe(`data:image/png;base64,${pngBase64}`)
+
+      // Media nothing serves anymore fails the pin, so the item is never cancelled.
+      const cancels = events.length
+      const failed = await undoQueuedPrompt({
+        prompt: extracted,
+        cancelInboxItem: async () => {
+          events.push("cancelInboxItem")
+        },
+      }).catch((error: unknown) => error)
+      expect(failed).toBeInstanceOf(Error)
+      expect(events.slice(cancels)).toEqual([`load:${mediaUri}`])
+    } finally {
+      setMediaBlobLoader("queue-test", undefined)
     }
   })
 })
