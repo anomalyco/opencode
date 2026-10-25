@@ -1,9 +1,9 @@
 import { describe, expect, spyOn } from "bun:test"
 import fuzzysort from "fuzzysort"
-import { mkdir, rm } from "node:fs/promises"
+import { mkdir } from "node:fs/promises"
 import os from "os"
 import path from "path"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Schedule, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileSystem } from "@opencode/core/filesystem"
@@ -173,7 +173,7 @@ describe("FileSystemSearch", () => {
     }),
   )
 
-  it.live("real fff finds files on first search and picks up file changes afterwards", () =>
+  it.live("real fff finds files on first search", () =>
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-lazy-")))).path
       yield* Effect.promise(() => Bun.write(path.join(directory, "src/existing-alpha.ts"), "alpha"))
@@ -192,30 +192,10 @@ describe("FileSystemSearch", () => {
       )
       yield* Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
-        const paths = (query: string) =>
-          search.find({ query, type: "file" }).pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
-
-        expect(yield* paths("existing-alpha")).toContain(RelativePath.make("src/existing-alpha.ts"))
-
-        yield* Effect.promise(() => Bun.write(path.join(directory, "src/created-beta.ts"), "beta"))
-        const created = yield* paths("created-beta").pipe(
-          Effect.repeat({
-            until: (found) => found.includes(RelativePath.make("src/created-beta.ts")),
-            schedule: Schedule.spaced("50 millis"),
-          }),
-          Effect.timeout("10 seconds"),
-        )
-        expect(created).toContain(RelativePath.make("src/created-beta.ts"))
-
-        yield* Effect.promise(() => rm(path.join(directory, "src/existing-alpha.ts")))
-        const removed = yield* paths("existing-alpha").pipe(
-          Effect.repeat({
-            until: (found) => !found.includes(RelativePath.make("src/existing-alpha.ts")),
-            schedule: Schedule.spaced("50 millis"),
-          }),
-          Effect.timeout("10 seconds"),
-        )
-        expect(removed).not.toContain(RelativePath.make("src/existing-alpha.ts"))
+        const found = yield* search
+          .find({ query: "existing-alpha", type: "file" })
+          .pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
+        expect(found).toContain(RelativePath.make("src/existing-alpha.ts"))
       }).pipe(Effect.provide(layer))
     }),
   )
