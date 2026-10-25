@@ -2,7 +2,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
@@ -178,10 +178,10 @@ function route() {
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   const { fs, configFile } = yield* paths
-  const temp = configFile + ".tmp"
+  const temp = configFile + "." + process.pid + ".tmp"
   yield* fs.makeDirectory(path.dirname(configFile), { recursive: true })
   yield* fs.writeFileString(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })
-  yield* fs.rename(temp, configFile)
+  yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
 })
 
 export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {
