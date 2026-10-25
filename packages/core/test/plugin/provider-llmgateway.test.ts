@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@bolt-ai/core/catalog"
 import { Integration } from "@bolt-ai/core/integration"
@@ -13,68 +13,61 @@ import { PluginTestLayer } from "./fixture"
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
+  const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  const integration = yield* Integration.Service
-  yield* LLMGatewayPlugin.effect(host).pipe(Effect.provideService(Integration.Service, integration))
+  yield* LLMGatewayPlugin.effect(host)
 })
 
 describe("LLMGatewayPlugin", () => {
-  it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("llmgateway"))),
-  )
+  test("is registered so legacy referer headers can be applied", () => {
+    expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.llmgateway")
+  })
 
   it.effect("applies legacy referer headers only to enabled llmgateway", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const integrations = yield* Integration.Service
       yield* integrations.transform((editor) => {
         editor.update(Integration.ID.make("llmgateway"), () => {})
         editor.update(Integration.ID.make("openrouter"), () => {})
       })
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.make("llmgateway"), (provider) => {
-          provider.api = {
-            type: "aisdk",
-            package: "@ai-sdk/openai-compatible",
-            url: "https://api.llmgateway.io/v1",
-          }
-          provider.request = { headers: { Existing: "value" }, body: {} }
+        catalog.update(Provider.ID.make("llmgateway"), (provider) => {
+          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.settings = { baseURL: "https://api.llmgateway.io/v1" }
+          provider.headers = { Existing: "value" }
         })
-        catalog.provider.update(ProviderV2.ID.openrouter, () => {})
+        catalog.update(Provider.ID.openrouter, () => {})
       })
       yield* addPlugin()
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway")))?.request.headers).toEqual({
+      expect((yield* catalog.get(Provider.ID.make("llmgateway")))?.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://bolt.ai/",
         "X-Title": "bolt",
         "X-Source": "bolt",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter))?.request.headers).toEqual({})
+      expect((yield* catalog.get(Provider.ID.openrouter))?.headers).toBeUndefined()
     }),
   )
 
   it.effect("does not apply legacy headers to a disabled llmgateway provider", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const integrations = yield* Integration.Service
       yield* integrations.transform((editor) => {
         editor.update(Integration.ID.make("llmgateway"), () => {})
       })
       yield* catalog.transform((catalog) => {
-        catalog.provider.update(ProviderV2.ID.make("llmgateway"), (provider) => {
-          provider.disabled = true
-          provider.api = {
-            type: "aisdk",
-            package: "@ai-sdk/openai-compatible",
-            url: "https://api.llmgateway.io/v1",
-          }
+        catalog.update(Provider.ID.make("llmgateway"), (provider) => {
+          provider.activation = "disabled"
+          provider.package = "@opencode/ai/providers/openai-compatible"
+          provider.settings = { baseURL: "https://api.llmgateway.io/v1" }
         })
       })
       yield* addPlugin()
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway")))?.disabled).toBe(true)
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway")))?.request.headers).toEqual({})
+      expect((yield* catalog.get(Provider.ID.make("llmgateway")))?.activation).toBe("disabled")
+      expect((yield* catalog.get(Provider.ID.make("llmgateway")))?.headers).toBeUndefined()
     }),
   )
 })

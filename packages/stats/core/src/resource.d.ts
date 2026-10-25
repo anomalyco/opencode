@@ -13,6 +13,10 @@ declare module "sst/resource" {
       type: "sst.sst.Secret"
       value: string
     }
+    StatsHiddenModels: {
+      type: "sst.sst.Secret"
+      value: string
+    }
     StatsSyncConfig: {
       dataset: string
       type: "sst.sst.Linkable"

@@ -34,7 +34,7 @@ I file di configurazione vengono **uniti (merge)**, non sostituiti.
 
 I file di configurazione vengono uniti (merge), non sostituiti. Le impostazioni provenienti dalle posizioni qui sotto vengono combinate. Le configurazioni caricate dopo sovrascrivono quelle precedenti solo per le chiavi in conflitto. Le impostazioni non in conflitto vengono preservate.
 
-Per esempio, se la tua configurazione globale imposta `autoupdate: true` e la configurazione del progetto imposta `model: "anthropic/claude-sonnet-4-5"`, la configurazione finale includera entrambe le impostazioni.
+Per esempio, se la tua configurazione globale imposta `autoupdate: true` e la configurazione del progetto imposta `model: "anthropic/claude-sonnet-5-5"`, la configurazione finale includera entrambe le impostazioni.
 
 ---
 
@@ -233,8 +233,8 @@ Puoi configurare provider e modelli da usare in Bolt tramite le opzioni `provide
 {
   "$schema": "https://bolt.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -323,7 +323,7 @@ Puoi configurare agenti specializzati per task specifici tramite l'opzione `agen
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -389,7 +389,7 @@ Puoi configurare comandi personalizzati per task ripetitivi tramite l'opzione `c
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",

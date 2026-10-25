@@ -2,53 +2,25 @@ import { describe, expect, test } from "bun:test"
 import type { FilePart } from "@bolt-ai/sdk/v2"
 import { attached, inline, kind, typeLabel } from "./message-file"
 
-function file(part: Partial<FilePart> = {}): FilePart {
-  return {
-    id: "part_1",
-    sessionID: "ses_1",
-    messageID: "msg_1",
-    type: "file",
+function file(source: PromptFileAttachment["source"], mention = false): PromptFileAttachment {
+  const item: PromptFileAttachment = {
+    data: "",
     mime: "text/plain",
-    url: "file:///repo/README.txt",
-    filename: "README.txt",
-    ...part,
+    source,
   }
+
+  if (mention) item.mention = { text: "@README.md", start: 0, end: 10 }
+
+  return item
 }
 
 describe("message-file", () => {
-  test("treats data URLs as attachments", () => {
-    expect(attached(file({ url: "data:text/plain;base64,SGVsbG8=" }))).toBe(true)
-    expect(attached(file())).toBe(false)
-  })
-
-  test("keeps data-backed file mentions inline", () => {
-    expect(
-      inline(
-        file({
-          source: {
-            type: "file",
-            path: "/repo/README.txt",
-            text: { value: "@README.txt", start: 0, end: 11 },
-          },
-        }),
-      ),
-    ).toBe(true)
-
-    const mentioned = file({
-      url: "data:text/plain;base64,SGVsbG8=",
-      source: {
-        type: "file",
-        path: "/repo/README.txt",
-        text: { value: "@README.txt", start: 0, end: 11 },
-      },
-    })
-    expect(inline(mentioned)).toBe(true)
-    expect(attached(mentioned)).toBe(false)
-  })
-
-  test("separates image and file attachment kinds", () => {
-    expect(kind(file({ mime: "image/png" }))).toBe("image")
-    expect(kind(file({ mime: "application/pdf" }))).toBe("file")
+  test("only treats data-backed files without mentions as attachments", () => {
+    expect(attached(file({ type: "inline" }))).toBe(true)
+    expect(attached(file({ type: "uri", uri: "data:text/plain;base64,SGVsbG8=" }))).toBe(true)
+    expect(attached(file({ type: "uri", uri: "blob:http://localhost/image-1" }))).toBe(true)
+    expect(attached(file({ type: "uri", uri: "file:///repo/README.md" }))).toBe(false)
+    expect(attached(file({ type: "inline" }, true))).toBe(false)
   })
 
   test("labels attachment types from the basename extension", () => {

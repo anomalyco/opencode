@@ -1009,6 +1009,7 @@ function LeaderboardCard(props: {
 function getProviderIconId(author: string) {
   if (author === "MiniMax") return "minimax"
   if (author === "Moonshot") return "moonshotai"
+  if (author === "Qwen") return "alibaba"
   if (author === "Zhipu") return "zhipuai"
   return author.toLowerCase()
 }

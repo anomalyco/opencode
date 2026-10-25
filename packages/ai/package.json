@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "version": "2.1.4",
+  "name": "@opencode/ai",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "setup:recording-env": "bun run script/setup-recording-env.ts",
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "bun check --no-script && bun check --no-script -p tsconfig.types.json",
+    "typecheck:tsc": "tsc --noEmit && tsc --noEmit -p tsconfig.types.json",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./effect": "./src/effect.ts",
+    "./testing": "./src/testing.ts",
+    "./*": "./src/*.ts"
+  },
+  "devDependencies": {
+    "@clack/prompts": "1.0.0-alpha.1",
+    "@effect/platform-node": "catalog:",
+    "@opencode/http-recorder": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@aws-sdk/credential-providers": "3.1057.0",
+    "@smithy/eventstream-codec": "4.2.14",
+    "@smithy/util-utf8": "4.2.2",
+    "@opencode/schema": "workspace:*",
+    "aws4fetch": "1.0.20",
+    "effect": "catalog:",
+    "google-auth-library": "10.5.0"
+  }
+}

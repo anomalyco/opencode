@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/merman",
+  "version": "2.1.4",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./markdown": "./src/markdown.ts",
+    "./palette": "./src/palette.ts",
+    "./plugin": "./src/plugin.ts"
+  },
+  "scripts": {
+    "audit:layouts": "bun run script/layout-audit.ts",
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode/plugin": "workspace:*",
+    "@opentui/core": "catalog:",
+    "entities": "7.0.1",
+    "string-width": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:"
+  }
+}

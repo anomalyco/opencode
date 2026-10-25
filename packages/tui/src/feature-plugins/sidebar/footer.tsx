@@ -1,8 +1,11 @@
 import type { TuiPlugin, TuiPluginApi } from "@bolt-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Show } from "solid-js"
-import { abbreviateHome } from "../../runtime"
-import { useTuiPaths } from "../../context/runtime"
+import { useTerminalDimensions } from "@opentui/solid"
+import { FilePath } from "../../ui/file-path"
+import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
+import { usePromptMove } from "../../component/prompt/move"
+import { hasConnectedProvider } from "../../util/connected-provider"
 
 const id = "internal:sidebar-footer"
 
@@ -14,19 +17,11 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
       (item) => item.id !== "bolt" || Object.values(item.models).some((model) => model.cost?.input !== 0),
     ),
   )
-  const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
-  const show = createMemo(() => !has() && !done())
-  const path = createMemo(() => {
-    const session = props.api.state.session.get(props.sessionID)
-    const dir = session?.directory || props.api.state.path.directory || paths.cwd
-    const out = abbreviateHome(dir, paths.home)
-    const branch = session?.directory === props.api.state.path.directory ? props.api.state.vcs?.branch : undefined
-    const text = branch ? out + ":" + branch : out
-    const list = text.split("/")
-    return {
-      parent: list.slice(0, -1).join("/"),
-      name: list.at(-1) ?? "",
-    }
+  const showOnboarding = createMemo(() => {
+    if (dimensions().height < 22) return false
+    const list = integrations()
+    if (!list) return false
+    return !onboarding.dismissed && !hasConnectedProvider(list)
   })
 
   return (
@@ -57,12 +52,72 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
             <text fg={theme().textMuted}>
               Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
             </text>
-            <box flexDirection="row" gap={1} justifyContent="space-between">
-              <text fg={theme().text}>Connect provider</text>
-              <text fg={theme().textMuted}>/connect</text>
-            </box>
+            <text
+              id="sidebar.footer.getting-started.dismiss"
+              fg={props.context.theme.text.muted}
+              onMouseUp={() => {
+                void updateOnboarding((draft) => {
+                  draft.dismissed = true
+                }).catch((error) => console.error("Failed to dismiss sidebar onboarding", error))
+              }}
+            >
+              ✕
+            </text>
+          </box>
+          <text fg={props.context.theme.text.muted}>OpenCode includes free models so you can start immediately.</text>
+          <text fg={props.context.theme.text.muted}>
+            Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+          </text>
+          <box
+            id="sidebar.footer.getting-started.connect"
+            flexDirection="row"
+            gap={1}
+            justifyContent="space-between"
+            onMouseUp={() => props.context.keymap.dispatch("provider.connect")}
+          >
+            <text fg={props.context.theme.text.base}>Connect provider</text>
+            <text fg={props.context.theme.text.muted}>/connect</text>
           </box>
         </box>
+      </box>
+    </Show>
+  )
+}
+
+function SidebarFooter(props: { context: Plugin.Context; sessionID: string }) {
+  const session = createMemo(() => props.context.data.session.get(props.sessionID))
+  const move = usePromptMove({
+    projectID: () => session()?.projectID,
+    sessionID: () => props.sessionID,
+  })
+  const actions = useWorkingDirectoryActions({
+    directory: () => props.context.location?.directory,
+    onMove: () => void move.open(),
+  })
+  const directory = createMemo(() => {
+    if (!props.context.location) return undefined
+    const value = props.context.ui.format.path(props.context.location.directory)
+    const branch = props.context.data.location.vcs.info(props.context.location)?.branch.current
+    return branch ? `${value}:${branch}` : value
+  })
+  return (
+    <box gap={1}>
+      <SidebarOnboarding context={props.context} sessionID={props.sessionID} />
+      <Show when={directory()}>
+        {(value) => (
+          <box
+            id="sidebar.footer.location"
+            onMouseOver={actions.onMouseOver}
+            onMouseOut={actions.onMouseOut}
+            onMouseUp={actions.onMouseUp}
+          >
+            <FilePath
+              value={value()}
+              maxWidth={38}
+              fg={actions.hovered() ? props.context.theme.text.base : props.context.theme.text.muted}
+            />
+          </box>
+        )}
       </Show>
       <text>
         <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
@@ -75,20 +130,14 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   )
 }
 
-const tui: TuiPlugin = async (api) => {
-  api.slots.register({
-    order: 100,
-    slots: {
-      sidebar_footer(_ctx, props) {
-        return <View api={api} sessionID={props.session_id} />
-      },
-    },
-  })
-}
-
-const plugin: BuiltinTuiPlugin = {
-  id,
-  tui,
-}
-
-export default plugin
+export default Plugin.define({
+  id: "opencode.sidebar.footer",
+  setup(context) {
+    // Append keeps the path open to additive plugin claims; an external
+    // replace still takes the boundary over.
+    context.ui.slot({
+      append: "sidebar.footer",
+      render: (props) => <SidebarFooter context={context} sessionID={props.sessionID} />,
+    })
+  },
+})

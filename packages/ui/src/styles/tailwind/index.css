@@ -1,7 +1,21 @@
 @layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities) source("../../../../");
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "../../../../app/src";
+@source "../../../../app/index.html";
+@source not "../../../../app/src/i18n";
+@source not "../../../../app/src/**/*.test.{ts,tsx}";
+@source "../../../../desktop/src/renderer";
+@source not "../../../../desktop/src/renderer/**/*.test.{ts,tsx}";
+@source "../../../../session-ui/src";
+@source "../../../../gui-extensions/src";
+@source not "../../../../session-ui/src/**/*.test.{ts,tsx}";
+@source "../../../../storybook";
+@source "../../../src";
+@source not "../../../src/assets";
+@source not "../../../src/i18n";
+@source not "../../../src/**/*.test.{ts,tsx}";
 @import "./utilities.css";
 
 @import "../index.css";
@@ -34,6 +48,9 @@
   --container-5xl: 64rem;
   --container-6xl: 72rem;
   --container-7xl: 80rem;
+  /* Shared by the session timeline, composer dock, and drop target so their edges stay aligned.
+     The composer dock's 12px gutter leaves the design's 720px composer. */
+  --container-session: 744px;
 
   --font-sans: var(--font-family-sans);
   --font-sans--font-feature-settings: var(--font-family-sans--font-feature-settings);
@@ -51,6 +68,9 @@
   --leading-lg: var(--line-height-large);
   --leading-xl: var(--line-height-x-large);
   --leading-2xl: var(--line-height-2x-large);
+  --leading-text-tight: var(--line-height-tight);
+  --leading-text-compact: var(--line-height-compact);
+  --leading-text-base: var(--line-height-base);
 
   --tracking-normal: var(--letter-spacing-normal);
   --tracking-tight: var(--letter-spacing-tight);

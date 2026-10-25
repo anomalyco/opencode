@@ -1,4 +1,4 @@
-import { MetaProvider, Title, Meta } from "@solidjs/meta"
+import { MetaProvider, Title } from "@solidjs/meta"
 import { Router } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
 import { Suspense } from "solid-js"
@@ -7,11 +7,10 @@ import { Font } from "@bolt-ai/ui/font"
 import "@ibm/plex/css/ibm-plex.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
-import { I18nProvider, useI18n } from "~/context/i18n"
+import { I18nProvider } from "~/context/i18n"
 import { strip } from "~/lib/language"
 
 function AppMeta() {
-  const i18n = useI18n()
   return (
     <>
       <Title>Bolt Cli</Title>

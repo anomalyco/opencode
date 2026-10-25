@@ -1,8 +1,9 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Provider } from "../../provider.js"
 
 export const VercelPlugin = define({
-  id: "vercel",
+  id: "opencode.provider.vercel",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {

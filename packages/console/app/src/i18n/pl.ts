@@ -2,16 +2,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, nowy anonimowy model, jest dostępny przez ograniczony czas",
   "go.referral.ended.label": "Ostrzeżenie",
   "go.referral.ended":
     "Program poleceń został zakończony. Linki polecające nie dają już środków ani Tobie, ani osobie, która je udostępniła.",
-  "go.graph.bonus": "{{count}}× większy limit",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentacja",
-  "nav.changelog": "Dziennik zmian",
-  "nav.discord": "Discord",
-  "nav.x": "X",
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Zaloguj się",
@@ -40,6 +35,7 @@ export const dict = {
   "email.placeholder": "Adres e-mail",
   "email.subscribe": "Subskrybuj",
   "email.success": "Prawie gotowe, sprawdź skrzynkę i potwierdź swój adres e-mail",
+  "email.error": "Nie udało się zapisać. Spróbuj ponownie.",
 
   "notFound.title": "Nie znaleziono | opencode",
   "notFound.heading": "404 - Nie znaleziono strony",
@@ -50,18 +46,7 @@ export const dict = {
   "notFound.logoLightAlt": "jasne logo opencode",
   "notFound.logoDarkAlt": "ciemne logo opencode",
 
-  "user.logout": "Wyloguj się",
-
-  "auth.callback.error.codeMissing": "Nie znaleziono kodu autoryzacji.",
-
-  "workspace.select": "Wybierz obszar roboczy",
-  "workspace.createNew": "+ Utwórz nowy obszar roboczy",
-  "workspace.modal.title": "Utwórz nowy obszar roboczy",
-  "workspace.modal.placeholder": "Wpisz nazwę obszaru roboczego",
-
   "common.cancel": "Anuluj",
-  "common.creating": "Tworzenie...",
-  "common.create": "Utwórz",
   "common.contactUs": "Skontaktuj się z nami",
 
   "common.videoUnsupported": "Twoja przeglądarka nie obsługuje znacznika wideo.",
@@ -107,14 +92,6 @@ export const dict = {
   "temp.logoDarkAlt": "ciemne logo opencode",
 
   "home.banner.badge": "Nowość",
-  "home.banner.text": "Przedstawiamy karty w aplikacji desktopowej.",
-  "home.banner.platforms": "Dostępne na macOS, Windows i Linux",
-  "home.banner.downloadNow": "Pobierz teraz",
-  "home.banner.downloadBetaNow": "Pobierz betę wersji desktopowej",
-  "home.promo.title": "Przedstawiamy karty w aplikacji desktopowej",
-  "home.promo.body": "Organizuj swoją pracę i aktywne sesje za pomocą kart.",
-  "home.promo.cta": "Pobierz najnowszą wersję, aby rozpocząć.",
-  "home.promo.close": "Zamknij ogłoszenie o aplikacji desktopowej",
 
   "home.hero.title": "Open source'owy agent AI do kodowania",
   "home.hero.subtitle.a": "Darmowe modele w zestawie lub podłącz dowolny model od dowolnego dostawcy,",
@@ -128,8 +105,6 @@ export const dict = {
   "home.what.lsp.body": "Automatycznie ładuje odpowiednie LSP dla LLM",
   "home.what.multiSession.title": "Wielosesyjność",
   "home.what.multiSession.body": "Uruchom wiele agentów równolegle w tym samym projekcie",
-  "home.what.shareLinks.title": "Udostępnianie linków",
-  "home.what.shareLinks.body": "Udostępnij link do dowolnej sesji w celach referencyjnych lub do debugowania",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Zaloguj się przez GitHub, aby używać swojego konta Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -180,8 +155,7 @@ export const dict = {
   "home.faq.a6":
     "Bolt jest w 100% darmowy. Zawiera również zestaw darmowych modeli. Mogą pojawić się dodatkowe koszty, jeśli podłączysz innego dostawcę.",
   "home.faq.q7": "A co z danymi i prywatnością?",
-  "home.faq.a7.p1":
-    "Twoje dane i informacje są przechowywane tylko wtedy, gdy używasz naszych darmowych modeli lub tworzysz linki do udostępniania.",
+  "home.faq.a7.p1": "Twoje dane i informacje są przechowywane tylko wtedy, gdy używasz naszych darmowych modeli.",
   "home.faq.a7.p2.beforeModels": "Dowiedz się więcej o",
   "home.faq.a7.p2.modelsLink": "naszych modelach",
   "home.faq.a7.p2.and": "i",
@@ -223,7 +197,7 @@ export const dict = {
     "Aby pokryć koszty, Bolt dolicza jedynie niewielką opłatę za przetwarzanie płatności w wysokości $1.23 przy każdym doładowaniu salda o $20.",
   "zen.faq.q5": "A co z danymi i prywatnością?",
   "zen.faq.a5.beforeExceptions":
-    "Wszystkie modele Zen są hostowane w USA. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
+    "Wszystkie modele Zen są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
   "zen.faq.a5.exceptionsLink": "następującymi wyjątkami",
   "zen.faq.q6": "Czy mogę ustawić limity wydatków?",
   "zen.faq.a6": "Tak, możesz ustawić miesięczne limity wydatków na swoim koncie.",
@@ -256,10 +230,10 @@ export const dict = {
   "zen.how.step2.link": "płać za żądanie",
   "zen.how.step2.afterLink": "bez marży",
   "zen.how.step3.title": "Automatyczne doładowanie",
-  "zen.how.step3.body": "gdy Twoje saldo osiągnie 5$, automatycznie dodamy 20$",
+  "zen.how.step3.body": "włącz opcjonalne automatyczne doładowanie i wybierz próg salda oraz kwotę doładowania",
   "zen.privacy.title": "Twoja prywatność jest dla nas ważna",
   "zen.privacy.beforeExceptions":
-    "Wszystkie modele Zen są hostowane w USA. Dostawcy stosują politykę zerowej retencji i nie wykorzystują Twoich danych do trenowania modeli, z",
+    "Wszystkie modele Zen są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie wykorzystują Twoich danych do trenowania modeli, z",
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "Bolt Go | Niskokosztowe modele do kodowania dla każdego",
@@ -270,10 +244,7 @@ export const dict = {
   "go.hero.body":
     "Go udostępnia programowanie z agentami programistom na całym świecie. Oferuje hojne limity i niezawodny dostęp do najzdolniejszych modeli open source, dzięki czemu możesz budować za pomocą potężnych agentów, nie martwiąc się o koszty czy dostępność.",
 
-  "go.cta.start": "Zasubskrybuj Go",
-  "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Zasubskrybuj Go",
-  "go.cta.price": "$10/miesiąc",
   "go.plans.month": "miesięcznie",
   "go.plans.plus.cta": "Subskrybuj Go Plus",
   "go.plans.plus.description": "Go Plus kosztuje $40/miesiąc i oferuje wyższe limity.",
@@ -286,24 +257,18 @@ export const dict = {
   "go.plans.limits": "Limity",
   "go.plans.description": "Szacowana liczba żądań na 5 godzin i miesięczne limity dla modeli",
   "go.plans.legend": "Plany",
-  "go.pricing.body":
-    "Używaj z dowolnym agentem. $10/miesiąc. Doładuj konto w razie potrzeby. Anuluj w dowolnym momencie.",
-  "go.graph.free": "Darmowe",
-  "go.graph.freePill": "Big Pickle i darmowe modele",
-  "go.graph.go": "Go",
-  "go.graph.label": "Żądania na 5 godzin",
   "go.graph.period": "Użycie",
   "go.graph.model": "Model",
   "go.graph.requests": "Szac. żądania / 5 godz.",
   "go.graph.allowance": "Miesięczne użycie",
   "go.graph.new": "Nowość",
+  "go.graph.bonus": "{{count}}× większy limit",
   "go.graph.scale": "Nieliniowa skala liczby żądań",
   "go.graph.showAll": "Pokaż wszystkie modele ({{count}})",
   "go.graph.showLess": "Pokaż mniej modeli",
   "go.graph.limitedRegions": "ograniczone regiony",
   "go.graph.limitedTime": "ograniczony czas",
   "go.graph.usageLimits": "Limity użycia",
-  "go.graph.aria": "Żądania na 5h: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
@@ -374,20 +339,17 @@ export const dict = {
   "go.faq.a5.retention0": "0 dni",
   "go.faq.a5.used": "Wykorzystywane",
   "go.faq.a5.notUsed": "Niewykorzystywane",
-  "go.faq.a5.noAgreement": "Brak umowy",
   "go.faq.a5.notZdr": "Nie ZDR",
   "go.faq.a5.grokRetention":
     "ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API.",
   "go.faq.a5.gptRetention":
     "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
   "go.faq.a5.learnMore": "Dowiedz się więcej",
-  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 30 września 2026 r.",
+  "go.faq.a5.deepseekRetention":
+    "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 października 2026 r.",
   "go.faq.a5.museRetention":
     "Znacznie obniżone ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi do trenowania przyszłych modeli Meta.",
 
-  "go.faq.a5.beforeExceptions":
-    "Modele Go są hostowane w USA. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
-  "go.faq.a5.exceptionsLink": "następującymi wyjątkami",
   "go.faq.q6": "Czy mogę doładować środki?",
   "go.faq.a6": "Jeśli potrzebujesz większego użycia, możesz doładować środki na swoim koncie.",
   "go.faq.q7": "Czy mogę anulować?",
@@ -398,7 +360,7 @@ export const dict = {
 
   "go.faq.q9": "Jaka jest różnica między darmowymi modelami a Go?",
   "go.faq.a9":
-    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go oferuje starannie dobrany zestaw modeli z wyższymi limitami zapytań w oknach kroczących: 20% miesięcznego limitu na 5 godzin, 50% na tydzień i 100% na miesiąc. Limity mogą się różnić zależnie od modelu (rzeczywista liczba zapytań zależy od modelu i użycia).",
+    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie. Go oferuje starannie dobrany zestaw modeli z wyższymi limitami zapytań w oknach kroczących: 20% miesięcznego limitu na 5 godzin, 50% na tydzień i 100% na miesiąc. Limity mogą się różnić zależnie od modelu (rzeczywista liczba zapytań zależy od modelu i użycia).",
   "go.faq.q10": "Czy mogę otrzymać zwrot pieniędzy?",
   "go.faq.a10":
     "Możesz kwalifikować się do zwrotu, jeśli opłata została pobrana w ciągu ostatnich 14 dni i nie wykorzystano żadnej części limitu Go w tym okresie rozliczeniowym. {{contact}}, aby poprosić o zwrot.",
@@ -783,6 +745,7 @@ export const dict = {
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
   "download.platform.windowsX64": "Windows (x64)",
+  "download.platform.windowsArm64": "Windows (ARM64)",
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
@@ -819,6 +782,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Numer telefonu",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Jakie są obecne miesięczne wydatki Twojej firmy na inferencję (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Wybierz przedział (opcjonalnie)",
+  "enterprise.form.inferenceSpend.none": "Jeszcze bez wydatków",
+  "enterprise.form.inferenceSpend.under1k": "Poniżej $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K lub więcej",
   "enterprise.form.message.label": "Jaki problem próbujesz rozwiązać?",
   "enterprise.form.message.placeholder": "Potrzebujemy pomocy z...",
   "enterprise.form.send": "Wyślij",
@@ -827,7 +798,9 @@ export const dict = {
   "enterprise.form.success.submitted": "Formularz został pomyślnie wysłany.",
   "enterprise.form.error.allFieldsRequired": "Wszystkie pola są wymagane.",
   "enterprise.form.error.invalidEmailFormat": "Nieprawidłowy format adresu e-mail.",
+  "enterprise.form.error.invalidInferenceSpend": "Wybierz prawidłowy przedział wydatków na inferencję.",
   "enterprise.form.error.internalServer": "Wewnętrzny błąd serwera.",
+  "enterprise.form.error.captcha": "Weryfikacja captcha nie powiodła się. Spróbuj ponownie.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Czym jest Bolt Enterprise?",
   "enterprise.faq.a1":
@@ -854,40 +827,6 @@ export const dict = {
   "changelog.hero.subtitle": "Nowe aktualizacje i ulepszenia Bolt",
   "changelog.empty": "Nie znaleziono wpisów w dzienniku zmian.",
   "changelog.viewJson": "Zobacz JSON",
-
-  "bench.list.title": "Benchmark",
-  "bench.list.heading": "Benchmarki",
-  "bench.list.table.agent": "Agent",
-  "bench.list.table.model": "Model",
-  "bench.list.table.score": "Wynik",
-  "bench.submission.error.allFieldsRequired": "Wszystkie pola są wymagane.",
-
-  "bench.detail.title": "Benchmark - {{task}}",
-  "bench.detail.notFound": "Nie znaleziono zadania",
-  "bench.detail.na": "Brak danych",
-  "bench.detail.labels.agent": "Agent",
-  "bench.detail.labels.model": "Model",
-  "bench.detail.labels.task": "Zadanie",
-  "bench.detail.labels.repo": "Repozytorium",
-  "bench.detail.labels.from": "Z",
-  "bench.detail.labels.to": "Do",
-  "bench.detail.labels.prompt": "Prompt",
-  "bench.detail.labels.commit": "Commit",
-  "bench.detail.labels.averageDuration": "Średni czas trwania",
-  "bench.detail.labels.averageScore": "Średni wynik",
-  "bench.detail.labels.averageCost": "Średni koszt",
-  "bench.detail.labels.summary": "Podsumowanie",
-  "bench.detail.labels.runs": "Uruchomienia",
-  "bench.detail.labels.score": "Wynik",
-  "bench.detail.labels.base": "Baza",
-  "bench.detail.labels.penalty": "Kara",
-  "bench.detail.labels.weight": "waga",
-  "bench.detail.table.run": "Uruchomienie",
-  "bench.detail.table.score": "Wynik (Baza - Kara)",
-  "bench.detail.table.cost": "Koszt",
-  "bench.detail.table.duration": "Czas trwania",
-  "bench.detail.run.title": "Uruchomienie {{n}}",
-  "bench.detail.rawJson": "Surowy JSON",
 } as const
 
 export type Key = keyof typeof dict

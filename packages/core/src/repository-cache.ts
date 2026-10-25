@@ -6,14 +6,20 @@
  * observe the checkout move underneath them.
  */
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
-import { FSUtil } from "./fs-util"
-import { Git } from "./git"
-import { Global } from "./global"
-import { Repository } from "./repository"
-import { AbsolutePath } from "./schema"
-import { makeGlobalNode } from "./effect/app-node"
-import { EffectFlock } from "./util/effect-flock"
+import { Clock, Context, Duration, Effect, Layer, Option, Schema } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Git } from "./git.js"
+import { Global } from "@opencode/util/global"
+import { Repository } from "./repository.js"
+import { AbsolutePath } from "./schema.js"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { KV } from "./kv.js"
+
+const Refresh = Schema.Struct({
+  attemptedAt: Schema.Number,
+})
+const refreshInterval = Duration.toMillis(Duration.days(1))
 
 export type Result = {
   readonly repository: string
@@ -27,37 +33,27 @@ export type Result = {
 
 export type EnsureInput = {
   readonly reference: Repository.RemoteReference
-  readonly refresh?: boolean
+  /** `daily` throttles existing checkouts; `true` forces a refresh. */
+  readonly refresh?: boolean | "daily"
   readonly branch?: string
 }
 
-export class InvalidRepositoryError extends Schema.TaggedErrorClass<InvalidRepositoryError>()(
-  "RepositoryCacheInvalidRepositoryError",
-  {
-    repository: Schema.String,
-    message: Schema.String,
-  },
-) {}
+export class InvalidBranchError extends Schema.TaggedError<InvalidBranchError>()("RepositoryCacheInvalidBranchError", {
+  branch: Schema.String,
+  message: Schema.String,
+}) {}
 
-export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchError>()(
-  "RepositoryCacheInvalidBranchError",
-  {
-    branch: Schema.String,
-    message: Schema.String,
-  },
-) {}
-
-export class CloneFailedError extends Schema.TaggedErrorClass<CloneFailedError>()("RepositoryCacheCloneFailedError", {
+export class CloneFailedError extends Schema.TaggedError<CloneFailedError>()("RepositoryCacheCloneFailedError", {
   repository: Schema.String,
   message: Schema.String,
 }) {}
 
-export class FetchFailedError extends Schema.TaggedErrorClass<FetchFailedError>()("RepositoryCacheFetchFailedError", {
+export class FetchFailedError extends Schema.TaggedError<FetchFailedError>()("RepositoryCacheFetchFailedError", {
   repository: Schema.String,
   message: Schema.String,
 }) {}
 
-export class CheckoutFailedError extends Schema.TaggedErrorClass<CheckoutFailedError>()(
+export class CheckoutFailedError extends Schema.TaggedError<CheckoutFailedError>()(
   "RepositoryCacheCheckoutFailedError",
   {
     repository: Schema.String,
@@ -66,27 +62,23 @@ export class CheckoutFailedError extends Schema.TaggedErrorClass<CheckoutFailedE
   },
 ) {}
 
-export class ResetFailedError extends Schema.TaggedErrorClass<ResetFailedError>()("RepositoryCacheResetFailedError", {
+export class ResetFailedError extends Schema.TaggedError<ResetFailedError>()("RepositoryCacheResetFailedError", {
   repository: Schema.String,
   message: Schema.String,
 }) {}
 
-export class LockFailedError extends Schema.TaggedErrorClass<LockFailedError>()("RepositoryCacheLockFailedError", {
+export class LockFailedError extends Schema.TaggedError<LockFailedError>()("RepositoryCacheLockFailedError", {
   localPath: Schema.String,
   message: Schema.String,
 }) {}
 
-export class CacheOperationError extends Schema.TaggedErrorClass<CacheOperationError>()(
-  "RepositoryCacheOperationError",
-  {
-    operation: Schema.String,
-    path: Schema.String,
-    message: Schema.String,
-  },
-) {}
+export class CacheOperationError extends Schema.TaggedError<CacheOperationError>()("RepositoryCacheOperationError", {
+  operation: Schema.String,
+  path: Schema.String,
+  message: Schema.String,
+}) {}
 
 export type Error =
-  | InvalidRepositoryError
   | InvalidBranchError
   | CloneFailedError
   | FetchFailedError
@@ -103,7 +95,6 @@ export class Service extends Context.Service<Service, Interface>()("@bolt/Reposi
 
 export function isError(error: unknown): error is Error {
   return (
-    error instanceof InvalidRepositoryError ||
     error instanceof InvalidBranchError ||
     error instanceof CloneFailedError ||
     error instanceof FetchFailedError ||
@@ -114,13 +105,6 @@ export function isError(error: unknown): error is Error {
   )
 }
 
-export const parseRemote = Effect.fn("RepositoryCache.parseRemote")(function* (repository: string) {
-  return yield* Effect.try({
-    try: () => Repository.parseRemote(repository),
-    catch: (error) => new InvalidRepositoryError({ repository, message: errorMessage(error) }),
-  })
-})
-
 export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(function* (branch: string) {
   return yield* Effect.try({
     try: () => Repository.validateBranch(branch),
@@ -128,50 +112,57 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
   })
 })
 
-const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFlock.Service | Global.Service> =
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const fs = yield* FSUtil.Service
-      const git = yield* Git.Service
-      const flock = yield* EffectFlock.Service
-      const global = yield* Global.Service
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
+    const git = yield* Git.Service
+    const flock = yield* EffectFlock.Service
+    const global = yield* Global.Service
+    const kv = yield* KV.Service
 
-      return Service.of({
-        ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
-          if (input.branch) yield* validateBranch(input.branch)
+    return Service.of({
+      ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
+        if (input.branch) yield* validateBranch(input.branch)
 
-          const repository = input.reference.label
-          const localPath = Repository.cachePath(global.repos, input.reference, input.branch)
-          const cloneTarget = Repository.parse(input.reference.remote) ?? input.reference
+        const repository = input.reference.label
+        const localPath = Repository.cachePath(global.repos, input.reference, input.branch)
+        const key = `repository-cache:${localPath}`
+        const cloneTarget = Repository.parse(input.reference.remote) ?? input.reference
 
-          return yield* flock
-            .withLock(
-              Effect.gen(function* () {
-                yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
+        return yield* flock
+          .withLock(
+            Effect.gen(function* () {
+              yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
 
-                const existing = yield* git.repo.discover(AbsolutePath.make(localPath))
-                const origin = existing ? yield* git.remote.get(existing) : undefined
-                const originReference = origin ? Repository.parse(origin) : undefined
-                // Discovery walks upward, so an enclosing repository with a
-                // matching origin could masquerade as the cache entry; reuse
-                // requires the checkout to live exactly at the cache path.
-                const worktree = existing ? yield* fs.resolve(localPath) : undefined
-                const reuse = Boolean(
-                  existing &&
-                    existing.worktree === worktree &&
-                    originReference &&
-                    Repository.same(originReference, cloneTarget),
-                )
-                if (!reuse && (yield* fs.existsSafe(localPath))) {
-                  yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
-                }
+              const existing = yield* git.repo.discover(AbsolutePath.make(localPath))
+              const origin = existing
+                ? yield* git.remote.get(existing).pipe(Effect.orElseSucceed(() => undefined))
+                : undefined
+              const originReference = origin ? Repository.parse(origin) : undefined
+              // Discovery walks upward, so an enclosing repository with a
+              // matching origin could masquerade as the cache entry; reuse
+              // requires the checkout to live exactly at the cache path.
+              const worktree = existing ? yield* fs.resolve(localPath) : undefined
+              const reuse = Boolean(
+                existing &&
+                  existing.worktree === worktree &&
+                  originReference &&
+                  Repository.same(originReference, cloneTarget),
+              )
+              if (!reuse && (yield* fs.existsSafe(localPath))) {
+                yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
+              }
 
-                const status = !reuse
-                  ? ("cloned" as const)
-                  : input.refresh
-                    ? ("refreshed" as const)
-                    : ("cached" as const)
+              const now = yield* Clock.currentTimeMillis
+              const previous = Option.getOrUndefined(Schema.decodeUnknownOption(Refresh)(yield* kv.get(key)))
+              const refresh =
+                input.refresh === "daily" ? !previous || now - previous.attemptedAt >= refreshInterval : input.refresh
+              const status = !reuse ? ("cloned" as const) : refresh ? ("refreshed" as const) : ("cached" as const)
+
+              if (status !== "cached") {
+                // Record attempts before network work so failures obey the same refresh interval.
+                yield* kv.set(key, { attemptedAt: now })
 
                 if (status === "cloned") {
                   yield* git.repo
@@ -215,35 +206,36 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                     .resetHard(existing, target ? `origin/${target}` : "HEAD")
                     .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
+              }
 
-                const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
+              const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
 
-                return {
-                  repository,
-                  host: input.reference.host,
-                  remote: input.reference.remote,
-                  localPath,
-                  status,
-                  head: checkout ? yield* git.history.head(checkout) : undefined,
-                  branch: checkout ? yield* git.history.branch(checkout) : undefined,
-                } satisfies Result
-              }),
-              `repository-cache:${localPath}`,
-            )
-            .pipe(
-              Effect.mapError((error) =>
-                isError(error) ? error : new LockFailedError({ localPath, message: errorMessage(error) }),
-              ),
-            )
-        }),
-      })
-    }),
-  )
+              return {
+                repository,
+                host: input.reference.host,
+                remote: input.reference.remote,
+                localPath,
+                status,
+                head: checkout ? yield* git.history.head(checkout) : undefined,
+                branch: checkout ? yield* git.history.branch(checkout) : undefined,
+              } satisfies Result
+            }),
+            key,
+          )
+          .pipe(
+            Effect.mapError((error) =>
+              isError(error) ? error : new LockFailedError({ localPath, message: errorMessage(error) }),
+            ),
+          )
+      }),
+    })
+  }),
+)
 
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node],
+  deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node, KV.node],
 })
 
 function errorMessage(error: unknown) {
@@ -256,4 +248,4 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
   )
 }
 
-export * as RepositoryCache from "./repository-cache"
+export * as RepositoryCache from "./repository-cache.js"

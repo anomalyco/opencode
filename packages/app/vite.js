@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
@@ -23,6 +24,10 @@ export default [
         resolve: {
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
+            // The font package imports its 33 MB Chinese, Japanese and Korean add-on on demand; the app does not ship it.
+            "@betteroffice/fonts-cjk": fileURLToPath(
+              new URL("../gui-extensions/src/microsoft-office/fonts-cjk.ts", import.meta.url),
+            ),
           },
         },
         define: {
@@ -31,9 +36,14 @@ export default [
         worker: {
           format: "es",
         },
+        optimizeDeps: {
+          exclude: [...workerDeps, ...officeDeps],
+          rolldownOptions: { plugins: [bundleNestedWorkerDeps] },
+        },
       }
     },
   },
+  dropUnloadedOfficeFiles,
   {
     name: "bolt-desktop:theme-preload",
     transformIndexHtml(html) {
@@ -43,6 +53,13 @@ export default [
       )
     },
   },
-  tailwindcss(),
+  ...tailwind,
   solidPlugin(),
 ]
+
+export function inlineThemePreload(html) {
+  return html.replace(
+    /<script id="oc-theme-preload-script" src="(?:\.\/|\/)oc-theme-preload\.js"><\/script>/,
+    `<script id="oc-theme-preload-script">${themeScript}</script>`,
+  )
+}

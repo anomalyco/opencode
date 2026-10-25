@@ -1,0 +1,18 @@
+id: no-identity-pipe
+valid:
+  - schema
+  - schema.pipe(transform)
+  - schema.pipe((value) => transform(value))
+  - schema.pipe((value) => other)
+  - schema.pipe((value) => { log(value); return value })
+  - schema.pipe((value = fallback) => value)
+  - schema.pipe(({ value }) => value)
+  - schema.pipe((value) => value, transform)
+  - other.call((value) => value)
+invalid:
+  - schema.pipe((value) => value)
+  - schema.pipe(value => value)
+  - "schema.pipe((value: Schema) => value)"
+  - schema.pipe((value) => { return value })
+  - schema.pipe(value => { return value })
+  - "schema.pipe((value: Schema) => { return value })"

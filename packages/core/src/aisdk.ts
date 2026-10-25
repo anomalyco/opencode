@@ -1,25 +1,65 @@
-export * as AISDK from "./aisdk"
+export * as AISDK from "./aisdk.js"
 
-import { makeLocationNode } from "./effect/app-node"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { Cause, Context, Effect, Layer, Schema, Scope } from "effect"
-import { ModelV2 } from "./model"
-import { ProviderV2 } from "./provider"
-import { State } from "./state"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { APICallError } from "@ai-sdk/provider"
+import type {
+  JSONSchema7,
+  JSONValue,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3FinishReason,
+  LanguageModelV3FunctionTool,
+  LanguageModelV3Message,
+  LanguageModelV3Prompt,
+  LanguageModelV3StreamPart,
+  LanguageModelV3ToolChoice,
+  SharedV3ProviderOptions,
+} from "@ai-sdk/provider"
+import {
+  FinishReason,
+  LLMEvent,
+  AIError,
+  LanguageModel,
+  ProviderID,
+  ProviderMetadata,
+  TransportError,
+  ToolResultValue,
+  type ContentPart,
+  type LLMRequest,
+  type Media,
+  type ToolDefinition,
+  type UsageInput,
+} from "@opencode/ai/effect"
+import { Auth, Endpoint, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import { ProviderShared } from "@opencode/ai/protocols/shared"
+import { isRecord } from "@opencode/ai/utils/record"
+import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
+import { makeParser } from "effect/encoding/Sse"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { AsyncLocalStorage } from "node:async_hooks"
+import type { ID, RuntimeInfo } from "./model.js"
+import { Provider } from "./provider.js"
+import { State } from "./state.js"
+import { stringify } from "./tool/runtime.js"
 
 type SDK = any
+type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]
+type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["content"]
+type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
+
+const decodeJsonRecord = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))
 
 export interface SDKEvent {
-  readonly model: ModelV2.Info
+  readonly model: RuntimeInfo
   readonly package: string
-  readonly options: Record<string, any>
+  readonly options: Record<string, unknown>
   sdk?: SDK
 }
 
 export interface LanguageEvent {
-  readonly model: ModelV2.Info
+  readonly model: RuntimeInfo
   readonly sdk: SDK
-  readonly options: Record<string, any>
+  readonly options: Record<string, unknown>
   language?: LanguageModelV3
 }
 
@@ -29,15 +69,23 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let deadline: number | undefined
+  const parser = makeParser((event) => {
+    if (event._tag === "Event") deadline = Date.now() + ms
+  })
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
+      const expires = deadline ?? Date.now() + ms
+      deadline = expires
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+        const remaining = Math.max(0, expires - Date.now())
         const id = setTimeout(() => {
           const err = new Error("SSE read timed out")
           ctl.abort(err)
-          reader.cancel(err).catch(() => {})
+          void reader.cancel(err)
           reject(err)
-        }, ms)
+        }, remaining)
 
         reader.read().then(
           (part) => {
@@ -56,6 +104,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
         return
       }
 
+      parser.feed(decoder.decode(part.value, { stream: true }))
       ctrl.enqueue(part.value)
     },
     async cancel(reason) {
@@ -71,30 +120,39 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-function prepareOptions(model: ModelV2.Info, pkg: string) {
-  const options: Record<string, any> = {
-    name: model.providerID,
-    ...(model.api.type === "aisdk" ? (model.api.settings ?? {}) : {}),
-    ...model.request.body,
+function prepareOptions(model: RuntimeInfo, pkg: string) {
+  const projected = mapBodyToProviderOptions(model, pkg)
+  const options: Record<string, unknown> = {
+    name: model.canonical ?? model.providerID,
+    ...(model.settings ?? {}),
+    headers: model.headers,
+    body: projected.body,
   }
-  if (model.api.type === "aisdk" && model.api.url) options.baseURL = model.api.url
 
   const customFetch = options.fetch
-  const chunkTimeout = options.chunkTimeout
+  const timeouts = Provider.timeouts(options)
+  delete options.headerTimeout
   delete options.chunkTimeout
+  delete options.compaction
+  delete options.transport
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
-    const signals = [
-      opts.signal,
-      typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
-      options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-        ? AbortSignal.timeout(options.timeout)
-        : undefined,
-    ].filter((item): item is AbortSignal | AbortController => Boolean(item))
-    const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
-    const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
-    if (abortSignals.length === 1) opts.signal = abortSignals[0]
-    if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
+    // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
+    // a timer that is cleared once headers arrive. The whole-request limit is meant to span the body.
+    const headers = new AbortController()
+    const headerTimer =
+      timeouts.headerTimeout === false
+        ? undefined
+        : setTimeout(() => headers.abort(new Error(HEADER_TIMEOUT_MESSAGE)), timeouts.headerTimeout)
+    const chunks = new AbortController()
+    opts.signal = AbortSignal.any(
+      [
+        opts.signal,
+        headers.signal,
+        chunks.signal,
+        timeouts.timeout ? AbortSignal.timeout(timeouts.timeout) : undefined,
+      ].filter((item): item is AbortSignal => item !== undefined && item !== null),
+    )
 
     const runFetch = () =>
       (typeof customFetch === "function" ? customFetch : fetch)(input, {
@@ -131,12 +189,66 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   return options
 }
 
-export class InitError extends Schema.TaggedErrorClass<InitError>()("AISDK.InitError", {
-  providerID: ProviderV2.ID,
+type Fetch = (input: Parameters<typeof fetch>[0], init?: BunFetchRequestInit) => Promise<Response>
+
+const isFetch = (value: unknown): value is Fetch => typeof value === "function"
+
+// HTTP hook middleware is scoped to one model request, but the SDK's fetch is baked into the
+// cached language model, so the active middleware rides along in async context instead.
+const httpMiddleware = new AsyncLocalStorage<{ http: HttpMiddleware; context: Context.Context<never> }>()
+
+function throughMiddleware(
+  store: { http: HttpMiddleware; context: Context.Context<never> },
+  send: Fetch,
+  input: Parameters<typeof fetch>[0],
+  init: BunFetchRequestInit,
+) {
+  const toError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)))
+  const request = input instanceof Request ? new Request(input, init) : new Request(String(input), init)
+  return Effect.runPromiseWith(store.context)(
+    Effect.gen(function* () {
+      // Hooks see a byte body like on the native route, so they may convert it to a web Request
+      // as many times as they like without contending for one stream.
+      const body = request.body ? new Uint8Array(yield* Effect.promise(() => request.arrayBuffer())) : undefined
+      const response = yield* store.http(
+        body
+          ? HttpClientRequest.bodyUint8Array(
+              HttpClientRequest.fromWeb(request),
+              body,
+              request.headers.get("content-type") ?? undefined,
+            )
+          : HttpClientRequest.fromWeb(request),
+        (sent) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(sent)
+            const response = yield* Effect.tryPromise(async () =>
+              send(web.url, {
+                ...init,
+                method: web.method,
+                headers: web.headers,
+                body: web.body ? await web.arrayBuffer() : undefined,
+              }),
+            )
+            return HttpClientResponse.fromWeb(sent, response)
+          }).pipe(Effect.mapError(toError)),
+      )
+      const stream = [204, 205, 304].includes(response.status)
+        ? null
+        : yield* Stream.toReadableStreamEffect(response.stream)
+      return new Response(stream, { status: response.status, headers: response.headers })
+    }),
+    { signal: init.signal ?? undefined },
+  )
+}
+
+const HEADER_TIMEOUT_MESSAGE = "Response headers timed out"
+
+export class InitError extends Schema.TaggedError<InitError>()("AISDK.InitError", {
+  providerID: Provider.ID,
   cause: Schema.Defect(),
 }) {}
 
-function initError(providerID: ProviderV2.ID) {
+function initError(providerID: Provider.ID) {
   return Effect.catchCause((cause) => Effect.fail(new InitError({ providerID, cause: Cause.squash(cause) })))
 }
 
@@ -151,7 +263,8 @@ export interface Interface {
   }
   readonly runSDK: (event: SDKEvent) => Effect.Effect<SDKEvent>
   readonly runLanguage: (event: LanguageEvent) => Effect.Effect<LanguageEvent>
-  readonly language: (model: ModelV2.Info) => Effect.Effect<LanguageModelV3, InitError>
+  readonly language: (model: RuntimeInfo) => Effect.Effect<LanguageModelV3, InitError>
+  readonly model: (model: RuntimeInfo) => Effect.Effect<LanguageModel, InitError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@bolt/v2/AISDK") {}
@@ -163,6 +276,17 @@ export const locationLayer = Layer.effect(
     let languageHooks: ((event: LanguageEvent) => Effect.Effect<void> | void)[] = []
     const languages = new Map<string, LanguageModelV3>()
     const sdks = new Map<string, SDK>()
+    const functionIDs = new WeakMap<object, number>()
+    let nextFunctionID = 0
+    const cacheKey = (input: unknown) =>
+      JSON.stringify(input, (_key, value: unknown) => {
+        if (typeof value !== "function") return value
+        const existing = functionIDs.get(value)
+        if (existing !== undefined) return `function:${existing}`
+        const id = nextFunctionID++
+        functionIDs.set(value, id)
+        return `function:${id}`
+      }) ?? ""
 
     const register = <Event>(
       hooks: () => ((event: Event) => Effect.Effect<void> | void)[],
@@ -206,24 +330,38 @@ export const locationLayer = Layer.effect(
       runSDK: (event) => run(sdkHooks, event),
       runLanguage: (event) => run(languageHooks, event),
       language: Effect.fn("AISDK.language")(function* (model) {
-        const key = `${model.providerID}/${model.id}/${model.request.variant ?? "default"}`
+        const key = cacheKey({
+          providerID: model.providerID,
+          canonical: model.canonical,
+          id: model.id,
+          modelID: model.modelID,
+          package: model.package,
+          settings: model.settings,
+          headers: model.headers,
+          body: model.body,
+          limit: model.limit,
+        })
         const existing = languages.get(key)
         if (existing) return existing
-        if (model.api.type !== "aisdk")
+        if (!Provider.isAISDK(model.package))
           return yield* new InitError({
             providerID: model.providerID,
-            cause: new Error(`Unsupported api ${model.api.type}`),
+            cause: new Error(`Unsupported package ${model.package}`),
           })
 
-        const options = prepareOptions(model, model.api.package)
-        const sdkKey = JSON.stringify({
+        const packageName = Provider.packageName(model.package)
+        const options = prepareOptions(model, packageName)
+        const sdkKey = cacheKey({
           providerID: model.providerID,
-          api: model.api,
-          options,
+          canonical: model.canonical,
+          package: packageName,
+          settings: model.settings,
+          headers: model.headers,
+          body: model.body,
         })
         const sdk =
           sdks.get(sdkKey) ??
-          (yield* service.runSDK({ model, package: model.api.package, options }).pipe(initError(model.providerID))).sdk
+          (yield* service.runSDK({ model, package: packageName, options }).pipe(initError(model.providerID))).sdk
         if (!sdk)
           return yield* new InitError({
             providerID: model.providerID,
@@ -231,15 +369,716 @@ export const locationLayer = Layer.effect(
           })
         sdks.set(sdkKey, sdk)
         const result = yield* service.runLanguage({ model, sdk, options }).pipe(initError(model.providerID))
-        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.api.id)).pipe(
+        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.modelID ?? model.id)).pipe(
           initError(model.providerID),
         )
         languages.set(key, language)
         return language
       }),
+      model: Effect.fn("AISDK.model")(function* (model) {
+        return modelFromLanguage(model, yield* service.language(model))
+      }),
     })
     return service
   }),
 )
+
+function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
+  const packageName = Provider.packageName(info.package!)
+  const projected = mapBodyToProviderOptions(info, packageName)
+  const providerID = info.canonical ?? info.providerID
+  const optionKey = providerOptionKey(packageName, providerID)
+  const route: AnyRoute = {
+    compact: undefined,
+    id: `ai-sdk:${packageName}`,
+    provider: ProviderID.make(providerID),
+    providerMetadataKey: optionKey,
+    protocol: "ai-sdk",
+    // AI SDK providers convert tool schemas themselves, so model-family sanitizers stay off here.
+    sanitizer: "none",
+    endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
+    auth: Auth.none,
+    transport: {
+      id: "ai-sdk",
+      prepare: (input) => Effect.succeed(input.body),
+      execute: () => Effect.succeed({ frames: Stream.empty }),
+    },
+    defaults: {
+      headers: info.headers,
+      http:
+        projected.body === undefined && info.headers === undefined
+          ? undefined
+          : {
+              body: projected.body === undefined ? undefined : { ...projected.body },
+              headers: info.headers,
+            },
+      providerOptions: projected.settings,
+    },
+    body: {
+      schema: Schema.Unknown,
+      from: (request) =>
+        Effect.try({
+          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
+          catch: (cause) =>
+            cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
+        }),
+    },
+    with: () => route,
+    model: (input) =>
+      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
+    prepareTransport: (body) => Effect.succeed(body),
+    streamPrepared: (prepared, _request, _runtime, options) =>
+      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+  }
+  return LanguageModel.make({
+    id: info.modelID ?? info.id,
+    provider: providerID,
+    route,
+    compatibility: info.compatibility,
+  })
+}
+
+function gatewayProviderOptions(modelID: ID, settings: Readonly<Record<string, JSONValue>>) {
+  const gateway = isRecord(settings.gateway) ? { ...settings.gateway } : undefined
+  const model = Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "gateway"))
+  if (Object.keys(model).length === 0) return gateway === undefined ? undefined : { gateway }
+
+  const separator = modelID.indexOf("/")
+  const prefix = separator > 0 ? modelID.slice(0, separator) : undefined
+  if (prefix)
+    return { ...(gateway === undefined ? {} : { gateway }), [prefix === "amazon" ? "bedrock" : prefix]: model }
+  if (gateway !== undefined) return { gateway: { ...gateway, ...model } }
+  return { gateway: model }
+}
+
+function providerOptionKey(packageName: string | undefined, providerID: Provider.ID) {
+  if (packageName === "@ai-sdk/google") return "google"
+  if (packageName === "@ai-sdk/google-vertex") return "vertex"
+  if (packageName === "@ai-sdk/google-vertex/anthropic") return "anthropic"
+  if (packageName === "@ai-sdk/amazon-bedrock") return "bedrock"
+  if (packageName === "@ai-sdk/amazon-bedrock/mantle") return "openai"
+  if (packageName === "@ai-sdk/azure") return "azure"
+  if (packageName === "@ai-sdk/github-copilot") return "copilot"
+  if (packageName === "@jerome-benoit/sap-ai-provider-v2") return "sap-ai"
+  if (packageName === "@ai-sdk/openai-compatible") return providerID.split(".")[0]
+  if (packageName === "@openrouter/ai-sdk-provider") return "openrouter"
+  if (packageName === "ai-gateway-provider") return "openaiCompatible"
+  if (packageName?.startsWith("@ai-sdk/")) return packageName.slice("@ai-sdk/".length)
+  return providerID
+}
+
+function requestSettings(settings: Readonly<Record<string, unknown>> | undefined) {
+  if (settings === undefined) return undefined
+  const result = Object.fromEntries(
+    Object.entries(settings).filter(
+      ([key]) =>
+        ![
+          "apiKey",
+          "authToken",
+          "baseURL",
+          "chunkTimeout",
+          "compaction",
+          "fetch",
+          "headerTimeout",
+          "timeout",
+          "transport",
+        ].includes(key),
+    ),
+  )
+  return Object.keys(result).length === 0 ? undefined : result
+}
+
+function mapBodyToProviderOptions(model: RuntimeInfo, packageName: string) {
+  const settings = requestSettings(model.settings)
+  const pro = Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(model.body?.reasoning)
+  const forceReasoning =
+    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(packageName) &&
+    (pro || settings?.reasoningEffort !== undefined || settings?.reasoningSummary !== undefined)
+  const normalized = forceReasoning ? Provider.mergeOverlay(settings, { forceReasoning: true }) : settings
+  if (!pro) return { settings: normalized, body: model.body }
+  const body = { ...model.body }
+  delete body.reasoning
+  return {
+    settings: Provider.mergeOverlay(normalized, { reasoningMode: "pro" }),
+    body: Object.keys(body).length === 0 ? undefined : body,
+  }
+}
+
+function callOptions(
+  request: LLMRequest,
+  packageName: string | undefined,
+  modelID: ID,
+  optionKey: string,
+): LanguageModelV3CallOptions {
+  const flattened = ProviderShared.flattenToolRequest(request)
+  return {
+    prompt: prompt(flattened.request),
+    maxOutputTokens: request.generation?.maxTokens,
+    temperature: request.generation?.temperature,
+    stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
+    topP: request.generation?.topP,
+    topK: request.generation?.topK,
+    presencePenalty: request.generation?.presencePenalty,
+    frequencyPenalty: request.generation?.frequencyPenalty,
+    seed: request.generation?.seed,
+    tools: flattened.tools.map(tool),
+    toolChoice: toolChoice(request.toolChoice),
+    headers: request.http?.headers,
+    providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
+  }
+}
+
+function prompt(request: LLMRequest): LanguageModelV3Prompt {
+  const system = request.system
+    .map((part) => part.text)
+    .filter(Boolean)
+    .join("\n\n")
+  const pending: UserContent = []
+  const messages = request.messages.flatMap((input, index) => {
+    if (input.role !== "tool") return message(input)
+    const lowered = toolMessage(input)
+    pending.push(...lowered.media)
+    if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
+    const media = [...pending]
+    pending.length = 0
+    return [
+      ...lowered.messages,
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "Attached media from tool result:" }, ...media],
+      },
+    ]
+  })
+  if (!system.length) return messages
+  return [{ role: "system", content: system }, ...messages]
+}
+
+function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
+  switch (input.role) {
+    case "system":
+      // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
+      // chronological instruction update, but opaque AI SDK providers do not uniformly allow the system role after
+      // conversation history, so preserve its position using the safe wrapped-user fallback.
+      return [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
+            },
+          ],
+        },
+      ]
+    case "user":
+      return [{ role: "user", content: input.content.flatMap(userPart) }]
+    case "assistant":
+      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
+    case "tool":
+      return toolMessage(input).messages
+  }
+}
+
+function toolMessage(input: LLMRequest["messages"][number]) {
+  const media: UserContent = []
+  const content = input.content.flatMap((part) => {
+    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
+    const value = part.result.value.filter((item) => {
+      if (item.type !== "file") return true
+      if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
+      media.push({
+        type: "file",
+        mediaType: item.mime,
+        data: fileData(ProviderShared.toolFileMedia(item).media),
+        filename: item.name,
+      })
+      return false
+    })
+    return toolResultPart({
+      ...part,
+      result:
+        value.length === 0
+          ? { type: "text", value: "Media attached in the following user message." }
+          : { ...part.result, value },
+    })
+  })
+  return {
+    messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
+    media,
+  }
+}
+
+function userPart(part: ContentPart): UserContent {
+  if (part.type === "text") return [{ type: "text", text: part.text }]
+  if (part.type === "media")
+    return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
+  return []
+}
+
+function assistantPart(part: ContentPart): AssistantContent {
+  switch (part.type) {
+    case "compaction":
+      throw ProviderShared.unsupportedOperation({
+        operation: "compaction-replay",
+        provider: part.provider,
+        message: "AI SDK routes cannot replay native provider compaction state",
+      })
+    case "text":
+      return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
+    case "media":
+      return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
+    case "reasoning":
+      return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
+    case "tool-call":
+      return [
+        {
+          type: "tool-call",
+          toolCallId: part.id,
+          toolName: part.name,
+          input: part.input,
+          providerExecuted: part.providerExecuted,
+          providerOptions: metadataProviderOptions(part.providerMetadata),
+        },
+      ]
+    case "tool-result":
+      return toolResultPart(part)
+    case "effort":
+      throw ProviderShared.unsupportedContent("AI SDK", "assistant", [
+        "text",
+        "media",
+        "reasoning",
+        "tool-call",
+        "tool-result",
+      ])
+  }
+}
+
+function fileData(media: Media.Asset) {
+  const source = media.source
+  if (source.type === "bytes" || source.type === "base64") return source.data
+  if (source.type === "url") return new URL(source.url)
+  throw ProviderShared.unsupportedOperation({
+    operation: "media-ref",
+    provider: source.provider,
+    message: "AI SDK routes cannot forward provider media references",
+  })
+}
+
+function toolResultPart(part: ContentPart): ToolResultContent[] {
+  if (part.type !== "tool-result") return []
+  return [
+    {
+      type: "tool-result",
+      toolCallId: part.id,
+      toolName: part.name,
+      output: toolOutput(part.result),
+      providerOptions: metadataProviderOptions(part.providerMetadata),
+    },
+  ]
+}
+
+function toolOutput(result: ToolResultValue) {
+  switch (result.type) {
+    case "text":
+    case "error":
+      return { type: "text" as const, value: stringify(result.value) }
+    case "content":
+      return {
+        type: "content" as const,
+        value: result.value.map((item) => {
+          if (item.type === "text") return { type: "text" as const, text: item.text }
+          const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1]
+          const image = item.mime.toLowerCase().startsWith("image/")
+          if (data !== undefined)
+            return image
+              ? { type: "image-data" as const, data, mediaType: item.mime }
+              : { type: "file-data" as const, data, mediaType: item.mime, filename: item.name }
+          return image ? { type: "image-url" as const, url: item.uri } : { type: "file-url" as const, url: item.uri }
+        }),
+      }
+    case "json":
+      return { type: "json" as const, value: jsonValue(result.value) }
+  }
+}
+
+function tool(input: ToolDefinition): LanguageModelV3FunctionTool {
+  return {
+    type: "function",
+    name: input.name,
+    description: input.description,
+    inputSchema: input.inputSchema as JSONSchema7,
+  }
+}
+
+function toolChoice(input: LLMRequest["toolChoice"]): LanguageModelV3ToolChoice | undefined {
+  if (!input) return undefined
+  if (input.type === "tool") return input.name === undefined ? undefined : { type: "tool", toolName: input.name }
+  return { type: input.type }
+}
+
+function requestProviderOptions(
+  input: LLMRequest["providerOptions"],
+  packageName: string | undefined,
+  modelID: ID,
+  optionKey: string,
+): SharedV3ProviderOptions | undefined {
+  if (!input) return undefined
+  const options = jsonObject(input)
+  if (packageName === "@ai-sdk/gateway") return gatewayProviderOptions(modelID, options)
+  if (packageName === "@ai-sdk/azure") return { openai: options, azure: options }
+  return { [optionKey]: options }
+}
+
+function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3ProviderOptions | undefined {
+  if (!input) return undefined
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
+}
+
+function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
+  const state: StreamState = { step: 0, toolNames: {}, open: {} }
+  return Stream.concat(
+    Stream.make(LLMEvent.stepStart({ index: state.step })),
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const context = yield* Effect.context<never>()
+        return yield* Effect.tryPromise({
+          try: () =>
+            http ? httpMiddleware.run({ http, context }, () => language.doStream(options)) : language.doStream(options),
+          catch: (error) => llmError(error, "request"),
+        })
+      }).pipe(
+        Effect.map((result) =>
+          Stream.fromReadableStream({
+            evaluate: () => result.stream,
+            onError: (error) => llmError(error, "read"),
+          }).pipe(
+            Stream.mapEffect((event) => streamPartEvents(state, event)),
+            Stream.flatMap((events) => Stream.fromIterable(events)),
+          ),
+        ),
+      ),
+    ),
+  )
+}
+
+type Fragment = "text" | "reasoning"
+
+type StreamState = {
+  step: number
+  toolNames: Record<string, string>
+  open: Partial<Record<Fragment, string>>
+}
+
+function streamPartEvents(
+  state: StreamState,
+  event: LanguageModelV3StreamPart,
+): Effect.Effect<ReadonlyArray<LLMEvent>, AIError> {
+  switch (event.type) {
+    case "stream-start":
+    case "response-metadata":
+    case "raw":
+    case "file":
+    case "source":
+    case "tool-approval-request":
+      return Effect.succeed([])
+    case "text-start":
+      return Effect.succeed(openFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
+    case "text-delta":
+      return Effect.succeed([
+        ...openFragment(state, "text", event.id),
+        LLMEvent.textDelta({
+          id: event.id,
+          text: event.delta,
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+    case "text-end":
+      return Effect.succeed(closeFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
+    case "reasoning-start":
+      return Effect.succeed(openFragment(state, "reasoning", event.id, providerMetadata(event.providerMetadata)))
+    case "reasoning-delta":
+      return Effect.succeed([
+        ...openFragment(state, "reasoning", event.id),
+        LLMEvent.reasoningDelta({
+          id: event.id,
+          text: event.delta,
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+    case "reasoning-end":
+      return Effect.succeed(closeFragment(state, "reasoning", event.id, providerMetadata(event.providerMetadata)))
+    case "tool-input-start":
+      state.toolNames[event.id] = event.toolName
+      return Effect.succeed([
+        LLMEvent.toolInputStart({
+          id: event.id,
+          name: event.toolName,
+          providerExecuted: event.providerExecuted,
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+    case "tool-input-delta":
+      return Effect.succeed([
+        LLMEvent.toolInputDelta({ id: event.id, name: state.toolNames[event.id] ?? "unknown", text: event.delta }),
+      ])
+    case "tool-input-end":
+      return Effect.succeed([
+        LLMEvent.toolInputEnd({
+          id: event.id,
+          name: state.toolNames[event.id] ?? "unknown",
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+    case "tool-call":
+      state.toolNames[event.toolCallId] = event.toolName
+      return ProviderShared.parseToolInput("aisdk", event.toolName, event.input).pipe(
+        Effect.map((input) => [
+          LLMEvent.toolCall({
+            id: event.toolCallId,
+            name: event.toolName,
+            input,
+            providerExecuted: event.providerExecuted,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]),
+        Effect.catch((error) =>
+          event.providerExecuted
+            ? Effect.fail(error)
+            : Effect.succeed([
+                LLMEvent.toolInputError({
+                  id: event.toolCallId,
+                  name: event.toolName,
+                  raw: event.input,
+                }),
+              ]),
+        ),
+      )
+    case "tool-result":
+      delete state.toolNames[event.toolCallId]
+      return Effect.succeed([
+        LLMEvent.toolResult({
+          id: event.toolCallId,
+          name: event.toolName,
+          result: ToolResultValue.make(event.result, event.isError ? "error" : "json"),
+          providerExecuted: true,
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+    case "finish":
+      return Effect.succeed([
+        LLMEvent.stepFinish({
+          index: state.step++,
+          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
+          usage: usage(event.usage),
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+        LLMEvent.finish({
+          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
+          usage: usage(event.usage),
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+    case "error":
+      return Effect.fail(llmError(event.error, "read"))
+  }
+}
+
+// Session persists one open text and one open reasoning fragment at a time, while AI SDK providers may overlap,
+// repeat, or omit fragment boundaries. Like the native protocol lifecycles, a start or delta for another fragment
+// closes the open one, repeated starts are ignored, and ends for fragments that are not open are dropped.
+function openFragment(state: StreamState, kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
+  const open = state.open[kind]
+  if (open === id) return []
+  state.open[kind] = id
+  const start =
+    kind === "text" ? LLMEvent.textStart({ id, providerMetadata }) : LLMEvent.reasoningStart({ id, providerMetadata })
+  if (open === undefined) return [start]
+  return [fragmentEnd(kind, open), start]
+}
+
+function closeFragment(state: StreamState, kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
+  if (state.open[kind] !== id) return []
+  state.open[kind] = undefined
+  return [fragmentEnd(kind, id, providerMetadata)]
+}
+
+function fragmentEnd(kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
+  return kind === "text" ? LLMEvent.textEnd({ id, providerMetadata }) : LLMEvent.reasoningEnd({ id, providerMetadata })
+}
+
+function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
+  const output = {
+    inputTokens: input.inputTokens.total,
+    nonCachedInputTokens: input.inputTokens.noCache,
+    cacheReadInputTokens: input.inputTokens.cacheRead,
+    cacheWriteInputTokens: input.inputTokens.cacheWrite,
+    outputTokens: input.outputTokens.total,
+    reasoningTokens: input.outputTokens.reasoning,
+    totalTokens:
+      input.inputTokens.total === undefined || input.outputTokens.total === undefined
+        ? undefined
+        : input.inputTokens.total + input.outputTokens.total,
+  }
+  return Object.values(output).some((value) => value !== undefined) ? output : undefined
+}
+
+function finishReason(value: LanguageModelV3FinishReason): FinishReason {
+  return value.unified === "other" ? "unknown" : value.unified
+}
+
+function providerMetadata(value: unknown) {
+  return Schema.is(ProviderMetadata)(value) ? value : undefined
+}
+
+function jsonObject(input: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonValue(value)]))
+}
+
+function jsonValue(input: unknown): JSONValue {
+  try {
+    const encoded = JSON.stringify(input)
+    return encoded === undefined ? null : (JSON.parse(encoded) as JSONValue)
+  } catch {
+    return stringify(input)
+  }
+}
+
+function llmError(error: unknown, operation: "request" | "read") {
+  if (error instanceof AIError) return error
+  if (APICallError.isInstance(error)) return apiCallError(error)
+  const network = networkFailure(error)
+  if (network)
+    return new AIError({
+      reason: new TransportError({
+        message: network.message.trim() === "" ? unknownErrorMessage(error) : network.message,
+        cause: error,
+        transport: "http",
+        operation,
+        code: network.code,
+      }),
+    })
+  return RequestExecutor.httpFailure({
+    message: unknownErrorMessage(error),
+    data: errorValue(error) ?? error,
+    responseBody: errorBody(error),
+    cause: error,
+  })
+}
+
+// AI SDK stream errors can arrive as plain objects. A gateway's type validation error keeps the provider's error
+// response in `value`, which carries the message and codes.
+const errorValue = (error: unknown) => (ProviderShared.isRecord(error) ? error.value : undefined)
+
+// Runtime-generated network failure shapes. The codes mirror the AI SDK's own
+// Bun network error list in handleFetchError; the messages are undici's fetch
+// TypeError and stream termination strings plus our header and chunk timeout errors.
+// Unrecognized shapes still retry via the UnknownProvider default; this match
+// only adds transport semantics (continuation eligibility, display).
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ConnectionRefused",
+  "ConnectionClosed",
+  "FailedToOpenSocket",
+])
+const NETWORK_ERROR_MESSAGES = new Set([
+  "fetch failed",
+  "failed to fetch",
+  "terminated",
+  "other side closed",
+  "sse read timed out",
+  HEADER_TIMEOUT_MESSAGE.toLowerCase(),
+])
+
+const NativeErrorShape = Schema.Struct({
+  message: Schema.String,
+  code: Schema.optionalKey(Schema.String),
+  cause: Schema.optionalKey(Schema.Unknown),
+})
+const decodeNativeErrorShape = Schema.decodeUnknownOption(NativeErrorShape)
+
+function networkFailure(error: unknown, depth = 0): { message: string; code?: string } | undefined {
+  if (depth > 4) return undefined
+  const shape = Option.getOrUndefined(decodeNativeErrorShape(error))
+  if (!shape) return undefined
+  // Prefer the deepest match: wrappers like undici's "fetch failed" TypeError
+  // carry the specific network code on their cause.
+  const cause = networkFailure(shape.cause, depth + 1)
+  if (cause) return cause
+  if (shape.code !== undefined && (NETWORK_ERROR_CODES.has(shape.code) || shape.code.startsWith("UND_ERR")))
+    return { message: shape.message, code: shape.code }
+  if (NETWORK_ERROR_MESSAGES.has(shape.message.trim().toLowerCase()))
+    return { message: shape.message, code: shape.code }
+  return undefined
+}
+
+function apiCallError(error: APICallError) {
+  const failure = RequestExecutor.httpFailure({
+    message: providerErrorMessage(error),
+    url: error.url,
+    status: error.statusCode,
+    data: error.data,
+    responseHeaders: error.responseHeaders,
+    responseBody: error.responseBody ?? errorBody(error.data),
+    cause: error,
+  })
+  if (error.statusCode !== undefined || !error.isRetryable) return failure
+  return new AIError({
+    reason: new TransportError({
+      message: failure.message,
+      body: failure.reason.body,
+      http: failure.reason.http,
+      cause: failure.reason.cause,
+      transport: "http",
+      operation: "request",
+      url: error.url,
+    }),
+  })
+}
+
+function errorBody(value: unknown) {
+  if (typeof value === "string") return value
+  if (value instanceof Error || !Schema.is(Schema.Json)(value)) return undefined
+  return ProviderShared.encodeJson(value)
+}
+
+const ProviderErrorDetail = Schema.Struct({
+  message: Schema.optionalKey(Schema.String),
+  code: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
+})
+const ProviderErrorBody = Schema.Struct({
+  ...ProviderErrorDetail.fields,
+  error: Schema.optionalKey(ProviderErrorDetail),
+})
+const decodeProviderError = Schema.decodeUnknownOption(
+  Schema.Union([ProviderErrorBody, Schema.fromJsonString(ProviderErrorBody)]),
+)
+
+function unknownErrorMessage(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : ([error, errorValue(error)]
+            .map((value) => Option.getOrUndefined(decodeProviderError(value)))
+            .flatMap((decoded) => [decoded?.error?.message, decoded?.message])
+            .find((value) => value?.trim()) ?? "")
+  return message.trim() === "" ? "Provider request failed" : message
+}
+
+function providerErrorMessage(error: APICallError) {
+  const data = Option.getOrUndefined(decodeProviderError(error.data))
+  const body = Option.getOrUndefined(decodeProviderError(error.responseBody))
+  const details = [data?.error, data, body?.error, body]
+  const message = details.map((detail) => detail?.message).find((value) => value?.trim())
+  const value = details.map((detail) => detail?.code).find((value) => value !== undefined)
+  const code = value === undefined ? undefined : String(value)
+  const prefix =
+    error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
+  return error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`))
+}
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })

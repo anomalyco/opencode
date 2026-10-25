@@ -34,9 +34,11 @@ export namespace RipgrepBinary {
       const fs = yield* FSUtil.Service
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
       const spawner = yield* ChildProcessSpawner
+      const global = yield* Global.Service
+      const findExecutable = (name: string) => which(name, undefined, global.bin)
 
-      const run = Effect.fnUntraced(function* (command: string, args: string[]) {
-        const handle = yield* spawner.spawn(ChildProcess.make(command, args, { extendEnv: true, stdin: "ignore" }))
+      const run = Effect.fnUntraced(function* (command: string, args: string[], cwd: string) {
+        const handle = yield* spawner.spawn(ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore" }))
         const [stdout, stderr, code] = yield* Effect.all(
           [
             Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -53,29 +55,23 @@ export namespace RipgrepBinary {
         config: (typeof PLATFORM)[keyof typeof PLATFORM],
         target: string,
       ) {
-        const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
+        const dir = yield* fs.makeTempDirectoryScoped({ directory: global.bin, prefix: "ripgrep-" })
 
-        if (config.extension === "zip") {
-          const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
-          const result = yield* run(shell, [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
-          ])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+        // Windows zips go through the bsdtar in System32 (Windows 10 1803+), not PowerShell, which policy can block.
+        // Git's GNU tar can come first on PATH and cannot read zip, so the system copy is called by path. bsdtar
+        // decodes its arguments in the ANSI code page, so it runs inside the temp dir and only sees the ASCII
+        // archive name: a profile path such as C:\Users\用户 would otherwise reach it as C:\Users\??.
+        const result = yield* config.extension === "zip"
+          ? run(
+              path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"),
+              ["-xf", path.relative(dir, archive)],
+              dir,
             )
-        }
-
-        if (config.extension === "tar.gz") {
-          const result = yield* run("tar", ["-xzf", archive, "-C", dir])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
-            )
-        }
+          : run("tar", ["-xzf", archive, "-C", dir], dir)
+        if (result.code !== 0)
+          throw new Error(
+            result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+          )
 
         const extracted = path.join(
           dir,
@@ -91,10 +87,10 @@ export namespace RipgrepBinary {
       return Service.of({
         filepath: yield* Effect.cached(
           Effect.gen(function* () {
-            const system = yield* Effect.sync(() => which(process.platform === "win32" ? "rg.exe" : "rg"))
+            const system = yield* Effect.sync(() => findExecutable(process.platform === "win32" ? "rg.exe" : "rg"))
             if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
-            const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
+            const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
             if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
 
             const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
@@ -103,10 +99,10 @@ export namespace RipgrepBinary {
 
             const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
             const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
-            const archive = path.join(Global.Path.bin, filename)
+            const archive = path.join(global.bin, filename)
 
             yield* Effect.logInfo("downloading ripgrep", { url })
-            yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)
+            yield* fs.ensureDir(global.bin).pipe(Effect.orDie)
             const bytes = yield* HttpClientRequest.get(url).pipe(
               http.execute,
               Effect.flatMap((response) => response.arrayBuffer),
@@ -127,6 +123,6 @@ export namespace RipgrepBinary {
   export const node = makeGlobalNode({
     service: Service,
     layer: layer,
-    deps: [FSUtil.node, httpClient, CrossSpawnSpawner.node],
+    deps: [FSUtil.node, Global.node, httpClient, CrossSpawnSpawner.node],
   })
 }

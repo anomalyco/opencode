@@ -1,0 +1,247 @@
+import { Effect, Schema } from "effect"
+import { Base64 } from "effect/encoding"
+import { Protocol } from "../route/protocol.js"
+import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
+import { OpenResponses } from "./open-responses.js"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
+import { detectMediaType } from "../utils/media-type.js"
+
+const ADAPTER = "meta-responses"
+const NAME = "Meta Responses"
+
+export const WebSearch = Schema.Struct({
+  type: Schema.Literal("web_search"),
+  search_context_size: Schema.optional(Schema.String),
+  user_location: Schema.optional(
+    Schema.Struct({
+      type: Schema.Literal("approximate"),
+      city: Schema.optional(Schema.String),
+      region: Schema.optional(Schema.String),
+      country: Schema.optional(Schema.String),
+      timezone: Schema.optional(Schema.String),
+    }),
+  ),
+})
+
+export const ImageGeneration = Schema.Struct({
+  type: Schema.Literal("image_generation"),
+  size: Schema.optional(Schema.String),
+  output_format: Schema.optional(Schema.String),
+  reasoning_strength: Schema.optional(Schema.String),
+  enable_image_search: Schema.optional(Schema.Boolean),
+  enable_web_search: Schema.optional(Schema.Boolean),
+  enable_shell: Schema.optional(Schema.Boolean),
+})
+
+const NativeTool = Schema.Union([WebSearch, ImageGeneration])
+const ImageItem = Schema.Struct({
+  type: Schema.Literal("image_generation_call"),
+  id: Schema.String,
+  status: Schema.optional(Schema.String),
+  result: optionalNull(Schema.String),
+  output_format: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.Unknown),
+})
+
+const MessageAnnotations = Schema.Struct({
+  content: Schema.Array(Schema.Struct({ annotations: optionalArray(JsonObject) })),
+})
+
+interface ParserState extends OpenResponses.ParserState {
+  readonly completedItems: ReadonlySet<string>
+}
+
+const adapter = {
+  id: ADAPTER,
+  name: NAME,
+  nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.meta),
+  restoreHostedToolItem: (item: unknown) => (Schema.is(ImageItem)(item) ? item : undefined),
+} satisfies OpenResponses.ProviderAdapter
+
+const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
+  const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const body = yield* OpenResponses.fromRequestWithAdapter(
+    LLMRequest.update(request, {
+      messages: request.messages.map((message) =>
+        Message.make({
+          ...message,
+          content: message.content.map((part) => {
+            if (
+              part.type !== "tool-result" ||
+              !part.providerExecuted ||
+              part.name !== "image_generation" ||
+              part.result.type !== "content" ||
+              part.providerMetadata?.[key]?.itemId !== part.id
+            )
+              return part
+            // Meta's signed image ID carries edit state; replay the handle, not the image bytes as a user message.
+            return ToolResultPart.make({
+              ...part,
+              result: {
+                type: "json",
+                value: { type: "image_generation_call", id: part.id, status: "completed", result: null },
+              },
+            })
+          }),
+        }),
+      ),
+    }),
+    adapter,
+  )
+  // Meta cannot see video nested in tool results; attach it after the complete result batch.
+  const input: InputItem[] = []
+  const videos: OpenResponses.MediaInput[] = []
+  const flushVideos = () => {
+    if (videos.length > 0) input.push({ type: "message", role: "user", content: videos.splice(0) })
+  }
+  for (const item of body.input) {
+    if (!isFunctionCallOutput(item)) {
+      flushVideos()
+      input.push(item)
+      continue
+    }
+    if (typeof item.output === "string") {
+      input.push(item)
+      continue
+    }
+    const content = item.output.filter((part) => part.type !== "input_video")
+    videos.push(...item.output.filter((part) => part.type === "input_video"))
+    input.push({
+      ...item,
+      output:
+        content.length === 0 && item.output.length > 0 ? "Video attached in the following user message." : content,
+    })
+  }
+  flushVideos()
+  return { ...body, input }
+})
+
+type InputItem = OpenResponses.OpenResponsesBody["input"][number]
+
+// Hosted replay items have an open `type`, so a plain tag check does not narrow the union.
+const isFunctionCallOutput = (item: InputItem): item is Extract<InputItem, { type: "function_call_output" }> =>
+  item.type === "function_call_output"
+
+const HOSTED_TOOLS = {
+  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  image_generation_call: {
+    name: "image_generation",
+    input: () => ({}),
+    result: Effect.fnUntraced(function* (raw: ResponsesHostedTools.Item) {
+      const item = yield* Schema.decodeUnknownEffect(ImageItem)(raw).pipe(
+        Effect.mapError((cause) =>
+          ProviderShared.eventError(
+            ADAPTER,
+            "Meta returned an invalid image item",
+            ProviderShared.encodeJson(raw),
+            cause,
+          ),
+        ),
+      )
+      if (item.error !== undefined && item.error !== null) return { type: "error" as const, value: item.error }
+      if (!item.result)
+        return yield* ProviderShared.eventError(
+          ADAPTER,
+          "Meta returned an image without data",
+          ProviderShared.encodeJson(raw),
+        )
+      const data = yield* Effect.fromResult(Base64.decode(item.result)).pipe(
+        Effect.mapError((cause) =>
+          ProviderShared.eventError(
+            ADAPTER,
+            "Meta returned invalid image base64",
+            ProviderShared.encodeJson(raw),
+            cause,
+          ),
+        ),
+      )
+      // Responses image items can omit output_format, including when PNG/JPEG was requested.
+      const mime =
+        item.output_format === undefined
+          ? (detectMediaType(data) ?? "application/octet-stream")
+          : `image/${item.output_format}`
+      return {
+        type: "content" as const,
+        value: [{ type: "file" as const, uri: `data:${mime};base64,${item.result}`, mime }],
+      }
+    }),
+  },
+} satisfies ResponsesHostedTools.Definitions
+
+const onEvent = Effect.fnUntraced(function* (
+  state: OpenResponses.ParserState,
+  input: OpenResponses.Event,
+) {
+  const event = OpenResponses.normalize(state, input)
+  if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
+    return yield* ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
+  const result = yield* OpenResponses.step(state, event)
+  if (event.type !== "response.output_item.done" || event.item?.type !== "message") return result
+  const message = yield* Schema.decodeUnknownEffect(MessageAnnotations)(event.item).pipe(
+    Effect.mapError((cause) =>
+      ProviderShared.eventError(
+        ADAPTER,
+        "Meta returned invalid message annotations",
+        ProviderShared.encodeJson(event),
+        cause,
+      ),
+    ),
+  )
+  const annotations = message.content.flatMap((part) => part.annotations ?? [])
+  if (annotations.length === 0) return result
+  return [
+    result[0],
+    result[1].map((item) =>
+      LLMEvent.is.textEnd(item)
+        ? LLMEvent.textEnd({
+            ...item,
+            providerMetadata: {
+              ...item.providerMetadata,
+              [state.providerMetadataKey]: { ...item.providerMetadata?.[state.providerMetadataKey], annotations },
+            },
+          })
+        : item,
+    ),
+  ] satisfies OpenResponses.StepResult
+})
+
+const step = Effect.fnUntraced(function* (state: ParserState, input: OpenResponses.Event) {
+  const completedItems = new Set(state.completedItems)
+  const event = OpenResponses.normalize(state, input)
+  if (event.type === "response.output_item.done" && event.item && completedItems.has(event.item.id))
+    return [state, []] as const
+  const events: LLMEvent[] = []
+  let current: OpenResponses.ParserState = state
+  // Muse Image delivers its image and optional summary only in response.completed.
+  // Recover terminal-only items in order, without duplicating Spark's streamed items.
+  if (event.type === "response.completed") {
+    for (const [index, item] of (event.response?.output ?? []).entries()) {
+      const done = OpenResponses.normalize(current, { type: "response.output_item.done", item, output_index: index })
+      // Spark changes reasoning IDs in the terminal snapshot; output indices still identify the streamed items.
+      if (!done.item || completedItems.has(done.item.id) || completedItems.has(state.outputItems[index] ?? "")) continue
+      const result = yield* onEvent(current, done)
+      current = result[0]
+      events.push(...result[1])
+      completedItems.add(done.item.id)
+    }
+  }
+  const result = yield* onEvent(current, event)
+  if (event.type === "response.output_item.done" && event.item) completedItems.add(event.item.id)
+  return [{ ...result[0], completedItems }, [...events, ...result[1]]] as const
+})
+
+export const protocol = Protocol.make({
+  id: ADAPTER,
+  body: { schema: OpenResponses.OpenResponsesBody, from: fromRequest },
+  stream: {
+    event: OpenResponses.protocol.stream.event,
+    initial: (request): ParserState => ({ ...OpenResponses.initial(request, adapter), completedItems: new Set() }),
+    step,
+    terminal: OpenResponses.terminal,
+  },
+})
+
+export const httpTransport = OpenResponses.httpTransport
+
+export * as MetaResponses from "./meta-responses.js"

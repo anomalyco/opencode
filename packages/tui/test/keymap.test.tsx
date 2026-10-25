@@ -1,7 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import { createBindingLookup } from "@opentui/keymap/extras"
-import { testRender, useRenderer } from "@opentui/solid"
+import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { TuiKeybind } from "../src/config/keybind"
@@ -19,71 +17,19 @@ function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
 }
 
 test("legacy page key aliases compile as page keys", async () => {
-  const sequences: Record<string, string[][]> = {}
+  let read = () => ({ up: "", down: "" })
 
   function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    const config = createResolvedKeymapConfig({
-      messages_page_up: "pgup",
-      messages_page_down: "pgdown",
-    })
-    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
-    const offLayer = keymap.registerLayer({
-      bindings: config.keybinds.gather("session", ["session.page.up", "session.page.down"]),
-    })
-    const bindings = keymap.getCommandBindings({
-      visibility: "registered",
-      commands: ["session.page.up", "session.page.down"],
-    })
-    sequences.up =
-      bindings.get("session.page.up")?.map((binding) => binding.sequence.map((part) => part.stroke.name)) ?? []
-    sequences.down =
-      bindings.get("session.page.down")?.map((binding) => binding.sequence.map((part) => part.stroke.name)) ?? []
-    onCleanup(() => {
-      offLayer()
-      offKeymap()
-    })
-
-    return (
-      <OpencodeKeymapProvider keymap={keymap}>
-        <box />
-      </OpencodeKeymapProvider>
-    )
-  }
-
-  const app = await testRender(() => <Harness />)
-  try {
-    expect(sequences).toEqual({
-      up: [["pageup"]],
-      down: [["pagedown"]],
-    })
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("mode-less bindings stay active when opencode mode changes", async () => {
-  const counts: Record<string, Record<string, number>> = {}
-
-  function Harness() {
-    const renderer = useRenderer()
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    const config = createResolvedKeymapConfig()
-    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
-    const offGlobal = keymap.registerLayer({
+    const shortcuts = Keymap.useShortcuts()
+    Keymap.createLayer(() => ({
       commands: [
-        { name: "session.list", run() {} },
-        { name: "session.new", run() {} },
-        { name: "session.page.up", run() {} },
-        { name: "session.first", run() {} },
+        { id: "session.page.up", run() {} },
+        { id: "session.page.down", run() {} },
       ],
-      bindings: config.keybinds.gather("test.global", [
-        "session.list",
-        "session.new",
-        "session.page.up",
-        "session.first",
-      ]),
+    }))
+    read = () => ({
+      up: shortcuts.get("session.page.up") ?? "",
+      down: shortcuts.get("session.page.down") ?? "",
     })
     const offBase = keymap.registerLayer({
       mode: BOLT_BASE_MODE,
@@ -122,19 +68,118 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
     )
   }
 
-  const app = await testRender(() => <Harness />)
+  const app = await testRender(() => (
+    <ConfigProvider
+      config={createTuiResolvedConfig({
+        keybinds: {
+          "session.page.up": "pgup",
+          "session.page.down": "pgdown",
+        },
+      })}
+    >
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
   try {
-    expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
-      autocomplete: {
-        "session.list": 1,
-        "session.new": 1,
-        "session.page.up": 2,
-        "session.first": 2,
-        "model.list": 0,
-      },
+    expect(read()).toEqual({ up: "pgup", down: "pgdn" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("formats navigation keys as arrows", async () => {
+  let read = () => ({}) as Record<string, string>
+  const commands = ["session.parent", "session.child.first"]
+
+  function Harness() {
+    const shortcuts = Keymap.useShortcuts()
+    Keymap.createLayer(() => ({
+      commands: commands.map((id) => ({ id, run() {} })),
+    }))
+    read = () => Object.fromEntries(commands.map((id) => [id, shortcuts.get(id) ?? ""]))
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    expect(read()).toEqual({
+      "session.parent": "↑",
+      "session.child.first": "↓",
     })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("returns every formatted command shortcut", async () => {
+  let read = () => [] as readonly string[]
+
+  function Harness() {
+    const shortcuts = Keymap.useShortcuts()
+    Keymap.createLayer(() => ({
+      commands: [{ id: "demo.command", bind: "x,y", run() {} }],
+    }))
+    read = () => shortcuts.list("demo.command")
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    expect(read()).toEqual(["x", "y"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("global commands stay reachable when the mode changes", async () => {
+  const calls: string[] = []
+  let exercise = () => {}
+
+  function Harness() {
+    const keymap = Keymap.use()
+    Keymap.createLayer(() => ({
+      mode: "global",
+      commands: [{ id: "session.list", run: () => void calls.push("global") }],
+    }))
+    Keymap.createLayer(() => ({
+      commands: [{ id: "model.list", run: () => void calls.push("base") }],
+    }))
+
+    exercise = () => {
+      keymap.dispatch("session.list")
+      keymap.dispatch("model.list")
+      const pop = keymap.mode.push("question")
+      keymap.dispatch("session.list")
+      keymap.dispatch("model.list")
+      pop()
+    }
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    exercise()
+    expect(calls).toEqual(["global", "base", "global"])
   } finally {
     app.renderer.destroy()
   }

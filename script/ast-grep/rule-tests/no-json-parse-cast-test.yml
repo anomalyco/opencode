@@ -1,0 +1,6 @@
+id: no-json-parse-cast
+valid:
+  - const value = JSON.parse(input)
+  - const value = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(input)
+invalid:
+  - const value = JSON.parse(input) as Record<string, unknown>

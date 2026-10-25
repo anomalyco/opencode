@@ -9,14 +9,19 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit"
+    "build": "bun run script/build.ts",
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
+    "@standard-schema/spec": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:",
+    "typescript": "catalog:"
   }
 }

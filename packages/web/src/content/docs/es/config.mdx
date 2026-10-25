@@ -234,8 +234,8 @@ Puede configurar los proveedores y modelos que desea utilizar en su configuraci�
 {
   "$schema": "https://bolt.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -324,7 +324,7 @@ Puedes configurar agentes especializados para tareas específicas a través de l
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -390,7 +390,7 @@ Puede configurar comandos personalizados para tareas repetitivas a través de la
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",

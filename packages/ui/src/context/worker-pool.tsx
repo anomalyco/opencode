@@ -15,6 +15,8 @@ export const WorkerPoolProvider = ctx.provider
 
 export function useWorkerPool(diffStyle: "unified" | "split" | undefined) {
   const pools = ctx.use()
+
   if (diffStyle === "split") return pools.split
+
   return pools.unified
 }

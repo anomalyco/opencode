@@ -73,7 +73,7 @@ Vous pouvez configurer globalement les options d'un modèle via le fichier confi
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -85,7 +85,7 @@ Vous pouvez configurer globalement les options d'un modèle via le fichier confi
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -99,7 +99,7 @@ Vous pouvez configurer globalement les options d'un modèle via le fichier confi
 }
 ```
 
-Ici, nous configurons les paramètres globaux pour deux modèles intégrés : `gpt-5` lorsqu'il est accessible via le fournisseur `openai` et `claude-sonnet-4-20250514` lorsqu'il est accessible via le fournisseur `anthropic`.
+Ici, nous configurons les paramètres globaux pour deux modèles intégrés : `gpt-6.1-sol` lorsqu'il est accessible via le fournisseur `openai` et `claude-sonnet-5-5` lorsqu'il est accessible via le fournisseur `anthropic`.
 Les noms du fournisseur intégré et des modèles peuvent être trouvés sur [Models.dev](https://models.dev).
 
 Vous pouvez également configurer ces options pour tous les agents que vous utilisez. La configuration de l'agent remplace ici toutes les options globales. [En savoir plus](/docs/agents/#additional).
@@ -112,7 +112,7 @@ Vous pouvez également définir des variantes personnalisées qui étendent cell
   "provider": {
     "bolt": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -177,7 +177,7 @@ Vous pouvez remplacer les variantes existantes ou ajouter les vôtres :
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",

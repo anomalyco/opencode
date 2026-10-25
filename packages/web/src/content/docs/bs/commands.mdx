@@ -9,7 +9,7 @@ Prilagođene komande vam omogućavaju da odredite prompt koji želite da pokrene
 /my-command
 ```
 
-Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`. [Saznajte više](/docs/tui#commands).
+Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo`, `/redo`, `/help`. [Saznajte više](/docs/tui#commands).
 
 ---
 
@@ -22,7 +22,7 @@ Kreiraj `.bolt/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -59,7 +59,7 @@ Koristite opciju `command` u svom Bolt [config](/docs/config):
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -84,7 +84,7 @@ Također možete definirati komande koristeći markdown datoteke. Stavite ih u:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -159,7 +159,7 @@ Ovo zamjenjuje:
 
 ### Shell izlaz
 
-Koristite _!`command`_ da ubacite izlaz [bash command](/docs/tui#bash-commands) u svoj prompt.
+Koristite _!`command`_ da ubacite izlaz [shell command](/docs/tui#shell-commands) u svoj prompt.
 Na primjer, da kreirate prilagođenu naredbu koja analizira pokrivenost testom:
 
 ```md title=".bolt/commands/analyze-coverage.md"
@@ -297,7 +297,7 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovu naredbu.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

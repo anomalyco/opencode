@@ -1,0 +1,121 @@
+import { describe, expect } from "bun:test"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
+import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Tool } from "@opencode/core/tool"
+import { Effect, Schema } from "effect"
+import { it } from "../lib/effect"
+import { readInitial, readUpdate } from "../lib/instructions"
+
+const echo: CodeModeCatalog.Tool = {
+  type: "tool",
+  name: "notes.echo",
+  description: "Echo text",
+  signature: "tools.notes.echo({\n  text: string,\n}): Promise<string>",
+}
+
+const lookup: CodeModeCatalog.Tool = {
+  type: "tool",
+  name: "orders.lookup",
+  description: "Look up an order",
+  signature: "tools.orders.lookup({\n  id: string,\n}): Promise<unknown>",
+}
+
+describe("CodeModeInstructions", () => {
+  it.effect("instructs the model not to call execute while the catalog is empty", () =>
+    Effect.gen(function* () {
+      const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [] }))
+      expect(initialized.text).toBe(
+        "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
+      )
+
+      const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), initialized)
+      expect(added.text).toContain("New tools are available in addition to those previously listed:")
+      expect(added.text).toContain(echo.signature)
+
+      expect(yield* readUpdate(CodeModeInstructions.make({ tools: [] }), { values: added.values })).toMatchObject({
+        text:
+          "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.\n\n" +
+          "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
+      })
+    }),
+  )
+
+  it.effect("renders the initial catalog, semantic deltas, and removal", () =>
+    Effect.gen(function* () {
+      const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
+      expect(initialized.text).toContain("Use the `execute` tool to call the tools listed below.")
+      expect(initialized.text).toContain("The catalog is complete.")
+      expect(initialized.text).toContain("## Available tools")
+      expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
+
+      const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
+      expect(added.text).toContain("The Code Mode tool catalog has changed.")
+      expect(added.text).toContain("New tools are available in addition to those previously listed:")
+      expect(added.text).toContain(`  - ${lookup.signature} // Look up an order`)
+      expect(added.text).not.toContain("## Available tools")
+
+      const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })
+      expect(removed.text).toBe(
+        "The Code Mode tool catalog has changed.\n\n" +
+          "The following tools are no longer available and must not be called: tools.orders.lookup.",
+      )
+
+      expect(yield* readUpdate(CodeModeInstructions.make(), initialized)).toMatchObject({
+        text: "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
+      })
+    }),
+  )
+
+  it.effect("stores a canonical sorted snapshot so registration order does not churn history", () => {
+    const alpha = {
+      name: "alpha",
+      description: "Alpha tool",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.succeed({ output: "alpha" }),
+    }
+    const zeta = {
+      name: "zeta",
+      description: "Zeta tool",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.succeed({ output: "zeta" }),
+    }
+    const layer = AppNodeBuilder.build(Tool.node, [
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    ])
+
+    return Effect.gen(function* () {
+      const tools = yield* Tool.Service
+      const initialized = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "tools", description: "Project utilities" })
+            editor.add({ ...zeta, options: { namespace: "tools" } })
+            editor.add({ ...alpha, options: { namespace: "tools" } })
+          })
+          const snapshot = yield* tools.snapshot()
+          return yield* readInitial(CodeModeInstructions.make(snapshot.codeModeCatalog))
+        }),
+      )
+      const reordered = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "tools", description: "Project utilities" })
+            editor.add({ ...alpha, options: { namespace: "tools" } })
+            editor.add({ ...zeta, options: { namespace: "tools" } })
+          })
+          const snapshot = yield* tools.snapshot()
+          return yield* readUpdate(CodeModeInstructions.make(snapshot.codeModeCatalog), initialized)
+        }),
+      )
+
+      expect(initialized.text).toContain("- tools (2 tools) // Project utilities")
+      expect(reordered.changed).toBe(false)
+      expect(reordered.text).toBe("")
+    }).pipe(Effect.provide(layer))
+  })
+})

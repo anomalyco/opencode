@@ -18,11 +18,11 @@ export function SessionReviewEmptyNoGitV2(props: SessionReviewEmptyNoGitV2Props)
       <div data-slot="session-review-v2-empty-no-git-description">
         {i18n.t("ui.sessionReviewV2.empty.noGit.description")}
       </div>
-      <ButtonV2 variant="neutral" size="normal" disabled={props.pending} onClick={props.onInitGit}>
+      <Button variant="neutral" size="normal" disabled={props.pending} onClick={props.onInitGit}>
         {props.pending
           ? i18n.t("ui.sessionReviewV2.empty.noGit.actionLoading")
           : i18n.t("ui.sessionReviewV2.empty.noGit.action")}
-      </ButtonV2>
+      </Button>
     </div>
   )
 }

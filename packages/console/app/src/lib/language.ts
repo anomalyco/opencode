@@ -84,7 +84,8 @@ const DOCS = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
-  uk: "uk",
+  // There are no Ukrainian docs, so Ukrainian visitors read the English docs.
+  uk: "root",
   ar: "ar",
   no: "nb",
   br: "pt-br",
@@ -133,34 +134,6 @@ const DOCS_LOCALE = {
   "zh-cn": "zh",
   "zh-tw": "zht",
 } as const satisfies Record<string, Locale>
-
-// Heading IDs from the localized Go documentation.
-const GO_USAGE_LIMITS = {
-  en: "usage-limits",
-  zh: "使用限制",
-  zht: "使用限制",
-  ko: "사용-한도",
-  de: "nutzungslimits",
-  es: "límites-de-uso",
-  fr: "limites-dutilisation",
-  it: "limiti-di-utilizzo",
-  da: "forbrugsgrænser",
-  ja: "利用制限",
-  pl: "limity-użycia",
-  ru: "лимиты-использования",
-  uk: "usage-limits",
-  ar: "حدود-الاستخدام",
-  no: "bruksgrenser",
-  br: "limites-de-uso",
-  th: "usage-limits",
-  tr: "kullanım-limitleri",
-} satisfies Record<Locale, string>
-
-export function goUsageLimits(locale: Locale) {
-  // No Ukrainian Go docs yet; the explicit English path overrides the locale cookie.
-  if (locale === "uk") return "/docs/en/go/#usage-limits"
-  return docs(locale, `/docs/go/#${GO_USAGE_LIMITS[locale]}`)
-}
 
 function suffix(pathname: string) {
   const index = pathname.search(/[?#]/)
@@ -237,6 +210,8 @@ export function route(locale: Locale, pathname: string) {
   if (next.startsWith("/docs")) return docs(locale, next)
   if (next.startsWith("/auth")) return next
   if (next.startsWith("/workspace")) return next
+  // The changelog worker owns /changelog and only publishes English release notes.
+  if (next === "/changelog" || next.startsWith("/changelog/")) return next
   if (locale === "en") return next
   if (next === "/") return `/${locale}`
   return `/${locale}${next}`
@@ -347,6 +322,17 @@ export function localeFromRequest(request: Request) {
   return (
     localeFromCookieHeader(request.headers.get("cookie")) ??
     detectFromAcceptLanguage(request.headers.get("accept-language"))
+  )
+}
+
+// Pages take their language from the URL alone, so one URL serves the same language to people, crawlers and caches.
+export function pageLocale(request: Request) {
+  const pathname = new URL(request.url).pathname
+  return (
+    parseLocale(request.headers.get(LOCALE_HEADER)) ??
+    fromPathname(pathname) ??
+    fromDocsPathname(pathname) ??
+    ("en" satisfies Locale)
   )
 }
 

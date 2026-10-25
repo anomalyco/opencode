@@ -1,0 +1,13 @@
+export default {
+  "command.open": "브라우저 열기",
+  "command.reload": "브라우저 페이지 새로 고침",
+  "tab.title": "브라우저",
+  "address.label": "브라우저 주소",
+  "action.stop": "중지",
+  replaced: "브라우저 제어가 다른 데스크톱 창으로 이동되었습니다.",
+  unsupported: "이 데스크톱 앱은 브라우저 창을 지원하지 않습니다.",
+  suspended: "브라우저가 일시 중지되었습니다. 다시 연결하려면 이 세션과 상호작용하세요.",
+  "failed.title": "URL에 연결할 수 없음",
+  "failed.description": "URL과 연결을 확인한 후 다시 시도하세요.",
+  "action.reload": "다시 로드",
+}

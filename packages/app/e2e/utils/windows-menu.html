@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import { mount } from "./windows-menu.fixture.tsx"
+      mount({ server: new URLSearchParams(location.search).get("server") })
+    </script>
+  </body>
+</html>

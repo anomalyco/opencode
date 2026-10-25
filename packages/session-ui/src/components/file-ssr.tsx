@@ -16,7 +16,7 @@ import {
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { File, type DiffFileProps, type FileProps } from "./file"
 
-type DiffPreload<T> = PreloadMultiFileDiffResult<T> | PreloadFileDiffResult<T>
+type DiffPreload<T> = PreloadMultiFileDiffResult<T, undefined> | PreloadFileDiffResult<T, undefined>
 
 type SSRDiffFileProps<T> = DiffFileProps<T> & {
   preloadedDiff: DiffPreload<T>
@@ -54,19 +54,24 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
   const getVirtualizer = () => {
     if (sharedVirtualizer) return sharedVirtualizer.virtualizer
     const result = acquireVirtualizer(container)
+
     if (!result) return
     sharedVirtualizer = result
+
     return result.virtualizer
   }
 
   const setSelectedLines = (range: DiffFileProps<T>["selectedLines"], attempt = 0) => {
     const diff = fileDiffInstance
+
     if (!diff) return
 
     const fixed = fixDiffSelection(getRoot(), range ?? null)
+
     if (fixed === undefined) {
       if (attempt >= 120) return
       requestAnimationFrame(() => setSelectedLines(range ?? null, attempt + 1))
+
       return
     }
 
@@ -119,7 +124,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
     // @ts-expect-error private field required for hydration
     fileDiffInstance.fileContainer = fileDiffRef
     fileDiffInstance.hydrate(
-      local.fileDiff
+      local.fileDiff || !local.before || !local.after
         ? {
             fileDiff: local.fileDiff,
             lineAnnotations: annotations,
@@ -128,12 +133,11 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
             prerenderedHTML: local.preloadedDiff.prerenderedHTML,
           }
         : {
-            oldFile: local.before
-              ? { ...local.before, contents: typeof local.before.contents === "string" ? local.before.contents : "" }
-              : local.before,
-            newFile: local.after
-              ? { ...local.after, contents: typeof local.after.contents === "string" ? local.after.contents : "" }
-              : local.after,
+            oldFile: {
+              ...local.before,
+              contents: typeof local.before.contents === "string" ? local.before.contents : "",
+            },
+            newFile: { ...local.after, contents: typeof local.after.contents === "string" ? local.after.contents : "" },
             lineAnnotations: annotations,
             fileContainer: fileDiffRef,
             containerWrapper: container,
@@ -146,6 +150,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
 
   createEffect(() => {
     const diff = fileDiffInstance
+
     if (!diff) return
     diff.setLineAnnotations(local.annotations ?? [])
     diff.rerender()
@@ -159,6 +164,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
     const ranges = local.commentedLines ?? []
     requestAnimationFrame(() => {
       const root = getRoot()
+
       if (!root) return
       markCommentedDiffLines(root, ranges)
     })
@@ -193,5 +199,6 @@ export type FileSSRProps<T = {}> = FileProps<T>
 
 export function FileSSR<T>(props: FileSSRProps<T>) {
   if (props.mode !== "diff" || !props.preloadedDiff) return File(props)
+
   return DiffSSRViewer(props as SSRDiffFileProps<T>)
 }

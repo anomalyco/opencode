@@ -1,5 +1,4 @@
 import { createStore } from "solid-js/store"
-import { dirname } from "node:path"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
@@ -7,37 +6,33 @@ import { useTheme, selectedForeground } from "../../context/theme"
 import type { PermissionRequest } from "@bolt-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
-import { useSync } from "../../context/sync"
-import { useProject } from "../../context/project"
+import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
-import { Locale } from "../../util/locale"
-import { webSearchProviderLabel } from "../../util/tool-display"
+import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
 import { BOLT_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { SimulationSemantics } from "../../simulation/semantics"
+import { PatchDiff } from "../../component/patch-diff"
+import { useToast } from "../../ui/toast"
 
-type PermissionStage = "permission" | "always" | "reject"
+type PermissionStage = "permission" | "reject"
 
-function EditBody(props: { request: PermissionRequest }) {
-  const themeState = useTheme()
-  const theme = themeState.theme
-  const syntax = themeState.syntax
-  const config = useTuiConfig()
+function EditBody(props: { file?: string; diff?: string; patch?: string }) {
+  const theme = useTheme()
+  const themes = useThemes()
+  const syntax = themes.currentSyntax
+  const config = useConfig().data
   const dimensions = useTerminalDimensions()
 
-  const filepath = createMemo(() => {
-    const value = props.request.metadata?.filepath
-    return typeof value === "string" ? value : ""
-  })
-  const diff = createMemo(() => {
-    const value = props.request.metadata?.diff
-    return typeof value === "string" ? value : ""
-  })
+  const filepath = createMemo(() => props.file ?? "")
+  const diff = createMemo(() => props.diff ?? "")
 
   const view = createMemo(() => {
-    const diffStyle = config.diff_style
-    if (diffStyle === "stacked") return "unified"
+    const diffView = config.diffs?.view
+    if (diffView === "unified") return "unified"
+    if (diffView === "split") return "split"
     return dimensions().width > 120 ? "split" : "unified"
   })
 
@@ -52,86 +47,97 @@ function EditBody(props: { request: PermissionRequest }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: theme.background,
-              foregroundColor: theme.borderActive,
+              backgroundColor: theme.background.base,
+              foregroundColor: theme.scrollbar.base,
             },
           }}
         >
-          <diff
+          <PatchDiff
             diff={diff()}
+            hunkFg={theme.diff.text.hunkHeader}
             view={view()}
             filetype={ft()}
             syntaxStyle={syntax()}
             showLineNumbers={true}
             width="100%"
             wrapMode="word"
-            fg={theme.text}
-            addedBg={theme.diffAddedBg}
-            removedBg={theme.diffRemovedBg}
-            contextBg={theme.diffContextBg}
-            addedSignColor={theme.diffHighlightAdded}
-            removedSignColor={theme.diffHighlightRemoved}
-            lineNumberFg={theme.diffLineNumber}
-            lineNumberBg={theme.diffContextBg}
-            addedLineNumberBg={theme.diffAddedLineNumberBg}
-            removedLineNumberBg={theme.diffRemovedLineNumberBg}
+            fg={theme.text.base}
+            addedBg={theme.diff.background.added}
+            removedBg={theme.diff.background.removed}
+            contextBg={theme.diff.background.context}
+            addedSignColor={theme.diff.highlight.added}
+            removedSignColor={theme.diff.highlight.removed}
+            lineNumberFg={theme.diff.lineNumber.text}
+            lineNumberBg={theme.diff.background.context}
+            addedLineNumberBg={theme.diff.lineNumber.background.added}
+            removedLineNumberBg={theme.diff.lineNumber.background.removed}
           />
         </scrollbox>
       </Show>
       <Show when={!diff()}>
-        <box paddingLeft={1}>
-          <text fg={theme.textMuted}>No diff provided</text>
-        </box>
+        <Show
+          when={props.patch}
+          fallback={
+            <box paddingLeft={1}>
+              <text fg={theme.text.muted}>No diff provided</text>
+            </box>
+          }
+        >
+          {(patch) => (
+            <scrollbox
+              height="100%"
+              scrollAcceleration={scrollAcceleration()}
+              verticalScrollbarOptions={{
+                trackOptions: {
+                  backgroundColor: theme.background.base,
+                  foregroundColor: theme.scrollbar.base,
+                },
+              }}
+            >
+              <code
+                filetype="diff"
+                drawUnstyledText={false}
+                streaming={true}
+                syntaxStyle={syntax()}
+                content={patch()}
+                fg={theme.text.muted}
+              />
+            </scrollbox>
+          )}
+        </Show>
       </Show>
     </box>
   )
 }
 
-function TextBody(props: { title: string; description?: string; icon?: string }) {
-  const { theme } = useTheme()
-  return (
-    <>
-      <box flexDirection="row" gap={1} paddingLeft={1}>
-        <Show when={props.icon}>
-          <text fg={theme.textMuted} flexShrink={0}>
-            {props.icon}
-          </text>
-        </Show>
-        <text fg={theme.textMuted}>{props.title}</text>
-      </box>
-      <Show when={props.description}>
-        <box paddingLeft={1}>
-          <text fg={theme.text}>{props.description}</text>
-        </box>
-      </Show>
-    </>
-  )
-}
-
 export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
-  const sdk = useSDK()
-  const project = useProject()
-  const sync = useSync()
+  const data = useData()
+  const toast = useToast()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
   const pathFormatter = usePathFormatter()
+  const session = createMemo(() => data.session.get(props.request.sessionID))
 
-  const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
-
-  const input = createMemo(() => {
-    const tool = props.request.tool
-    if (!tool) return {}
-    const parts = sync.data.part[tool.messageID] ?? []
-    for (const part of parts) {
-      if (part.type === "tool" && part.callID === tool.callID && part.state.status !== "pending") {
-        return part.state.input ?? {}
-      }
+  const source = createMemo(() => {
+    const tool = props.request.source
+    if (!tool) return { input: undefined, metadata: undefined }
+    const message = data.session.message.get(props.request.sessionID, tool.messageID)
+    if (message?.type !== "assistant") return { input: undefined, metadata: undefined }
+    const part = message.content.find((part) => part.type === "tool" && part.id === tool.id)
+    if (part?.type === "tool" && part.state.status !== "streaming") {
+      return { input: part.state.input, metadata: part.state.metadata }
     }
-    return {}
+    return { input: undefined, metadata: undefined }
   })
 
-  const { theme } = useTheme()
+  const theme = useTheme()
+
+  function reply(value: PermissionReply, message?: string) {
+    void data.session.permission
+      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, decision: value, message })
+      .catch((error: unknown) => toast.error(error))
+  }
 
   return (
     <Switch>
@@ -176,14 +182,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
       </Match>
       <Match when={store.stage === "reject"}>
         <RejectPrompt
+          action={props.request.action}
+          instance={props.request.id}
           onConfirm={(message) => {
-            void sdk.client.permission.reply({
-              reply: "reject",
-              requestID: props.request.id,
-              directory: props.directory,
-              message: message || undefined,
-              workspace: project.workspace.current(),
-            })
+            reply("reject", message || undefined)
           }}
           onCancel={() => {
             setStore("stage", "permission")
@@ -192,222 +194,94 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
       </Match>
       <Match when={store.stage === "permission"}>
         {(() => {
-          const info = () => {
-            const permission = props.request.permission
-            const data = input()
-
-            if (permission === "edit") {
-              const raw = props.request.metadata?.filepath
-              const filepath = typeof raw === "string" ? raw : ""
-              return {
-                icon: "→",
-                title: `Edit ${pathFormatter.format(filepath)}`,
-                body: <EditBody request={props.request} />,
-              }
-            }
-
-            if (permission === "read") {
-              const raw = data.filePath
-              const filePath = typeof raw === "string" ? raw : ""
-              return {
-                icon: "→",
-                title: `Read ${pathFormatter.format(filePath)}`,
-                body: (
-                  <Show when={filePath}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(filePath)}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "glob") {
-              const pattern = typeof data.pattern === "string" ? data.pattern : ""
-              return {
-                icon: "✱",
-                title: `Glob "${pattern}"`,
-                body: (
-                  <Show when={pattern}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "grep") {
-              const pattern = typeof data.pattern === "string" ? data.pattern : ""
-              return {
-                icon: "✱",
-                title: `Grep "${pattern}"`,
-                body: (
-                  <Show when={pattern}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "list") {
-              const raw = data.path
-              const dir = typeof raw === "string" ? raw : ""
-              return {
-                icon: "→",
-                title: `List ${pathFormatter.format(dir)}`,
-                body: (
-                  <Show when={dir}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(dir)}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "bash") {
-              const command = typeof data.command === "string" ? data.command : ""
-              return {
-                icon: "#",
-                title: "Shell command",
-                body: (
-                  <Show when={command}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.text}>{"$ " + command}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "task") {
-              const type = typeof data.subagent_type === "string" ? data.subagent_type : "Unknown"
-              const desc = typeof data.description === "string" ? data.description : ""
-              return {
-                icon: "#",
-                title: `${Locale.titlecase(type)} Task`,
-                body: (
-                  <Show when={desc}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.text}>{"◉ " + desc}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "webfetch") {
-              const url = typeof data.url === "string" ? data.url : ""
-              return {
-                icon: "%",
-                title: `WebFetch ${url}`,
-                body: (
-                  <Show when={url}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"URL: " + url}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "websearch") {
-              const query = typeof data.query === "string" ? data.query : ""
-              return {
-                icon: "◈",
-                title: `${webSearchProviderLabel(data.provider)} "${query}"`,
-                body: (
-                  <Show when={query}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "external_directory") {
-              const meta = props.request.metadata ?? {}
-              const parent = typeof meta["parentDir"] === "string" ? meta["parentDir"] : undefined
-              const filepath = typeof meta["filepath"] === "string" ? meta["filepath"] : undefined
-              const pattern = props.request.patterns?.[0]
-              const derived =
-                typeof pattern === "string" ? (pattern.includes("*") ? dirname(pattern) : pattern) : undefined
-
-              const raw = parent ?? filepath ?? derived
-              const dir = pathFormatter.format(raw)
-              const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
-
-              return {
-                icon: "←",
-                title: `Access external directory ${dir}`,
-                body: (
-                  <Show when={patterns.length > 0}>
-                    <box paddingLeft={1} gap={1}>
-                      <text fg={theme.textMuted}>Patterns</text>
-                      <box>
-                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
-                      </box>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "doom_loop") {
-              return {
-                icon: "⟳",
-                title: "Continue after repeated failures",
-                body: (
-                  <box paddingLeft={1}>
-                    <text fg={theme.textMuted}>This keeps the session running despite repeated failures.</text>
+          const current = permissionPresentation(
+            {
+              action: props.request.action,
+              resources: props.request.resources,
+              metadata: props.request.metadata,
+              input: source().input,
+              toolMetadata: source().metadata,
+            },
+            pathFormatter.format,
+          )
+          const presentationBody = () =>
+            props.request.action === "edit" ? (
+              <EditBody file={current.file} diff={current.diff} patch={current.patch} />
+            ) : props.request.action === "external_directory" ? (
+              <Show when={current.lines.length > 0}>
+                <box paddingLeft={1} gap={1}>
+                  <text fg={theme.text.muted}>Patterns</text>
+                  <box>
+                    <For each={current.lines}>{(line) => <text fg={theme.text.base}>{line}</text>}</For>
                   </box>
-                ),
-              }
-            }
-
-            return {
-              icon: "⚙",
-              title: `Call tool ${permission}`,
-              body: (
-                <box paddingLeft={1}>
-                  <text fg={theme.textMuted}>{"Tool: " + permission}</text>
                 </box>
-              ),
-            }
-          }
-
-          const current = info()
+              </Show>
+            ) : (
+              <box paddingLeft={1}>
+                <For each={current.lines}>
+                  {(line) => (
+                    <text
+                      fg={
+                        props.request.action === "shell" ||
+                        props.request.action === "subagent" ||
+                        props.request.action === "task"
+                          ? theme.text.base
+                          : theme.text.muted
+                      }
+                    >
+                      {line}
+                    </text>
+                  )}
+                </For>
+              </box>
+            )
 
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
-                <text fg={theme.warning}>{"△"}</text>
-                <text fg={theme.text}>Permission required</text>
+                <text fg={theme.text.feedback.warning.base}>{"△"}</text>
+                <text fg={theme.text.base}>Permission required</text>
               </box>
-              <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
-                <text fg={theme.textMuted} flexShrink={0}>
-                  {current.icon}
-                </text>
-                <text fg={theme.text}>{current.title}</text>
-              </box>
+              <Show when={props.request.action !== "shell" && current.title}>
+                <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
+                  <text fg={theme.text.muted} flexShrink={0}>
+                    {current.icon}
+                  </text>
+                  <text fg={theme.text.base}>{current.title}</text>
+                </box>
+              </Show>
             </box>
           )
 
           const body = (
-            <Prompt
+            <SessionQuestion
               title="Permission required"
+              semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
+              instance={props.request.id}
               header={header()}
-              body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              body={(option) => (
+                <Show when={option === "always"} fallback={presentationBody()}>
+                  <box paddingLeft={1} gap={1}>
+                    <For each={permissionAlwaysLines(props.request)}>
+                      {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
+                    </For>
+                  </box>
+                </Show>
+              )}
+              options={
+                props.request.save?.length
+                  ? {
+                      once: permissionOptionLabel("once"),
+                      always: permissionOptionLabel("always"),
+                      reject: permissionOptionLabel("reject"),
+                    }
+                  : { once: permissionOptionLabel("once"), reject: permissionOptionLabel("reject") }
+              }
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
-                  setStore("stage", "always")
+                  reply("always")
                   return
                 }
                 if (option === "reject") {
@@ -415,20 +289,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                     setStore("stage", "reject")
                     return
                   }
-                  void sdk.client.permission.reply({
-                    reply: "reject",
-                    requestID: props.request.id,
-                    directory: props.directory,
-                    workspace: project.workspace.current(),
-                  })
+                  reply("reject")
                   return
                 }
-                void sdk.client.permission.reply({
-                  reply: "once",
-                  requestID: props.request.id,
-                  directory: props.directory,
-                  workspace: project.workspace.current(),
-                })
+                reply("once")
               }}
             />
           )
@@ -440,47 +304,64 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   )
 }
 
-function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: () => void }) {
+export function permissionSemanticLabel(action: string, title?: string) {
+  return `Permission required: ${title ?? action}`
+}
+
+function RejectPrompt(props: {
+  action: string
+  instance: string
+  onConfirm: (message: string) => void
+  onCancel: () => void
+}) {
   let input: TextareaRenderable
-  const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
+  const enabled = useInteractivity()
+  const theme = useTheme()
+  const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   useBindings(() => ({
     mode: BOLT_BASE_MODE,
     commands: [
       {
-        name: "app.exit",
+        id: "app.exit",
         title: "Cancel permission rejection",
-        category: "Permission",
-        run() {
+        group: "Permission",
+        run(_input, event) {
+          if (event?.ctrl && event.name === "c" && input.plainText) {
+            input.setText("")
+            return
+          }
           props.onCancel()
         },
       },
-    ],
-    bindings: [
-      { key: "escape", desc: "Cancel permission rejection", group: "Permission", cmd: () => props.onCancel() },
-      ...tuiConfig.keybinds.get("app.exit"),
+      { bind: "escape", title: "Cancel permission rejection", group: "Permission", run: () => props.onCancel() },
       {
-        key: "return",
-        desc: "Confirm permission rejection",
+        bind: "return",
+        title: "Confirm permission rejection",
         group: "Permission",
-        cmd: () => props.onConfirm(input.plainText),
+        run: () => props.onConfirm(input.plainText),
       },
     ],
   }))
 
   return (
     <box
-      backgroundColor={theme.backgroundPanel}
+      id="session.permission.reject"
+      ref={SimulationSemantics.bind(() => ({
+        instance: props.instance,
+        role: "dialog",
+        label: `Reject permission: ${props.action}`,
+      }))}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
-      borderColor={theme.error}
+      borderColor={theme.text.feedback.error.base}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.error}>{"△"}</text>
-          <text fg={theme.text}>Reject permission</text>
+          <text fg={theme.text.feedback.error.base}>{"△"}</text>
+          <text fg={theme.text.base}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
           <text fg={theme.textMuted}>Tell Bolt what to do differently</text>
@@ -493,46 +374,90 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.backgroundElement}
+        backgroundColor={theme.decrease(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
       >
         <textarea
+          id="session.permission.reject.message"
           ref={(val: TextareaRenderable) => {
             input = val
+            SimulationSemantics.bind(() => ({
+              instance: props.instance,
+              role: "textbox",
+              label: "Rejection reason",
+              focused: val.focused,
+              disabled: false,
+            }))(val)
             val.traits = { status: "REJECT" }
           }}
-          focused
-          textColor={theme.text}
-          focusedTextColor={theme.text}
-          cursorColor={theme.primary}
-          cursorStyle={tuiConfig.cursor}
+          focused={enabled()}
+          textColor={theme.text.base}
+          focusedTextColor={theme.text.base}
+          cursorColor={theme.text.base}
+          cursorStyle={config.cursor}
         />
-        <box flexDirection="row" gap={2} flexShrink={0}>
-          <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
-          </text>
-          <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>cancel</span>
-          </text>
+        <box
+          id="session.permission.reject.actions"
+          ref={SimulationSemantics.bind(() => ({
+            instance: props.instance,
+            role: "group",
+            label: "Rejection actions",
+          }))}
+          flexDirection="row"
+          gap={2}
+          flexShrink={0}
+        >
+          <box
+            id="session.permission.reject.confirm"
+            ref={SimulationSemantics.bind(() => ({
+              instance: props.instance,
+              role: "button",
+              label: "Confirm rejection",
+              disabled: false,
+            }))}
+            onMouseUp={() => props.onConfirm(input.plainText)}
+          >
+            <text fg={theme.text.base}>
+              enter <span style={{ fg: theme.text.muted }}>confirm</span>
+            </text>
+          </box>
+          <box
+            id="session.permission.reject.cancel"
+            ref={SimulationSemantics.bind(() => ({
+              instance: props.instance,
+              role: "button",
+              label: "Cancel rejection",
+              disabled: false,
+            }))}
+            onMouseUp={props.onCancel}
+          >
+            <text fg={theme.text.base}>
+              esc <span style={{ fg: theme.text.muted }}>cancel</span>
+            </text>
+          </box>
         </box>
       </box>
     </box>
   )
 }
 
-function Prompt<const T extends Record<string, string>>(props: {
+export function SessionQuestion<const T extends Record<string, string>>(props: {
   title: string
+  semanticLabel?: string
+  instance: string
+  id?: string
+  group?: string
+  choicesLabel?: string
   header?: JSX.Element
-  body: JSX.Element
+  body: JSX.Element | ((option: keyof T) => JSX.Element)
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
-  const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
+  const theme = useTheme()
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
@@ -540,90 +465,73 @@ function Prompt<const T extends Record<string, string>>(props: {
     expanded: false,
   })
   const narrow = createMemo(() => dimensions().width < 80)
-  const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
+  const shortcuts = Keymap.useShortcuts()
+  const id = () => props.id ?? "session.permission"
+  const group = () => props.group ?? "Permission"
+  const dismiss = () => {
+    if (store.expanded) {
+      setStore("expanded", false)
+      return
+    }
+    if (props.escapeKey) props.onSelect(props.escapeKey)
+  }
 
   useBindings(() => ({
     mode: BOLT_BASE_MODE,
     commands: [
-      {
-        name: "app.exit",
-        title: "Reject permission",
-        category: "Permission",
-        run() {
-          if (!props.escapeKey) return
-          props.onSelect(props.escapeKey)
-        },
-      },
-      {
-        name: "permission.prompt.fullscreen",
-        title: "Toggle permission fullscreen",
-        category: "Permission",
-        run() {
-          if (!props.fullscreen) return
-          setStore("expanded", (v) => !v)
-        },
-      },
-    ],
-    bindings: [
-      {
-        key: "left",
-        desc: "Previous permission option",
-        group: "Permission",
-        cmd: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        key: "h",
-        desc: "Previous permission option",
-        group: "Permission",
-        cmd: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        key: "right",
-        desc: "Next permission option",
-        group: "Permission",
-        cmd: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        key: "l",
-        desc: "Next permission option",
-        group: "Permission",
-        cmd: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        key: "return",
-        desc: "Select permission option",
-        group: "Permission",
-        cmd: () => props.onSelect(store.selected),
-      },
       ...(props.escapeKey
         ? [
             {
-              key: "escape",
-              desc: "Reject permission",
-              group: "Permission",
-              cmd: () => props.onSelect(props.escapeKey!),
+              id: "app.exit",
+              title: "Reject permission",
+              group: group(),
+              bind: false as const,
+              run: dismiss,
             },
           ]
         : []),
-      ...(props.escapeKey ? tuiConfig.keybinds.get("app.exit") : []),
-      ...(props.fullscreen ? tuiConfig.keybinds.get("permission.prompt.fullscreen") : []),
+      ...(props.fullscreen
+        ? [
+            {
+              id: "permission.prompt.fullscreen",
+              title: "Toggle permission fullscreen",
+              group: group(),
+              bind: false as const,
+              run: () => setStore("expanded", (value) => !value),
+            },
+          ]
+        : []),
+      ...(keys.length > 1
+        ? [
+            {
+              bind: "left,h",
+              title: "Previous option",
+              group: group(),
+              run: () => {
+                const index = keys.indexOf(store.selected)
+                setStore("selected", keys[(index - 1 + keys.length) % keys.length])
+              },
+            },
+            {
+              bind: "right,l",
+              title: "Next option",
+              group: group(),
+              run: () => {
+                const index = keys.indexOf(store.selected)
+                setStore("selected", keys[(index + 1) % keys.length])
+              },
+            },
+          ]
+        : []),
+      {
+        bind: "return",
+        title: "Select option",
+        group: group(),
+        run: () => props.onSelect(store.selected),
+      },
+      ...(props.escapeKey ? [{ bind: "escape", title: "Reject permission", group: group(), run: dismiss }] : []),
     ],
+    bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],
   }))
 
   const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
@@ -631,9 +539,16 @@ function Prompt<const T extends Record<string, string>>(props: {
 
   const content = () => (
     <box
-      backgroundColor={theme.backgroundPanel}
+      id={id()}
+      ref={SimulationSemantics.bind(() => ({
+        instance: props.instance,
+        role: "dialog",
+        label: props.semanticLabel ?? props.title,
+        expanded: store.expanded,
+      }))}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
-      borderColor={theme.warning}
+      borderColor={theme.background.action.primary.focused}
       customBorderChars={SplitBorder.customBorderChars}
       {...(store.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
@@ -651,8 +566,8 @@ function Prompt<const T extends Record<string, string>>(props: {
           when={props.header}
           fallback={
             <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
-              <text fg={theme.warning}>{"△"}</text>
-              <text fg={theme.text}>{props.title}</text>
+              <text fg={theme.text.feedback.warning.base}>{"△"}</text>
+              <text fg={theme.text.base}>{props.title}</text>
             </box>
           }
         >
@@ -660,7 +575,7 @@ function Prompt<const T extends Record<string, string>>(props: {
             {props.header}
           </box>
         </Show>
-        {props.body}
+        {typeof props.body === "function" ? props.body(store.selected) : props.body}
       </box>
       <box
         flexDirection={narrow() ? "column" : "row"}
@@ -670,24 +585,49 @@ function Prompt<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.backgroundElement}
+        backgroundColor={theme.decrease(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >
-        <box flexDirection="row" gap={1} flexShrink={0}>
+        <box
+          id={`${id()}.actions`}
+          ref={SimulationSemantics.bind(() => ({
+            instance: props.instance,
+            role: "listbox",
+            label: props.choicesLabel ?? "Permission choices",
+          }))}
+          flexDirection="row"
+          gap={1}
+          flexShrink={0}
+        >
           <For each={keys}>
             {(option) => (
               <box
+                id={`${id()}.action.${String(option)}`}
+                ref={SimulationSemantics.bind(() => ({
+                  instance: props.instance,
+                  role: "option",
+                  label: props.options[option],
+                  focused: option === store.selected,
+                  selected: option === store.selected,
+                  disabled: false,
+                }))}
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={option === store.selected ? theme.warning : theme.backgroundMenu}
-                onMouseOver={() => setStore("selected", option)}
+                backgroundColor={
+                  option === store.selected
+                    ? theme.background.action.primary.focused
+                    : theme.background.action.primary.base
+                }
+                onMouseMove={() => setStore("selected", option)}
                 onMouseUp={() => {
                   setStore("selected", option)
                   props.onSelect(option)
                 }}
               >
-                <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
+                <text
+                  fg={option === store.selected ? theme.text.action.primary.focused : theme.text.action.primary.base}
+                >
                   {props.options[option]}
                 </text>
               </box>
@@ -696,15 +636,17 @@ function Prompt<const T extends Record<string, string>>(props: {
         </box>
         <box flexDirection="row" gap={2} flexShrink={0}>
           <Show when={props.fullscreen}>
-            <text fg={theme.text}>
-              {fullscreenHint()} <span style={{ fg: theme.textMuted }}>{hint()}</span>
+            <text fg={theme.text.base}>
+              {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: theme.text.muted }}>{hint()}</span>
             </text>
           </Show>
-          <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
-          </text>
-          <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+          <Show when={keys.length > 1}>
+            <text fg={theme.text.base}>
+              {"⇆"} <span style={{ fg: theme.text.muted }}>select</span>
+            </text>
+          </Show>
+          <text fg={theme.text.base}>
+            enter <span style={{ fg: theme.text.muted }}>confirm</span>
           </text>
         </box>
       </box>

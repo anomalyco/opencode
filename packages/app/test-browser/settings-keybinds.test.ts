@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createKeybindSettingsController } from "../src/components/settings-keybinds"
+import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
 
 function setup(overrides: Record<string, string> = {}) {
   const changes: [string, string][] = []
@@ -39,11 +39,14 @@ function setup(overrides: Record<string, string> = {}) {
         locale: () => "en",
         t: (key, params) => {
           if (params) return `${key}:${Object.values(params).join("|")}`
+
           if (key === "common.key.alt") return "Alt"
+
           return String(key)
         },
       },
     )
+
     return dispose
   })
 
@@ -59,6 +62,7 @@ function setup(overrides: Record<string, string> = {}) {
 
 function modKey(key: string) {
   const mac = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
   return new KeyboardEvent("keydown", { key, ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true })
 }
 

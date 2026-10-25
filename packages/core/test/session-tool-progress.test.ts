@@ -17,18 +17,21 @@ import { SessionProjector } from "@bolt-ai/core/session/projector"
 import { SessionTable, SessionMessageTable } from "@bolt-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
-const timestamp = DateTime.makeUnsafe(1)
-const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    Bus.node.replace(Bus.configured({ persist: true })),
+  ]),
+)
+const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
 
-const content = (text: string) => [{ type: "text" as const, text }]
+const content = (text: string) => [{ type: "text" as const, text }] as const
 
-describe("Tool.Progress", () => {
-  it.effect("projects durable progress and keeps final settlements durable", () =>
+describe("Session tool progress", () => {
+  it.effect("keeps progress live-only and terminal settlements durable", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
-      const service = yield* EventV2.Service
-      const sessionID = SessionV2.ID.make("ses_tool_progress_projector")
+      const service = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_tool_progress_projector")
       yield* db
         .insert(ProjectTable)
         .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -51,9 +54,9 @@ describe("Tool.Progress", () => {
       yield* service.publish(SessionEvent.Step.Started, {
         sessionID,
         assistantMessageID,
-        timestamp,
-        agent: "build",
+        agent: Agent.ID.make("build"),
         model,
+        started: 0,
       })
       const readAssistant = Effect.gen(function* () {
         const row = yield* db
@@ -65,81 +68,75 @@ describe("Tool.Progress", () => {
         if (!row) return yield* Effect.die("Missing projected assistant")
         return Schema.decodeUnknownSync(SessionMessage.Assistant)({ ...row.data, id: row.id, type: row.type })
       })
-      const start = (callID: string) =>
+      const start = (id: string) =>
         Effect.gen(function* () {
           yield* service.publish(SessionEvent.Tool.Input.Started, {
             sessionID,
-            timestamp,
             assistantMessageID,
-            callID,
+            id,
             name: "bash",
           })
           yield* service.publish(SessionEvent.Tool.Called, {
             sessionID,
-            timestamp,
             assistantMessageID,
-            callID,
-            tool: "bash",
+            id,
             input: { command: "pwd" },
-            provider: { executed: false },
+            executed: false,
           })
         })
 
       yield* start("call-success")
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "running", structured: {}, content: [] },
+        state: { status: "running", metadata: {} },
       })
 
-      yield* service.publish(SessionEvent.Tool.Progress, {
+      const progress = yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
-        timestamp,
         assistantMessageID,
-        callID: "call-success",
-        structured: { phase: "checkpoint" },
-        content: content("saved"),
+        id: "call-success",
+        metadata: { phase: "checkpoint" },
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "running", structured: { phase: "checkpoint" }, content: content("saved") },
+        state: { status: "running", metadata: {} },
       })
 
       const success = yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
-        timestamp,
         assistantMessageID,
-        callID: "call-success",
-        structured: { phase: "done" },
+        id: "call-success",
+        metadata: { phase: "done" },
         content: content("complete"),
-        provider: { executed: false },
+        executed: false,
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
-        state: { status: "completed", structured: { phase: "done" }, content: content("complete") },
+        state: { status: "completed", metadata: { phase: "done" }, content: content("complete") },
       })
 
       yield* start("call-failed")
       yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
-        timestamp,
         assistantMessageID,
-        callID: "call-failed",
-        structured: { phase: "checkpoint" },
-        content: content("before failure"),
+        id: "call-failed",
+        metadata: { phase: "checkpoint" },
       })
       const failed = yield* service.publish(SessionEvent.Tool.Failed, {
         sessionID,
-        timestamp,
         assistantMessageID,
-        callID: "call-failed",
+        id: "call-failed",
         error: { type: "unknown", message: "boom" },
-        provider: { executed: false },
+        metadata: { phase: "checkpoint" },
+        content: content("before failure"),
+        executed: false,
       })
       expect((yield* readAssistant).content[1]).toMatchObject({
         state: {
           status: "error",
-          structured: { phase: "checkpoint" },
+          metadata: { phase: "checkpoint" },
           content: content("before failure"),
           error: { type: "unknown", message: "boom" },
         },
       })
+      expect(Schema.is(SessionEvent.Durable)(progress)).toBe(false)
       expect(Schema.is(SessionEvent.Durable)(success)).toBe(true)
       expect(Schema.is(SessionEvent.Durable)(failed)).toBe(true)
 
@@ -150,9 +147,9 @@ describe("Tool.Progress", () => {
         .orderBy(asc(EventTable.seq))
         .all()
         .pipe(Effect.orDie)
-      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
-      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
-      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 1))
+      expect(rows.map((row) => row.type)).not.toContain(Bus.versionedType(SessionEvent.Tool.Progress.type, 1))
+      expect(rows.map((row) => row.type)).toContain(Bus.versionedType(SessionEvent.Tool.Success.type, 2))
+      expect(rows.map((row) => row.type)).toContain(Bus.versionedType(SessionEvent.Tool.Failed.type, 2))
     }),
   )
 })

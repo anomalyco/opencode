@@ -327,59 +327,18 @@ body {
     }
   }
 
-  [data-component="referral-ended-notice"] {
-    /* Matches the docs warning callout, which uses fixed colors in both themes. */
-    border: 1px solid rgb(98, 71, 31);
-    background: rgb(28, 20, 8);
-    color: rgb(239, 239, 239);
-    line-height: 1.8;
-    padding: 16px;
-    margin-bottom: 24px;
-
-    strong {
-      display: block;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    p {
-      margin: 0;
-    }
-  }
-
-  [data-component="referral-ended-notice"] {
-    /* Matches the docs warning callout, which uses fixed colors in both themes. */
-    border: 1px solid rgb(98, 71, 31);
-    background: rgb(28, 20, 8);
-    color: rgb(239, 239, 239);
-    line-height: 1.8;
-    padding: 16px;
-    margin-bottom: 24px;
-
-    strong {
-      display: block;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    p {
-      margin: 0;
-    }
-  }
-
   [data-component="desktop-app-banner"] {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 40px;
-    font-size: 16px;
+    margin-bottom: 32px;
 
     [data-slot="badge"] {
       background: var(--color-background-strong);
       color: var(--color-text-inverted);
       font-weight: 500;
       padding: 4px 8px;
-      line-height: 1.1;
+      line-height: 1;
       flex-shrink: 0;
     }
 
@@ -390,14 +349,48 @@ body {
     }
 
     [data-slot="text"] {
-      color: var(--color-text);
-      line-height: 1.5;
+      color: var(--color-text-strong);
+      line-height: 1.4;
+    }
+  }
+
+  [data-component="referral-ended-notice"] {
+    /* Matches the docs warning callout, which uses fixed colors in both themes. */
+    border: 1px solid rgb(98, 71, 31);
+    background: rgb(28, 20, 8);
+    color: rgb(239, 239, 239);
+    line-height: 1.8;
+    padding: 16px;
+    margin-bottom: 24px;
+
+    strong {
+      display: block;
+      text-transform: uppercase;
+      margin-bottom: 8px;
     }
 
-    @media (max-width: 40rem) {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
+    p {
+      margin: 0;
+    }
+  }
+
+  [data-component="referral-ended-notice"] {
+    /* Matches the docs warning callout, which uses fixed colors in both themes. */
+    border: 1px solid rgb(98, 71, 31);
+    background: rgb(28, 20, 8);
+    color: rgb(239, 239, 239);
+    line-height: 1.8;
+    padding: 16px;
+    margin-bottom: 24px;
+
+    strong {
+      display: block;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0;
     }
   }
 
@@ -435,11 +428,11 @@ body {
   [data-slot="model-logos"] {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 16px;
 
     svg {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       color: var(--color-text-strong);
     }
   }

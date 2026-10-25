@@ -7,14 +7,16 @@ process.env.BOLT_PERFORMANCE_RUN_ID ??= `${new Date().toISOString().replace(/[:.
 export default {
   ...config,
   testDir: ".",
-  testIgnore: "unit/**",
+  testIgnore: ["unit/**", "devex/**"],
   outputDir: "../test-results/performance",
   fullyParallel: false,
   workers: 1,
   reporter: [["html", { outputFolder: "../playwright-report/performance", open: "never" }], ["line"]],
-  webServer: {
-    ...config.webServer,
-    command: `bun run build && bun run serve -- --host 0.0.0.0 --port ${port} --strictPort`,
-    reuseExistingServer: false,
-  },
+  webServer: config.webServer
+    ? {
+        ...config.webServer,
+        command: `bun run build && bun run serve -- --host 0.0.0.0 --port ${port} --strictPort`,
+        reuseExistingServer: false,
+      }
+    : undefined,
 }

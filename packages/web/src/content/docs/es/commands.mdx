@@ -9,7 +9,7 @@ Los comandos personalizados le permiten especificar un mensaje que desea ejecuta
 /my-command
 ```
 
-Los comandos personalizados se suman a los comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`. [Más información](/docs/tui#commands).
+Los comandos personalizados se suman a los comandos integrados como `/init`, `/undo`, `/redo`, `/help`. [Más información](/docs/tui#commands).
 
 ---
 
@@ -23,7 +23,7 @@ Crear `.bolt/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ Utilice la opción `command` en su Bolt [config](/docs/config):
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ También puede definir comandos utilizando archivos de Markdown. Colócalos en:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -163,7 +163,7 @@ Esto reemplaza:
 
 ### Salida del shell
 
-Utilice _!`command`_ para inyectar la salida de [comando bash](/docs/tui#bash-commands) en su mensaje.
+Utilice _!`command`_ para inyectar la salida de [comando shell](/docs/tui#shell-commands) en su mensaje.
 
 Por ejemplo, para crear un comando personalizado que analice la cobertura de la prueba:
 
@@ -302,7 +302,7 @@ Utilice la configuración `model` para anular el modelo predeterminado para este
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -314,7 +314,7 @@ Esta es una opción de configuración **opcional**.
 
 ## Integrados
 
-opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
+opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/help`; [más información](/docs/tui#commands).
 
 :::note
 Los comandos personalizados pueden anular los comandos integrados.

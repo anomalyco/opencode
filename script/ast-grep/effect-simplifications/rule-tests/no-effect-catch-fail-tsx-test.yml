@@ -1,0 +1,21 @@
+id: no-effect-catch-fail-tsx
+valid:
+  - const view = <Widget value={effect.pipe(Effect.mapError((error) => transform(error)))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => Effect.fail(error)))} />
+  - "const view = <Widget value={effect.pipe(Effect.catch((error: Error) => Effect.fail(error)))} />"
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => { log(error); return Effect.fail(transform(error)) }))} />
+  - "const view = <Widget value={effect.pipe(Effect.catch((error) => condition ? Effect.fail(transform(error)) : Effect.fail(other(error))))} />"
+  - const view = <Widget value={effect.pipe(Effect.catchCause((cause) => Effect.fail(transform(cause))))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(transform(error))))))} />
+  - const view = <Widget value={effect.pipe(Other.catch((error) => Effect.fail(transform(error))))} />
+  - const view = <Widget value={stream.pipe(Stream.catch((error) => Effect.fail(transform(error))))} />
+  - const view = <Widget value={Effect.catch(effect, options, (error) => Effect.fail(transform(error)))} />
+invalid:
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => Effect.fail(transform(error))))} />
+  - const view = <Widget value={Effect.catch(effect, error => Effect.fail(new Wrapped(error)))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => { return Effect.fail(transform(error)) }))} />
+  - "const view = <Widget value={effect.pipe(Effect.catch((error: Error): Effect.Effect<never, Wrapped> => Effect.fail(transform(error))))} />"
+  - const view = <Widget value={stream.pipe(Stream.catch((error) => Stream.fail(transform(error))))} />
+  - const view = <Widget value={Stream.catch(stream, error => Stream.fail(new Wrapped(error)))} />
+  - const view = <Widget value={stream.pipe(Stream.catch((error) => { return Stream.fail(transform(error)) }))} />
+  - "const view = <Widget value={stream.pipe(Stream.catch((error: Error): Stream.Stream<string, Wrapped> => Stream.fail(transform(error))))} />"

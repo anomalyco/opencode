@@ -71,7 +71,7 @@ _モード_: `primary`
 
 _モード_: `subagent`
 
-複雑な質問を調査し、複数ステップのタスクを実行するための汎用エージェント。完全なツールアクセス権 (todo を除く) があるため、必要に応じてファイルを変更できます。これを使用して、複数の作業単位を並行して実行します。
+複雑な質問を調査し、複数ステップのタスクを実行するための汎用エージェント。完全なツールアクセス権があるため、必要に応じてファイルを変更できます。これを使用して、複数の作業単位を並行して実行します。
 
 ---
 
@@ -151,7 +151,7 @@ _モード_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -171,7 +171,7 @@ _モード_: `primary`
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,7 +195,7 @@ Markdown ファイルを使用してエージェントを定義することも�
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -650,7 +650,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -668,19 +668,9 @@ Only analyze code and suggest changes.
 
 ## エージェントの作成
 
-次のコマンドを使用して、新しいエージェントを作成できます。
+新しいエージェントを作成するには、プロジェクト用は `.opencode/agents/`、グローバル用は `~/.config/opencode/agents/` に Markdown ファイルを追加します。ファイル名がエージェント名になり、フロントマターで説明、モード、モデル、権限を設定します。ファイル形式については、上記の [Markdown](#markdown) を参照してください。
 
-```bash
-opencode agent create
-```
-
-この対話型コマンドは次のことを行います。
-
-1. エージェントを保存する場所を尋ねます。グローバルまたはプロジェクト固有。
-2. エージェントが行うべきことの説明。
-3. 適切なシステムプロンプトと識別子を生成します。
-4. エージェントがアクセスできるツールを選択できます。
-5. 最後に、エージェント設定を含む Markdown ファイルを作成します。
+`opencode agent list` を実行すると、OpenCode が読み込んだエージェントを一覧表示できます。
 
 ---
 

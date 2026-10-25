@@ -9,12 +9,12 @@ To debug issues with Bolt, start by checking the logs and local data it stores o
 
 ## Logs
 
-Log files are written to:
+CLI and server logs are written to:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/opencode/log/opencode.log`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
 
-Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
+Logs are appended to `opencode.log`. Run `opencode debug paths` to find the log directory if you use custom XDG paths.
 
 You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
 
@@ -31,9 +31,10 @@ This directory contains:
 
 - `auth.json` - Authentication data like API keys, OAuth tokens
 - `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
+- `opencode.db` - SQLite database containing projects, sessions, and messages
+- `snapshot/` - Project snapshots used for undo
+
+Run `opencode db path` to find the active database. Custom `OPENCODE_DB` settings and development channels can use a different filename.
 
 ---
 
@@ -175,11 +176,13 @@ If the app won't start and you can't clear settings from inside the UI, reset th
 - `bolt.settings.dat` (desktop default server URL)
 - `bolt.global.dat` and `bolt.workspace.*.dat` (UI state like recent servers/projects)
 
-To find the directory quickly:
+For the stable release, the desktop app data directory is:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (then search for the filenames above)
-- **Linux**: search under `~/.local/share` for the filenames above
-- **Windows**: Press `WIN+R` -> `%APPDATA%` (then search for the filenames above)
+- **macOS**: `~/Library/Application Support/ai.opencode.desktop/`
+- **Linux**: `~/.config/ai.opencode.desktop/` (or `$XDG_CONFIG_HOME/ai.opencode.desktop/`)
+- **Windows**: `%APPDATA%\ai.opencode.desktop\`
+
+Beta and development builds use the `ai.opencode.desktop.beta` and `ai.opencode.desktop.dev` directories instead.
 
 ---
 
@@ -237,8 +240,8 @@ Models should be referenced like so: `<providerId>/<modelId>`
 
 Examples:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 To figure out what models you have access to, run `opencode models`

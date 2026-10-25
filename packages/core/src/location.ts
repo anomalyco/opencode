@@ -4,7 +4,7 @@ import { Project } from "./project"
 import { LayerNode } from "./effect/layer-node"
 import { makeLocationNode, tags } from "./effect/app-node"
 
-export * as Location from "./location"
+export * as Location from "./location.js"
 
 export { Info, Ref, response }
 
@@ -25,7 +25,7 @@ const layer = (ref: Ref) =>
       return Service.of({
         directory: ref.directory,
         workspaceID: ref.workspaceID,
-        project: { id: resolved.id, directory: resolved.directory },
+        project: { id: resolved.id, directory: resolved.directory, canonical: resolved.canonical },
         vcs: resolved.vcs,
       })
     }),

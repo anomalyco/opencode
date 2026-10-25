@@ -83,12 +83,15 @@ For most permissions, you can use an object to apply different actions based on 
     "edit": {
       "*": "deny",
       "packages/web/src/content/docs/*.mdx": "allow"
-    }
+    },
+    "webfetch": "ask"
   }
 }
 ```
 
 Rules are evaluated by pattern match, with the **last matching rule winning**. A common pattern is to put the catch-all `"*"` rule first, and more specific rules after it.
+
+In OpenCode 1, `webfetch` accepts only `"allow"`, `"ask"`, or `"deny"`; URL-pattern objects are not supported.
 
 ### Wildcards
 
@@ -155,11 +158,12 @@ Bolt permissions are keyed by tool name, plus a couple of safety guards:
 - `grep` — content search (matches the regex pattern)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
 - `task` — launching subagents (matches the subagent type)
+- `todowrite` — updating the session's todo list
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
 - `question` — asking the user questions during execution
-- `webfetch` — fetching a URL (matches the URL)
-- `websearch` — web search (matches the query)
+- `webfetch` — fetching a URL (one action for all URLs)
+- `websearch` — web search
 - `external_directory` — triggered when a tool touches paths outside the project working directory
 - `doom_loop` — triggered when the same tool call repeats 3 times with identical input
 
@@ -171,15 +175,15 @@ If you don’t specify anything, Bolt starts from permissive defaults:
 
 - Most permissions default to `"allow"`.
 - `doom_loop` and `external_directory` default to `"ask"`.
-- `read` is `"allow"`, but `.env` files are denied by default:
+- `read` is `"allow"`, but `.env` files require approval by default:
 
 ```json title="bolt.json"
 {
   "permission": {
     "read": {
       "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
+      "*.env": "ask",
+      "*.env.*": "ask",
       "*.env.example": "allow"
     }
   }

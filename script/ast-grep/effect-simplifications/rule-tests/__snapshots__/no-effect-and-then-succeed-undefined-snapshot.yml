@@ -1,0 +1,28 @@
+id: no-effect-and-then-succeed-undefined
+snapshots:
+  Effect.andThen(effect, Effect.succeed(undefined)):
+    labels:
+      - source: Effect.andThen(effect, Effect.succeed(undefined))
+        style: primary
+        start: 0
+        end: 49
+  ? |
+    effect.pipe(
+      Effect.andThen(
+        Effect.succeed(undefined),
+      ),
+    )
+  : labels:
+      - source: |-
+          Effect.andThen(
+              Effect.succeed(undefined),
+            )
+        style: primary
+        start: 15
+        end: 65
+  effect.pipe(Effect.andThen(Effect.succeed(undefined))):
+    labels:
+      - source: Effect.andThen(Effect.succeed(undefined))
+        style: primary
+        start: 12
+        end: 53

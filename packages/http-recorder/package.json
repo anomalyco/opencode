@@ -27,14 +27,15 @@
   },
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "bun check --no-script && bun check --no-script -p test/tsconfig.json",
+    "typecheck:tsc": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
     "build": "bun ./script/build.ts",
     "verify:package": "bun ./script/verify-package.ts"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./internal": "./src/internal.ts"
+    ".": "./src/index.ts"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "README.md",
@@ -45,15 +46,15 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
+    "@effect/platform-node": "catalog:",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.83",
-    "@effect/platform-node-shared": "4.0.0-beta.83"
+    "@effect/platform-node-shared": "catalog:"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.83"
+    "effect": "catalog:"
   }
 }

@@ -149,12 +149,9 @@ Bolt サーバーは次の API を公開します。
 | `DELETE` | `/session/:id`                           | セッションとそのすべてのデータを削除する           | 戻り値 `boolean`                                                                        |
 | `PATCH`  | `/session/:id`                           | セッションのプロパティを更新する                   | 本文: `{ title? }`、<a href={typesUrl}><code>Session</code></a> を返します。            |
 | `GET`    | `/session/:id/children`                  | セッションの子セッションを取得する                 | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                    |
-| `GET`    | `/session/:id/todo`                      | セッションの ToDo リストを取得する                 | 戻り値 <a href={typesUrl}><code>Todo[]</code></a>                                       |
 | `POST`   | `/session/:id/init`                      | アプリを分析して `AGENTS.md` を作成する            | 本文: `{ messageID, providerID, modelID }`、`boolean` を返します。                      |
 | `POST`   | `/session/:id/fork`                      | メッセージで既存のセッションをフォークする         | 本文: `{ messageID? }`、<a href={typesUrl}><code>Session</code></a> を返します。        |
 | `POST`   | `/session/:id/abort`                     | 実行中のセッションを中止する                       | 戻り値 `boolean`                                                                        |
-| `POST`   | `/session/:id/share`                     | セッションを共有する                               | 戻り値 <a href={typesUrl}><code>Session</code></a>                                      |
-| `DELETE` | `/session/:id/share`                     | セッションの共有を解除する                         | 戻り値 <a href={typesUrl}><code>Session</code></a>                                      |
 | `GET`    | `/session/:id/diff`                      | このセッションの差分を取得する                     | クエリ: `messageID?`、<a href={typesUrl}><code>FileDiff[]</code></a> を返します。       |
 | `POST`   | `/session/:id/summarize`                 | セッションを要約する                               | 本文: `{ providerID, modelID }`、`boolean` を返します。                                 |
 | `POST`   | `/session/:id/revert`                    | メッセージを元に戻す                               | 本文: `{ messageID, partID? }`、`boolean` を返します。                                  |

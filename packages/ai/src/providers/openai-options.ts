@@ -1,0 +1,66 @@
+import { mergeProviderOptions, type ProviderOptions } from "../schema/index.js"
+import type { Options, ResponseIncludable, ServiceTier } from "../protocols/utils/open-responses-options.js"
+import type { ContextManagement, ReasoningContext, ReasoningMode } from "../protocols/openai-responses.js"
+
+// Mirrors OpenAI's `ResponseIncludable` union from the official SDK. Keep this
+// in lockstep with `openai-node/src/resources/responses/responses.ts`.
+export type OpenAIResponseIncludable = ResponseIncludable
+// Mirrors OpenAI's `ServiceTier` union from the official SDK.
+export type OpenAIServiceTier = ServiceTier | "scale" | "fast" | "ultrafast"
+
+export type OpenAIOptionsInput = Omit<Options, "serviceTier"> & {
+  /** Advanced in-band compaction. The caller owns checkpoint persistence and recovery. */
+  readonly contextManagement?: ContextManagement
+  readonly reasoningMode?: ReasoningMode
+  readonly reasoningContext?: ReasoningContext
+  readonly serviceTier?: OpenAIServiceTier
+  readonly [key: string]: unknown
+}
+
+export type OpenAIProviderOptionsInput = OpenAIOptionsInput
+
+const definedEntries = (input: Record<string, unknown>) =>
+  Object.entries(input).filter((entry) => entry[1] !== undefined)
+
+const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): ProviderOptions | undefined => {
+  const result = Object.fromEntries(
+    definedEntries({
+      store: options?.store,
+      reasoningEffort: options?.reasoningEffort,
+      reasoningSummary: options?.reasoningSummary,
+      include: options?.include,
+      textVerbosity: options?.textVerbosity,
+      serviceTier: options?.serviceTier,
+    }),
+  )
+  if (Object.keys(result).length === 0) return undefined
+  return result
+}
+
+export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined => {
+  const id = modelID.toLowerCase()
+  if (!id.includes("gpt-5") || id.includes("gpt-5-chat") || id.includes("gpt-5-pro")) return undefined
+  return openAIProviderOptions({
+    reasoningEffort: "medium",
+    reasoningSummary: "auto",
+    // GPT-5 reasoning models are configured stateless (`store: false`) by
+    // `openAIDefaultOptions` below, so the only way a follow-up turn can
+    // carry reasoning state is via the encrypted reasoning include. Without
+    // this, callers using the default model facade get reasoning summaries
+    // they cannot replay statelessly.
+    include: ["reasoning.encrypted_content"],
+  })
+}
+
+export const openAIDefaultOptions = (modelID: string): ProviderOptions | undefined =>
+  mergeProviderOptions(openAIProviderOptions({ store: false }), gpt5DefaultOptions(modelID))
+
+export const withOpenAIOptions = <Options extends { readonly providerOptions?: ProviderOptions }>(
+  modelID: string,
+  options: Options,
+): Omit<Options, "providerOptions"> & { readonly providerOptions?: ProviderOptions } => {
+  return {
+    ...options,
+    providerOptions: mergeProviderOptions(openAIDefaultOptions(modelID), options.providerOptions),
+  }
+}

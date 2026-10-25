@@ -24,35 +24,60 @@ import { ProjectCopyGroup } from "./groups/project-copy"
 
 // Protocol owns middleware placement, while Server injects concrete keys so Core service identities stay downstream.
 const makeApiFromGroup = <
-  const Group extends HttpApiGroup.Any,
+  const Group extends HttpApiGroup.Constraint,
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(
   eventGroup: Group,
   locationMiddleware: Context.Key<LocationId, LocationService>,
+  formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>,
   sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>,
-) =>
+): Api<
+  LocationId,
+  LocationService,
+  FormLocationId,
+  FormLocationService,
+  SessionLocationId,
+  SessionLocationService,
+  Group
+> =>
   HttpApi.make("server")
-    .add(HealthGroup)
-    .add(LocationGroup.middleware(locationMiddleware))
+    .add(ServerGroup)
+    .add(makeLocationGroup(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
-    .add(makeSessionGroup(sessionLocationMiddleware))
-    .add(MessageGroup.middleware(sessionLocationMiddleware))
+    .add(PluginGroup.middleware(locationMiddleware))
+    .add(makeSessionGroup(sessionLocationMiddleware, formLocationMiddleware))
+    .add(MessageGroup)
     .add(ModelGroup.middleware(locationMiddleware))
+    .add(GenerateGroup)
+    .add(VoiceGroup)
     .add(ProviderGroup.middleware(locationMiddleware))
     .add(IntegrationGroup.middleware(locationMiddleware))
-    .add(CredentialGroup.middleware(locationMiddleware))
+    .add(makeMcpGroup(locationMiddleware))
+    .add(CredentialGroup)
+    .add(ProjectGroup)
+    .add(makeFormGroup(locationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))
     .add(SkillGroup.middleware(locationMiddleware))
+    .add(RpcGroup.middleware(locationMiddleware))
     .add(eventGroup)
-    .add(PtyGroup.middleware(locationMiddleware))
-    .add(makeQuestionGroup(locationMiddleware, sessionLocationMiddleware))
+    .add(makePtyGroup(locationMiddleware))
+    .add(PersistentPtyGroup)
+    .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
-    .add(ProjectCopyGroup.middleware(locationMiddleware))
+    .add(WorktreeGroup)
+    .add(VcsGroup.middleware(locationMiddleware))
+    .add(DebugGroup)
+    .add(MigrationGroup)
+    .add(WebSearchGroup.middleware(locationMiddleware))
+    .add(UsageGroup.middleware(locationMiddleware))
+    .add(ConfigGroup.middleware(locationMiddleware))
     .annotateMerge(
       OpenApi.annotations({
         title: "bolt HttpApi",
@@ -64,23 +89,57 @@ const makeApiFromGroup = <
     .middleware(SchemaErrorMiddleware)
 
 export const makeApi = <
+  const Definitions extends ReadonlyArray<Definition>,
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(options: {
-  readonly definitions: ReadonlyArray<Definition>
+  readonly definitions: Definitions
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
+  readonly formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
-}) =>
-  makeApiFromGroup(makeEventGroup(options.definitions), options.locationMiddleware, options.sessionLocationMiddleware)
+}): Api<
+  LocationId,
+  LocationService,
+  FormLocationId,
+  FormLocationService,
+  SessionLocationId,
+  SessionLocationService,
+  EventGroupFor<Definitions>
+> =>
+  makeApiFromGroup(
+    makeEventGroup(options.definitions),
+    options.locationMiddleware,
+    options.formLocationMiddleware,
+    options.sessionLocationMiddleware,
+  )
 
 export const makeDefaultApi = <
   LocationId extends HttpApiMiddleware.AnyId,
   LocationService,
+  FormLocationId extends HttpApiMiddleware.AnyId,
+  FormLocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
 >(options: {
   readonly locationMiddleware: Context.Key<LocationId, LocationService>
+  readonly formLocationMiddleware: Context.Key<FormLocationId, FormLocationService>
   readonly sessionLocationMiddleware: Context.Key<SessionLocationId, SessionLocationService>
-}) => makeApiFromGroup(EventGroup, options.locationMiddleware, options.sessionLocationMiddleware)
+}): Api<
+  LocationId,
+  LocationService,
+  FormLocationId,
+  FormLocationService,
+  SessionLocationId,
+  SessionLocationService,
+  typeof EventGroup
+> =>
+  makeApiFromGroup(
+    EventGroup,
+    options.locationMiddleware,
+    options.formLocationMiddleware,
+    options.sessionLocationMiddleware,
+  )

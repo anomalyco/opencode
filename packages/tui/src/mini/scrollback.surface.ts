@@ -1,0 +1,539 @@
+// Retained streaming append logic for direct-mode scrollback.
+//
+// Static text entries are rendered through `scrollback.writer.tsx`. Retained
+// surfaces keep streaming markdown/code layout stable and wait for image loads
+// before their snapshots enter scrollback.
+import {
+  CodeRenderable,
+  ImageRenderable,
+  MarkdownRenderable,
+  TextRenderable,
+  getTreeSitterClient,
+  type TreeSitterClient,
+  type CliRenderer,
+  type ScrollbackSurface,
+  type SyntaxStyle,
+} from "@opentui/core"
+import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
+import { monoMarkdownRenderable, monoMarkdownTableOptions } from "./mono"
+import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
+import { turnSummaryCommit } from "./turn-summary"
+import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
+import { type RunTheme } from "./theme"
+import type { RunEntryBody, StreamCommit } from "./types"
+
+type ActiveBody = Exclude<RunEntryBody, { type: "none" | "structured" }>
+
+type ActiveEntry = {
+  body: ActiveBody
+  commit: StreamCommit
+  surface: ScrollbackSurface
+  renderable: TextRenderable | CodeRenderable | MarkdownRenderable
+  syntax?: SyntaxStyle
+  content: string
+  committedRows: number
+  committedBlocks: number
+  pendingSpacerRows: number
+  rendered: boolean
+}
+
+function commitMarkdownBlocks(input: {
+  surface: ScrollbackSurface
+  renderable: MarkdownRenderable
+  startBlock: number
+  endBlockExclusive: number
+  trailingNewline: boolean
+  beforeCommit?: () => void
+}) {
+  if (input.endBlockExclusive <= input.startBlock) {
+    return false
+  }
+
+  const first = input.renderable._blockStates[input.startBlock]
+  const last = input.renderable._blockStates[input.endBlockExclusive - 1]
+  if (!first || !last) {
+    return false
+  }
+
+  const next = input.renderable._blockStates[input.endBlockExclusive]
+  const start = first.renderable.y
+  const end = next ? next.renderable.y : last.renderable.y + last.renderable.height
+
+  input.beforeCommit?.()
+  input.surface.commitRows(start, end, {
+    trailingNewline: input.trailingNewline,
+  })
+  return true
+}
+
+function staticBody(commit: StreamCommit, body: RunEntryBody, spaced: number): RunEntryBody {
+  if (spaced === 0 || body.type !== "text") {
+    return body
+  }
+
+  if (commit.kind !== "tool" || commit.phase !== "progress" || commit.toolState !== "completed") {
+    return body
+  }
+
+  if (!body.content.startsWith("\n")) {
+    return body
+  }
+
+  return {
+    ...body,
+    content: body.content.replace(/^\n/, ""),
+  }
+}
+
+export class RunScrollbackStream {
+  private tail: StreamCommit | undefined
+  private rendered: StreamCommit | undefined
+  private active: ActiveEntry | undefined
+  private imageSurface: ScrollbackSurface | undefined
+  private treeSitterClient: TreeSitterClient | undefined
+  private wrote: boolean
+  private shellOutput: () => boolean
+  private mono: boolean
+  private imagePreview: boolean
+  private destroyed = false
+  private pendingThemes: RunTheme[] = []
+  private pendingStyles: SyntaxStyle[] = []
+
+  constructor(
+    private renderer: CliRenderer,
+    private theme: RunTheme,
+    options: {
+      wrote?: boolean
+      treeSitterClient?: TreeSitterClient
+      onThemeRelease?: (theme: RunTheme) => void
+      shellOutput?: () => boolean
+      mono?: boolean
+      imagePreview?: boolean
+    } = {},
+  ) {
+    this.treeSitterClient = options.treeSitterClient
+    this.wrote = options.wrote ?? false
+    this.shellOutput = options.shellOutput ?? (() => true)
+    this.mono = options.mono ?? false
+    this.imagePreview = options.imagePreview ?? false
+    this.onThemeRelease = options.onThemeRelease
+  }
+
+  private onThemeRelease: ((theme: RunTheme) => void) | undefined
+
+  public async setMono(mono: boolean): Promise<void> {
+    if (this.mono === mono) return
+    const active = this.active
+    if (active?.body.type !== "markdown") await this.complete()
+    this.mono = mono
+    if (active?.body.type !== "markdown") return
+
+    // Rebuild the Markdown tree, keeping its source and printed block boundary.
+    // Mono hooks are one-way, and ending the entry would lose open fence/list context.
+    const next = this.createEntry(active.commit, active.body)
+    this.active = { ...active, surface: next.surface, renderable: next.renderable, syntax: next.syntax }
+    active.surface.destroy()
+    active.syntax?.destroy()
+    this.releasePendingThemes()
+  }
+
+  private releasePendingThemes(): void {
+    for (const style of this.pendingStyles.splice(0)) style.destroy()
+    if (this.pendingThemes.length === 0) {
+      return
+    }
+
+    for (const theme of this.pendingThemes.splice(0)) this.onThemeRelease?.(theme)
+  }
+
+  public setTheme(theme: RunTheme): void {
+    if (this.theme === theme) {
+      return
+    }
+
+    const previous = this.theme
+    this.theme = theme
+    const active = this.active
+    if (!active) {
+      this.onThemeRelease?.(previous)
+      return
+    }
+
+    this.pendingThemes.push(previous)
+
+    const style = entryLook(active.commit, theme.entry)
+    if (active.renderable instanceof TextRenderable) {
+      active.renderable.fg = style.fg
+      active.renderable.attributes = style.attrs ?? 0
+      return
+    }
+
+    active.renderable.fg = entryColor(active.commit, theme)
+    const syntax = entrySyntax(theme, active.surface.renderContext.nativeScene)
+    if (active.syntax) this.pendingStyles.push(active.syntax)
+    active.syntax = syntax
+    active.renderable.syntaxStyle = syntax
+  }
+
+  private createEntry(commit: StreamCommit, body: ActiveBody): ActiveEntry {
+    const surface = this.renderer.createScrollbackSurface({
+      startOnNewLine: entryFlags(commit).startOnNewLine,
+    })
+    const style = entryLook(commit, this.theme.entry)
+    const syntax = body.type === "text" ? undefined : entrySyntax(this.theme, surface.renderContext.nativeScene)
+    const treeSitterClient = body.type === "text" ? undefined : (this.treeSitterClient ??= getTreeSitterClient())
+    const renderable =
+      body.type === "text"
+        ? new TextRenderable(surface.renderContext, {
+            content: "",
+            width: "100%",
+            wrapMode: "word",
+            fg: style.fg,
+            attributes: style.attrs,
+          })
+        : body.type === "code"
+          ? new CodeRenderable(surface.renderContext, {
+              content: "",
+              filetype: body.filetype,
+              syntaxStyle: syntax!,
+              width: "100%",
+              wrapMode: "word",
+              drawUnstyledText: false,
+              streaming: true,
+              fg: entryColor(commit, this.theme),
+              treeSitterClient,
+            })
+          : new MarkdownRenderable(surface.renderContext, {
+              content: "",
+              syntaxStyle: syntax!,
+              width: "100%",
+              streaming: true,
+              internalBlockMode: "top-level",
+              tableOptions: this.mono ? monoMarkdownTableOptions : { widthMode: "content" },
+              fg: entryColor(commit, this.theme),
+              treeSitterClient,
+            })
+
+    if (this.mono && renderable instanceof MarkdownRenderable) monoMarkdownRenderable(renderable)
+    surface.root.add(renderable)
+
+    const rows = separatorRows(this.rendered, commit, body)
+
+    return {
+      body,
+      commit,
+      surface,
+      renderable,
+      syntax,
+      content: "",
+      committedRows: 0,
+      committedBlocks: 0,
+      pendingSpacerRows: rows || (!this.rendered && this.wrote ? 1 : 0),
+      rendered: false,
+    }
+  }
+
+  private markRendered(commit: StreamCommit | undefined): void {
+    if (!commit) {
+      return
+    }
+
+    this.rendered = commit
+  }
+
+  private writeSpacer(rows: number): void {
+    if (rows === 0) {
+      return
+    }
+
+    this.renderer.writeToScrollback(spacerWriter())
+    this.wrote = false
+  }
+
+  private flushPendingSpacer(active: ActiveEntry): void {
+    this.writeSpacer(active.pendingSpacerRows)
+    active.pendingSpacerRows = 0
+  }
+
+  private async flushActive(done: boolean, trailingNewline: boolean): Promise<boolean> {
+    const active = this.active
+    if (!active) {
+      return false
+    }
+
+    if (active.body.type === "text") {
+      if (!(active.renderable instanceof TextRenderable)) {
+        return false
+      }
+
+      const renderable = active.renderable
+      renderable.content = active.content
+      active.surface.render()
+      this.releasePendingThemes()
+      const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
+      if (targetRows <= active.committedRows) {
+        return false
+      }
+
+      this.flushPendingSpacer(active)
+      active.surface.commitRows(active.committedRows, targetRows, {
+        trailingNewline: done && targetRows === active.surface.height ? trailingNewline : false,
+      })
+      active.committedRows = targetRows
+      active.rendered = true
+      return true
+    }
+
+    if (active.body.type === "code") {
+      if (!(active.renderable instanceof CodeRenderable)) {
+        return false
+      }
+
+      const renderable = active.renderable
+      renderable.content = active.content
+      renderable.streaming = !done
+      await active.surface.settle()
+      this.releasePendingThemes()
+      const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
+      if (targetRows <= active.committedRows) {
+        return false
+      }
+
+      this.flushPendingSpacer(active)
+      active.surface.commitRows(active.committedRows, targetRows, {
+        trailingNewline: done && targetRows === active.surface.height ? trailingNewline : false,
+      })
+      active.committedRows = targetRows
+      active.rendered = true
+      return true
+    }
+
+    if (!(active.renderable instanceof MarkdownRenderable)) {
+      return false
+    }
+
+    const renderable = active.renderable
+    renderable.content = active.content
+    renderable.streaming = !done
+    await active.surface.settle()
+    this.releasePendingThemes()
+    const targetBlockCount = done ? renderable._blockStates.length : renderable._stableBlockCount
+    if (targetBlockCount <= active.committedBlocks) {
+      return false
+    }
+
+    if (
+      commitMarkdownBlocks({
+        surface: active.surface,
+        renderable,
+        startBlock: active.committedBlocks,
+        endBlockExclusive: targetBlockCount,
+        trailingNewline: done && targetBlockCount === renderable._blockStates.length ? trailingNewline : false,
+        beforeCommit: () => this.flushPendingSpacer(active),
+      })
+    ) {
+      active.committedBlocks = targetBlockCount
+      active.rendered = true
+      return true
+    }
+
+    return false
+  }
+
+  private async finishActive(trailingNewline: boolean): Promise<StreamCommit | undefined> {
+    if (!this.active) {
+      return undefined
+    }
+
+    const active = this.active
+
+    try {
+      await this.flushActive(true, trailingNewline)
+    } finally {
+      if (this.active === active) {
+        this.active = undefined
+      }
+
+      if (!active.surface.isDestroyed) {
+        active.surface.destroy()
+      }
+      active.syntax?.destroy()
+      this.releasePendingThemes()
+    }
+
+    return active.rendered ? active.commit : undefined
+  }
+
+  private async writeStreaming(commit: StreamCommit, body: ActiveBody): Promise<void> {
+    if (!this.active || !sameEntryGroup(this.active.commit, commit) || this.active.body.type !== body.type) {
+      this.markRendered(await this.finishActive(false))
+      this.active = this.createEntry(commit, body)
+    }
+
+    this.active.body = body
+    this.active.commit = commit
+    this.active.content += body.content
+    await this.flushActive(false, false)
+    if (this.active.rendered) {
+      this.markRendered(this.active.commit)
+    }
+  }
+
+  private async writeImage(commit: StreamCommit): Promise<void> {
+    const surface = this.renderer.createScrollbackSurface(entryFlags(commit))
+    this.imageSurface = surface
+
+    try {
+      const image = new ImageRenderable(surface.renderContext, {
+        source: commit.image,
+        fit: "fit",
+        visible: false,
+        alignSelf: "flex-start",
+        flexShrink: 0,
+      })
+      surface.root.add(image)
+      // settle() waits for code highlighting, not image decoding.
+      await image.loadPromise
+      if (surface.isDestroyed) return
+
+      const body = entryBody(commit, { mono: this.mono })
+      if (body.type !== "text") return
+      const style = entryLook(commit, this.theme.entry)
+      const caption = new TextRenderable(surface.renderContext, {
+        content: body.content + (image.image ? "" : "\nNo preview"),
+        width: "100%",
+        wrapMode: "word",
+        fg: style.fg,
+        attributes: style.attrs,
+        flexShrink: 0,
+      })
+      surface.root.add(caption, 0)
+      surface.render()
+
+      if (image.image && !this.mono) {
+        const resolution = this.renderer.resolution
+        const fitted = image.getFittedSize(
+          Math.min(
+            surface.width,
+            resolution?.width
+              ? Math.max(1, Math.floor((image.image.width * this.renderer.terminalWidth) / resolution.width))
+              : Infinity,
+          ),
+          Math.min(
+            Math.max(0, this.renderer.terminalHeight - this.renderer.height - caption.height),
+            resolution?.height
+              ? Math.max(1, Math.floor((image.image.height * this.renderer.terminalHeight) / resolution.height))
+              : Infinity,
+          ),
+          image.cellAspectRatio,
+        )
+        // fit centers within its rectangle, so the rectangle itself must be fitted.
+        image.width = fitted.width
+        image.height = fitted.height
+        image.visible = fitted.width > 0 && fitted.height > 0
+        surface.render()
+      }
+
+      this.writeSpacer(separatorRows(this.rendered, commit, body) || (!this.rendered && this.wrote ? 1 : 0))
+      surface.commitRows(0, surface.height, { trailingNewline: entryFlags(commit).trailingNewline })
+      this.markRendered(commit)
+    } finally {
+      surface.destroy()
+      this.imageSurface = undefined
+    }
+  }
+
+  public async append(commit: StreamCommit): Promise<void> {
+    if (this.destroyed || this.renderer.isDestroyed) return
+    const same = sameEntryGroup(this.tail, commit)
+    if (!same || commit.image) {
+      this.markRendered(await this.finishActive(false))
+    }
+    if (this.destroyed || this.renderer.isDestroyed) return
+
+    if (commit.summary) {
+      this.writeSpacer(1)
+      this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme, mono: this.mono }))
+      this.markRendered(commit)
+      this.tail = commit
+      return
+    }
+
+    if (commit.image && this.imagePreview && !this.mono) {
+      await this.writeImage(commit)
+      this.tail = commit
+      return
+    }
+
+    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
+    if (body.type === "none") {
+      if (entryDone(commit)) {
+        this.markRendered(await this.finishActive(false))
+      }
+
+      this.tail = commit
+      return
+    }
+
+    if (
+      body.type !== "structured" &&
+      (entryCanStream(commit, body) || (commit.kind === "tool" && commit.phase === "final" && body.type === "markdown"))
+    ) {
+      await this.writeStreaming(commit, body)
+      if (entryDone(commit)) {
+        this.markRendered(await this.finishActive(entryFlags(commit).trailingNewline))
+      }
+      this.tail = commit
+      return
+    }
+
+    if (same) {
+      this.markRendered(await this.finishActive(false))
+    }
+
+    const rows = separatorRows(this.rendered, commit, body)
+    const spaced = rows || (!this.rendered && this.wrote ? 1 : 0)
+    this.writeSpacer(spaced)
+
+    this.renderer.writeToScrollback(
+      entryWriter({
+        commit,
+        body: staticBody(commit, body, spaced),
+        theme: this.theme,
+        opts: { mono: this.mono },
+      }),
+    )
+    this.markRendered(commit)
+    this.tail = commit
+  }
+
+  private resetActive(): void {
+    if (!this.active) {
+      return
+    }
+
+    if (!this.active.surface.isDestroyed) {
+      this.active.surface.destroy()
+    }
+    this.active.syntax?.destroy()
+
+    this.active = undefined
+    this.releasePendingThemes()
+  }
+
+  public async complete(trailingNewline = false): Promise<void> {
+    this.markRendered(await this.finishActive(trailingNewline))
+  }
+
+  public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {
+    await this.append(turnSummaryCommit(input))
+  }
+
+  public destroy(): void {
+    this.destroyed = true
+    this.imageSurface?.destroy()
+    this.imageSurface = undefined
+    this.resetActive()
+    this.releasePendingThemes()
+  }
+}

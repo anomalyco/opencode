@@ -2,6 +2,12 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
-    "noUncheckedIndexedAccess": false
+    "types": ["bun"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": false,
+    "allowJs": false,
+    "noUncheckedIndexedAccess": false,
+    "noUnusedLocals": true
   }
 }

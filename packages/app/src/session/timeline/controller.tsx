@@ -1,0 +1,354 @@
+import type { SessionMessageInfo } from "@opencode/client/promise"
+import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
+import { Button } from "@opencode/ui/button"
+import { useNavigate } from "@solidjs/router"
+import { createEffect, createMemo, on } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Option, Predicate, Schema } from "effect"
+import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useTabs } from "@/shell/tabs/tabs"
+import type { SessionModel } from "@/session/model"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { useServerSDK } from "@/runtime/server/client"
+import { sessionHref } from "@/shell/routes/session"
+import { sessionTitle } from "@/session/title"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { showToast } from "@/shell/notifications/toast"
+import { usePlatform } from "@/runtime/platform/platform"
+import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
+import { createTimelineProjection } from "./projection"
+import { useServer } from "@/runtime/server/current"
+import { getSessionMessageHandoff } from "@/session/handoff"
+import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
+
+const emptyMessages: SessionMessageInfo[] = []
+
+const decodeErrorData = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Struct({ message: Schema.String }) }))
+
+const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
+  if (message.type !== "assistant") return
+
+  const tool = message.content.findLast((item) => {
+    if (item.type !== "tool" || (item.name !== "task" && item.name !== "subagent")) return false
+
+    const metadata =
+      item.state.status === "running" || item.state.status === "completed" ? item.state.metadata : undefined
+
+    return metadata?.sessionId === sessionID || metadata?.sessionID === sessionID
+  })
+
+  if (tool?.type !== "tool") return
+  const input = Predicate.isString(tool.state.input) ? undefined : tool.state.input
+  const value = input?.description
+
+  if (Predicate.isString(value) && value) return value
+
+  return undefined
+}
+
+export type TimelineSessionSource = {
+  identity: Pick<SessionModel["identity"], "params" | "sessionID" | "sessionKey">
+  data: Pick<SessionModel["data"], "info" | "parent" | "parentID" | "status">
+  history: Pick<SessionModel["history"], "messages">
+}
+
+export function createTimelineController(input: { session: TimelineSessionSource }) {
+  const navigate = useNavigate()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
+  const server = useServer()
+  const data = server.ctx.data
+  const settings = useSettings()
+  const tabs = useTabs()
+  const dialog = useDialog()
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  const visibleMessages = createMemo(() => {
+    const id = input.session.identity.sessionID()
+
+    return visibleTimelineMessages(
+      input.session.history.messages(),
+      id ? data.session.pending.list(id) : [],
+      input.session.data.info()?.revert?.messageID,
+    )
+  })
+
+  // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
+  const projectedMessages = createMemo(() =>
+    applyTimelineMessageHandoff(
+      visibleMessages(),
+      getSessionMessageHandoff(input.session.identity.sessionKey()),
+      input.session.data.info(),
+    ),
+  )
+
+  // Inputs that wait behind the active turn. A starting steer opens the next turn instead, so the turn before it
+  // stays finished, as it will once the steer is delivered.
+  const pendingInputIDs = createMemo(() => {
+    const id = input.session.identity.sessionID()
+
+    if (!id) return new Set<string>()
+
+    return new Set(
+      data.session.pending
+        .list(id)
+        .flatMap((item) =>
+          (item.type === "user" &&
+            item.delivery === "steer" &&
+            data.session.pending.status(id, item.id) !== "starting") ||
+          item.type === "synthetic"
+            ? [item.id]
+            : [],
+        ),
+    )
+  })
+
+  const queuedCompactionIDs = createMemo(() => {
+    const id = input.session.identity.sessionID()
+
+    return (id ? data.session.pending.list(id) : []).flatMap((item) => (item.type === "compaction" ? [item.id] : []))
+  })
+
+  const titleValue = createMemo(() => input.session.data.info()?.title)
+  const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("session.tab.session"))
+
+  const parentMessages = createMemo(() => {
+    const id = input.session.data.parentID()
+
+    return id ? data.session.message.list(id) : emptyMessages
+  })
+
+  const parentTitle = createMemo(
+    () => sessionTitle(input.session.data.parent()?.title) ?? language.t("session.tab.session"),
+  )
+
+  const childTaskDescription = createMemo(() => {
+    const id = input.session.identity.sessionID()
+
+    if (!id) return undefined
+
+    return parentMessages()
+      .map((message) => taskDescription(message, id))
+      .findLast((value): value is string => !!value)
+  })
+
+  const childTitle = createMemo(() => {
+    return timelineChildTitle({
+      parentID: input.session.data.parentID(),
+      taskDescription: childTaskDescription(),
+      title: titleLabel(),
+      fallback: language.t("session.tab.session"),
+    })
+  })
+
+  const showHeader = createMemo(() => !!input.session.identity.sessionID())
+
+  const timelineDetail = createMemo(() => {
+    const detail = settings.general.timelineDetail()
+
+    return {
+      shell: { ...detail.shell },
+      edit: { ...detail.edit },
+      thinking: { ...detail.thinking },
+      subagents: { ...detail.subagents },
+      notices: { ...detail.notices },
+      tools: { ...detail.tools },
+    }
+  })
+
+  const reasoningMode = (): ReasoningMode =>
+    timelineDetail().thinking.placement === "hidden"
+      ? "hidden"
+      : timelineDetail().thinking.details === "expanded"
+        ? "full"
+        : "compact"
+
+  const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
+  const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
+
+  const projection = createTimelineProjection({
+    sessionMessages: projectedMessages,
+    status: input.session.data.status,
+    reasoningMode,
+    shellToolDefaultOpen: shellToolPartsExpanded,
+    editToolDefaultOpen: editToolPartsExpanded,
+    timelineDetail,
+    pendingInputIDs,
+    queuedCompactionIDs,
+    turnDiffs: settings.general.showTurnDiffs,
+  })
+
+  const [pending, setPending] = createStore({ rename: false })
+
+  const errorMessage = (cause: unknown) =>
+    Option.match(decodeErrorData(cause), {
+      onSome: (error) => error.data.message,
+      onNone: () => (cause instanceof Error ? cause.message : language.t("common.requestFailed")),
+    })
+
+  const rename = async (title: string) => {
+    const id = input.session.identity.sessionID()
+
+    if (!id || pending.rename) return false
+    const next = title.trim()
+
+    if (!next || next === (titleLabel() ?? "")) return true
+    setPending("rename", true)
+
+    const success = await serverSDK.api.session
+      .update({ sessionID: id, title: next })
+      .then(() => true)
+      .catch((error) => {
+        showToast({ title: language.t("common.requestFailed"), description: errorMessage(error) })
+
+        return false
+      })
+
+    setPending("rename", false)
+
+    if (!success) return false
+    const current = data.session.get(id)
+
+    if (current) data.session.remember({ ...current, title: next })
+
+    return true
+  }
+
+  const href = (id: string) => sessionHref(server.key, id)
+
+  const navigateAfterRemoval = (id: string, parent?: string, next?: string) => {
+    if (input.session.identity.params.id !== id) return
+
+    if (parent) return navigate(href(parent))
+
+    if (next) return navigate(href(next))
+
+    return tabs.newDraft({ server: server.key, directory: sdk().directory })
+  }
+
+  const exportSession = async (id: string) => {
+    try {
+      const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
+      const filename = sessionExportFilename(data.info)
+
+      if (!(await saveSessionExport(filename, data, platform))) return
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: error instanceof Error ? error.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
+  const remove = async (id: string) => {
+    const session = data.session.get(id)
+
+    if (!session) return false
+    const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
+    const index = sessions.findIndex((item) => item.id === id)
+    const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+    const removed = sessionTreeIDs(data.session.list(), id)
+
+    const success = await data.session
+      .remove(id)
+      .then(() => true)
+      .catch((error) => {
+        showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })
+
+        return false
+      })
+
+    if (!success) return false
+    void navigateAfterRemoval(id, session.parentID, next?.id)
+    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: removed })
+
+    return true
+  }
+
+  function DeleteDialog(props: { sessionID: string }) {
+    const name = createMemo(
+      () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("session.tab.session"),
+    )
+
+    const confirm = async () => {
+      await remove(props.sessionID)
+      dialog.close()
+    }
+
+    return (
+      <Dialog fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t("session.delete.title")}
+            description={language.t("session.delete.confirm", { name: name() })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button variant="danger" onClick={confirm}>
+            {language.t("session.delete.button")}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    )
+  }
+
+  createEffect(
+    on(
+      () => [input.session.data.parentID(), childTaskDescription()] as const,
+      ([id, description]) => {
+        if (!id || description || data.session.message.list(id).length > 0) return
+        void Promise.all([data.session.sync(id), data.session.message.sync(id)])
+      },
+      { defer: true },
+    ),
+  )
+
+  return {
+    data: {
+      sessionKey: input.session.identity.sessionKey,
+      sessionID: input.session.identity.sessionID,
+      status: input.session.data.status,
+      titleValue,
+      titleLabel,
+      parentID: input.session.data.parentID,
+      parentTitle,
+      childTitle,
+      showHeader,
+      projection,
+      timelineDetail,
+      reasoningMode,
+      shellToolPartsExpanded,
+      editToolPartsExpanded,
+    },
+    pending: {
+      rename: () => pending.rename,
+    },
+    action: {
+      rename,
+      export: exportSession,
+      showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
+      navigateParent: () => {
+        const id = input.session.data.parentID()
+
+        if (id) navigate(href(id))
+      },
+    },
+  }
+}
+
+export type TimelineController = ReturnType<typeof createTimelineController>

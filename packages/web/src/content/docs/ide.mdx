@@ -20,9 +20,9 @@ Bolt integrates with VS Code, Cursor, or any IDE that supports a terminal. Just 
 
 To install Bolt on VS Code and popular forks like Cursor, Windsurf, VSCodium:
 
-1. Open VS Code
-2. Open the integrated terminal
-3. Run `opencode` - the extension installs automatically
+1. Open your IDE's Extension Marketplace.
+2. Search for **OpenCode** and click **Install**.
+3. Open the integrated terminal and run `opencode`.
 
 If on the other hand you want to use your own IDE when you run `/editor` or `/export` from the TUI, you'll need to set `export EDITOR="code --wait"`. [Learn more](/docs/tui/#editor-setup).
 
@@ -36,13 +36,8 @@ Search for **Bolt** in the Extension Marketplace and click **Install**.
 
 ### Troubleshooting
 
-If the extension fails to install automatically:
+If the extension doesn't work after installation:
 
 - Ensure you’re running `opencode` in the integrated terminal.
-- Confirm the CLI for your IDE is installed:
-  - For VS Code: `code` command
-  - For Cursor: `cursor` command
-  - For Windsurf: `windsurf` command
-  - For VSCodium: `codium` command
-  - If not, run `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux) and search for "Shell Command: Install 'code' command in PATH" (or the equivalent for your IDE)
-- Ensure VS Code has permission to install extensions
+- Confirm that OpenCode is installed and enabled in your IDE's Extensions view.
+- Restart the integrated terminal after installing the extension.

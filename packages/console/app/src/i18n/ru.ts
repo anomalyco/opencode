@@ -3,16 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free — новая анонимная модель, доступная в течение ограниченного времени",
   "go.referral.ended.label": "Предупреждение",
   "go.referral.ended":
     "Реферальная программа завершена. Реферальные ссылки больше не начисляют кредиты ни вам, ни тому, кто ими поделился.",
-  "go.graph.bonus": "Лимит ×{{count}}",
   "nav.github": "GitHub",
   "nav.docs": "Документация",
-  "nav.changelog": "Список изменений",
-  "nav.discord": "Discord",
-  "nav.x": "X",
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Войти",
@@ -41,6 +36,7 @@ export const dict = {
   "email.placeholder": "Email адрес",
   "email.subscribe": "Подписаться",
   "email.success": "Почти готово, проверьте почту и подтвердите ваш email",
+  "email.error": "Не удалось оформить подписку. Попробуйте ещё раз.",
 
   "notFound.title": "Не найдено | opencode",
   "notFound.heading": "404 - Страница не найдена",
@@ -51,18 +47,7 @@ export const dict = {
   "notFound.logoLightAlt": "светлый логотип opencode",
   "notFound.logoDarkAlt": "темный логотип opencode",
 
-  "user.logout": "Выйти",
-
-  "auth.callback.error.codeMissing": "Код авторизации не найден.",
-
-  "workspace.select": "Выбрать рабочее пространство",
-  "workspace.createNew": "+ Создать рабочее пространство",
-  "workspace.modal.title": "Создать рабочее пространство",
-  "workspace.modal.placeholder": "Введите название рабочего пространства",
-
   "common.cancel": "Отмена",
-  "common.creating": "Создание...",
-  "common.create": "Создать",
   "common.contactUs": "Свяжитесь с нами",
 
   "common.videoUnsupported": "Ваш браузер не поддерживает видео тег.",
@@ -108,14 +93,6 @@ export const dict = {
   "temp.logoDarkAlt": "темный логотип opencode",
 
   "home.banner.badge": "Новое",
-  "home.banner.text": "Представляем вкладки в десктопном приложении.",
-  "home.banner.platforms": "Доступно на macOS, Windows и Linux",
-  "home.banner.downloadNow": "Скачать",
-  "home.banner.downloadBetaNow": "Скачать бету для десктопа",
-  "home.promo.title": "Представляем вкладки в десктопном приложении",
-  "home.promo.body": "Организуйте работу и активные сессии с помощью вкладок.",
-  "home.promo.cta": "Скачайте последнюю версию, чтобы начать.",
-  "home.promo.close": "Закрыть объявление о десктопном приложении",
 
   "home.hero.title": "AI-агент с открытым кодом для программирования",
   "home.hero.subtitle.a": "Бесплатные модели включены, или подключите любую модель от любого провайдера,",
@@ -130,8 +107,6 @@ export const dict = {
   "home.what.lsp.body": "Автоматически загружает нужные LSP для LLM",
   "home.what.multiSession.title": "Мульти-сессии",
   "home.what.multiSession.body": "Запускайте несколько агентов параллельно в одном проекте",
-  "home.what.shareLinks.title": "Общие ссылки",
-  "home.what.shareLinks.body": "Делитесь ссылкой на любую сессию для справки или отладки",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Войдите через GitHub, чтобы использовать ваш аккаунт Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -183,8 +158,7 @@ export const dict = {
   "home.faq.a6":
     "Bolt на 100% бесплатен. Он также включает набор бесплатных моделей. Дополнительные расходы могут возникнуть, если вы подключите другого провайдера.",
   "home.faq.q7": "Как насчет данных и приватности?",
-  "home.faq.a7.p1":
-    "Ваши данные сохраняются только тогда, когда вы используете наши бесплатные модели или создаете ссылки для шеринга.",
+  "home.faq.a7.p1": "Ваши данные сохраняются только тогда, когда вы используете наши бесплатные модели.",
   "home.faq.a7.p2.beforeModels": "Подробнее о",
   "home.faq.a7.p2.modelsLink": "наших моделях",
   "home.faq.a7.p2.and": "и",
@@ -227,7 +201,7 @@ export const dict = {
     "Для покрытия расходов Bolt добавляет лишь небольшую комиссию за обработку платежа в размере $1.23 при пополнении баланса на $20.",
   "zen.faq.q5": "Как насчет данных и приватности?",
   "zen.faq.a5.beforeExceptions":
-    "Все модели Zen размещены в США. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
+    "Все модели Zen размещены в США и ЕС. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
   "zen.faq.a5.exceptionsLink": "следующими исключениями",
   "zen.faq.q6": "Могу ли я установить лимиты расходов?",
   "zen.faq.a6": "Да, вы можете установить ежемесячные лимиты расходов в своем аккаунте.",
@@ -260,10 +234,10 @@ export const dict = {
   "zen.how.step2.link": "оплата за запрос",
   "zen.how.step2.afterLink": "с нулевой наценкой",
   "zen.how.step3.title": "Автопополнение",
-  "zen.how.step3.body": "когда ваш баланс достигнет $5, мы автоматически добавим $20",
+  "zen.how.step3.body": "при желании включите автопополнение и выберите порог баланса и сумму пополнения",
   "zen.privacy.title": "Ваша приватность важна для нас",
   "zen.privacy.beforeExceptions":
-    "Все модели Zen размещены в США. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
+    "Все модели Zen размещены в США и ЕС. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
   "zen.privacy.exceptionsLink": "следующими исключениями",
 
   "go.title": "Bolt Go | Недорогие модели для кодинга для всех",
@@ -274,10 +248,7 @@ export const dict = {
   "go.hero.body":
     "Go открывает доступ к агентам-программистам разработчикам по всему миру. Предлагая щедрые лимиты и надежный доступ к наиболее способным моделям с открытым исходным кодом, вы можете создавать проекты с мощными агентами, не беспокоясь о затратах или доступности.",
 
-  "go.cta.start": "Подписаться на Go",
-  "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Подписаться на Go",
-  "go.cta.price": "$10/месяц",
   "go.plans.month": "в месяц",
   "go.plans.plus.cta": "Подписаться на Go Plus",
   "go.plans.plus.description": "Go Plus стоит $40/месяц и предлагает более высокие лимиты.",
@@ -290,24 +261,18 @@ export const dict = {
   "go.plans.limits": "Лимиты",
   "go.plans.description": "Примерное число запросов за 5 часов и месячные лимиты по моделям",
   "go.plans.legend": "Тарифы",
-  "go.pricing.body":
-    "Используйте с любым агентом. $10/месяц. Пополняйте баланс при необходимости. Отменить можно в любое время.",
-  "go.graph.free": "Бесплатно",
-  "go.graph.freePill": "Big Pickle и бесплатные модели",
-  "go.graph.go": "Go",
-  "go.graph.label": "Запросов за 5 часов",
   "go.graph.period": "Использование",
   "go.graph.model": "Модель",
   "go.graph.requests": "Примерное число запросов / 5 ч",
   "go.graph.allowance": "Использование за месяц",
   "go.graph.new": "Новое",
+  "go.graph.bonus": "Лимит ×{{count}}",
   "go.graph.scale": "Нелинейная шкала числа запросов",
   "go.graph.showAll": "Показать все модели ({{count}})",
   "go.graph.showLess": "Показать меньше моделей",
   "go.graph.limitedRegions": "доступно в отдельных регионах",
   "go.graph.limitedTime": "ограниченное время",
   "go.graph.usageLimits": "Лимиты использования",
-  "go.graph.aria": "Запросов за 5ч: {{free}} против {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
@@ -379,7 +344,6 @@ export const dict = {
   "go.faq.a5.retention0": "0 дней",
   "go.faq.a5.used": "Используется",
   "go.faq.a5.notUsed": "Не используется",
-  "go.faq.a5.noAgreement": "Нет соглашения",
   "go.faq.a5.notZdr": "Не ZDR",
   "go.faq.a5.grokRetention":
     "ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API.",
@@ -387,13 +351,10 @@ export const dict = {
     "Журналы мониторинга злоупотреблений создаются при любом использовании функций API и хранятся до 30 дней.",
   "go.faq.a5.learnMore": "Подробнее",
   "go.faq.a5.deepseekRetention":
-    "Соглашение ZDR продлевается ежемесячно. Текущее соглашение действует до 30 сентября 2026 года.",
+    "Соглашение ZDR продлевается ежемесячно. Текущее соглашение действует до 31 октября 2026 года.",
   "go.faq.a5.museRetention":
     "Значительно сниженная стоимость токенов в обмен на разрешение использовать ваши промпты и ответы для обучения будущих моделей Meta.",
 
-  "go.faq.a5.beforeExceptions":
-    "Модели Go размещены в США. Провайдеры следуют политике нулевого хранения и не используют ваши данные для обучения моделей, за",
-  "go.faq.a5.exceptionsLink": "следующими исключениями",
   "go.faq.q6": "Могу ли я пополнить баланс?",
   "go.faq.a6": "Если вам нужно больше использования, вы можете пополнить баланс в своем аккаунте.",
   "go.faq.q7": "Могу ли я отменить подписку?",
@@ -404,7 +365,7 @@ export const dict = {
 
   "go.faq.q9": "В чем разница между бесплатными моделями и Go?",
   "go.faq.a9":
-    "Бесплатные модели включают Big Pickle и доступные на данный момент промо-модели с квотой 200 запросов/день. Go предлагает набор отобранных моделей с более высокими квотами запросов в скользящих окнах: 20% месячного лимита за 5 часов, 50% за неделю и 100% за месяц. Лимиты для отдельных моделей могут отличаться (фактическое количество запросов зависит от модели и использования).",
+    "Бесплатные модели включают Big Pickle и доступные на данный момент промо-модели. Go предлагает набор отобранных моделей с более высокими квотами запросов в скользящих окнах: 20% месячного лимита за 5 часов, 50% за неделю и 100% за месяц. Лимиты для отдельных моделей могут отличаться (фактическое количество запросов зависит от модели и использования).",
   "go.faq.q10": "Могу ли я получить возврат средств?",
   "go.faq.a10":
     "Вы можете претендовать на возврат, если списание произошло в течение последних 14 дней и вы не использовали лимит Go в этом расчетном периоде. {{contact}}, чтобы запросить возврат.",
@@ -793,6 +754,7 @@ export const dict = {
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
   "download.platform.windowsX64": "Windows (x64)",
+  "download.platform.windowsArm64": "Windows (ARM64)",
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
@@ -828,6 +790,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Номер телефона",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Каковы текущие ежемесячные расходы вашей компании на инференс (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Выберите диапазон (необязательно)",
+  "enterprise.form.inferenceSpend.none": "Расходов пока нет",
+  "enterprise.form.inferenceSpend.under1k": "Менее $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K или больше",
   "enterprise.form.message.label": "Какую проблему вы пытаетесь решить?",
   "enterprise.form.message.placeholder": "Нам нужна помощь с...",
   "enterprise.form.send": "Отправить",
@@ -836,7 +806,9 @@ export const dict = {
   "enterprise.form.success.submitted": "Форма успешно отправлена.",
   "enterprise.form.error.allFieldsRequired": "Все поля обязательны.",
   "enterprise.form.error.invalidEmailFormat": "Неверный формат email.",
+  "enterprise.form.error.invalidInferenceSpend": "Выберите допустимый диапазон расходов на инференс.",
   "enterprise.form.error.internalServer": "Внутренняя ошибка сервера.",
+  "enterprise.form.error.captcha": "Не удалось пройти проверку captcha. Попробуйте ещё раз.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Что такое Bolt Enterprise?",
   "enterprise.faq.a1":
@@ -863,38 +835,4 @@ export const dict = {
   "changelog.hero.subtitle": "Новые обновления и улучшения Bolt",
   "changelog.empty": "Записи в списке изменений не найдены.",
   "changelog.viewJson": "Посмотреть JSON",
-
-  "bench.list.title": "Бенчмарк",
-  "bench.list.heading": "Бенчмарки",
-  "bench.list.table.agent": "Агент",
-  "bench.list.table.model": "Модель",
-  "bench.list.table.score": "Оценка",
-  "bench.submission.error.allFieldsRequired": "Все поля обязательны.",
-
-  "bench.detail.title": "Бенчмарк - {{task}}",
-  "bench.detail.notFound": "Задача не найдена",
-  "bench.detail.na": "Н/Д",
-  "bench.detail.labels.agent": "Агент",
-  "bench.detail.labels.model": "Модель",
-  "bench.detail.labels.task": "Задача",
-  "bench.detail.labels.repo": "Репозиторий",
-  "bench.detail.labels.from": "От",
-  "bench.detail.labels.to": "До",
-  "bench.detail.labels.prompt": "Промпт",
-  "bench.detail.labels.commit": "Коммит",
-  "bench.detail.labels.averageDuration": "Средняя длительность",
-  "bench.detail.labels.averageScore": "Средняя оценка",
-  "bench.detail.labels.averageCost": "Средняя стоимость",
-  "bench.detail.labels.summary": "Сводка",
-  "bench.detail.labels.runs": "Запуски",
-  "bench.detail.labels.score": "Оценка",
-  "bench.detail.labels.base": "База",
-  "bench.detail.labels.penalty": "Штраф",
-  "bench.detail.labels.weight": "вес",
-  "bench.detail.table.run": "Запуск",
-  "bench.detail.table.score": "Оценка (База - Штраф)",
-  "bench.detail.table.cost": "Стоимость",
-  "bench.detail.table.duration": "Длительность",
-  "bench.detail.run.title": "Запуск {{n}}",
-  "bench.detail.rawJson": "Raw JSON",
 } satisfies Dict

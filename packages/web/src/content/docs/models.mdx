@@ -74,7 +74,7 @@ You can globally configure a model's options through the config.
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ You can globally configure a model's options through the config.
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ You can globally configure a model's options through the config.
 }
 ```
 
-Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
+Here we're configuring global settings for two built-in models: `gpt-6.1-sol` when accessed via the `openai` provider, and `claude-sonnet-5-5` when accessed via the `anthropic` provider.
 The built-in provider and model names can be found on [Models.dev](https://models.dev).
 
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
@@ -113,7 +113,7 @@ You can also define custom variants that extend built-in ones. Variants let you 
   "provider": {
     "bolt": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ You can override existing variants or add your own:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",

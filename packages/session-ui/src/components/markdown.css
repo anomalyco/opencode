@@ -1,5 +1,5 @@
 [data-component="markdown"] {
-  --markdown-inline-code-path-color: var(--v2-text-text-code-accent);
+  --markdown-inline-code-path-color: var(--v2-text-text-code-path);
   --markdown-inline-code-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
@@ -15,6 +15,17 @@
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: 160%;
+  /* Shells such as the app's turn off selection for chrome; Markdown is content, so it stays selectable. */
+  -webkit-user-select: text;
+  user-select: text;
+
+  [data-markdown-word] {
+    display: inline;
+  }
+
+  :is([data-markdown-word], code)[data-markdown-enter] {
+    animation: markdown-word-enter 180ms ease-out both;
+  }
 
   /* Spacing for flow */
   > *:first-child {
@@ -28,6 +39,11 @@
   }
   > [data-markdown-block]:last-child > *:last-child {
     margin-bottom: 0;
+  }
+
+  /* Pretty wrapping would move settled words as each token arrives, so the growing block stays greedy until it completes. */
+  &[data-streaming] > [data-markdown-block]:last-child {
+    text-wrap-style: auto;
   }
 
   /* Headings: Sized by level, distinguished by color and spacing */
@@ -73,7 +89,7 @@
   strong,
   b {
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold);
   }
 
   /* Paragraphs */
@@ -90,6 +106,89 @@
 
   a:hover {
     text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  a.external-link:is(
+      [href="https://github.com" i],
+      [href^="https://github.com/" i],
+      [href="http://github.com" i],
+      [href^="http://github.com/" i]
+    ):not(:has(img))::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-inline-end: 4px;
+    vertical-align: -0.125em;
+    background: currentColor;
+    mask: url("./markdown-github.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon {
+    position: relative;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-inline-end: 4px;
+    vertical-align: -0.125em;
+  }
+
+  .markdown-link-favicon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    mask: url("./markdown-globe.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    border-radius: 2px;
+    cursor: inherit;
+    opacity: 0;
+  }
+
+  .markdown-link-favicon img[data-loaded] {
+    opacity: 1;
+  }
+
+  a[data-local-link] {
+    cursor: pointer;
+  }
+
+  .markdown-session-link {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-interactive-base);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .markdown-session-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .markdown-session-link:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
+    cursor: pointer;
+  }
+
+  &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code):hover {
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-path-color) 40%, transparent);
     text-underline-offset: 2px;
   }
 
@@ -172,7 +271,7 @@
     margin: 32px 0;
   }
 
-  .shiki {
+  .highlights {
     background: var(--color-background-stronger);
     color: var(--text-base);
     font-size: 13px;
@@ -187,7 +286,46 @@
     unicode-bidi: isolate;
   }
 
-  [data-component="markdown-code"][data-code-kind="shell"] .shiki {
+  [data-component="markdown-mermaid"] {
+    --pele-bg: var(--v2-background-bg-layer-02);
+    --pele-fg: var(--v2-text-text-base);
+    --pele-muted: var(--v2-text-text-muted);
+    --pele-line: var(--v2-icon-icon-muted);
+    --pele-surface: var(--v2-background-bg-base);
+    --pele-surface-alt: var(--v2-background-bg-layer-03);
+    --pele-border: var(--v2-border-border-strong);
+    --pele-accent: var(--v2-text-text-accent);
+    --pele-critical: var(--v2-state-fg-danger);
+    --pele-error: var(--v2-state-fg-danger);
+    --pele-font: var(--font-family-sans);
+    --pele-font-mono: var(--font-family-mono);
+    --pele-radius: 6px;
+    min-height: 96px;
+    margin: 12px 0 24px;
+    padding: 16px;
+    overflow: auto;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+    background: var(--v2-background-bg-layer-02);
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  [data-component="markdown-mermaid"] > svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"] {
+    display: none;
+  }
+
+  [data-component="markdown-code"][data-code-kind="shell"] .highlights {
     background: var(--markdown-shell-code-background);
     border-color: var(--markdown-shell-code-border);
     color: var(--markdown-shell-code-color);
@@ -205,9 +343,12 @@
     position: absolute;
     top: 4px;
     inset-inline-end: 4px;
-    opacity: 0;
     transition: opacity 0.15s ease;
     z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
   [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
@@ -245,18 +386,15 @@
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    padding: 2px 4px;
+    padding: 0 4px;
     border-radius: 4px;
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
   :not(pre) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    background: color-mix(
-      in oklch,
-      var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
-      transparent
-    );
+    padding: 0 2px;
+    background: none;
   }
 
   a.external-link > code[data-inline-code-kind="url"] {
@@ -294,6 +432,7 @@
 
   /* Images */
   img {
+    cursor: zoom-in;
     max-width: 100%;
     height: auto;
     border-radius: 4px;
@@ -302,11 +441,26 @@
   }
 }
 
+@keyframes markdown-word-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="markdown"] :is([data-markdown-word], code)[data-markdown-enter] {
+    animation: none;
+  }
+}
+
 [data-component="markdown"] > * {
   unicode-bidi: plaintext;
 }
 
-body[data-new-layout] [data-component="markdown"] {
+:root body [data-component="markdown"] {
   [data-slot="markdown-copy-button"]::after {
     box-sizing: border-box;
     display: inline-flex;
@@ -326,56 +480,6 @@ body[data-new-layout] [data-component="markdown"] {
     letter-spacing: 0.05px;
     font-variant-numeric: tabular-nums;
     font-variation-settings: "slnt" 0;
-  }
-}
-
-body:not([data-new-layout]) [data-component="markdown"] {
-  color: var(--text-strong);
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-size: 14px;
-    color: var(--text-strong);
-    font-weight: var(--font-weight-medium);
-  }
-
-  strong,
-  b {
-    color: var(--text-strong);
-  }
-
-  li::marker {
-    color: var(--text-weak);
-  }
-
-  blockquote {
-    border-inline-start: 2px solid var(--border-weak-base);
-    color: var(--text-weak);
-  }
-
-  .shiki {
-    border-color: var(--border-weak-base);
-  }
-
-  :not(pre) > code {
-    color: var(--syntax-string);
-    padding: 0;
-    border-radius: 0;
-    background: none;
-  }
-
-  th,
-  td {
-    border-bottom: 1px solid var(--border-weaker-base);
-  }
-
-  th {
-    color: var(--text-strong);
-    border-bottom-color: var(--border-weak-base);
   }
 }
 

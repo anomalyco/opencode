@@ -3,16 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "新しい匿名モデル Space Bunny Free が期間限定で利用可能です",
   "go.referral.ended.label": "警告",
   "go.referral.ended":
     "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",
-  "go.graph.bonus": "利用枠{{count}}倍",
   "nav.github": "GitHub",
   "nav.docs": "ドキュメント",
-  "nav.changelog": "変更履歴",
-  "nav.discord": "Discord",
-  "nav.x": "X",
   "nav.enterprise": "エンタープライズ",
   "nav.zen": "Zen",
   "nav.login": "ログイン",
@@ -41,6 +36,7 @@ export const dict = {
   "email.placeholder": "メールアドレス",
   "email.subscribe": "登録",
   "email.success": "ほぼ完了です。受信トレイを確認してメールアドレスを認証してください",
+  "email.error": "登録できませんでした。もう一度お試しください。",
 
   "notFound.title": "見つかりません | Bolt",
   "notFound.heading": "404 - ページが見つかりません",
@@ -51,18 +47,7 @@ export const dict = {
   "notFound.logoLightAlt": "boltのロゴ（ライト）",
   "notFound.logoDarkAlt": "boltのロゴ（ダーク）",
 
-  "user.logout": "ログアウト",
-
-  "auth.callback.error.codeMissing": "認証コードが見つかりません。",
-
-  "workspace.select": "ワークスペースを選択",
-  "workspace.createNew": "+ 新しいワークスペースを作成",
-  "workspace.modal.title": "新しいワークスペースを作成",
-  "workspace.modal.placeholder": "ワークスペース名を入力",
-
   "common.cancel": "キャンセル",
-  "common.creating": "作成中...",
-  "common.create": "作成",
   "common.contactUs": "お問い合わせ",
 
   "common.videoUnsupported": "お使いのブラウザは video タグをサポートしていません。",
@@ -108,14 +93,6 @@ export const dict = {
   "temp.logoDarkAlt": "boltのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
-  "home.banner.text": "デスクトップ版にタブが登場。",
-  "home.banner.platforms": "macOS、Windows、Linux で利用できます",
-  "home.banner.downloadNow": "今すぐダウンロード",
-  "home.banner.downloadBetaNow": "デスクトップベータ版を今すぐダウンロード",
-  "home.promo.title": "デスクトップ版にタブが登場",
-  "home.promo.body": "タブで作業とアクティブなセッションを整理できます。",
-  "home.promo.cta": "始めるには最新版をダウンロードしてください。",
-  "home.promo.close": "デスクトップアプリのお知らせを閉じる",
 
   "home.hero.title": "オープンソースのAIコーディングエージェント",
   "home.hero.subtitle.a": "無料モデルが含まれています。また、任意のプロバイダーの任意のモデルに接続でき、",
@@ -130,8 +107,6 @@ export const dict = {
   "home.what.lsp.body": "LLMに適したLSPを自動的に読み込みます",
   "home.what.multiSession.title": "マルチセッション",
   "home.what.multiSession.body": "同じプロジェクトで複数のエージェントを並行実行できます",
-  "home.what.shareLinks.title": "共有リンク",
-  "home.what.shareLinks.body": "参照やデバッグのために、任意のセッションへのリンクを共有できます",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "GitHubでログインしてCopilotアカウントを利用できます",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -181,7 +156,7 @@ export const dict = {
   "home.faq.a6":
     "Boltは100%無料で使えます。無料モデルも含まれています。他のプロバイダーに接続する場合は追加費用が発生することがあります。",
   "home.faq.q7": "データとプライバシーは？",
-  "home.faq.a7.p1": "無料モデルを使う場合や共有リンクを作成する場合にのみ、データが保存されます。",
+  "home.faq.a7.p1": "無料モデルを使う場合にのみ、データが保存されます。",
   "home.faq.a7.p2.beforeModels": "詳しくは",
   "home.faq.a7.p2.modelsLink": "モデルのプライバシー",
   "home.faq.a7.p2.and": "と",
@@ -221,7 +196,7 @@ export const dict = {
   "zen.faq.a4.p3": "コストを賄うために、Boltは$20の残高チャージあたり$1.23の小さな決済手数料のみを追加します。",
   "zen.faq.q5": "データとプライバシーは？",
   "zen.faq.a5.beforeExceptions":
-    "Zenのモデルはすべて米国でホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
+    "Zenのモデルはすべて米国とEUでホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
   "zen.faq.a5.exceptionsLink": "以下の例外",
   "zen.faq.q6": "支出上限を設定できますか？",
   "zen.faq.a6": "はい、アカウントで月次の支出上限を設定できます。",
@@ -255,10 +230,10 @@ export const dict = {
   "zen.how.step2.link": "リクエストごとに支払う",
   "zen.how.step2.afterLink": "（マークアップなし）",
   "zen.how.step3.title": "自動チャージ",
-  "zen.how.step3.body": "残高が$5に達すると、自動的に$20が追加されます",
+  "zen.how.step3.body": "任意で自動チャージを有効にし、残高のしきい値とチャージ額を設定できます",
   "zen.privacy.title": "あなたのプライバシーは私たちにとって重要です",
   "zen.privacy.beforeExceptions":
-    "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
+    "すべてのZenモデルは米国とEUでホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "Bolt Go | すべての人のための低価格なコーディングモデル",
@@ -269,10 +244,7 @@ export const dict = {
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
 
-  "go.cta.start": "Goを購読する",
-  "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Goを購読する",
-  "go.cta.price": "$10/月",
   "go.plans.month": "/月",
   "go.plans.plus.cta": "Go Plus に登録",
   "go.plans.plus.description": "Go Plus は月額$40で、より高い利用枠を提供します。",
@@ -285,24 +257,18 @@ export const dict = {
   "go.plans.limits": "利用枠",
   "go.plans.description": "モデル別の5時間あたりの推定リクエスト数と月間利用枠",
   "go.plans.legend": "プラン",
-  "go.pricing.body":
-    "どのエージェントでも使えます。月額$10。必要に応じてクレジットを追加。いつでもキャンセルできます。",
-  "go.graph.free": "無料",
-  "go.graph.freePill": "Big Pickleと無料モデル",
-  "go.graph.go": "Go",
-  "go.graph.label": "5時間あたりのリクエスト数",
   "go.graph.period": "利用枠",
   "go.graph.model": "モデル",
   "go.graph.requests": "推定リクエスト数 / 5時間",
   "go.graph.allowance": "月間利用枠",
   "go.graph.new": "新着",
+  "go.graph.bonus": "利用枠{{count}}倍",
   "go.graph.scale": "リクエスト数は非線形目盛りで表示",
   "go.graph.showAll": "全{{count}}モデルを表示",
   "go.graph.showLess": "折りたたむ",
   "go.graph.limitedRegions": "一部の地域に限定",
   "go.graph.limitedTime": "期間限定",
   "go.graph.usageLimits": "利用制限",
-  "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
@@ -374,7 +340,6 @@ export const dict = {
   "go.faq.a5.retention0": "0日",
   "go.faq.a5.used": "使用あり",
   "go.faq.a5.notUsed": "使用なし",
-  "go.faq.a5.noAgreement": "契約なし",
   "go.faq.a5.notZdr": "ZDRではない",
   "go.faq.a5.grokRetention":
     "ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。",
@@ -382,10 +347,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
   "go.faq.a5.learnMore": "詳しく見る",
-  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年9月30日まで有効です。",
-  "go.faq.a5.beforeExceptions":
-    "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
-  "go.faq.a5.exceptionsLink": "以下の例外",
+  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年10月31日まで有効です。",
   "go.faq.q6": "クレジットをチャージできますか？",
   "go.faq.a6": "利用枠を追加したい場合は、アカウントでクレジットをチャージできます。",
   "go.faq.q7": "キャンセルできますか？",
@@ -396,7 +358,7 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれます。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
   "go.faq.q10": "返金を受けられますか？",
   "go.faq.a10":
     "請求から14日以内で、その請求期間中にGoの利用枠を一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
@@ -782,6 +744,7 @@ export const dict = {
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
   "download.platform.windowsX64": "Windows (x64)",
+  "download.platform.windowsArm64": "Windows (ARM64)",
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
@@ -817,6 +780,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "電話番号",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "貴社の現在の月間 AI 推論費用（USD）はどのくらいですか？",
+  "enterprise.form.inferenceSpend.placeholder": "範囲を選択（任意）",
+  "enterprise.form.inferenceSpend.none": "まだ費用は発生していない",
+  "enterprise.form.inferenceSpend.under1k": "$1K 未満",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 以上",
   "enterprise.form.message.label": "どのような課題を解決したいですか？",
   "enterprise.form.message.placeholder": "これについて支援が必要です...",
   "enterprise.form.send": "送信",
@@ -825,7 +796,9 @@ export const dict = {
   "enterprise.form.success.submitted": "フォームが正常に送信されました。",
   "enterprise.form.error.allFieldsRequired": "すべての項目は必須です。",
   "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
+  "enterprise.form.error.invalidInferenceSpend": "有効な推論費用の範囲を選択してください。",
   "enterprise.form.error.internalServer": "内部サーバーエラー。",
+  "enterprise.form.error.captcha": "CAPTCHA認証に失敗しました。もう一度お試しください。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Bolt Enterpriseとは？",
   "enterprise.faq.a1":
@@ -852,38 +825,4 @@ export const dict = {
   "changelog.hero.subtitle": "Boltの新しいアップデートと改善",
   "changelog.empty": "変更履歴が見つかりませんでした。",
   "changelog.viewJson": "JSONを表示",
-
-  "bench.list.title": "ベンチマーク",
-  "bench.list.heading": "ベンチマーク",
-  "bench.list.table.agent": "エージェント",
-  "bench.list.table.model": "モデル",
-  "bench.list.table.score": "スコア",
-  "bench.submission.error.allFieldsRequired": "すべての項目は必須です。",
-
-  "bench.detail.title": "ベンチマーク - {{task}}",
-  "bench.detail.notFound": "タスクが見つかりません",
-  "bench.detail.na": "N/A",
-  "bench.detail.labels.agent": "エージェント",
-  "bench.detail.labels.model": "モデル",
-  "bench.detail.labels.task": "タスク",
-  "bench.detail.labels.repo": "リポジトリ",
-  "bench.detail.labels.from": "From",
-  "bench.detail.labels.to": "To",
-  "bench.detail.labels.prompt": "プロンプト",
-  "bench.detail.labels.commit": "コミット",
-  "bench.detail.labels.averageDuration": "平均所要時間",
-  "bench.detail.labels.averageScore": "平均スコア",
-  "bench.detail.labels.averageCost": "平均コスト",
-  "bench.detail.labels.summary": "概要",
-  "bench.detail.labels.runs": "実行回数",
-  "bench.detail.labels.score": "スコア",
-  "bench.detail.labels.base": "ベース",
-  "bench.detail.labels.penalty": "ペナルティ",
-  "bench.detail.labels.weight": "重み",
-  "bench.detail.table.run": "実行",
-  "bench.detail.table.score": "スコア (ベース - ペナルティ)",
-  "bench.detail.table.cost": "コスト",
-  "bench.detail.table.duration": "所要時間",
-  "bench.detail.run.title": "実行 {{n}}",
-  "bench.detail.rawJson": "Raw JSON",
 } satisfies Dict

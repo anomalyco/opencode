@@ -1,6 +1,0 @@
-{
-  "mcp": {
-    "servers": { "type": "local", "command": ["server-named-servers"] },
-    "timeout": { "type": "remote", "url": "https://timeout.example.com/mcp" },
-  },
-}

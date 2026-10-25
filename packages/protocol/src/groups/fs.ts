@@ -2,12 +2,23 @@ import { FileSystem } from "@bolt-ai/schema/filesystem"
 import { Location } from "@bolt-ai/schema/location"
 import { PositiveInt, RelativePath } from "@bolt-ai/schema/schema"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
+import { FileNotFoundError } from "../errors.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
-  path: RelativePath.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional).annotate({
+    description: "An absolute path or a path relative to the requested location. Defaults to the location directory.",
+  }),
+})
+
+const WriteQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  path: Schema.String.annotate({
+    description:
+      "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+  }),
 })
 
 const FindQuery = Schema.Struct({
@@ -22,13 +33,15 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.read", "/api/fs/read/*", {
       query: LocationQuery,
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+      error: FileNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.read",
+          identifier: "fs.read",
           summary: "Read file",
-          description: "Serve one file relative to the requested location.",
+          description:
+            "Stream one file relative to the requested location with ETag, Last-Modified, and single-range HTTP Range support (206 Partial Content, 416 Range Not Satisfiable, and 304 Not Modified; multi-range and malformed Range headers fall back to 200).",
         }),
       ),
   )
@@ -36,13 +49,15 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
+      error: FileNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.list",
+          identifier: "fs.list",
           summary: "List directory",
-          description: "List direct children of one directory relative to the requested location.",
+          description:
+            "List direct children using an absolute path or a path relative to the requested location, including parents and siblings outside its directory. Entry paths remain relative to the requested location; listing does not switch locations.",
         }),
       ),
   )
@@ -54,9 +69,25 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.find",
+          identifier: "fs.find",
           summary: "Find files",
           description: "Find recursively ranked filesystem entries relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.write", "/api/experimental/fs/write", {
+      query: WriteQuery,
+      payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+      success: Location.response(FileSystem.Write),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.fs.write",
+          summary: "Write file",
+          description:
+            "Write the raw request body to an absolute path or a path relative to the requested location, creating parent directories, and return the resolved absolute path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
         }),
       ),
   )

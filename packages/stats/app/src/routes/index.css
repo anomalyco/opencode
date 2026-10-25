@@ -42,6 +42,20 @@
     U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
 }
 
+:root {
+  background: #ffffff;
+}
+
+:root[data-stats-theme="dark"] {
+  background: #161616;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-stats-theme="light"]) {
+    background: #161616;
+  }
+}
+
 body {
   min-width: 320px;
   margin: 0;
@@ -661,7 +675,7 @@ body {
 [data-page="stats"] [data-slot="footer-pattern"] {
   height: 16px;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -870,13 +884,18 @@ body {
   display: none;
 }
 
+/* Ripple layer drawn by PatternRipple. Pattern rules set only background-color so this layer survives. */
+[data-page="stats"] [data-slot$="-pattern"] {
+  background-image: var(--dot-ripple, none);
+}
+
 [data-page="stats"] [data-slot="hero-pattern"] {
   order: 2;
   flex: 0 0 auto;
   width: 100%;
   height: 16px;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-repeat: repeat;
   mask-size: 6px 6px;
@@ -1081,7 +1100,6 @@ body {
 [data-page="stats"] [data-component="top-models-chart"] {
   --top-models-bar-gap: 12px;
   --top-models-dot-size: 6px;
-  --top-models-dot-offset: 2px;
   position: relative;
   display: grid;
   grid-template-rows: 34px minmax(0, 1fr);
@@ -1211,6 +1229,8 @@ body {
   padding-inline: calc(var(--top-models-bar-gap) / 2);
   outline: none;
   cursor: pointer;
+  /* Resolved by absolutely positioned children against this slot's width. Three 2px dot columns span the bar, so this inset makes the gap between bars equal the gap between dot columns. */
+  --top-models-bar-inset: calc((100% - 6px) / 6);
 }
 
 [data-page="stats"] [data-slot="top-models-bar"][data-active="true"] {
@@ -1219,34 +1239,29 @@ body {
 
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: calc(100% - var(--top-models-bar-gap));
-  transform: translateX(-50%);
+  inset: 0 var(--top-models-bar-inset);
   content: "";
   background: var(--stats-dot);
-  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: var(--top-models-dot-offset) top;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  mask-position: left top;
   mask-repeat: repeat;
-  mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: var(--top-models-dot-offset) top;
+  mask-size: calc((100% - 2px) / 2) var(--top-models-dot-size);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  -webkit-mask-position: left top;
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
+  -webkit-mask-size: calc((100% - 2px) / 2) var(--top-models-dot-size);
+  transition: background-color 120ms ease;
 }
 
-@supports (width: round(down, 100%, 1px)) {
-  [data-page="stats"] [data-slot="top-models-bar"]::before {
-    width: round(down, calc(100% - var(--top-models-bar-gap)), var(--top-models-dot-size));
-  }
+[data-page="stats"] [data-slot="top-models-bar"]:is(:hover, [data-active="true"])::before {
+  background: color-mix(in srgb, var(--stats-dot), var(--stats-text) 25%);
 }
 
 [data-page="stats"] [data-slot="top-models-stack"] {
   position: absolute;
-  right: calc(var(--top-models-bar-gap) / 2);
+  right: var(--top-models-bar-inset);
   bottom: 0;
-  left: calc(var(--top-models-bar-gap) / 2);
+  left: var(--top-models-bar-inset);
   z-index: 1;
   display: grid;
   height: var(--top-models-bar-height);
@@ -2063,7 +2078,7 @@ body {
   height: 16px;
   margin: 16px 0;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -3051,7 +3066,7 @@ body {
   width: 100%;
   height: 18px;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-repeat: repeat;
   mask-size: 6px 6px;
@@ -3191,7 +3206,7 @@ body {
   min-width: 64px;
   height: 64px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -3508,7 +3523,7 @@ body {
   width: 100%;
   height: 16px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-position: center top;
   -webkit-mask-position: center top;
 }
@@ -3655,7 +3670,7 @@ body {
   width: 100%;
   height: 16px;
   overflow: hidden;
-  background: var(--stats-line);
+  background-color: var(--stats-line);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -4129,7 +4144,7 @@ body {
   height: 16px;
   margin-bottom: 40px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -4254,7 +4269,7 @@ body {
   height: 16px;
   margin-bottom: 40px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -4750,7 +4765,6 @@ body {
 [data-page="stats"] [data-component="model-usage-chart"] {
   --model-usage-bar-gap: 6px;
   --model-usage-dot-size: 6px;
-  --model-usage-dot-offset: 2px;
   position: relative;
   display: grid;
   grid-template-rows: 40px minmax(0, 1fr);
@@ -4808,38 +4822,36 @@ body {
   padding-inline: calc(var(--model-usage-bar-gap) / 2);
   outline: none;
   cursor: pointer;
+  /* Resolved by absolutely positioned children against this slot's width. Three 2px dot columns span the bar, so this inset makes the gap between bars equal the gap between dot columns. */
+  --model-usage-bar-inset: calc((100% - 6px) / 6);
 }
 
+/* Three dot columns aligned to the bar's left edge, center, and right edge, so they read as rising out of the bar. The SVG has no viewBox, so the 2px dot keeps its size while the cell stretches. */
 [data-page="stats"] [data-slot="model-usage-column"]::before {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: calc(100% - var(--model-usage-bar-gap));
-  transform: translateX(-50%);
+  inset: 0 var(--model-usage-bar-inset);
   content: "";
   background: var(--stats-dot);
-  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: var(--model-usage-dot-offset) top;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  mask-position: left top;
   mask-repeat: repeat;
-  mask-size: var(--model-usage-dot-size) var(--model-usage-dot-size);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: var(--model-usage-dot-offset) top;
+  mask-size: calc((100% - 2px) / 2) var(--model-usage-dot-size);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  -webkit-mask-position: left top;
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: var(--model-usage-dot-size) var(--model-usage-dot-size);
+  -webkit-mask-size: calc((100% - 2px) / 2) var(--model-usage-dot-size);
+  transition: background-color 120ms ease;
 }
 
-@supports (width: round(down, 100%, 1px)) {
-  [data-page="stats"] [data-slot="model-usage-column"]::before {
-    width: round(down, calc(100% - var(--model-usage-bar-gap)), var(--model-usage-dot-size));
-  }
+[data-page="stats"] [data-slot="model-usage-column"]:is(:hover, [data-active="true"])::before {
+  background: color-mix(in srgb, var(--stats-dot), var(--stats-text) 25%);
 }
 
 [data-page="stats"] [data-slot="model-usage-bar"] {
   position: absolute;
-  right: calc(var(--model-usage-bar-gap) / 2);
+  right: var(--model-usage-bar-inset);
   bottom: 0;
-  left: calc(var(--model-usage-bar-gap) / 2);
+  left: var(--model-usage-bar-inset);
   z-index: 1;
   height: var(--model-usage-fill);
   min-height: 0;
@@ -5899,7 +5911,7 @@ body {
   height: 16px;
   margin-inline: -40px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -8074,6 +8086,12 @@ body {
   }
 }
 
+@media (min-width: 48rem) and (max-width: 58rem) {
+  [data-page="stats"] [data-slot="top-models-bar"][data-active="true"] {
+    z-index: 2;
+  }
+}
+
 @media (max-width: 47.999rem) {
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
@@ -8481,7 +8499,8 @@ body {
   }
 
   [data-page="stats"] [data-component="model-usage-chart"] {
-    --model-usage-mobile-bar-width: 16px;
+    /* 18px puts three 2px dot columns 6px apart, matching the 6px bar gap. */
+    --model-usage-mobile-bar-width: 18px;
     --model-usage-mobile-edge-space: 48px;
     --model-usage-mobile-track-width: calc(
       var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)) +
@@ -8522,7 +8541,7 @@ body {
   }
 
   [data-page="stats"] [data-slot="model-usage-column"]::before {
-    width: 100%;
+    inset: 0;
   }
 
   [data-page="stats"] [data-slot="model-usage-bar"] {

@@ -89,28 +89,6 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### create
-
-カスタム構成で新しいエージェントを作成します。
-
-```bash
-opencode agent create
-```
-
-このコマンドは、カスタムシステムプロンプトとツール構成を使用して新しいエージェントを作成する手順を示します。
-
----
-
-#### list
-
-利用可能なエージェントをすべてリストします。
-
-```bash
-opencode agent list
-```
-
----
-
 ### auth
 
 プロバイダーの資格情報とログインを管理するコマンド。
@@ -345,7 +323,6 @@ bolt run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`     | 最後のセッションを続行                                                                    |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`     | 続行するセッション ID                                                                     |
 | <nobr><code>{"--fork"}</code></nobr>     |          | 続行時にセッションをフォーク (`--continue` または `--session` と併用)                     |
-| <nobr><code>{"--share"}</code></nobr>    |          | セッションを共有する                                                                      |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`     | プロバイダー/モデルの形式で使用するモデル                                                 |
 | <nobr><code>{"--agent"}</code></nobr>    |          | 使用するエージェント                                                                      |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`     | メッセージに添付するファイル                                                              |
@@ -452,7 +429,6 @@ opencode import <file>
 
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---

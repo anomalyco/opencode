@@ -1,13 +1,7 @@
-import {
-  type LanguageModelV3Prompt,
-  type LanguageModelV3ToolCallPart,
-  type SharedV3Warning,
-  UnsupportedFunctionalityError,
-} from "@ai-sdk/provider"
+import { type LanguageModelV3Prompt, type SharedV3Warning, UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types"
-import { localShellInputSchema, localShellOutputSchema } from "./tool/local-shell"
+import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types.js"
 
 /**
  * Check if a string is a file ID based on the given prefixes
@@ -23,13 +17,11 @@ export async function convertToOpenAIResponsesInput({
   systemMessageMode,
   fileIdPrefixes,
   store,
-  hasLocalShellTool = false,
 }: {
   prompt: LanguageModelV3Prompt
   systemMessageMode: "system" | "developer" | "remove"
   fileIdPrefixes?: readonly string[]
   store: boolean
-  hasLocalShellTool?: boolean
 }): Promise<{
   input: OpenAIResponsesInput
   warnings: Array<SharedV3Warning>
@@ -119,7 +111,6 @@ export async function convertToOpenAIResponsesInput({
 
       case "assistant": {
         const reasoningMessages: Record<string, OpenAIResponsesReasoning> = {}
-        const toolCallParts: Record<string, LanguageModelV3ToolCallPart> = {}
 
         for (const part of content) {
           switch (part.type) {
@@ -127,33 +118,12 @@ export async function convertToOpenAIResponsesInput({
               input.push({
                 role: "assistant",
                 content: [{ type: "output_text", text: part.text }],
-                id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
+                id: store ? ((part.providerOptions?.copilot?.itemId as string) ?? undefined) : undefined,
               })
               break
             }
             case "tool-call": {
-              toolCallParts[part.toolCallId] = part
-
               if (part.providerExecuted) {
-                break
-              }
-
-              if (hasLocalShellTool && part.toolName === "local_shell") {
-                const parsedInput = localShellInputSchema.parse(part.input)
-                input.push({
-                  type: "local_shell_call",
-                  call_id: part.toolCallId,
-                  id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
-                  action: {
-                    type: "exec",
-                    command: parsedInput.action.command,
-                    timeout_ms: parsedInput.action.timeoutMs,
-                    user: parsedInput.action.user,
-                    working_directory: parsedInput.action.workingDirectory,
-                    env: parsedInput.action.env,
-                  },
-                })
-
                 break
               }
 
@@ -162,7 +132,7 @@ export async function convertToOpenAIResponsesInput({
                 call_id: part.toolCallId,
                 name: part.toolName,
                 arguments: JSON.stringify(part.input),
-                id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
+                id: store ? ((part.providerOptions?.copilot?.itemId as string) ?? undefined) : undefined,
               })
               break
             }
@@ -206,35 +176,14 @@ export async function convertToOpenAIResponsesInput({
                       summary: [],
                     }
                   }
-                } else {
-                  const summaryParts: Array<{
-                    type: "summary_text"
-                    text: string
-                  }> = []
-
-                  if (part.text.length > 0) {
-                    summaryParts.push({
-                      type: "summary_text",
-                      text: part.text,
-                    })
-                  } else if (reasoningMessage !== undefined) {
-                    warnings.push({
-                      type: "other",
-                      message: `Cannot append empty reasoning part to existing reasoning sequence. Skipping reasoning part: ${JSON.stringify(part)}.`,
-                    })
+                } else if (providerOptions?.reasoningEncryptedContent != null && reasoningMessage === undefined) {
+                  reasoningMessages[reasoningId] = {
+                    type: "reasoning",
+                    id: reasoningId,
+                    encrypted_content: providerOptions.reasoningEncryptedContent,
+                    summary: [],
                   }
-
-                  if (reasoningMessage === undefined) {
-                    reasoningMessages[reasoningId] = {
-                      type: "reasoning",
-                      id: reasoningId,
-                      encrypted_content: providerOptions?.reasoningEncryptedContent,
-                      summary: summaryParts,
-                    }
-                    input.push(reasoningMessages[reasoningId])
-                  } else {
-                    reasoningMessage.summary.push(...summaryParts)
-                  }
+                  input.push(reasoningMessages[reasoningId])
                 }
               } else {
                 warnings.push({
@@ -280,15 +229,6 @@ export async function convertToOpenAIResponsesInput({
             if (approvalId) {
               continue
             }
-          }
-
-          if (hasLocalShellTool && part.toolName === "local_shell" && output.type === "json") {
-            input.push({
-              type: "local_shell_call_output",
-              call_id: part.toolCallId,
-              output: localShellOutputSchema.parse(output.value).output,
-            })
-            break
           }
 
           let contentValue: string

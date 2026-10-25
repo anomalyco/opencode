@@ -21,8 +21,10 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
       const isReady = createMemo(() => {
         // @ts-expect-error
         const ready = init.ready as Accessor<boolean> | boolean | undefined
+
         return ready === undefined || (typeof ready === "function" ? ready() : ready)
       })
+
       return (
         <Show when={isReady()}>
           <ctx.Provider value={init}>{props.children}</ctx.Provider>
@@ -31,7 +33,9 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
     },
     use() {
       const value = useContext(ctx)
+
       if (!value) throw new Error(`${input.name} context must be used within a context provider`)
+
       return value
     },
   }

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:elevenlabs-transcription",
+      "provider:elevenlabs",
+      "protocol:elevenlabs-transcription"
+    ],
+    "name": "elevenlabs-transcription/groups-diarized-words-into-speaker-turns",
+    "recordedAt": "2026-09-27T09:35:28.265Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/speech-to-text",
+        "headers": {
+          "content-type": "multipart/form-data; boundary=----WebKitFormBoundary356bdc14864a477dbacbfcf60d1ecceb"
+        },
+        "body": "--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n[audio]\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"model_id\"\r\n\r\nscribe_v2\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"diarize\"\r\n\r\ntrue\r\n--BOUNDARY--\r\n"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"language_code\":\"eng\",\"language_probability\":0.9495430588722229,\"text\":\"Did the release ship? Yes, it shipped this morning\",\"words\":[{\"text\":\"Did\",\"start\":0.34,\"end\":0.44,\"type\":\"word\",\"speaker_id\":\"speaker_0\",\"logprob\":-1.7881377516459906e-6},{\"text\":\" \",\"start\":0.44,\"end\":0.48,\"type\":\"spacing\",\"speaker_id\":\"speaker_0\",\"logprob\":-1.1920928244535389e-7},{\"text\":\"the\",\"start\":0.48,\"end\":0.56,\"type\":\"word\",\"speaker_id\":\"speaker_0\",\"logprob\":-1.1920928244535389e-7},{\"text\":\" \",\"start\":0.56,\"end\":0.6,\"type\":\"spacing\",\"speaker_id\":\"speaker_0\",\"logprob\":-7.152531907195225e-6},{\"text\":\"release\",\"start\":0.6,\"end\":0.92,\"type\":\"word\",\"speaker_id\":\"speaker_0\",\"logprob\":-7.152531907195225e-6},{\"text\":\" \",\"start\":0.92,\"end\":0.94,\"type\":\"spacing\",\"speaker_id\":\"speaker_0\",\"logprob\":-8.344646857949556e-7},{\"text\":\"ship?\",\"start\":0.94,\"end\":1.26,\"type\":\"word\",\"speaker_id\":\"speaker_0\",\"logprob\":-7.414704032271402e-6},{\"text\":\" \",\"start\":1.26,\"end\":1.26,\"type\":\"spacing\",\"speaker_id\":\"speaker_0\",\"logprob\":-0.0009363081189803779},{\"text\":\"Yes,\",\"start\":1.68,\"end\":2.02,\"type\":\"word\",\"speaker_id\":\"speaker_1\",\"logprob\":-0.003542040009030245},{\"text\":\" \",\"start\":2.02,\"end\":2.48,\"type\":\"spacing\",\"speaker_id\":\"speaker_1\",\"logprob\":-3.933898824470816e-6},{\"text\":\"it\",\"start\":2.48,\"end\":2.62,\"type\":\"word\",\"speaker_id\":\"speaker_1\",\"logprob\":-3.933898824470816e-6},{\"text\":\" \",\"start\":2.62,\"end\":2.64,\"type\":\"spacing\",\"speaker_id\":\"speaker_1\",\"logprob\":-0.000013589766240329482},{\"text\":\"shipped\",\"start\":2.66,\"end\":2.9,\"type\":\"word\",\"speaker_id\":\"speaker_1\",\"logprob\":-0.000013589766240329482},{\"text\":\" \",\"start\":2.9,\"end\":2.94,\"type\":\"spacing\",\"speaker_id\":\"speaker_1\",\"logprob\":0.0},{\"text\":\"this\",\"start\":2.94,\"end\":3.12,\"type\":\"word\",\"speaker_id\":\"speaker_1\",\"logprob\":0.0},{\"text\":\" \",\"start\":3.12,\"end\":3.18,\"type\":\"spacing\",\"speaker_id\":\"speaker_1\",\"logprob\":-3.576278118089249e-7},{\"text\":\"morning\",\"start\":3.18,\"end\":3.5,\"type\":\"word\",\"speaker_id\":\"speaker_1\",\"logprob\":-3.576278118089249e-7}],\"transcription_id\":\"cs3I2282TH8hjw12brNg\",\"audio_duration_secs\":3.5526875}"
+      }
+    }
+  ]
+}

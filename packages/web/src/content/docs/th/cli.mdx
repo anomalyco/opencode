@@ -89,28 +89,6 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### create
-
-สร้างเอเจนต์ใหม่
-
-```bash
-opencode agent create
-```
-
-คำสั่งนี้จะแนะนำคุณตลอดกระบวนการสร้างเอเจนต์ใหม่ พร้อมพรอมต์ระบบและความสามารถของเครื่องมือ
-
----
-
-#### list
-
-แสดงรายชื่อเอเจนต์ที่พร้อมใช้งานทั้งหมด
-
-```bash
-opencode agent list
-```
-
----
-
 ### auth
 
 จัดการการตรวจสอบสิทธิ์และข้อมูลรับรอง
@@ -449,11 +427,8 @@ opencode export [sessionID]
 opencode import <file>
 ```
 
-คุณสามารถนำเข้าไฟล์ในเครื่องหรือ URL ที่แชร์
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---

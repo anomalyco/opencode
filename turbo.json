@@ -3,15 +3,45 @@
   "globalEnv": ["CI", "BOLT_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "BOLT_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {},
+    // `transit` folds every workspace dependency into the hash, so a change in a dependency re-checks its dependents
+    // instead of replaying their cached result. Local `typecheck` runs `bun check`, which reads dependency sources
+    // directly and needs no build order.
+    "typecheck": {
+      "dependsOn": ["transit"]
+    },
+    // CI checks types with the official TypeScript compiler. tsc -b writes core's declarations for the packages that
+    // reference it, so those packages also wait for core. Package entries replace the generic one, so they repeat
+    // `transit`.
+    "typecheck:tsc": {
+      "dependsOn": ["transit"]
+    },
+    "@opencode/cli#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/sdk#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/server#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/simulation#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/tui#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "test:components": {
+      "outputs": [],
+      "cache": false
+    },
     "build": {
-      "dependsOn": [],
+      "dependsOn": ["transit"],
       "outputs": ["dist/**"]
     },
     "bolt#test": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "passThroughEnv": ["*"]
+      "cache": false
     },
     "@bolt-ai/core#test": {
       "dependsOn": ["^build"],

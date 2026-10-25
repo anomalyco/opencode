@@ -5,7 +5,8 @@ const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
-const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
+const forwardedSignals =
+  process.platform === "win32" ? ["SIGINT", "SIGTERM", "SIGHUP"] : ["SIGINT", "SIGTERM", "SIGHUP", "SIGUSR1"]
 
 function run(target) {
   const child = childProcess.spawn(target, process.argv.slice(2), { stdio: "inherit" })
@@ -77,6 +78,7 @@ function supportsAvx2() {
 }
 
 const names = (() => {
+  if (nodeBuild) return [base]
   const baseline = arch === "x64" && !supportsAvx2()
   if (platform === "linux") {
     const musl = (() => {

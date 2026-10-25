@@ -1,0 +1,17 @@
+---
+import OpenApiReference from "../../../docs/components/OpenApiReference.astro"
+import DocsLayout from "../../../docs/layouts/DocsLayout.astro"
+
+export const prerender = true
+---
+
+<DocsLayout
+  title="API"
+  description="OpenCode HTTP API reference and OpenAPI specification."
+  currentSlug="api"
+  headings={[]}
+  showTableOfContents={false}
+  fullWidth
+>
+  <OpenApiReference />
+</DocsLayout>

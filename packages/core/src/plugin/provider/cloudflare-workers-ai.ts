@@ -1,79 +1,63 @@
-import os from "os"
-import { InstallationVersion } from "../../installation/version"
 import { Effect } from "effect"
-import { define } from "../internal"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Form } from "@opencode/schema/form"
+import { Provider } from "../../provider.js"
+import { configuredSettings } from "./configured.js"
 
-const providerID = ProviderV2.ID.make("cloudflare-workers-ai")
+const providerID = Provider.ID.make("cloudflare-workers-ai")
 
 export const CloudflareWorkersAIPlugin = define({
-  id: "cloudflare-workers-ai",
+  id: "opencode.provider.cloudflare.workers.ai",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform(
-      Effect.fn(function* (evt) {
-        const item = evt.provider.get(providerID)
-        if (!item) return
-        evt.provider.update(item.provider.id, (provider) => {
-          if (provider.api.type !== "aisdk") return
-          if (provider.api.url) return
-          const accountId = resolveAccountId(provider.request.body)
-          if (accountId) provider.api.url = workersEndpoint(accountId)
-        })
-      }),
-    )
-    yield* ctx.aisdk.sdk(
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== providerID) return
-        if (evt.package !== "@ai-sdk/openai-compatible") return
-
-        const accountId = resolveAccountId(evt.options)
-        if (!hasWorkersEndpoint(evt.model.api) && !accountId) return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
-        evt.sdk = mod.createOpenAICompatible(
-          sdkOptions({
-            ...evt.options,
-            baseURL: evt.options.baseURL ?? (accountId ? workersEndpoint(accountId) : undefined),
-          }) as any,
-        )
-      }),
-    )
-    yield* ctx.aisdk.language(
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== providerID) return
-        evt.language = evt.sdk.languageModel(evt.model.api.id)
-      }),
-    )
+    const configured = yield* configuredSettings(providerID)
+    const form =
+      typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
+        ? undefined
+        : Form.Fields.make([
+            {
+              type: "string",
+              key: "accountId",
+              title: "Enter your Cloudflare Account ID",
+              placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+              required: true,
+            },
+          ])
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
+        integrationID: providerID,
+        method: { type: "env", names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] },
+      })
+      editor.method.update({
+        integrationID: providerID,
+        method: {
+          type: "key",
+          label: "API key",
+          form,
+        },
+      })
+    })
+    yield* ctx.provider.transform((evt) => {
+      const item = evt.get(providerID)
+      if (!item) return
+      evt.update(item.provider.id, (provider) => {
+        if (typeof provider.settings?.baseURL === "string") return
+        const accountId = resolveAccountId(provider.settings ?? {})
+        if (!accountId) return
+        provider.settings =
+          provider.package === "@opencode/ai/providers/cloudflare-workers-ai"
+            ? { ...provider.settings, accountId }
+            : { ...provider.settings, baseURL: workersEndpoint(accountId) }
+      })
+    })
   }),
 })
 
 function resolveAccountId(options: Record<string, unknown>) {
-  return process.env.CLOUDFLARE_ACCOUNT_ID ?? stringOption(options, "accountId")
+  return stringOption(options, "accountId") ?? process.env.CLOUDFLARE_ACCOUNT_ID
 }
 
 function workersEndpoint(accountId: string) {
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`
-}
-
-function hasWorkersEndpoint(api: ProviderV2.Api) {
-  return api.type === "aisdk" && Boolean(api.url)
-}
-
-function sdkOptions(options: Record<string, any>) {
-  return {
-    ...options,
-    baseURL: expandAccountId(options.baseURL),
-    apiKey: process.env.CLOUDFLARE_API_KEY ?? options.apiKey,
-    headers: {
-      "User-Agent": `opencode/${InstallationVersion} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
-      ...options.headers,
-    },
-    name: providerID,
-  }
-}
-
-function expandAccountId(baseURL: unknown) {
-  if (typeof baseURL !== "string") return baseURL
-  return baseURL.replaceAll("${CLOUDFLARE_ACCOUNT_ID}", process.env.CLOUDFLARE_ACCOUNT_ID ?? "${CLOUDFLARE_ACCOUNT_ID}")
 }
 
 function stringOption(options: Record<string, unknown>, key: string) {

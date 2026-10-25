@@ -1,0 +1,272 @@
+import { Config } from "effect"
+import { Auth } from "../src/route.js"
+import type { ProviderAuthOption } from "../src/route/auth-options.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import * as AmazonBedrock from "../src/providers/amazon-bedrock.js"
+import * as Anthropic from "../src/providers/anthropic.js"
+import * as AnthropicCompatible from "../src/providers/anthropic-compatible.js"
+import * as Azure from "../src/providers/azure.js"
+import { CloudflareWorkersAI } from "../src/providers/cloudflare-workers-ai.js"
+import { DeepSeek } from "../src/providers/deepseek.js"
+import * as Google from "../src/providers/google.js"
+import * as GoogleVertex from "../src/providers/google-vertex.js"
+import * as GoogleVertexChat from "../src/providers/google-vertex-chat.js"
+import * as GoogleVertexMessages from "../src/providers/google-vertex-messages.js"
+import * as GoogleVertexResponses from "../src/providers/google-vertex-responses.js"
+import * as OpenAI from "../src/providers/openai.js"
+import * as OpenRouter from "../src/providers/openrouter.js"
+import * as XAI from "../src/providers/xai.js"
+
+type BaseOptions = {
+  readonly baseURL?: string
+  readonly headers?: Record<string, string>
+}
+
+type LanguageModel = {
+  readonly id: string
+}
+
+declare const auth: Auth.Definition
+declare const optionalAuthModel: (id: string, options?: BaseOptions & ProviderAuthOption<"optional">) => LanguageModel
+declare const requiredAuthModel: (id: string, options: BaseOptions & ProviderAuthOption<"required">) => LanguageModel
+const configApiKey = Config.Redacted("OPENAI_API_KEY")
+
+OpenAIChat.route.model({ id: "gpt-4.1-mini" })
+
+// @ts-expect-error route model selection does not configure endpoints.
+OpenAIChat.route.model({ id: "gpt-4.1-mini", baseURL: "https://gateway.example.com/v1" })
+
+// @ts-expect-error route model selection does not configure query params.
+OpenAIChat.route.model({ id: "gpt-4.1-mini", queryParams: { debug: "1" } })
+
+// @ts-expect-error route model selection does not configure auth.
+OpenAIChat.route.model({ id: "gpt-4.1-mini", auth })
+
+// @ts-expect-error route model selection does not configure api keys.
+OpenAIChat.route.model({ id: "gpt-4.1-mini", apiKey: "sk-test" })
+
+optionalAuthModel("gpt-4.1-mini")
+optionalAuthModel("gpt-4.1-mini", {})
+optionalAuthModel("gpt-4.1-mini", { apiKey: "sk-test" })
+optionalAuthModel("gpt-4.1-mini", { apiKey: configApiKey })
+optionalAuthModel("gpt-4.1-mini", { auth })
+optionalAuthModel("gpt-4.1-mini", { auth, baseURL: "https://gateway.example.com/v1" })
+optionalAuthModel("gpt-4.1-mini", { apiKey: "sk-test", headers: { "x-source": "test" } })
+
+// @ts-expect-error auth is an override, so apiKey cannot be supplied with it.
+optionalAuthModel("gpt-4.1-mini", { apiKey: "sk-test", auth })
+
+requiredAuthModel("custom-model", { apiKey: "key" })
+requiredAuthModel("custom-model", { apiKey: configApiKey })
+requiredAuthModel("custom-model", { auth })
+requiredAuthModel("custom-model", { auth, headers: { "x-tenant-id": "tenant" } })
+
+// @ts-expect-error providers without config fallback need apiKey or auth.
+requiredAuthModel("custom-model")
+
+// @ts-expect-error providers without config fallback need apiKey or auth.
+requiredAuthModel("custom-model", {})
+
+// @ts-expect-error auth is an override, so apiKey cannot be supplied with it.
+requiredAuthModel("custom-model", { apiKey: "key", auth })
+
+OpenAI.responses("gpt-4.1-mini")
+OpenAI.configure({}).responses("gpt-4.1-mini")
+OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini")
+OpenAI.configure({ apiKey: configApiKey }).responses("gpt-4.1-mini")
+OpenAI.configure({ auth: Auth.bearer("oauth-token") }).responses("gpt-4.1-mini")
+OpenAI.configure({
+  auth: Auth.headers({ authorization: "Bearer gateway" }),
+  baseURL: "https://gateway.example.com/v1",
+}).responses("gpt-4.1-mini")
+OpenAI.configure({
+  generation: { maxTokens: 100 },
+  providerOptions: { store: false },
+}).responses("gpt-4.1-mini")
+
+// @ts-expect-error OpenAI model selectors only accept model ids.
+OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini", {})
+
+// @ts-expect-error apiKey only accepts string, Redacted<string>, or Config<string | Redacted<string>>.
+OpenAI.configure({ apiKey: 123 })
+
+// @ts-expect-error provider helpers reject unknown top-level options.
+OpenAI.configure({ bogus: true })
+
+// @ts-expect-error common generation options remain typed.
+OpenAI.configure({ generation: { maxTokens: "many" } })
+
+// @ts-expect-error provider-native options remain typed.
+OpenAI.configure({ providerOptions: { store: "false" } })
+
+// @ts-expect-error auth is an override, so OpenAI rejects apiKey with auth.
+OpenAI.configure({ apiKey: "sk-test", auth: Auth.bearer("oauth-token") })
+
+OpenAI.chat("gpt-4.1-mini")
+OpenAI.configure({ apiKey: "sk-test" }).chat("gpt-4.1-mini")
+OpenAI.configure({ apiKey: configApiKey }).chat("gpt-4.1-mini")
+OpenAI.configure({ auth: Auth.bearer("oauth-token") }).chat("gpt-4.1-mini")
+
+// @ts-expect-error OpenAI chat selectors only accept model ids.
+OpenAI.configure({ apiKey: "sk-test" }).chat("gpt-4.1-mini", {})
+
+// @ts-expect-error auth is an override, so OpenAI Chat rejects apiKey with auth.
+OpenAI.configure({ apiKey: "sk-test", auth: Auth.bearer("oauth-token") })
+
+// @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
+Azure.configure()
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).responses("deployment")
+Azure.configure({ apiKey: configApiKey, resourceName: "resource" }).responses("deployment")
+Azure.configure({ auth: Auth.header("api-key", "azure-key"), resourceName: "resource" }).responses("deployment")
+
+// @ts-expect-error Azure model selectors only accept deployment ids.
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).responses("deployment", {})
+
+// @ts-expect-error auth is an override, so Azure rejects apiKey with auth.
+Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: Auth.header("api-key", "override") })
+
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deployment")
+Azure.configure({ apiKey: configApiKey, resourceName: "resource" }).chat("deployment")
+Azure.configure({ auth: Auth.header("api-key", "azure-key"), resourceName: "resource" }).chat("deployment")
+
+// @ts-expect-error Azure chat model selectors only accept deployment ids.
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deployment", {})
+
+// @ts-expect-error auth is an override, so Azure Chat rejects apiKey with auth.
+Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: Auth.header("api-key", "override") })
+
+Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku")
+Anthropic.configure({
+  apiKey: "anthropic-key",
+  providerOptions: {
+    thinking: { type: "enabled", budgetTokens: 1_024 },
+    effort: "high",
+  },
+}).model("claude-haiku")
+// @ts-expect-error Anthropic model selectors only accept model ids.
+Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku", {})
+// @ts-expect-error Anthropic package settings accept only one auth source.
+Anthropic.model("claude-sonnet-4-6", { apiKey: "anthropic-key", authToken: "anthropic-token" })
+// @ts-expect-error Enabled Anthropic thinking requires a token budget.
+Anthropic.configure({ providerOptions: { thinking: { type: "enabled" } } })
+// @ts-expect-error Anthropic thinking budgets must be numbers.
+Anthropic.configure({ providerOptions: { thinking: { type: "enabled", budgetTokens: "large" } } })
+
+AnthropicCompatible.configure({
+  apiKey: "messages-key",
+  baseURL: "https://messages.example.com/v1",
+  provider: "example",
+  providerOptions: { thinking: { type: "disabled" } },
+}).model("compatible-model")
+// @ts-expect-error Anthropic-compatible providers require a base URL.
+AnthropicCompatible.configure({ apiKey: "messages-key" })
+// @ts-expect-error Anthropic-compatible model selectors only accept model ids.
+AnthropicCompatible.configure({ baseURL: "https://messages.example.com/v1" }).model("compatible-model", {})
+// @ts-expect-error Anthropic-compatible package settings accept only one auth source.
+AnthropicCompatible.model("compatible-model", {
+  apiKey: "messages-key",
+  authToken: "messages-token",
+  baseURL: "https://messages.example.com/v1",
+})
+
+Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash")
+Google.configure({
+  apiKey: "google-key",
+  providerOptions: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } },
+}).model("gemini-2.5-flash")
+// @ts-expect-error Google model selectors only accept model ids.
+Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash", {})
+// @ts-expect-error Gemini thinking budgets must be numbers.
+Google.configure({ providerOptions: { thinkingConfig: { thinkingBudget: "large" } } })
+
+GoogleVertex.configure({
+  apiKey: "vertex-key",
+  providerOptions: { thinkingConfig: { thinkingBudget: 1_024 } },
+}).model("gemini-3.5-flash")
+GoogleVertex.configure({ accessToken: "vertex-token", project: "project" }).model("gemini-3.5-flash")
+GoogleVertex.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("gemini-3.5-flash")
+// @ts-expect-error Vertex Gemini model selectors only accept model ids.
+GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-3.5-flash", {})
+// @ts-expect-error Vertex Gemini config accepts only one auth source.
+GoogleVertex.configure({ accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
+// @ts-expect-error Vertex Gemini package settings accept only one auth source.
+GoogleVertex.model("gemini-3.5-flash", { accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
+
+GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model("deepseek-ai/deepseek-v3.2-maas")
+GoogleVertexChat.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model(
+  "deepseek-ai/deepseek-v3.2-maas",
+)
+// @ts-expect-error Vertex Chat package settings do not accept API keys.
+GoogleVertexChat.model("deepseek-ai/deepseek-v3.2-maas", { apiKey: "vertex-key", project: "project" })
+GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model(
+  "deepseek-ai/deepseek-v3.2-maas",
+  // @ts-expect-error Vertex Chat model selectors only accept model ids.
+  {},
+)
+GoogleVertexChat.configure({
+  accessToken: "vertex-token",
+  // @ts-expect-error Vertex Chat config accepts only one auth source.
+  auth: Auth.bearer("vertex-token"),
+  project: "project",
+})
+
+GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project" }).model("xai/grok-4.20-reasoning")
+GoogleVertexResponses.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model(
+  "xai/grok-4.20-reasoning",
+)
+// @ts-expect-error Vertex Responses package settings do not accept API keys.
+GoogleVertexResponses.model("xai/grok-4.20-reasoning", { apiKey: "vertex-key", project: "project" })
+GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project" }).model(
+  "xai/grok-4.20-reasoning",
+  // @ts-expect-error Vertex Responses model selectors only accept model ids.
+  {},
+)
+GoogleVertexResponses.configure({
+  accessToken: "vertex-token",
+  // @ts-expect-error Vertex Responses config accepts only one auth source.
+  auth: Auth.bearer("vertex-token"),
+  project: "project",
+})
+
+GoogleVertexMessages.configure({
+  accessToken: "vertex-token",
+  project: "project",
+  providerOptions: { thinking: { type: "adaptive", display: "omitted" }, effort: "low" },
+}).model("claude-sonnet-4-6")
+// @ts-expect-error Vertex Messages package settings do not accept API keys.
+GoogleVertexMessages.model("claude-sonnet-4-6", { apiKey: "vertex-key", project: "project" })
+GoogleVertexMessages.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("claude-sonnet-4-6")
+GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model(
+  "claude-sonnet-4-6",
+  // @ts-expect-error Vertex Messages model selectors only accept model ids.
+  {},
+)
+GoogleVertexMessages.configure({
+  accessToken: "vertex-token",
+  // @ts-expect-error Vertex Messages config accepts only one auth source.
+  auth: Auth.bearer("vertex-token"),
+  project: "project",
+})
+
+AmazonBedrock.configure({ apiKey: "bedrock-key" }).model("anthropic.claude")
+// @ts-expect-error Bedrock model selectors only accept model ids.
+AmazonBedrock.configure({ apiKey: "bedrock-key" }).model("anthropic.claude", {})
+
+OpenRouter.configure({ apiKey: "openrouter-key" }).model("openai/gpt-4o-mini")
+// @ts-expect-error OpenRouter model selectors only accept model ids.
+OpenRouter.configure({ apiKey: "openrouter-key" }).model("openai/gpt-4o-mini", {})
+
+XAI.configure({ apiKey: "xai-key" }).responses("grok-4")
+XAI.configure({ apiKey: "xai-key" }).chat("grok-4")
+// @ts-expect-error xAI Responses selectors only accept model ids.
+XAI.configure({ apiKey: "xai-key" }).responses("grok-4", {})
+// @ts-expect-error xAI Chat selectors only accept model ids.
+XAI.configure({ apiKey: "xai-key" }).chat("grok-4", {})
+
+DeepSeek.configure({ apiKey: "deepseek-key" }).model("deepseek-chat")
+// @ts-expect-error OpenAI-compatible family selectors only accept model ids.
+DeepSeek.configure({ apiKey: "deepseek-key" }).model("deepseek-chat", {})
+
+CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama")
+// @ts-expect-error Cloudflare Workers AI model selectors only accept model ids.
+CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama", {})

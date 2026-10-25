@@ -9,7 +9,7 @@ Polecenia to zdefiniowane prompty, które można uruchomić w TUI.
 /my-command
 ```
 
-Polecenia są dodatkiem do wbudowanych, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`. [Dowiedz się więcej](/docs/tui#commands).
+Polecenia są dodatkiem do wbudowanych, takich jak `/init`, `/undo`, `/redo`, `/help`. [Dowiedz się więcej](/docs/tui#commands).
 
 ---
 
@@ -23,7 +23,7 @@ Utwórz `.bolt/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ Użyj opcji `command` w swojej konfiguracji opencode:
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ Można także definiować polecenia za pomocą plików Markdown. Trzymaj je w:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -163,7 +163,7 @@ Wartości:
 
 ### Dane wyjściowe poleceń
 
-Użyj `!command`, aby wstawić dane wyjściowe [polecenia bash](/docs/tui#bash-commands) do promptu.
+Użyj `!command`, aby wstawić dane wyjściowe [polecenia shell](/docs/tui#shell-commands) do promptu.
 
 Na przykład, aby przeanalizować pokrycie testami:
 
@@ -302,7 +302,7 @@ Użyj `model`, aby określić model dla tego polecenia.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -314,7 +314,7 @@ Jest to **opcjonalna** opcja konfiguracji.
 
 ## Wbudowane
 
-opencode zawiera kilka wbudowanych poleceń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
+opencode zawiera kilka wbudowanych poleceń, takich jak `/init`, `/undo`, `/redo`, `/help`; [dowiedz się więcej](/docs/tui#commands).
 
 :::note
 Polecenia wbudowane mogą zostać nadpisane.

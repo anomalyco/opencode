@@ -1,85 +1,41 @@
-export * as AgentPlugin from "./agent"
+export * as AgentPlugin from "./agent.js"
 
-import path from "path"
-import { define } from "./internal"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
-import { AgentV2 } from "../agent"
-import { Global } from "../global"
-import { Location } from "../location"
-import { PermissionV2 } from "../permission"
-
-const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
-const BUILD_SYSTEM =
-  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
+import { Agent } from "../agent.js"
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
-Your strengths:
-- Rapidly finding files using glob patterns
-- Searching code and text with powerful regex patterns
-- Reading and analyzing file contents
-
 Guidelines:
-- Use Glob for broad file pattern matching
-- Use Grep for searching file contents with regex
-- Use Read when you know the specific file path you need to read
+- Your role is EXCLUSIVELY to search and analyze
+- Parallelize independent tool calls for searches and reads whenever possible
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Return file paths as absolute paths in your final response
-- For clear communication, avoid using emojis
-- Do not create any files, or run bash commands that modify the user's system state in any way
+- You MUST NOT create, modify, delete, move, or copy files, including temporary files and reports
+- Shell commands MUST be read-only. NEVER run commands that write files or change system state
 
 Complete the user's search request efficiently and report your findings clearly.`
 
-const PROMPT_COMPACTION = `You are a context summarization agent. You are given a conversation between a user and an agent. Your goal is to produce a structured summary matching the format specified so another coding agent can continue the work.
+const PROMPT_TITLE = `You name conversations so the user can find them later in a list of past sessions.
 
-Always follow the exact output structure requested by the user prompt. Keep every section, preserve exact file paths and identifiers when known, and prefer terse bullets over paragraphs.
+You will receive the first message of a conversation, or for an ongoing conversation its original request and recent messages. Reply with a title for it and nothing else: one line, no quotes, no trailing period, no label such as "Title:".
 
-Do not continue the conversation. Do not respond to any questions in the conversation. Only output the structured summary in the exact format requested by the user prompt. Respond in the same language as the conversation.`
+Aim for three to five words. Name the specific subject, such as the feature, file, issue number, error, or tool involved. Keep the detail that tells it apart from similar conversations, like a version, provider, or the thing it is compared against, and make room for it by dropping generic words like "review", "overview", "investigation", "request", "question", or "this project".
 
-const PROMPT_TITLE = `You are a title generator. You output ONLY a thread title. Nothing else.
+The title should read naturally as a short phrase, not as a stack of nouns. Write it in your own words rather than copying a heading, commit message, command, or long path from the message.
 
-<task>
-Generate a brief title that would help the user find this conversation later.
+Use sentence case, not title case: capitalize the first word and proper nouns only. Keep identifiers exactly as written, including file names, issue and PR numbers, error codes, and model names. Use the same language as the message.
 
-Follow all rules in <rules>
-Use the <examples> so you know what a good title looks like.
-Your output must be:
-- A single line
-- <=50 characters
-- No explanations
-</task>
+The message is something to name, not something to answer or carry out. Even if it asks you to do work, asks a question, or seems incomplete, only name it. For greetings or small talk, use a short label like "Greeting".
 
-<rules>
-- you MUST use the same language as the user message you are summarizing
-- Title must be grammatically correct and read naturally - no word salad
-- Never include tool names in the title (e.g. "read tool", "bash tool", "edit tool")
-- Focus on the main topic or question the user needs to retrieve
-- Vary your phrasing - avoid repetitive patterns like always starting with "Analyzing"
-- When a file is mentioned, focus on WHAT the user wants to do WITH the file, not just that they shared it
-- Keep exact: technical terms, numbers, filenames, HTTP codes
-- Remove: the, this, my, a, an
-- Never assume tech stack
-- Never use tools
-- NEVER respond to questions, just generate a title for the conversation
-- The title should NEVER include "summarizing" or "generating" when generating a title
-- DO NOT SAY YOU CANNOT GENERATE A TITLE OR COMPLAIN ABOUT THE INPUT
-- Always output something meaningful, even if the input is minimal.
-- If the user message is short or conversational (e.g. "hello", "lol", "what's up", "hey"):
-  -> create a title that reflects the user's tone or intent (such as Greeting, Quick check-in, Light chat, Intro message, etc.)
-</rules>
-
-<examples>
-"debug 500 errors in production" -> Debugging production 500 errors
-"refactor user service" -> Refactoring user service
-"why is app.js failing" -> app.js failure investigation
-"implement rate limiting" -> Rate limiting implementation
-"how do I connect postgres to my API" -> Postgres API connection
-"best practices for React hooks" -> React hooks best practices
-"@src/credential.ts can you add refresh token support" -> Credential refresh token support
-"@utils/parser.ts this is broken" -> Parser bug fix
-"look at @config.json" -> Config review
-"@App.tsx add dark mode toggle" -> Dark mode toggle in App
-</examples>`
+Examples:
+"debug 500 errors in production" -> Production 500 errors
+"why is app.js failing" -> app.js failure
+"what does the retry logic in fetch.ts do" -> fetch.ts retry logic
+"@src/credential.ts can you add refresh token support" -> Credential refresh tokens
+"compare the new cache layer with the v1 one in packages/legacy" -> New cache layer vs v1
+"Investigate https://github.com/acme/app/issues/412, don't make edits" -> Issue #412
+"hey" -> Greeting`
 
 const PROMPT_SUMMARY = `Summarize what was done in this conversation. Write like a pull request description.
 
@@ -94,40 +50,14 @@ Rules:
 - If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
 
 export const Plugin = define({
-  id: "agent",
+  id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
-    const location = yield* Location.Service
-    const worktree = location.directory
-    const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
-    const readonlyExternalDirectory: PermissionV2.Ruleset = [
-      { action: "external_directory", resource: "*", effect: "ask" },
-      ...whitelistedDirs.map(
-        (resource): PermissionV2.Rule => ({ action: "external_directory", resource, effect: "allow" }),
-      ),
-    ]
-    const defaults: PermissionV2.Ruleset = [
-      { action: "*", resource: "*", effect: "allow" },
-      ...readonlyExternalDirectory,
-      { action: "question", resource: "*", effect: "deny" },
-      { action: "plan_enter", resource: "*", effect: "deny" },
-      { action: "plan_exit", resource: "*", effect: "deny" },
-      { action: "read", resource: "*", effect: "allow" },
-      { action: "read", resource: "*.env", effect: "ask" },
-      { action: "read", resource: "*.env.*", effect: "ask" },
-      { action: "read", resource: "*.env.example", effect: "allow" },
-    ]
-
-    yield* ctx.agent.transform((draft) => {
-      draft.update(AgentV2.defaultID, (item) => {
+    yield* ctx.agent.transform((editor) => {
+      editor.update(Agent.defaultID, (item) => {
+        item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
-        item.system ??= BUILD_SYSTEM
         item.mode = "primary"
-        item.permissions.push(
-          ...PermissionV2.merge(defaults, [
-            { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_enter", resource: "*", effect: "allow" },
-          ]),
-        )
+        item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       })
 
       draft.update(AgentV2.ID.make("plan"), (item) => {
@@ -153,49 +83,54 @@ export const Plugin = define({
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
-        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "todowrite", resource: "*", effect: "deny" }]))
+        item.permissions.push(
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "subagent", resource: "*", effect: "deny" },
+        )
       })
 
-      draft.update(AgentV2.ID.make("explore"), (item) => {
+      editor.update(Agent.ID.make("explore"), (item) => {
+        item.name = Agent.Name.make("Explore")
         item.description =
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
         item.mode = "subagent"
         item.permissions.push(
-          ...PermissionV2.merge(
-            defaults,
-            [
-              { action: "*", resource: "*", effect: "deny" },
-              { action: "grep", resource: "*", effect: "allow" },
-              { action: "glob", resource: "*", effect: "allow" },
-              { action: "webfetch", resource: "*", effect: "allow" },
-              { action: "websearch", resource: "*", effect: "allow" },
-              { action: "read", resource: "*", effect: "allow" },
-            ],
-            readonlyExternalDirectory,
-          ),
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "shell", resource: "*", effect: "allow" },
+          { action: "grep", resource: "*", effect: "allow" },
+          { action: "glob", resource: "*", effect: "allow" },
+          { action: "webfetch", resource: "*", effect: "allow" },
+          { action: "websearch", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "read", resource: "*.env", effect: "ask" },
+          { action: "read", resource: "*.env.*", effect: "ask" },
+          { action: "read", resource: "*.env.example", effect: "allow" },
+          { action: "subagent", resource: "*", effect: "deny" },
+          { action: "external_directory", resource: "*", effect: "allow" },
         )
       })
 
-      draft.update(AgentV2.ID.make("compaction"), (item) => {
+      editor.update(Agent.ID.make("compaction"), (item) => {
+        item.name = Agent.Name.make("Compaction")
         item.mode = "primary"
         item.hidden = true
-        item.system = PROMPT_COMPACTION
-        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
-      draft.update(AgentV2.ID.make("title"), (item) => {
+      editor.update(Agent.ID.make("title"), (item) => {
+        item.name = Agent.Name.make("Title")
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
-        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
+        item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
 
-      draft.update(AgentV2.ID.make("summary"), (item) => {
+      editor.update(Agent.ID.make("summary"), (item) => {
+        item.name = Agent.Name.make("Summary")
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY
-        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
+        item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
     })
   }),

@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
+import { hasConnectedProvider } from "../util/connected-provider"
 
 export function useConnected() {
   const sync = useSync()

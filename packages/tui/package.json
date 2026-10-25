@@ -6,28 +6,12 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b"
   },
   "exports": {
     ".": "./src/index.tsx",
-    "./builtins": "./src/feature-plugins/builtins.ts",
     "./config": "./src/config/index.tsx",
-    "./context/args": "./src/context/args.tsx",
-    "./context/epilogue": "./src/context/epilogue.tsx",
-    "./context/exit": "./src/context/exit.tsx",
-    "./context/kv": "./src/context/kv.tsx",
-    "./context/project": "./src/context/project.tsx",
-    "./context/runtime": "./src/context/runtime.tsx",
-    "./context/sdk": "./src/context/sdk.tsx",
-    "./context/sync": "./src/context/sync.tsx",
-    "./context/theme": "./src/context/theme.tsx",
-    "./context/editor": "./src/context/editor.ts",
-    "./context/clipboard": "./src/context/clipboard.tsx",
-    "./attention": "./src/attention.ts",
-    "./editor": "./src/editor.ts",
-    "./editor-zed": "./src/editor-zed.ts",
-    "./runtime": "./src/runtime.tsx",
-    "./terminal-win32": "./src/terminal-win32.ts",
     "./config/keybind": "./src/config/keybind.ts",
     "./keymap": "./src/keymap.tsx",
     "./prompt/display": "./src/prompt/display.ts",
@@ -41,11 +25,30 @@
     "./util/persistence": "./src/util/persistence.ts",
     "./util/record": "./src/util/record.ts",
     "./logo": "./src/logo.ts",
-    "./ui/dialog": "./src/ui/dialog.tsx",
-    "./ui/spinner": "./src/ui/spinner.ts",
-    "./ui/toast": "./src/ui/toast.tsx",
     "./component/spinner": "./src/component/spinner.tsx",
-    "./component/register-spinner": "./src/component/register-spinner.ts"
+    "./component/spinner-renderable": "./src/component/spinner-renderable.ts"
+  },
+  "imports": {
+    "#attention-sounds": {
+      "bun": "./src/attention-sounds.bun.ts",
+      "node": "./src/attention-sounds.node.ts",
+      "default": "./src/attention-sounds.bun.ts"
+    },
+    "#string-width": {
+      "bun": "./src/util/string-width.bun.ts",
+      "node": "./src/util/string-width.node.ts",
+      "default": "./src/util/string-width.bun.ts"
+    },
+    "#zed-sqlite": {
+      "bun": "./src/editor-zed-sqlite.bun.ts",
+      "node": "./src/editor-zed-sqlite.node.ts",
+      "default": "./src/editor-zed-sqlite.bun.ts"
+    },
+    "#runtime-plugin-support": {
+      "bun": "./src/plugin/runtime-plugin-support.bun.ts",
+      "node": "./src/plugin/runtime-plugin-support.node.ts",
+      "default": "./src/plugin/runtime-plugin-support.node.ts"
+    }
   },
   "dependencies": {
     "@bolt-ai/core": "workspace:*",
@@ -61,7 +64,7 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
-    "opentui-spinner": "catalog:",
+    "get-east-asian-width": "catalog:",
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "strip-ansi": "7.1.2"
@@ -69,6 +72,6 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

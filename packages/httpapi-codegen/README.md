@@ -14,7 +14,9 @@ The package is private while its API is explored. Its tests are the executable s
 - Keep the Promise surface domain-oriented rather than Hey API compatible: methods return unwrapped values and reject with tagged declared errors or `ClientError`.
 - Return Promise streams as lazy `AsyncIterable` values and Effect streams as `Stream` values. Neither runtime reconnects automatically.
 
-- Flatten path, query, header, and payload fields into one input object.
+- Flatten path, query, header, and struct payload fields into one input object.
+- Represent every non-struct payload (including unions, arrays, primitives, and records with index signatures) as one required `payload` input field and send that value as the request body directly.
+- Reject an opaque `payload` field when its name collides with a path, query, or header field.
 - Reject duplicate field names across input channels.
 - Emit no method argument for zero fields, an optional object when every field is optional, and a required object when any field is required.
 - Unwrap exact `{ data: A }` success envelopes.

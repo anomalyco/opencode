@@ -1,16 +1,17 @@
 import { benchmark, expect } from "../benchmark"
 import { expectSessionTitle } from "../../utils/waits"
 import { measureNavigationMilestones } from "./navigation-milestones"
-import { fixture } from "./session-timeline-stress.fixture"
 import {
+  fixture,
   installStressSessionTabs,
   installTimelineSettings,
   mockStressTimeline,
-  stressSessionHref,
-} from "./timeline-test-helpers"
+} from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
 const homeRow = '[data-component="home-session-row"]'
+
 const homeShell = '[data-component="home-session-search"]'
 
 benchmark.describe("performance: home and tab navigation", () => {
@@ -19,7 +20,8 @@ benchmark.describe("performance: home and tab navigation", () => {
     await page.goto("/")
     const row = page.locator(homeRow).filter({ hasText: fixture.expected.targetTitle }).first()
     await expect(row).toBeVisible()
-    const href = stressSessionHref(fixture.targetID)
+    const href = sessionHref(fixture.targetID)
+
     const result = await measureNavigationMilestones(page, {
       triggerSelector: homeRow,
       milestones: {
@@ -31,6 +33,7 @@ benchmark.describe("performance: home and tab navigation", () => {
         await expectSessionTitle(page, fixture.expected.targetTitle)
       },
     })
+
     report(result)
     await expect(page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`)).toContainText(
       fixture.expected.targetTitle,
@@ -42,27 +45,36 @@ benchmark.describe("performance: home and tab navigation", () => {
     await page.goto("/")
     const row = page.locator(homeRow).filter({ hasText: fixture.expected.targetTitle }).first()
     await expect(row).toBeVisible()
+
     const result = await page.evaluate(
       ({ rowSelector, title, contentSelector }) =>
         new Promise<{ contentBeforeReview: boolean; samples: number }>((resolve) => {
           let samples = 0
+
           const sample = () => {
             samples++
             const content = !!document.querySelector(contentSelector)
             const review = !!document.querySelector('[data-component="session-review"]')
+
             if (content && !review) {
               resolve({ contentBeforeReview: true, samples })
+
               return
             }
+
             if (content && review) {
               resolve({ contentBeforeReview: false, samples })
+
               return
             }
+
             requestAnimationFrame(sample)
           }
+
           const target = [...document.querySelectorAll<HTMLElement>(rowSelector)].find((item) =>
             item.textContent?.includes(title),
           )
+
           if (!target) throw new Error(`Home session row not found: ${title}`)
           target.click()
           requestAnimationFrame(sample)
@@ -73,6 +85,7 @@ benchmark.describe("performance: home and tab navigation", () => {
         contentSelector: messageSelector(fixture.expected.targetMessageIDs.at(-1)!),
       },
     )
+
     report(result)
     expect(result.contentBeforeReview).toBe(true)
     await expect(page.locator('[data-component="session-review"]')).toBeVisible()
@@ -80,13 +93,14 @@ benchmark.describe("performance: home and tab navigation", () => {
 
   benchmark("closes the only session tab and paints home", async ({ page, report }) => {
     await setup(page, [fixture.sourceID])
-    const href = stressSessionHref(fixture.sourceID)
+    const href = sessionHref(fixture.sourceID)
     await page.goto(href)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
     const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
     const close = tab.locator("..").locator('[data-component="icon-button-v2"]')
     await expect(close).toBeVisible()
+
     const result = await measureNavigationMilestones(page, {
       triggerSelector: '[data-slot="titlebar-tabs"] [data-component="icon-button-v2"]',
       milestones: {
@@ -99,6 +113,7 @@ benchmark.describe("performance: home and tab navigation", () => {
         await expect(page).toHaveURL("/")
       },
     })
+
     report(result)
   })
 })

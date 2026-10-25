@@ -10,8 +10,11 @@ import { useRouteData } from "../context/route"
 import { usePromptRef } from "../context/prompt"
 import { useKV } from "../context/kv.tsx"
 import { useLocal } from "../context/local"
-import { usePluginRuntime } from "../plugin/runtime"
 import { useEditorContext } from "../context/editor"
+import { useData } from "../context/data"
+import { useLocation } from "../context/location"
+import { FormPrompt } from "./session/form"
+import { Slot } from "../plugin/render"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { useDialog } from "../ui/dialog"
@@ -25,21 +28,19 @@ const placeholder = {
 }
 
 export function Home() {
-  const pluginRuntime = usePluginRuntime()
-  const sync = useSync()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
   const editor = useEditorContext()
+  const data = useData()
+  const location = useLocation()
   const dimensions = useTerminalDimensions()
-  const tuiConfig = useTuiConfig()
-  const promptMaxWidth = createMemo(() => {
-    const configured = tuiConfig.prompt?.max_width
-    if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
-    return configured ?? 75
-  })
+  const [logoWidth, setLogoWidth] = createSignal(0)
+  // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
+  const currentLocation = () => route.location ?? data.location.default()
+  const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
 
   const kv = useKV()
@@ -102,25 +103,27 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r) return
-    if (route.prompt) {
-      r.set(route.prompt)
-      once = true
-      return
-    }
-    if (!args.prompt) return
-    r.set({ input: args.prompt, parts: [] })
+    if (once || !r || route.prompt || !args.prompt) return
+    r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
     once = true
   }
 
-  // Wait for sync and model store to be ready before auto-submitting --prompt
+  createEffect(() => {
+    const composer = ref()
+    const prompt = route.prompt
+    if (!composer || prompt?.text === undefined) return
+    untrack(() => composer.set(prompt))
+  })
+
+  // Wait for everything submit needs before auto-submitting --prompt; it runs once.
   createEffect(() => {
     const r = ref()
     if (sent) return
     if (!r) return
-    if (!sync.ready || !local.model.ready) return
+    if (!local.model.ready || !local.model.catalogReady) return
+    if (!local.agent.current() || !local.model.current()) return
     if (!args.prompt) return
-    if (r.current.input !== args.prompt) return
+    if (r.current.text !== args.prompt) return
     sent = true
     r.submit()
   })
@@ -177,8 +180,73 @@ export function Home() {
         </box>
       </box>
       <box width="100%" flexShrink={0}>
-        <pluginRuntime.Slot name="home_footer" mode="single_winner" />
+        <Slot path="home.footer" />
       </box>
-    </HomeSessionDestinationProvider>
+      <Show when={forms()[0]?.id} keyed>
+        {(_) => {
+          const form = forms()[0]
+          return form ? (
+            <box position="absolute" zIndex={2000} left={0} right={0} bottom={1} paddingLeft={2} paddingRight={2}>
+              <box width="100%">
+                <FormPrompt form={form} />
+              </box>
+            </box>
+          ) : null
+        }}
+      </Show>
+    </>
+  )
+}
+
+function UpdateNotification(props: { width: number }) {
+  const update = useUpdateNotification()
+  const exit = useExit()
+  const theme = useTheme()
+  const [hovered, setHovered] = createSignal(false)
+  const backdrop = () => (hovered() ? theme.background.action.primary.hovered : theme.background.base)
+  createEffect(() => {
+    update.notification()
+    setHovered(false)
+  })
+
+  return (
+    <Show when={update.notification()} keyed>
+      {(state) => {
+        const remote = state.source === "server" && state.remote
+        return (
+          <Show when={!remote || state.type === "available"}>
+            <box
+              flexShrink={0}
+              flexDirection="row"
+              justifyContent="center"
+              width={props.width}
+              maxWidth="100%"
+              gap={1}
+              backgroundColor={hovered() ? theme.background.action.primary.hovered : undefined}
+              onMouseOver={() => setHovered(true)}
+              onMouseOut={() => setHovered(false)}
+              onMouseUp={() => {
+                if (remote) return update.dismiss()
+                if (state.type === "installed") return exit()
+                update.open?.("notification")
+              }}
+            >
+              <FadeInText fg={theme.text.muted} backdrop={backdrop()}>
+                <Show when={!remote}>
+                  <span style={{ fg: theme.text.action.primary.selected }}>
+                    {state.type === "installed" ? "/exit" : "/update"}
+                  </span>
+                </Show>
+                {remote
+                  ? "remote server update available"
+                  : state.type === "installed"
+                    ? ` restart to use v${state.version}`
+                    : ` to install v${state.version}`}
+              </FadeInText>
+            </box>
+          </Show>
+        )
+      }}
+    </Show>
   )
 }

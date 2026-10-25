@@ -32,10 +32,7 @@ import "./styles.css"
 import { Splash } from "@bolt-ai/ui/logo"
 import { useTheme } from "@bolt-ai/ui/theme/context"
 
-const root = document.getElementById("root")
-if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("desktop.error.dev.rootNotFound"))
-}
+const root = requireRendererRoot()
 
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
@@ -57,14 +54,11 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
-const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
-void window.api.updater.subscribe(setUpdaterState)
+startDesktopMenu(api)
 
 const deepLinkEvent = "bolt:deep-link"
 
-type DesktopWindowState = {
-  id?: string
-}
+render(() => <DesktopApp api={api} version={version} />, root)
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return

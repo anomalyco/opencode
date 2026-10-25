@@ -31,7 +31,7 @@
     align-self: stretch;
     margin-bottom: 4px;
 
-    > [data-component="icon-button"] {
+    > [data-component="icon-button-v2"] {
       width: 24px;
       height: 24px;
       flex-shrink: 0;
@@ -83,7 +83,7 @@
       }
     }
 
-    > [data-component="icon-button"] {
+    > [data-component="icon-button-v2"] {
       width: 20px;
       height: 20px;
       background-color: transparent;
@@ -106,7 +106,7 @@
       }
     }
 
-    > [data-component="icon-button"] {
+    > [data-component="icon-button-v2"] {
       background-color: transparent;
 
       &:hover:not(:disabled),
@@ -252,7 +252,7 @@
             justify-content: center;
             flex-shrink: 0;
             aspect-ratio: 1/1;
-            [data-component="icon"] {
+            [data-slot="icon-svg"] {
               color: var(--icon-strong-base);
             }
           }
@@ -262,7 +262,7 @@
             justify-content: center;
             flex-shrink: 0;
             aspect-ratio: 1/1;
-            [data-component="icon"] {
+            [data-slot="icon-svg"] {
               color: var(--icon-strong-base);
             }
           }

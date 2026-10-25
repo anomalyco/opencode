@@ -1,17 +1,27 @@
 import { Catalog } from "@bolt-ai/core/catalog"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { response } from "../location"
+import { awaitPlugins, response } from "../location"
 
 export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers) =>
   Effect.gen(function* () {
-    return handlers.handle(
-      "model.list",
-      Effect.fn(function* () {
-        const catalog = yield* Catalog.Service
-        return yield* response(catalog.model.available())
-      }),
-    )
+    return handlers
+      .handle(
+        "model.list",
+        Effect.fn(function* () {
+          yield* awaitPlugins
+          const models = yield* Model.Service
+          return yield* response(models.available())
+        }),
+      )
+      .handle(
+        "model.default",
+        Effect.fn(function* () {
+          yield* awaitPlugins
+          const models = yield* Model.Service
+          return yield* response(models.default())
+        }),
+      )
   }),
 )

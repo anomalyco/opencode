@@ -1,0 +1,249 @@
+import { batch, untrack, type Accessor } from "solid-js"
+import { createStore, type SetStoreFunction } from "solid-js/store"
+import { Persist, persisted } from "@/runtime/persistence/storage"
+import { ServerScope } from "@/runtime/server/scope"
+import type { Platform } from "@/runtime/platform/platform"
+import { clonePrompt } from "./prompt-parts"
+import {
+  ComposerStore,
+  DEFAULT_PROMPT,
+  contextItemKey,
+  type ContextItem,
+  type Prompt,
+  type PromptModel,
+} from "./schema"
+
+export { DEFAULT_PROMPT } from "./schema"
+
+export type {
+  AgentPart,
+  ComposerStore,
+  ContentPart,
+  ContextItem,
+  FileAttachmentPart,
+  FileContextItem,
+  ImageAttachmentPart,
+  NoteComment,
+  NoteContextItem,
+  PathAttachmentPart,
+  Prompt,
+  PromptModel,
+  SkillPart,
+  TextPart,
+} from "./schema"
+
+export type PromptScope = { draftID: string } | { dir: string; id?: string }
+
+type InitialPrompt = {
+  prompt?: string
+  model?: PromptModel
+}
+
+export function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
+  return !!item.comment?.trim()
+}
+
+function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
+  return {
+    set(prompt: Prompt, cursorPosition?: number) {
+      batch(() => {
+        setStore({ prompt: clonePrompt(prompt), retry: undefined })
+
+        // An omitted cursor keeps the current one.
+        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
+      })
+    },
+    reset() {
+      batch(() => setStore({ prompt: clonePrompt(DEFAULT_PROMPT), cursor: 0, retry: undefined }))
+    },
+  }
+}
+
+function composerTarget(serverScope: ServerScope, scope: PromptScope) {
+  return "draftID" in scope
+    ? Persist.prompt(Persist.draft(scope.draftID, "prompt"))
+    : Persist.prompt({
+        ...Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt"),
+        previousKey:
+          serverScope === ServerScope.local ? `${scope.dir}/prompt${scope.id ? "/" + scope.id : ""}.v2` : undefined,
+      })
+}
+
+function initialComposerStore(initial?: InitialPrompt): ComposerStore {
+  const text = initial?.prompt
+
+  return {
+    prompt:
+      text === undefined ? clonePrompt(DEFAULT_PROMPT) : [{ type: "text", content: text, start: 0, end: text.length }],
+    cursor: text === undefined ? undefined : text.length,
+    model: initial?.model ? { ...initial.model } : undefined,
+    context: {
+      items: [],
+    },
+  }
+}
+
+// Named because `capture` returns the value itself: declaration emit cannot serialize the inferred cyclic type.
+export interface ComposerStateValue {
+  readonly store: [Accessor<ComposerStore>, SetStoreFunction<ComposerStore>]
+  readonly current: () => Prompt
+  readonly cursor: () => ComposerStore["cursor"]
+  readonly model: {
+    readonly current: () => ComposerStore["model"]
+    readonly set: (model: PromptModel | undefined) => void
+  }
+  readonly mode: {
+    readonly current: () => NonNullable<ComposerStore["mode"]>
+    readonly set: (mode: "normal" | "shell") => void
+  }
+  readonly retry: {
+    readonly current: () => ComposerStore["retry"]
+    readonly set: (retry: NonNullable<ComposerStore["retry"]>) => void
+  }
+  readonly context: {
+    readonly items: () => ComposerStore["context"]["items"]
+    add(item: ContextItem): void
+    remove(key: string): void
+    removeComment(commentID: string): void
+    updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }): void
+    replace(items: ContextItem[]): void
+    replaceComments(items: ContextItem[]): void
+  }
+  readonly set: (prompt: Prompt, cursorPosition?: number) => void
+  readonly reset: () => void
+  readonly capture: () => ComposerStateValue
+}
+
+function createComposerStateValue(
+  store: ComposerStore,
+  setStore: SetStoreFunction<ComposerStore>,
+): ComposerStateValue {
+  const actions = createComposerActions(setStore)
+
+  const clearRetry = () => {
+    if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
+  }
+
+  const value = {
+    store: [() => store, setStore] satisfies [Accessor<ComposerStore>, SetStoreFunction<ComposerStore>],
+    current: () => store.prompt,
+    cursor: () => store.cursor,
+    model: {
+      current: () => store.model,
+      set: (model: PromptModel | undefined) => {
+        setStore("model", model)
+        clearRetry()
+      },
+    },
+    mode: {
+      current: () => store.mode ?? "normal",
+      set: (mode: "normal" | "shell") => {
+        if (untrack(() => store.mode === mode && store.retry === undefined)) return
+        setStore({ mode, retry: undefined })
+      },
+    },
+    retry: {
+      current: () => store.retry,
+      set: (retry: NonNullable<ComposerStore["retry"]>) => setStore("retry", retry),
+    },
+    context: {
+      items: () => store.context.items,
+      add(item: ContextItem) {
+        const key = contextItemKey(item)
+
+        if (store.context.items.find((x) => x.key === key)) return
+        setStore("context", "items", (items) => [...items, { key, ...item }])
+        clearRetry()
+      },
+      remove(key: string) {
+        setStore("context", "items", (items) => items.filter((x) => x.key !== key))
+        clearRetry()
+      },
+      /** Removes the file comment or note with this commentID. */
+      removeComment(commentID: string) {
+        setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
+        clearRetry()
+      },
+      /** Edits the file comment or note with this commentID; only file comments carry a preview. */
+      updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.commentID !== commentID) return item
+
+            const value =
+              item.type === "file" ? { ...item, ...next } : { ...item, comment: next.comment ?? item.comment }
+
+            return { ...value, key: contextItemKey(value) }
+          }),
+        )
+        clearRetry()
+      },
+      /** Replaces every item, as restoring a sent prompt replaces the whole draft. */
+      replace(items: ContextItem[]) {
+        setStore(
+          "context",
+          "items",
+          [...new Map(items.map((item) => [contextItemKey(item), item] as const)).entries()].map(([key, item]) => ({
+            ...item,
+            key,
+          })),
+        )
+        clearRetry()
+      },
+      replaceComments(items: ContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isCommentItem(item)),
+          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
+        clearRetry()
+      },
+    },
+    set: (prompt: Prompt, cursorPosition?: number) => actions.set(prompt, cursorPosition),
+    reset: () => actions.reset(),
+    capture: () => value,
+  }
+
+  return value
+}
+
+function createPersistedComposer(
+  target: ReturnType<typeof composerTarget>,
+  initial?: InitialPrompt,
+  platform?: Platform,
+) {
+  const [store, setStore, _, ready] = persisted(target, ComposerStore, initialComposerStore(initial), platform)
+
+  return { ready, ...createComposerStateValue(store, setStore) }
+}
+
+export function createComposerState(
+  serverScope: ServerScope,
+  scope: PromptScope,
+  initial?: InitialPrompt,
+  platform?: Platform,
+) {
+  return createPersistedComposer(composerTarget(serverScope, scope), initial, platform)
+}
+
+export function createDraftComposerState(draftID: string, initial?: InitialPrompt) {
+  return createPersistedComposer(Persist.prompt(Persist.draft(draftID, "prompt")), initial)
+}
+
+export type ComposerState = ReturnType<typeof createComposerState>
+
+export function createComposerReady(session: Accessor<ComposerState>) {
+  // SAFETY: defineProperty returns the same function, now carrying the promise getter defined here.
+  return Object.defineProperty(() => session().ready(), "promise", {
+    get: () => session().ready.promise,
+  }) as (() => boolean) & { readonly promise: Promise<unknown> | undefined }
+}
+
+export function createMemoryComposerState(initial?: InitialPrompt) {
+  const [store, setStore] = createStore<ComposerStore>(initialComposerStore(initial))
+  const ready = Object.assign(() => true, { promise: Promise.resolve(true) })
+
+  return {
+    ready,
+    ...createComposerStateValue(store, setStore),
+  }
+}

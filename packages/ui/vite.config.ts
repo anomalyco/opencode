@@ -49,6 +49,7 @@ async function fetchProviderIcons() {
   const providers = await fetch(`${url}/api.json`)
     .then((res) => res.json())
     .then((json) => Object.keys(json))
+
   await Promise.all(
     providers.map((provider) =>
       fetch(`${url}/logos/${provider}.svg`)

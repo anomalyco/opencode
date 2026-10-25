@@ -1,4 +1,4 @@
-export * as PluginPromise from "./promise"
+export * as PluginPromise from "./promise.js"
 
 import { define } from "@bolt-ai/plugin/v2/effect"
 import type { Plugin, PluginContext, Registration } from "@bolt-ai/plugin/v2/promise"

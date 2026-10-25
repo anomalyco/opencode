@@ -15,7 +15,7 @@ Usage: install.sh [options]
 
 Options:
     -h, --help              Display this help message
-    -v, --version <version> Install a specific version (e.g., 1.0.180)
+    -v, --version <version> Install a specific version (e.g., 0.0.0-beta-17236)
     -b, --binary <path>     Install from a local binary instead of downloading
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
         --no-voice          Skip /voice input setup (sox recorder plus whisper-cpp
@@ -108,20 +108,23 @@ else
       fi
     fi
 
+    # Git Bash and MSYS2 run as emulated x64 on Windows ARM64, so `uname -m` reports x86_64.
+    # The host CPU still shows in the `uname -s` suffix and in PROCESSOR_IDENTIFIER.
+    if [ "$os" = "windows" ] && [ "$arch" = "x64" ]; then
+      if [[ "$raw_os" == *-ARM64 || "${PROCESSOR_IDENTIFIER:-}" == ARM* ]]; then
+        arch="arm64"
+      fi
+    fi
+
     combo="$os-$arch"
     case "$combo" in
-      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64|windows-arm64)
         ;;
       *)
         echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
         exit 1
         ;;
     esac
-
-    archive_ext=".zip"
-    if [ "$os" = "linux" ]; then
-      archive_ext=".tar.gz"
-    fi
 
     is_musl=false
     if [ "$os" = "linux" ]; then
@@ -190,19 +193,22 @@ else
         fi
     fi
 
+    package_scope="@opencode"
     if [ -z "$requested_version" ]; then
         url="https://github.com/bolt-builder/bolt-cli/releases/latest/download/$filename"
         specific_version=$(curl -s https://api.github.com/repos/bolt-builder/bolt-cli/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
-        if [[ $? -ne 0 || -z "$specific_version" ]]; then
+        if [ -z "$specific_version" ] || [ -z "$package" ]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
+        package_scope="${package%/cli}"
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
         url="https://github.com/bolt-builder/bolt-cli/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
+    fi
 
         # Verify the release exists before downloading
         http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/bolt-builder/bolt-cli/releases/tag/v${requested_version}")
@@ -235,23 +241,7 @@ check_version() {
         ## Check the installed version
         installed_version=$(bolt --version 2>/dev/null || echo "")
 
-        if [[ "$installed_version" != "$specific_version" ]]; then
-            print_message info "${MUTED}Installed version: ${NC}$installed_version."
-        else
-            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
-            exit 0
-        fi
-    fi
-}
-
-unbuffered_sed() {
-    if echo | sed -u -e "" >/dev/null 2>&1; then
-        sed -nu "$@"
-    elif echo | sed -l -e "" >/dev/null 2>&1; then
-        sed -nl "$@"
-    else
-        local pad="$(printf "\n%512s" "")"
-        sed -ne "s/$/\\${pad}/" "$@"
+        print_message info "${MUTED}Installed version: ${NC}$installed_version."
     fi
 }
 
@@ -293,42 +283,29 @@ download_with_progress() {
     # Hide cursor
     printf "\033[?25l" >&4
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    trap "trap - RETURN; rm -f \"$headers\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
-    (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
-    ) &
+    # Poll the file size on a timer so rendering cost stays fixed no matter how many bytes arrive.
+    # Read the size with ls because busybox wc -c reads the whole file.
+    curl -fsL -D "$headers" -o "$output" "$url" &
     local curl_pid=$!
 
-    unbuffered_sed \
-        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
-        -e '/^0000: content-length:/p' \
-        -e '/^<= recv data/p' \
-        "$tracefile" | \
-    {
-        local length=0
-        local bytes=0
+    local length bytes
+    while kill -0 "$curl_pid" 2>/dev/null; do
+        if [ -f "$output" ]; then
+            length=$(grep -i '^content-length:' "$headers" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
+            bytes=$(ls -ln "$output" | awk '{print $5}')
+            print_progress "$bytes" "${length:-0}"
+        fi
+        sleep 0.1 2>/dev/null || sleep 1
+    done
 
-        while IFS=" " read -r -a line; do
-            [ "${#line[@]}" -lt 2 ] && continue
-            local tag="${line[0]} ${line[1]}"
-
-            if [ "$tag" = "0000: content-length:" ]; then
-                length="${line[2]}"
-                length=$(echo "$length" | tr -d '\r')
-                bytes=0
-            elif [ "$tag" = "<= recv" ]; then
-                local size="${line[3]}"
-                bytes=$(( bytes + size ))
-                if [ "$length" -gt 0 ]; then
-                    print_progress "$bytes" "$length"
-                fi
-            fi
-        done
-    }
-
-    wait $curl_pid
-    local ret=$?
+    local ret=0
+    wait "$curl_pid" || ret=$?
+    if [ "$ret" -eq 0 ]; then
+        bytes=$(ls -ln "$output" | awk '{print $5}')
+        print_progress "$bytes" "$bytes"
+    fi
     echo "" >&4
     return $ret
 }
@@ -342,13 +319,13 @@ download_and_install() {
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -# -L -o "$tmp_dir/$filename" "$url"
+        curl -f -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
-    if [ "$os" = "linux" ]; then
-        tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
-    else
-        unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
+    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+    local installed_binary="$APP"
+    if [ "$os" = "windows" ]; then
+        installed_binary="$APP.exe"
     fi
 
     binary="bolt"
@@ -372,8 +349,10 @@ else
     check_version
     download_and_install
 fi
+install_legacy_shim
 
 
+path_added=false
 add_to_path() {
     local config_file=$1
     local command=$2
@@ -423,6 +402,18 @@ if [[ "$no_modify_path" != "true" ]]; then
             break
         fi
     done
+
+    # A new Mac has no ~/.zshrc, so create the shell's main config file rather than leaving opencode off PATH.
+    if [[ -z $config_file ]]; then
+        case $current_shell in
+            zsh) new_config_file="${ZDOTDIR:-$HOME}/.zshrc" ;;
+            fish) new_config_file="$HOME/.config/fish/config.fish" ;;
+            *) new_config_file="" ;;
+        esac
+        if [[ -n $new_config_file ]] && mkdir -p "$(dirname "$new_config_file")" 2>/dev/null && touch "$new_config_file" 2>/dev/null; then
+            config_file=$new_config_file
+        fi
+    fi
 
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
@@ -559,6 +550,9 @@ echo -e ""
 echo -e ""
 echo -e "${MUTED}Bolt CLI includes free models, to start:${NC}"
 echo -e ""
+if [[ $path_added == "true" ]]; then
+    echo -e "exec \$SHELL   ${MUTED}# Reload PATH (or open a new terminal)${NC}"
+fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "bolt          ${MUTED}# Run command${NC}"
 echo -e ""

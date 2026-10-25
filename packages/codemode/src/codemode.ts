@@ -1,29 +1,37 @@
 import { Effect, Schema } from "effect"
-import { executeWithLimits } from "./interpreter/runtime.js"
-import { type HostTools, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
-import type { Definition } from "./tool.js"
+import type { Extension } from "./extension.js"
+import { executeProgram } from "./interpreter/execute.js"
+import { extensionGlobals } from "./interpreter/extensions.js"
+import { globalNames } from "./interpreter/globals.js"
+import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
+import type { Tools } from "./tools.js"
 
 /** A tool call admitted during an execution. */
-export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
+export type {
+  CallResult,
+  ExtensionInvocation,
+  Hooks,
+  ToolCall,
+  ToolDescription,
+  ToolInvocation,
+} from "./tool-runtime.js"
+/** Signature-construction helpers for host-owned catalog instructions. */
+export { searchSignature, toolExpression } from "./tool-runtime.js"
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
-  /** Maximum wall-clock execution time in milliseconds. No default: absent means no timeout. */
+  /**
+   * Wall-clock milliseconds before interruption. Result delivery waits for tool cleanup.
+   * No default: absent means no timeout.
+   */
   readonly timeoutMs?: number
   /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
-  /** Maximum UTF-8 bytes of model-facing output. No default: absent means no truncation. */
+  /**
+   * Maximum UTF-8 bytes retained from the result and logs. Warnings have a separate equal budget;
+   * truncation notices and host formatting are additional.
+   */
   readonly maxOutputBytes?: number
-}
-
-/** Controls how much of the tool catalog is inlined in agent instructions. */
-export type DiscoveryOptions = {
-  /** Approximate token budget (chars/4, default 2000) for full catalog entries. */
-  readonly catalogBudget?: number
-}
-
-type ToolTree<R = never> = {
-  readonly [name: string]: Definition<R> | ToolTree<R>
 }
 
 export type ResolvedExecutionLimits = {
@@ -32,28 +40,26 @@ export type ResolvedExecutionLimits = {
   readonly maxOutputBytes: number | undefined
 }
 
+/** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
+export type Options<Provided extends Record<string, unknown> = {}> = {
+  /** Explicit tools exposed to the program as `tools`. */
+  tools?: Provided & Tools<Services<Provided>>
+  /** Hooks around every tool and extension call the program makes; see `Hooks`. */
+  hooks?: ToolRuntime.Hooks<Services<Provided>>
+  /** Host functions exposed as globals; see `Extension.make`. */
+  extensions?: ReadonlyArray<Extension>
+  /** Resource limits enforced on each execution. */
+  limits?: ExecutionLimits
+}
+
 /** Options for one CodeMode execution. */
-export type ExecuteOptions<Tools extends Record<string, unknown> = {}> = {
+export type ExecuteOptions<Provided extends Record<string, unknown> = {}> = Options<Provided> & {
   /** Source for one program in the supported JavaScript subset. */
   code: string
-  /** Explicit tool tree exposed to the program as `tools`. */
-  tools?: Tools & ToolTree<Services<Tools>>
-  /** Per-execution overrides for the default resource limits. */
-  limits?: ExecutionLimits
-  /** Observes decoded tool input immediately before tool execution. */
-  onToolCallStart?: (call: ToolRuntime.ToolCallStarted) => Effect.Effect<void, never, Services<Tools>>
-  /** Observes each admitted tool call as it settles, with outcome and duration. */
-  onToolCallEnd?: (call: ToolRuntime.ToolCallEnded) => Effect.Effect<void, never, Services<Tools>>
 }
 
 /** A JSON value that can cross the confined interpreter boundary. */
 export type DataValue = Schema.Json
-
-/** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
-export type Options<Tools extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Tools>, "code"> & {
-  /** Progressive-disclosure configuration for the agent-facing tool catalog. */
-  readonly discovery?: DiscoveryOptions
-}
 
 /** Schema for a host tool input containing CodeMode source. */
 export const Input = Schema.Struct({ code: Schema.String })
@@ -70,8 +76,9 @@ export const DiagnosticKind = Schema.Literals([
   "TimeoutExceeded",
   "ToolFailure",
   "ExecutionFailure",
+  "Truncated",
 ])
-/** Stable categories produced by program, schema, tool, and limit failures. */
+/** Stable categories produced by program, schema, tool, limit, and truncation diagnostics. */
 export type DiagnosticKind = typeof DiagnosticKind.Type
 
 export const Diagnostic = Schema.Struct({
@@ -87,6 +94,7 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
+  warnings: Schema.optionalKey(Schema.Array(Diagnostic)),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),
   toolCalls: Schema.Array(ToolCallSchema),
@@ -109,18 +117,13 @@ export const Result = Schema.Union([Success, Failure])
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type Result = typeof Result.Type
 
-/** Reusable confined runtime over one explicit tool tree. */
+/** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
-  readonly catalog: () => ReadonlyArray<ToolDescription>
-  readonly instructions: () => string
+  readonly catalog: ReadonlyArray<ToolDescription>
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
-const validateLimit = <Value extends number | undefined>(
-  name: keyof ExecutionLimits,
-  value: Value,
-  minimum: number,
-): Value => {
+const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
   }
@@ -134,26 +137,29 @@ const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimi
 })
 
 /** Executes one Effect-native CodeMode program without constructing a reusable runtime. */
-export const execute = <const Tools extends Record<string, unknown>>(
-  options: ExecuteOptions<Tools>,
-): Effect.Effect<Result, never, Services<Tools>> => {
-  const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
-  ToolRuntime.assertValidTools(tools)
-  return executeWithLimits(options, resolveExecutionLimits(options.limits), ToolRuntime.searchIndex(tools))
-}
+export const execute = <const Provided extends Record<string, unknown>>(
+  options: ExecuteOptions<Provided>,
+): Effect.Effect<Result, never, Services<Provided>> => make(options).execute(options.code)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools. */
-export const make = <const Tools extends Record<string, unknown> = {}>(
-  options: Options<Tools> = {} as Options<Tools>,
-): Runtime<Services<Tools>> => {
-  const tools = (options.tools ?? {}) as HostTools<Services<Tools>>
-  ToolRuntime.assertValidTools(tools)
+export const make = <const Provided extends Record<string, unknown> = {}>(
+  options: Options<Provided> = {},
+): Runtime<Services<Provided>> => {
+  const prepared = ToolRuntime.prepare((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
-  const prepared = ToolRuntime.prepare(tools, options.discovery?.catalogBudget)
-
+  const extensions = options.extensions ?? []
+  const bound = new Set(globalNames)
+  for (const extension of extensions) {
+    for (const name of Object.keys(extension.globals)) {
+      if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)
+      bound.add(name)
+    }
+  }
   return {
-    catalog: () => prepared.catalog,
-    instructions: () => prepared.instructions,
-    execute: (code) => executeWithLimits<Tools>({ ...options, code }, limits, prepared.searchIndex),
+    get catalog() {
+      return prepared.catalog
+    },
+    execute: (code) =>
+      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions)),
   }
 }

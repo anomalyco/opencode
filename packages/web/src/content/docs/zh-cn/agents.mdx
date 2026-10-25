@@ -71,7 +71,7 @@ _模式_：`primary`
 
 _模式_：`subagent`
 
-一个用于研究复杂问题和执行多步骤任务的通用代理。拥有完整的工具访问权限（todo 除外），因此可以在需要时修改文件。可用于并行运行多个工作单元。
+一个用于研究复杂问题和执行多步骤任务的通用代理。拥有完整的工具访问权限，因此可以在需要时修改文件。可用于并行运行多个工作单元。
 
 ---
 
@@ -151,7 +151,7 @@ _模式_：`primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -171,7 +171,7 @@ _模式_：`primary`
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,7 +195,7 @@ _模式_：`primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -671,19 +671,9 @@ Only analyze code and suggest changes.
 
 ## 创建代理
 
-您可以使用以下命令创建新代理：
+要创建新代理，请将 Markdown 文件添加到项目的 `.opencode/agents/` 或全局的 `~/.config/opencode/agents/` 中。文件名即为代理名称，frontmatter 用于配置其描述、模式、模型和权限。文件格式请参阅上文的 [Markdown](#markdown)。
 
-```bash
-opencode agent create
-```
-
-此交互式命令将：
-
-1. 询问代理的保存位置——全局或项目级。
-2. 描述代理应该做什么。
-3. 生成合适的系统提示词和标识符。
-4. 让您选择代理可以访问哪些工具。
-5. 最后，创建一个包含代理配置的 Markdown 文件。
+运行 `opencode agent list` 可列出 OpenCode 已加载的代理。
 
 ---
 

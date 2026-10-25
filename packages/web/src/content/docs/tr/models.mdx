@@ -74,7 +74,7 @@ Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılan
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılan
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılan
 }
 ```
 
-Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `gpt-5` sağlayıcısı aracılığıyla erişildiğinde `openai` ve `claude-sonnet-4-20250514` sağlayıcısı aracılığıyla erişildiğinde `anthropic`.
+Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `gpt-6.1-sol` sağlayıcısı aracılığıyla erişildiğinde `openai` ve `claude-sonnet-5-5` sağlayıcısı aracılığıyla erişildiğinde `anthropic`.
 Yerleşik sağlayıcı ve model adları [Models.dev](https://models.dev) adresinde bulunabilir.
 
 Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Daha fazla bilgi](/docs/agents/#additional).
@@ -113,7 +113,7 @@ Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsin
   "provider": {
     "bolt": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",

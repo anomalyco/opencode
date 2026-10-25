@@ -1,19 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { createSignal, For, Show } from "solid-js"
-import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
-  formatCompletedSubagentDetail,
-  formatSubagentRetry,
-  formatSubagentTitle,
-  formatSubagentToolcalls,
   InlineToolRow,
+  executeCallSummary,
+  genericToolSummary,
+  isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
-  parseTodos,
-  alwaysSeparate,
+  subagentModelLabel,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -52,40 +49,10 @@ const tools: readonly ToolFixture[] = [
   },
 ] as const
 
-function ShellOutput() {
-  return (
-    <box
-      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
-      marginTop={1}
-      paddingTop={1}
-      paddingBottom={1}
-      paddingLeft={2}
-      gap={1}
-    >
-      <box gap={1}>
-        <text>$ ls</text>
-        <text>file.ts</text>
-      </box>
-    </box>
-  )
-}
-
-function UserMessage() {
-  return (
-    <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)}>
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2}>
-        <text>Check whether the next tool remains separated.</text>
-      </box>
-    </box>
-  )
-}
-
-function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) {
+function Fixture(props: { errorExpanded?: boolean }) {
   return (
     <box flexDirection="column" width={72}>
       <box flexDirection="column">
-        {props.before === "shell" && <ShellOutput />}
-        {props.before === "user" && <UserMessage />}
         <For each={tools}>
           {(item) => (
             <InlineToolRow
@@ -105,94 +72,6 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
   )
 }
 
-function TaskRowsFixture() {
-  return (
-    <box flexDirection="column" width={72}>
-      <InlineToolRow icon="✱" complete={true} pending="">
-        Grep "Task" (2 matches)
-      </InlineToolRow>
-      <InlineToolRow icon="⠙" complete={true} pending="" separate={true}>
-        Explore Task — Inspect active task spacing
-      </InlineToolRow>
-      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
-        {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
-      </InlineToolRow>
-      <InlineToolRow icon="→" complete={true} pending="">
-        Read src/cli/cmd/tui/routes/session/index.tsx
-      </InlineToolRow>
-    </box>
-  )
-}
-
-function LoadedReadBeforeTaskFixture() {
-  return (
-    <box flexDirection="column" width={72}>
-      <InlineToolRow icon="→" complete={true} pending="">
-        Read src/cli/cmd/tui/routes/session/index.tsx
-      </InlineToolRow>
-      <box paddingLeft={3}>
-        <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
-      </box>
-      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
-        {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
-      </InlineToolRow>
-    </box>
-  )
-}
-
-function AssistantSummaryBeforeInlineFixture() {
-  return (
-    <box flexDirection="column" width={72}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
-        <text>▣ Build · Little Frank · 53.1s</text>
-      </box>
-      <InlineToolRow icon="✓" complete={true} pending="">
-        {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
-      </InlineToolRow>
-    </box>
-  )
-}
-
-function AssistantErrorBeforeInlineFixture() {
-  return (
-    <box flexDirection="column" width={72}>
-      <box
-        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
-        border={["left"]}
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-      >
-        <text>Managed inference requires an active Member plan</text>
-      </box>
-      <InlineToolRow icon="✓" complete={true} pending="">
-        {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
-      </InlineToolRow>
-    </box>
-  )
-}
-
-function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: ScrollBoxRenderable) => void }) {
-  return (
-    <scrollbox ref={props.scroll} stickyScroll={true} stickyStart="bottom" height={3} width={72}>
-      <box height={1}>
-        <text>First row</text>
-      </box>
-      <box height={1}>
-        <text>Second row</text>
-      </box>
-      <Show when={props.separated}>
-        <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)}>
-          <text>Assistant text</text>
-        </box>
-      </Show>
-      <InlineToolRow icon="→" complete={true} pending="">
-        Read src/cli/cmd/tui/routes/session/index.tsx
-      </InlineToolRow>
-    </scrollbox>
-  )
-}
-
 function FailedPendingToolFixture() {
   return (
     <InlineToolRow icon="%" complete={false} pending="Preparing patch…" failed={true} failure="Patch failed">
@@ -209,7 +88,29 @@ function FailedCompleteToolFixture() {
   )
 }
 
+function ReminderAlignmentFixture() {
+  return (
+    <box flexDirection="column">
+      <box paddingLeft={3}>
+        <text>Switched variant to medium</text>
+      </box>
+      <InlineToolRow icon="◈" complete={true} pending="Notice">
+        Instructions updated
+      </InlineToolRow>
+    </box>
+  )
+}
+
+function TrailingStatusFixture() {
+  return (
+    <InlineToolRow icon=":" complete={true} pending="" status={<text flexShrink={0}> Background </text>}>
+      Explore Subagent — Inspect renderer status styling
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
+  testSetup?.renderer.destroy()
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
   await testSetup.renderOnce()
@@ -224,7 +125,13 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 
 describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
-    expect(toolDisplay("bash")).toBe("bash")
+    expect(toolDisplay("shell")).toBe("shell")
+    expect(toolDisplay("subagent")).toBe("subagent")
+    // Legacy tool names normalize to their renamed views.
+    expect(toolDisplay("bash")).toBe("shell")
+    expect(toolDisplay("task")).toBe("subagent")
+    expect(toolDisplay("apply_patch")).toBe("patch")
+    expect(toolDisplay("patch")).toBe("patch")
     expect(toolDisplay("plugin_tool")).toBe("generic")
   })
 
@@ -240,22 +147,73 @@ describe("TUI inline tool wrapping", () => {
     expect(frame).not.toContain("Read failed")
   })
 
+  test("aligns switch reminders with instruction reminders", async () => {
+    expect(await renderFrame(() => <ReminderAlignmentFixture />, { width: 35, height: 2 })).toBe(
+      "   Switched variant to medium\n   ◈ Instructions updated",
+    )
+  })
+
+  test("wraps a trailing status as one padded item", async () => {
+    expect(await renderFrame(() => <TrailingStatusFixture />, { width: 70, height: 2 })).toBe(
+      "   : Explore Subagent — Inspect renderer status styling  Background",
+    )
+    expect(await renderFrame(() => <TrailingStatusFixture />, { width: 62, height: 2 })).toBe(
+      "   : Explore Subagent — Inspect renderer status styling\n      Background",
+    )
+  })
+
   test("filters malformed nested tool wire data", () => {
     expect(
       parseApplyPatchFiles([
         null,
         { type: "add" },
-        { type: "add", relativePath: "a.ts", filePath: "a.ts", patch: "diff", deletions: 0 },
+        { file: "a.ts", patch: "diff", additions: 1, deletions: 0, status: "added" },
       ]),
     ).toEqual([
-      { type: "add", relativePath: "a.ts", filePath: "a.ts", patch: "diff", deletions: 0, movePath: undefined },
-    ])
-    expect(parseTodos([null, { status: "pending" }, { status: "pending", content: "Safe" }])).toEqual([
-      { status: "pending", content: "Safe" },
+      {
+        type: "add",
+        relativePath: "a.ts",
+        filePath: "a.ts",
+        patch: "diff",
+        additions: 1,
+        deletions: 0,
+        movePath: undefined,
+      },
     ])
     expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
     expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])
     expect(parseQuestionAnswers({})).toBeUndefined()
+  })
+
+  test("summarizes execute calls on one line", () => {
+    expect(
+      executeCallSummary({
+        tool: "session.prompt",
+        status: "completed",
+        input: { sessionID: "ses_example", notify: true },
+      }),
+    ).toBe("session.prompt [sessionID=ses_example, notify=true]")
+    expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
+      "session.get",
+    )
+    expect(
+      executeCallSummary({ tool: "session.prompt", status: "completed", input: { text: "first line\nsecond line" } }),
+    ).toBe("session.prompt [text=first line second line]")
+  })
+
+  test("summarizes generic tool arguments on one line", () => {
+    expect(
+      genericToolSummary("demo_search_catalog", {
+        query: "wireless keyboard",
+        limit: 8,
+        includeArchived: false,
+        filters: { category: "accessories" },
+      }),
+    ).toBe("demo_search_catalog [query=wireless keyboard, limit=8, includeArchived=false]")
+    expect(genericToolSummary("demo_get_weather", { city: "Tokyo", units: "celsius" })).toBe(
+      "demo_get_weather [city=Tokyo, units=celsius]",
+    )
+    expect(genericToolSummary("demo_refresh", {})).toBe("demo_refresh")
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {
@@ -273,22 +231,19 @@ describe("TUI inline tool wrapping", () => {
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
   })
 
-  test("formats completed subagent toolcall details", () => {
-    expect(formatCompletedSubagentDetail(0, "501ms")).toBe("501ms")
-    expect(formatCompletedSubagentDetail(1, "501ms")).toBe("1 toolcall · 501ms")
-    expect(formatCompletedSubagentDetail(2, "501ms")).toBe("2 toolcalls · 501ms")
-    expect(formatSubagentToolcalls(0)).toBe("0 toolcalls")
+  test("labels only detached or async subagents as background", () => {
+    expect(isBackgroundSubagent({ status: "running" }, "running")).toBeFalse()
+    expect(isBackgroundSubagent({ status: "running" }, "completed")).toBeTrue()
+    expect(isBackgroundSubagent({ status: "running" }, "error")).toBeFalse()
+    expect(isBackgroundSubagent({ status: "completed" }, "completed")).toBeFalse()
   })
 
-  test("keeps background state attached to the subagent identity", () => {
-    expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Task — Inspect renderer")
-    expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
-      "Explore Task (background) — Inspect renderer",
-    )
-  })
-
-  test("keeps retry status ahead of wrapping messages", () => {
-    expect(formatSubagentRetry(2, "Rate limited by provider")).toBe("Retrying (attempt 2) · Rate limited by provider")
+  test("labels only explicit subagent model overrides", () => {
+    const models = [{ providerID: "anthropic", id: "claude-opus-4-1", name: "Claude Opus 4.1" }]
+    expect(subagentModelLabel(undefined, models)).toBeUndefined()
+    expect(subagentModelLabel("anthropic/claude-opus-4-1", models)).toBe("Claude Opus 4.1")
+    expect(subagentModelLabel("anthropic/claude-opus-4-1#max", models)).toBe("Claude Opus 4.1 (max)")
+    expect(subagentModelLabel("custom/reviewer", models)).toBe("custom/reviewer")
   })
 
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {
@@ -297,55 +252,5 @@ describe("TUI inline tool wrapping", () => {
 
   test("snapshots expanded tool errors under the tool text", async () => {
     expect(await renderFrame(() => <Fixture errorExpanded />, { width: 72, height: 12 })).toMatchSnapshot()
-  })
-
-  test("keeps separation after a shell output block", async () => {
-    expect(await renderFrame(() => <Fixture before="shell" />, { width: 72, height: 16 })).toMatchSnapshot()
-  })
-
-  test("keeps separation after a padded user message", async () => {
-    expect(await renderFrame(() => <Fixture before="user" />, { width: 72, height: 14 })).toMatchSnapshot()
-  })
-
-  test("separates after a multi-line task row", async () => {
-    expect(await renderFrame(() => <TaskRowsFixture />, { width: 72, height: 10 })).toMatchSnapshot()
-  })
-
-  test("separates a task row from a preceding inline detail", async () => {
-    expect(await renderFrame(() => <LoadedReadBeforeTaskFixture />, { width: 72, height: 8 })).toMatchSnapshot()
-  })
-
-  test("separates an inline row from the previous assistant summary", async () => {
-    expect(await renderFrame(() => <AssistantSummaryBeforeInlineFixture />, { width: 72, height: 5 })).toMatchSnapshot()
-  })
-
-  test("separates an inline row from the previous assistant error", async () => {
-    expect(await renderFrame(() => <AssistantErrorBeforeInlineFixture />, { width: 72, height: 7 })).toMatchSnapshot()
-  })
-
-  test("updates sticky-bottom geometry when a text separator mounts and unmounts", async () => {
-    const [separated, setSeparated] = createSignal(false)
-    let scroll: ScrollBoxRenderable | undefined
-    testSetup = await testRender(
-      () => <StickyScrollFixture separated={separated()} scroll={(value) => (scroll = value)} />,
-      {
-        width: 72,
-        height: 3,
-      },
-    )
-
-    await testSetup.renderOnce()
-    expect(scroll?.scrollHeight).toBe(3)
-    expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
-
-    setSeparated(true)
-    await testSetup.renderOnce()
-    expect(scroll?.scrollHeight).toBe(5)
-    expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
-
-    setSeparated(false)
-    await testSetup.renderOnce()
-    expect(scroll?.scrollHeight).toBe(3)
-    expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
   })
 })

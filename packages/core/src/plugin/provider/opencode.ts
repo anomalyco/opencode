@@ -16,7 +16,6 @@ import { ConfigV1 } from "../../v1/config/config"
 const defaultServer = "https://bolt.ai/console"
 const clientID = "bolt-cli"
 const methodID = Integration.MethodID.make("device")
-const RemoteResponse = Schema.Struct({ config: ConfigV1.Info })
 const Device = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
@@ -28,11 +27,40 @@ const Token = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,
   expires_in: Schema.Number,
+  org_id: Schema.optional(Schema.NullOr(Schema.String)),
 })
 const TokenPending = Schema.Struct({ error: Schema.String })
 const DeviceToken = Schema.Union([Token, TokenPending])
 const User = Schema.Struct({ id: Schema.String, email: Schema.String })
 const Org = Schema.Struct({ id: Schema.String, name: Schema.String })
+// Console's 403 when the organization enforces SSO and the user's SSO proof is missing or expired.
+const SsoRequired = Schema.Struct({
+  _tag: Schema.Literal("SsoRequired"),
+  orgId: Schema.String,
+  connectionId: Schema.String,
+})
+const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
+// Console's 401 when the session behind the access token was revoked or expired.
+const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
+const signedOutMessage = "Reconnect OpenCode Console to continue"
+const ssoMessage = (organization: string | undefined) =>
+  `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
+
+class SsoRequiredError extends Schema.TaggedError<SsoRequiredError>()("OpencodeConsole.SsoRequired", {
+  organization: Schema.optional(Schema.String),
+  url: Schema.String,
+}) {
+  override get message() {
+    return `${ssoMessage(this.organization)}.`
+  }
+}
+
+// The Console session or refresh token was revoked or expired; only a new device login recovers.
+class SignedOutError extends Schema.TaggedError<SignedOutError>()("OpencodeConsole.SignedOut", {}) {
+  override get message() {
+    return `${signedOutMessage}.`
+  }
+}
 
 function oauth(http: HttpClient.HttpClient) {
   return {
@@ -42,12 +70,18 @@ function oauth(http: HttpClient.HttpClient) {
       type: "oauth",
       label: "Bolt Console account",
     },
-    authorize: () =>
+    authorize: (answer) =>
       Effect.gen(function* () {
-        const device = yield* post(http, `${defaultServer}/auth/device/code`, { client_id: clientID }, Device)
+        const server = yield* normalizeServer(answer.server ?? ConsoleAccess.defaultServer)
+        const device = yield* post(
+          http,
+          `${server}/auth/device/code`,
+          { client_id: clientID, supports_org_scope: true },
+          Device,
+        )
         const verification = yield* Effect.try({
           try: () => {
-            const url = new URL(device.verification_uri_complete, `${defaultServer}/`)
+            const url = new URL(device.verification_uri_complete, `${server}/`)
             if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
             return url
           },
@@ -58,39 +92,72 @@ function oauth(http: HttpClient.HttpClient) {
           mode: "auto" as const,
           url: verification.href,
           instructions: `Enter code: ${device.user_code}`,
-          callback: poll(http, defaultServer, device.device_code, Duration.seconds(device.interval)),
+          callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),
         }
       }),
     refresh: (credential) =>
       Effect.gen(function* () {
-        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : defaultServer
-        const token = yield* post(
-          http,
-          `${server}/auth/device/token`,
-          { grant_type: "refresh_token", refresh_token: credential.refresh, client_id: clientID },
-          Token,
+        const response = yield* send(http, `${ConsoleAccess.server(credential)}/auth/device/token`, {
+          grant_type: "refresh_token",
+          refresh_token: credential.refresh,
+          client_id: clientID,
+        })
+        if (response.status === 400) {
+          const body = yield* HttpClientResponse.schemaBodyJson(InvalidGrant)(response).pipe(Effect.option)
+          if (Option.isSome(body)) return yield* new SignedOutError()
+        }
+        const token = yield* HttpClientResponse.filterStatusOk(response).pipe(
+          Effect.flatMap(HttpClientResponse.schemaBodyJson(Token)),
         )
+        // Persist rotated tokens without depending on discovery requests.
         return {
           ...credential,
           access: token.access_token,
           refresh: token.refresh_token,
           expires: Date.now() + token.expires_in * 1000,
+          metadata:
+            token.org_id == null
+              ? credential.metadata
+              : {
+                  ...credential.metadata,
+                  orgID: token.org_id,
+                  orgName:
+                    credential.metadata?.orgID === token.org_id && typeof credential.metadata.orgName === "string"
+                      ? credential.metadata.orgName
+                      : token.org_id,
+                },
         }
       }),
-    label: (credential) => {
-      return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
-    },
+    label: (credential) => (typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined),
   } satisfies IntegrationOAuthMethodRegistration
 }
 
 export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | Scope.Scope>({
   id: "bolt",
   effect: Effect.fn(function* (ctx) {
-    const events = yield* EventV2.Service
-    const http = yield* HttpClient.HttpClient
+    const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
+    const bus = yield* Bus.Service
+    const client = yield* HttpClient.HttpClient
+    // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
+    // and whether it evaluates the policies it is being sent.
+    const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
+    const managed = yield* ManagedPolicy.Service
+    const config = yield* Config.Service
+    const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
-    let connected = false
-    let providers: typeof ConfigV1.Info.Type.provider | undefined
+    type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
+    let snapshot: {
+      // The Console response in one of its two formats: a regular OpenCode config, merged as an integration config
+      // layer, or the legacy response, which OpencodeLegacy applies directly.
+      remote: { type: "config"; info: ConfigIntegration.Remote } | OpencodeLegacy.Snapshot | undefined
+      connection: ActiveConnection
+      organization: string | undefined
+    } = { remote: undefined, connection: undefined, organization: undefined }
+    // Status last reported for the active connection, so inference failures can name the fix.
+    let reported: IntegrationConnection.Status | undefined
+    let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
+    // When the last Console config load started, so rejected inference can reuse a recent status.
+    let checked = Number.NEGATIVE_INFINITY
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("bolt")
@@ -170,6 +237,127 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
           })
         }
       }
+      const status = (status: IntegrationConnection.Status | undefined) => {
+        reported = status
+        return ctx.integration.connection.status({ integrationID: "opencode", connection, status })
+      }
+      return yield* ctx.integration.connection.resolve(connection).pipe(
+        Effect.flatMap((credential) => {
+          if (!credential || credential.type === "external")
+            return Effect.succeed({ remote: undefined, connection, organization: undefined })
+          return fetchConfig(http, credential).pipe(
+            Effect.map((remote) => ({
+              remote:
+                remote?.type === "legacy"
+                  ? OpencodeLegacy.make(remote.response, ConsoleAccess.headers(credential))
+                  : remote,
+              connection,
+              organization: organizationName(credential),
+            })),
+          )
+        }),
+        Effect.tap(() => status(undefined)),
+        Effect.catch((cause) =>
+          Effect.gen(function* () {
+            // Only well-formed Console errors change the connection status; anything else may be transient.
+            const next = connectionStatus(cause)
+            if (next) yield* status(next)
+            yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
+            // A load that fails for the connection already in place keeps its last config: dropping it
+            // would lift organization policy while personal credentials keep working.
+            return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
+              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
+              : { remote: undefined, connection, organization: undefined }
+          }),
+        ),
+      )
+    })
+    // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
+    // where the legacy overlay applies, while the rest of the document merges through config.
+    let integrated: ConfigIntegration.Document | undefined
+    const integrate = Effect.fnUntraced(function* (document: ConfigIntegration.Document | undefined) {
+      yield* config.integration?.(Integration.ID.make("opencode"), document) ?? Effect.void
+      integrated = (yield* config.entries()).find(
+        (entry): entry is ConfigIntegration.Document =>
+          entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
+      )
+    })
+    // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
+    const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
+      switch (next.remote?.type) {
+        // A regular config merges as one integration document, which config loads right after managed policies,
+        // so its policies reach ManagedPolicy through config rather than as Console statements.
+        case "config":
+          yield* managed.set({ statements: [], organization: next.organization })
+          return yield* integrate(
+            next.connection &&
+              ConfigIntegration.make({
+                integrationID: Integration.ID.make("opencode"),
+                connection:
+                  next.connection.type === "credential"
+                    ? { ...next.connection, id: Credential.ID.make(next.connection.id) }
+                    : next.connection,
+                organization: next.organization,
+                info: next.remote.info,
+              }),
+          )
+        case "legacy":
+          yield* managed.set({ statements: OpencodeLegacy.statements(next.remote), organization: next.organization })
+          return yield* integrate(undefined)
+        default:
+          yield* managed.set({ statements: [], organization: next.organization })
+          return yield* integrate(undefined)
+      }
+    })
+    const search = (providerID: WebSearch.ID, connection: NonNullable<ActiveConnection>) => ({
+      id: providerID,
+      name: "OpenCode Web Search",
+      execute: (input: WebSearch.ProviderInput) =>
+        Effect.gen(function* () {
+          const active = yield* ctx.integration.connection.active("opencode")
+          if (
+            !active ||
+            (connection.type === "credential"
+              ? active.type !== "credential" || active.id !== connection.id
+              : active.type !== "env" || active.name !== connection.name)
+          ) {
+            return yield* Effect.fail(new Error("OpenCode Console connection changed"))
+          }
+          const credential = yield* ctx.integration.connection.resolve(active)
+          if (!credential || credential.type === "external")
+            return yield* Effect.fail(new Error("OpenCode Console is not connected"))
+          const metadata = credential.metadata
+          const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
+          const token = credential.type === "oauth" ? credential.access : credential.key
+          const server = yield* normalizeServer(ConsoleAccess.server(credential))
+          const request = yield* HttpClientRequest.post(`${server}/api/websearch`).pipe(
+            HttpClientRequest.acceptJson,
+            HttpClientRequest.bearerToken(token),
+            HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
+            HttpClientRequest.schemaBodyJson(WebSearch.Input)({
+              query: input.query,
+              providerID,
+            }),
+          )
+          const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
+            .execute(request)
+            .pipe(
+              Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+              Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
+              Effect.scoped,
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(25),
+                orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+              }),
+            )
+          if (response.providerID !== providerID) {
+            return yield* Effect.fail(
+              new Error(`OpenCode web search returned provider ${response.providerID} instead of ${providerID}`),
+            )
+          }
+          return response.results
+        }),
+    })
 
       const item = catalog.provider.get(ProviderV2.ID.bolt)
       if (!item) return
@@ -177,13 +365,48 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       catalog.provider.update(item.provider.id, (provider) => {
         if (!hasKey) provider.request.body.apiKey = "public"
       })
+      editor.method.update(oauth(http))
+      editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+    })
+
+    snapshot = yield* load()
+    yield* publish(snapshot)
+    yield* OpencodeLegacy.register(ctx, () => snapshot, search)
+    yield* ctx.provider.transform((providers) => {
+      if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
+    })
+    yield* ctx.provider.transform((providers) => {
+      const item = providers.get(Provider.ID.opencode)
+      if (!item) return
+      const hasKey = Boolean(process.env.OPENCODE_API_KEY || snapshot.connection || item.provider.settings?.apiKey)
+      providers.update(item.provider.id, (provider) => {
+        if (!hasKey && !disableFree) {
+          provider.activation = "enabled"
+          provider.settings = { ...provider.settings, apiKey: "public" }
+        }
+      })
+    })
+    yield* ctx.model.transform((models) => {
+      const item = models.provider.get(Provider.ID.opencode)
+      if (!item) return
+      const hasKey = Boolean(
+        process.env.OPENCODE_API_KEY ||
+          snapshot.connection ||
+          (item.provider.settings?.apiKey && item.provider.settings.apiKey !== "public"),
+      )
       if (hasKey) return
-      for (const model of item.models.values()) {
+      for (const model of models.list(item.provider.id)) {
         if (!model.cost.some((cost) => cost.input > 0)) continue
-        catalog.model.update(item.provider.id, model.id, (draft) => {
+        models.update(item.provider.id, model.id, (draft) => {
           draft.enabled = false
         })
       }
+    })
+    // Like any search plugin, the Console's provider is available whenever it is connected; the Console's config
+    // selects it as the default through config, where the user's own selection wins.
+    yield* ctx.websearch.transform((editor) => {
+      if (snapshot.remote?.type === "config" && snapshot.connection)
+        editor.add(search(WebSearch.ID.make("opencode"), snapshot.connection))
     })
 
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
@@ -192,57 +415,86 @@ export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | S
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh().pipe(Effect.forkScoped)
+    yield* poll()
   }),
 })
 
-function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
-  const metadata = value.metadata
-  const server = typeof metadata?.server === "string" ? metadata.server : defaultServer
-  const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
-  const token = value.type === "oauth" ? value.access : value.key
-  return http
+function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Credential.OAuth) {
+  // Scoped so responses whose body is never read (404, errors) are released here instead of by a GC-time abort.
+  return HttpClient.withScope(http)
     .execute(
-      HttpClientRequest.get(`${server}/api/config`).pipe(
+      HttpClientRequest.get(`${ConsoleAccess.server(value)}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
-        HttpClientRequest.bearerToken(token),
-        HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
+        HttpClientRequest.setHeaders(ConsoleAccess.headers(value)),
       ),
     )
     .pipe(
-      Effect.flatMap((response) => {
-        if (response.status === 404) return Effect.succeed(undefined)
-        return HttpClientResponse.filterStatusOk(response).pipe(
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
-          Effect.map((remote) => remote.config.provider),
-        )
-      }),
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          if (response.status === 404) return undefined
+          if (response.status === 401) {
+            const body = yield* HttpClientResponse.schemaBodyJson(Unauthorized)(response).pipe(Effect.option)
+            if (Option.isSome(body)) return yield* new SignedOutError()
+          }
+          if (response.status === 403) {
+            const body = yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option)
+            if (Option.isSome(body))
+              return yield* new SsoRequiredError({
+                organization: organizationName(value),
+                url: yield* ssoUrl(ConsoleAccess.server(value), body.value.connectionId),
+              })
+          }
+          const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
+          // A Console that serves a regular OpenCode config marks it with `$schema`; any other body is the legacy response.
+          if (Predicate.hasProperty(body, "$schema"))
+            return { type: "config" as const, info: yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body) }
+          return { type: "legacy" as const, response: yield* Schema.decodeUnknownEffect(OpencodeLegacy.Response)(body) }
+        }),
+      ),
+      Effect.scoped,
     )
 }
 
-function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined) {
-  return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
+function ssoUrl(server: string, connectionID: string) {
+  return normalizeServer(server).pipe(
+    Effect.map((base) => {
+      // Console only redirects to paths under its own base path after SSO.
+      const redirectTo = `${new URL(base).pathname.replace(/\/+$/, "")}/`
+      return `${base}/auth/sso/${encodeURIComponent(connectionID)}/start?redirectTo=${encodeURIComponent(redirectTo)}`
+    }),
+  )
 }
 
-function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cost"]>) {
-  const base = {
-    input: input.input,
-    output: input.output,
-    cache: { read: input.cache_read ?? 0, write: input.cache_write ?? 0 },
-  }
-  if (!input.context_over_200k) return [base]
-  return [
-    base,
-    {
-      tier: { type: "context" as const, size: 200_000 },
-      input: input.context_over_200k.input,
-      output: input.context_over_200k.output,
-      cache: {
-        read: input.context_over_200k.cache_read ?? 0,
-        write: input.context_over_200k.cache_write ?? 0,
-      },
+function connectionStatus(cause: unknown): IntegrationConnection.Status | undefined {
+  if (cause instanceof SsoRequiredError)
+    return {
+      status: "needs_auth",
+      message: ssoMessage(cause.organization),
+      url: cause.url,
+    }
+  if (
+    cause instanceof SignedOutError ||
+    (cause instanceof Integration.AuthorizationError && cause.cause instanceof SignedOutError)
+  )
+    return { status: "needs_auth", message: signedOutMessage }
+  return undefined
+}
+
+function organizationName(credential: Credential.Value) {
+  return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
+}
+
+function normalizeServer(input: unknown) {
+  return Effect.try({
+    try: () => {
+      if (typeof input !== "string") throw new Error("expected string")
+      const url = new URL(input)
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
     },
-  ]
+    catch: (cause) =>
+      new Error(`Invalid OpenCode server URL: ${cause instanceof Error ? cause.message : String(cause)}`),
+  })
 }
 
 function poll(http: HttpClient.HttpClient, server: string, deviceCode: string, interval: Duration.Duration) {
@@ -279,7 +531,13 @@ function credential(http: HttpClient.HttpClient, server: string, token: typeof T
       ],
       { concurrency: 2 },
     )
-    const org = orgs.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))[0]
+    const org =
+      token.org_id == null
+        ? orgs.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))[0]
+        : orgs.find((org) => org.id === token.org_id)
+    if (token.org_id != null && !org) {
+      return yield* Effect.fail(new Error(`OpenCode organization not found: ${token.org_id}`))
+    }
     return Credential.OAuth.make({
       type: "oauth" as const,
       methodID,
@@ -306,15 +564,20 @@ function get<S extends Schema.Top>(http: HttpClient.HttpClient, url: string, tok
 function post<S extends Schema.Top>(
   http: HttpClient.HttpClient,
   url: string,
-  body: Record<string, string>,
+  body: Record<string, string | boolean>,
   schema: S,
   statusOk = true,
 ) {
-  return HttpClientRequest.post(url).pipe(
-    HttpClientRequest.acceptJson,
-    HttpClientRequest.schemaBodyJson(Schema.Record(Schema.String, Schema.String))(body),
-    Effect.flatMap((request) => http.execute(request)),
+  return send(http, url, body).pipe(
     Effect.flatMap((response) => (statusOk ? HttpClientResponse.filterStatusOk(response) : Effect.succeed(response))),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
+  )
+}
+
+function send(http: HttpClient.HttpClient, url: string, body: Record<string, string | boolean>) {
+  return HttpClientRequest.post(url).pipe(
+    HttpClientRequest.acceptJson,
+    HttpClientRequest.schemaBodyJson(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Boolean])))(body),
+    Effect.flatMap((request) => http.execute(request)),
   )
 }

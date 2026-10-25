@@ -2,6 +2,8 @@
  * Application-wide constants and configuration
  */
 export const config = {
+  consoleMarketingEnabled: import.meta.env.VITE_CONSOLE_MARKETING_ENABLED === "true",
+
   // Base URL
   baseUrl: "https://bolt.ai",
 
@@ -9,8 +11,8 @@ export const config = {
   github: {
     repoUrl: "https://github.com/Bolt-builder/bolt-cli",
     starsFormatted: {
-      compact: "208K",
-      full: "208,000",
+      compact: "220K",
+      full: "220,000",
     },
   },
 
@@ -23,7 +25,7 @@ export const config = {
   // Static stats (used on landing page)
   stats: {
     contributors: "950",
-    commits: "13,000",
+    commits: "20,000",
     monthlyUsers: "16M",
   },
 } as const

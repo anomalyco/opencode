@@ -2,93 +2,84 @@ import type { Event } from "@bolt-ai/sdk/v2"
 import type { TuiAttentionSoundName, TuiPlugin, TuiPluginApi } from "@bolt-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 
-const id = "internal:notifications"
-
-type SessionError = Extract<Event, { type: "session.error" }>["properties"]["error"]
-
-function notify(api: TuiPluginApi, sessionID: string | undefined, message: string, sound: TuiAttentionSoundName) {
-  const session = sessionID ? api.state.session.get(sessionID) : undefined
+function notify(
+  context: Plugin.Context,
+  sessionID: string | undefined,
+  message: string,
+  sound: AttentionSoundName,
+  title?: string,
+) {
+  const session = sessionID ? context.data.session.get(sessionID) : undefined
   const isSubagent = session?.parentID !== undefined
-  void api.attention.notify({
-    title: session?.title,
+  void context.attention.notify({
+    title: title ?? session?.title,
     message,
     notification: isSubagent ? false : { when: "blurred" },
     sound: { name: sound, when: "always" },
   })
 }
 
-function sessionErrorMessage(error: SessionError) {
-  if (error?.name === "MessageAbortedError") return "Session aborted"
-  const data = error?.data
-  if (data && typeof data === "object" && "message" in data && data.message === "SSE read timed out") {
-    return "Model stopped responding"
-  }
-  return "Session error"
-}
+export default Plugin.define({
+  id: "opencode.notifications",
+  setup(context) {
+    const errored = new Set<string>()
+    const terminal = new Set<string>()
+    const forms = new Set<string>()
+    const permissions = new Set<string>()
 
-const tui: TuiPlugin = async (api) => {
-  const active = new Set<string>()
-  const errored = new Set<string>()
-  const questions = new Set<string>()
-  const permissions = new Set<string>()
-
-  api.event.on("question.asked", (event) => {
-    if (questions.has(event.properties.id)) return
-    questions.add(event.properties.id)
-    notify(api, event.properties.sessionID, "Question needs input", "question")
-  })
-
-  api.event.on("question.replied", (event) => {
-    questions.delete(event.properties.requestID)
-  })
-
-  api.event.on("question.rejected", (event) => {
-    questions.delete(event.properties.requestID)
-  })
-
-  api.event.on("permission.asked", (event) => {
-    if (permissions.has(event.properties.id)) return
-    permissions.add(event.properties.id)
-    notify(api, event.properties.sessionID, "Permission needs input", "permission")
-  })
-
-  api.event.on("permission.replied", (event) => {
-    permissions.delete(event.properties.requestID)
-  })
-
-  api.event.on("session.status", (event) => {
-    const sessionID = event.properties.sessionID
-    if (event.properties.status.type === "busy" || event.properties.status.type === "retry") {
-      active.add(sessionID)
+    const started = (sessionID: string) => {
       errored.delete(sessionID)
-      return
+      terminal.delete(sessionID)
+    }
+    const ended = (sessionID: string) => {
+      if (terminal.has(sessionID)) return
+      terminal.add(sessionID)
+      if (errored.has(sessionID)) {
+        errored.delete(sessionID)
+        return
+      }
+      const session = context.data.session.get(sessionID)
+      notify(context, sessionID, "Session done", session?.parentID ? "subagent_done" : "done")
     }
 
-    if (event.properties.status.type !== "idle") return
-    if (!active.has(sessionID)) return
-    active.delete(sessionID)
+    const dispose = [
+      context.data.on("form.created", (event) => {
+        if (forms.has(event.data.form.id)) return
+        forms.add(event.data.form.id)
+        notify(context, event.data.form.sessionID, "Input needs response", "question", event.data.form.title)
+      }),
+      context.data.on("form.replied", (event) => forms.delete(event.data.id)),
+      context.data.on("form.cancelled", (event) => forms.delete(event.data.id)),
+      context.data.on("permission.asked", (event) => {
+        if (permissions.has(event.data.id)) return
+        permissions.add(event.data.id)
+        notify(context, event.data.sessionID, "Permission needs input", "permission")
+      }),
+      context.data.on("permission.replied", (event) => permissions.delete(event.data.requestID)),
+      context.data.on("session.execution.started", (event) => started(event.data.sessionID)),
+      context.data.on("session.execution.succeeded", (event) => ended(event.data.sessionID)),
+      context.data.on("session.execution.interrupted", (event) => ended(event.data.sessionID)),
+      context.data.on("session.execution.failed", (event) => {
+        const sessionID = event.data.sessionID
+        if (terminal.has(sessionID)) return
+        if (errored.has(sessionID)) {
+          ended(sessionID)
+          return
+        }
+        errored.add(sessionID)
+        if (event.data.error.type !== "provider.free-limit") {
+          notify(context, sessionID, event.data.error.message, "error")
+          context.ui.toast.show({
+            sessionID,
+            title: "Session failed",
+            message: event.data.error.message,
+            variant: "error",
+          })
+        }
+        ended(sessionID)
+      }),
+    ]
 
-    if (errored.has(sessionID)) {
-      errored.delete(sessionID)
-      return
-    }
-
-    const session = api.state.session.get(sessionID)
-    notify(api, sessionID, "Session done", session?.parentID ? "subagent_done" : "done")
-  })
-
-  api.event.on("session.error", (event) => {
-    const sessionID = event.properties.sessionID
-    if (!sessionID) return
-    if (!active.has(sessionID)) return
-    errored.add(sessionID)
-    notify(api, sessionID, sessionErrorMessage(event.properties.error), "error")
-  })
-}
-
-const plugin: BuiltinTuiPlugin = {
-  id,
-  tui,
-}
-
-export default plugin
+    return () => dispose.reverse().forEach((cleanup) => cleanup())
+  },
+})

@@ -1,4 +1,4 @@
-export * as PluginInternal from "./internal"
+export * as PluginInternal from "./internal.js"
 
 import { makeLocationNode } from "../effect/app-node"
 import { httpClient } from "../effect/app-node-platform"
@@ -34,120 +34,187 @@ import { ProviderPlugins } from "./provider"
 import { SkillPlugin } from "./skill"
 import { VariantPlugin } from "./variant"
 
-export type Requirements =
-  | AgentV2.Service
-  | Catalog.Service
-  | CommandV2.Service
-  | Config.Service
-  | EventV2.Service
-  | FileSystem.Service
-  | FSUtil.Service
-  | Global.Service
-  | HttpClient.HttpClient
-  | Integration.Service
-  | Location.Service
-  | ModelsDev.Service
-  | Npm.Service
-  | Reference.Service
-  | SkillV2.Service
+const services = [
+  Agent.Service,
+  AppProcess.Service,
+  Provider.Service,
+  Model.Service,
+  Command.Service,
+  Config.Service,
+  Credential.Service,
+  Bus.Service,
+  Environment.Service,
+  FileAccess.Service,
+  FileMutation.Service,
+  Formatter.Service,
+  LocationWatcherPolicy.Service,
+  FileSystem.Service,
+  FSUtil.Service,
+  Global.Service,
+  HttpClient.HttpClient,
+  Image.Service,
+  InstructionDiscovery.Service,
+  Integration.Service,
+  Job.Service,
+  KV.Service,
+  LLMClient.Service,
+  Location.Service,
+  ManagedPolicy.Service,
+  ModelsDev.Service,
+  Mcp.Service,
+  Npm.Service,
+  Permission.Service,
+  Form.Service,
+  ReadToolFileSystem.Service,
+  Reference.Service,
+  WebSearch.Service,
+  Ripgrep.Service,
+  Session.Service,
+  SessionCompaction.Service,
+  SessionInstructions.Service,
+  SubagentJob.Service,
+  Shell.Service,
+  ShellSelect.Service,
+  Snapshot.Service,
+  Skill.Service,
+  SkillDiscovery.Service,
+  Tool.Service,
+  ToolOutput.Service,
+  Watcher.Service,
+  WellKnown.Service,
+  Worktree.Service,
+  WorktreeStrategies.Service,
+] as const
 
-export interface Plugin<R = never> {
-  readonly id: string
-  readonly effect: (context: PluginContext) => Effect.Effect<void, never, R | Scope.Scope>
-}
+export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
-export function define<R>(plugin: Plugin<R>) {
-  return plugin
-}
+export const requirements = LayerNode.group([
+  Agent.node,
+  AppProcess.node,
+  Provider.node,
+  Model.node,
+  Command.node,
+  Config.node,
+  Credential.node,
+  Bus.node,
+  Environment.node,
+  FileAccess.node,
+  FileMutation.node,
+  Formatter.node,
+  LocationWatcherPolicy.node,
+  FileSystem.node,
+  FSUtil.node,
+  Global.node,
+  httpClient,
+  Image.node,
+  InstructionDiscovery.node,
+  Integration.node,
+  Job.node,
+  KV.node,
+  llmClient,
+  Location.node,
+  ManagedPolicy.node,
+  ModelsDev.node,
+  Mcp.node,
+  Npm.node,
+  Permission.node,
+  Form.node,
+  ReadToolFileSystem.node,
+  Reference.node,
+  WebSearch.node,
+  Ripgrep.node,
+  Session.node,
+  SessionCompaction.node,
+  SessionInstructions.node,
+  SubagentJob.node,
+  Shell.node,
+  ShellSelect.node,
+  Snapshot.node,
+  Skill.node,
+  SkillDiscovery.node,
+  Tool.node,
+  ToolOutput.node,
+  Watcher.node,
+  WellKnown.node,
+  Worktree.node,
+  WorktreeStrategies.node,
+])
 
-const layer = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
-    const commands = yield* CommandV2.Service
-    const plugin = yield* PluginV2.Service
-    const integration = yield* Integration.Service
-    const agents = yield* AgentV2.Service
-    const config = yield* Config.Service
-    const location = yield* Location.Service
-    const modelsDev = yield* ModelsDev.Service
-    const npm = yield* Npm.Service
-    const events = yield* EventV2.Service
-    const fs = yield* FSUtil.Service
-    const filesystem = yield* FileSystem.Service
-    const global = yield* Global.Service
-    const http = yield* HttpClient.HttpClient
-    const skill = yield* SkillV2.Service
-    const reference = yield* Reference.Service
-    const add = <R>(input: Plugin<R>) => {
-      const loaded = {
-        id: input.id,
-        effect: (context: PluginContext) =>
-          input
-            .effect(context)
-            .pipe(
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(CommandV2.Service, commands),
-              Effect.provideService(Integration.Service, integration),
-              Effect.provideService(AgentV2.Service, agents),
-              Effect.provideService(Config.Service, config),
-              Effect.provideService(Location.Service, location),
-              Effect.provideService(ModelsDev.Service, modelsDev),
-              Effect.provideService(Npm.Service, npm),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(FSUtil.Service, fs),
-              Effect.provideService(FileSystem.Service, filesystem),
-              Effect.provideService(Global.Service, global),
-              Effect.provideService(HttpClient.HttpClient, http),
-              Effect.provideService(SkillV2.Service, skill),
-              Effect.provideService(Reference.Service, reference),
-            ),
-      }
-      return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
-    }
+export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
-    yield* State.batch(
-      Effect.gen(function* () {
-        yield* add(ConfigReferencePlugin.Plugin)
-        yield* add(AgentPlugin.Plugin)
-        yield* add(CommandPlugin.Plugin)
-        yield* add(SkillPlugin.Plugin)
-        yield* add(ModelsDevPlugin)
-        yield* add(ConfigAgentPlugin.Plugin)
-        yield* add(ConfigCommandPlugin.Plugin)
-        yield* add(ConfigSkillPlugin.Plugin)
-        for (const item of ProviderPlugins) yield* add(item)
-        yield* add(ConfigExternalPlugin.Plugin)
-        yield* add(ConfigProviderPlugin.Plugin)
-        yield* add(VariantPlugin.Plugin)
+const pre = [
+  ToolInputRepairPlugin.Plugin,
+  ConfigWorktreePlugin.Plugin,
+  ConfigMcpPlugin.Plugin,
+  McpCodeModeDefaultsPlugin.Plugin,
+  WellKnownPlugin.Plugin,
+  VcsGitPlugin.Plugin,
+  AgentPlugin.Plugin,
+  PlanPlugin.Plugin,
+  CommandPlugin.Plugin,
+  SkillPlugin.Plugin,
+  VcsHgPlugin.Plugin,
+  ModelsDevPlugin,
+  ...ProviderPlugins,
+  ...WebSearchPlugins,
+  PatchTool.Plugin,
+  // Render model prompts after the patch plugin selects the available editing tools.
+  ...OptimizePlugin.Plugins,
+  VerbosityPlugin.Plugin,
+  IdentityPlugin.Plugin,
+  EditTool.Plugin,
+  GlobTool.Plugin,
+  GrepTool.Plugin,
+  OpenCodeTools.Plugin,
+  McpResourceTools.Plugin,
+  QuestionTool.Plugin,
+  ReadTool.Plugin,
+  ShellTool.Plugin,
+  SkillTool.Plugin,
+  SubagentTool.Plugin,
+  TodoTool.Plugin,
+  WebFetchTool.Plugin,
+  WebSearchTool.Plugin,
+  WriteTool.Plugin,
+  WarmingPlugin.Plugin,
+] as const satisfies readonly InternalPlugin[]
+
+const post = [
+  ConfigInstructionPlugin.Plugin,
+  ConfigReferencePlugin.Plugin,
+  ConfigAgentPlugin.Plugin,
+  BrowserPlugin,
+  ConfigCommandPlugin.Plugin,
+  ConfigCompactionPlugin.Plugin,
+  ConfigFormatterPlugin.Plugin,
+  ConfigImagePlugin.Plugin,
+  ConfigLocationWatcherPlugin.Plugin,
+  ConfigShellPlugin.Plugin,
+  ConfigSnapshotPlugin.Plugin,
+  ConfigToolOutputPlugin.Plugin,
+  ConfigCompatibilityPlugin.Plugin,
+  ConfigSkillPlugin.Plugin,
+  ConfigProviderPlugin.Plugin,
+  ConfigWebSearchPlugin.Plugin,
+  ConfigPolicyPlugin.Plugin,
+] as const satisfies readonly InternalPlugin[]
+
+// Repository config must not switch off policy enforcement or the Console connection that delivers
+// organization statements, so plugin remove operations skip these IDs.
+export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPolicyPlugin.Plugin.id])
+
+export const list = Effect.fn("PluginInternal.list")(function* () {
+  // Capture only services; activation supplies the child Scope and batching context.
+  const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const resolve = (plugins: readonly InternalPlugin[]) =>
+    plugins.map(
+      (plugin): Plugin => ({
+        id: plugin.id,
+        effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
       }),
-    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
-  }),
-)
-
-export const locationLayer = layer.pipe(
-  Layer.provideMerge(Config.locationLayer),
-  Layer.provideMerge(FetchHttpClient.layer),
-)
-
-export const node = makeLocationNode({
-  name: "plugin-internal",
-  layer,
-  deps: [
-    Catalog.node,
-    CommandV2.node,
-    PluginV2.node,
-    Integration.node,
-    AgentV2.node,
-    Config.node,
-    Location.node,
-    ModelsDev.node,
-    Npm.node,
-    EventV2.node,
-    FSUtil.node,
-    FileSystem.node,
-    Global.node,
-    httpClient,
-    SkillV2.node,
-    Reference.node,
-  ],
+    )
+  return {
+    pre: resolve(pre),
+    post: resolve(post),
+  }
 })

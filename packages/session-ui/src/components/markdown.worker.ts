@@ -18,17 +18,21 @@ import { project, type Projection } from "./markdown-stream"
 type Stream = {
   language: string
   source: string
-  tokenizer: ShikiStreamTokenizer
+  tokenizer: LiveTokenizer
 }
 
 const streams = new Map<string, Stream>()
+
 const projections = new Map<string, Projection>()
-let highlighter: ReturnType<typeof createHighlighter> | undefined
+
+const parser = createMarkdownParser()
+
 const highlightQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
   run: highlight,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
-  dispose: (key) => void streams.delete(key),
+  dispose: closeStream,
 })
+
 const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "project" }>>({
   run: runProject,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
@@ -46,14 +50,19 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   if (event.data.type === "dispose") {
     highlightQueue.dispose(event.data.key)
     projectQueue.dispose(event.data.key)
+
     return
   }
+
   if (event.data.type === "parse") {
     void parse(event.data)
+
     return
   }
+
   if (event.data.type === "project") {
     projectQueue.highlight(event.data)
+
     return
   }
 
@@ -85,10 +94,9 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
 
 async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
   try {
-    const instance = await getHighlighter()
-    const language = request.language in bundledLanguages ? request.language : "text"
-    if (!instance.getLoadedLanguages().includes(language))
-      await instance.loadLanguage(bundledLanguages[language as BundledLanguage])
+    // Report the requested language so the viewer can label the block and spot Mermaid; lex unknown ones as text.
+    const language = request.language
+    const lang = isSupportedLanguage(language) ? language : "text"
 
     if (request.complete) {
       const result = instance.codeToTokens(request.text, { lang: language as BundledLanguage, theme: "Bolt" })
@@ -106,6 +114,7 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
           .map(token),
         unstable: [],
       })
+
       return
     }
 
@@ -121,14 +130,26 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
     const result = await stream.tokenizer.enqueue(request.text.slice(stream.source.length))
     stream.source = request.text
     streams.set(request.key, stream)
+
+    const last = stream.tokenizer.lineCount - 1
+
     post({
       type: "highlight",
       id: request.id,
       key: request.key,
       language,
       reset,
-      stable: result.stable.filter((token) => token.content.length > 0).map(token),
-      unstable: result.unstable.filter((token) => token.content.length > 0).map(token),
+      stable: Array.from({ length: last - start }, (_, index) => [
+        ...stream.tokenizer.getLineTokens(start + index).tokens,
+        { content: "\n", offset: 0 },
+      ])
+        .flat()
+        .filter((token) => token.content.length > 0)
+        .map(token),
+      unstable: stream.tokenizer
+        .getLineTokens(last)
+        .tokens.filter((token) => token.content.length > 0)
+        .map(token),
     })
   } catch (error) {
     post({
@@ -149,5 +170,16 @@ function post(response: MarkdownWorkerResponse) {
 }
 
 function token(value: ThemedToken): MarkdownToken {
-  return [value.content, stringifyTokenStyle(value.htmlStyle ?? getTokenStyleObject(value))]
+  const fontStyle = value.fontStyle ?? 0
+
+  return [
+    value.content,
+    [
+      value.color && `color:${value.color}`,
+      fontStyle & 1 && "font-style:italic",
+      fontStyle & 2 && "font-weight:bold",
+    ]
+      .filter(Boolean)
+      .join(";"),
+  ]
 }

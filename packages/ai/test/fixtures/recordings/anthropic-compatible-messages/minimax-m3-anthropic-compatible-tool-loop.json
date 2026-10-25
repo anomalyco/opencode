@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "minimax",
+    "protocol": "anthropic-messages",
+    "route": "anthropic-messages",
+    "transport": "http",
+    "model": "MiniMax-M3",
+    "tags": [
+      "prefix:anthropic-compatible-messages",
+      "provider:minimax",
+      "protocol:anthropic-messages",
+      "tool",
+      "tool-loop",
+      "golden"
+    ],
+    "name": "anthropic-compatible-messages/minimax-m3-anthropic-compatible-tool-loop",
+    "recordedAt": "2026-07-18T03:42:25.248Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/anthropic/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-M3\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"3807fa12f9ecb9357df511e099da6da0\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"MiniMax-M3\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":417,\"service_tier\":\"standard\"},\"service_tier\":\"standard\"}}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_function_yr64rwmre4gr_1\",\"name\":\"get_weather\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\": \\\"Paris\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"input_tokens\":303,\"output_tokens\":27,\"cache_read_input_tokens\":114,\"service_tier\":\"standard\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/anthropic/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-M3\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_function_yr64rwmre4gr_1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_function_yr64rwmre4gr_1\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"92f8a1e86f29946eb2699d40a088fc08\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"MiniMax-M3\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":41,\"output_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":430,\"service_tier\":\"standard\"},\"service_tier\":\"standard\"}}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Paris\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" is sunny.\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"input_tokens\":41,\"output_tokens\":4,\"cache_read_input_tokens\":430,\"service_tier\":\"standard\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

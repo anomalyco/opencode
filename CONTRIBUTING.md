@@ -3,14 +3,13 @@
 We want to make it easy for you to contribute to Bolt. Here are the most common type of changes that get merged:
 
 - Bug fixes
-- Additional LSPs / Formatters
-- Improvements to LLM performance
-- Support for new providers
-- Fixes for environment-specific quirks
+- Additional LSPs and formatters
+- LLM performance improvements
+- Environment-specific fixes
 - Missing standard behavior
 - Documentation improvements
 
-However, any UI or core product feature must go through a design review with the core team before implementation.
+UI and core product features require design review before implementation. If you are unsure whether a change fits, ask a maintainer or choose an issue labeled [`help wanted`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted), [`good first issue`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22), [`bug`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug), or [`perf`](https://github.com/anomalyco/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22).
 
 If you are unsure if a PR would be accepted, feel free to ask a maintainer or look for issues with any of the following labels:
 
@@ -22,12 +21,11 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 > [!NOTE]
 > PRs that ignore these guardrails will likely be closed.
 
-Want to take on an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
+## Adding Providers
 
-## Adding New Providers
+New providers should rarely require OpenCode changes. Add the provider to [models.dev](https://github.com/anomalyco/models.dev) first.
 
-New providers shouldn't require many if ANY code changes, but if you want to add support for a new provider first make a PR to:
-https://github.com/anomalyco/models.dev
+## Development
 
 ## Getting to know the codebase
 
@@ -48,30 +46,47 @@ New to the repo? The [Codebase Guide](./docs/CODEBASE.md) walks you through how 
 By default, `bun dev` runs Bolt in the `packages/opencode` directory. To run it against a different directory or repository:
 
 ```bash
-bun dev <directory>
+bun install
+bun dev [directory]
 ```
 
 To run Bolt in the root of the opencode repo itself:
 
 ```bash
-bun dev .
+bun run dev:live [directory]
 ```
 
-### Building a "localcode"
-
-To compile a standalone executable:
+For web development, run the backend and app in separate terminals. Other interfaces have root scripts:
 
 ```bash
-./packages/opencode/script/build.ts --single
+bun dev serve --port 4096
+bun run dev:web
+bun run dev:desktop
+bun run dev:www
 ```
 
-Then run it with:
+### Packages
+
+- `packages/schema`: shared wire and storage contracts
+- `packages/core`: domain behavior and persistence
+- `packages/protocol`: public API definitions
+- `packages/server`: HTTP server and runtime composition
+- `packages/client`: generated TypeScript clients
+- `packages/cli`: command-line entrypoint and service lifecycle
+- `packages/tui`: terminal interface
+- `packages/app`: shared web interface
+- `packages/desktop`: Electron desktop application
+- `packages/plugin`: plugin API
+
+### Verification
+
+Run typechecks, and tests where defined, from the affected package rather than the repository root:
 
 ```bash
 ./packages/opencode/dist/@bolt-builder/bolt-cli-<platform>/bin/bolt
 ```
 
-Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
+Follow package-specific instructions in nearby `AGENTS.md` files. After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`; never edit generated client files directly.
 
 - Core pieces:
   - `packages/opencode`: Bolt core business logic & server.
@@ -80,39 +95,29 @@ Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
   - `packages/desktop`: The native desktop app, built with Electron (wraps `packages/app`)
   - `packages/plugin`: Source for `@bolt-ai/plugin`
 
-### Understanding bun dev vs opencode
+## Pull Requests
 
-During development, `bun dev` is the local equivalent of the built `opencode` command. Both run the same CLI interface:
+### Link Issues When Required
 
-```bash
-# Development (from project root)
-bun dev --help           # Show all available commands
-bun dev serve            # Start headless API server
-bun dev web              # Start server + open web interface
-bun dev <directory>      # Start TUI in specific directory
+Bug fixes, chores, and tests must reference an existing issue. Documentation, refactor, and feature PRs are exempt from the automated linked-issue check. When required, use `Fixes #123` or `Closes #123` in the PR description.
 
-# Production
-opencode --help          # Show all available commands
-opencode serve           # Start headless API server
-opencode web             # Start server + open web interface
-opencode <directory>     # Start TUI in specific directory
-```
+Before implementing new functionality, open a feature request describing the problem, why it belongs in OpenCode, and your proposed approach if you have one. Wait for design approval before opening the implementation PR.
 
-### Running the API Server
+Base branches on `dev` and complete the provided pull request template.
 
 To start the Bolt headless API server:
 
-```bash
-bun dev serve
-```
+- Keep PRs small and focused.
+- Explain the problem and why the change fixes it.
+- Check whether the functionality already exists.
+- For UI changes, include before-and-after screenshots or video.
+- For logic changes, explain what you tested and how a reviewer can verify it.
 
-This starts the headless server on port 4096 by default. You can specify a different port:
+### Keep It Brief
 
-```bash
-bun dev serve --port 8080
-```
+Long, AI-generated PR descriptions and issues may be ignored. Write a short explanation in your own words. If the change cannot be explained briefly, the PR may be too large.
 
-### Running the Web App
+### Use Conventional Titles
 
 To test UI changes during development:
 
@@ -232,16 +237,13 @@ You can optionally include a scope to indicate which package is affected:
 
 Examples:
 
-- `docs: update contributing guidelines`
-- `fix: resolve crash on startup`
-- `feat: add dark mode support`
-- `feat(app): add dark mode support`
-- `fix(desktop): resolve crash on startup`
-- `chore: bump dependency versions`
+- `docs: update contributing guide`
+- `fix(tui): restore scroll position`
+- `feat(app): add workspace search`
 
-### Style Preferences
+## Issues
 
-These are not strictly enforced, they are just general guidelines:
+Bug reports and feature requests must use their issue templates. Blank issues are not allowed; ask support and how-to questions in the [Discord community](https://discord.gg/opencode).
 
 - **Functions:** Keep logic within a single function unless breaking it out adds clear reuse or composition benefits.
 - **Destructuring:** Do not do unnecessary destructuring of variables.

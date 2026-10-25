@@ -1,0 +1,15 @@
+---
+interface Props {
+  title: string
+  href: string
+}
+
+const href = Astro.props.href.startsWith("/")
+  ? `${import.meta.env.BASE_URL}docs${Astro.props.href}`
+  : Astro.props.href
+---
+
+<a class="docs-card" href={href}>
+  <strong>{Astro.props.title}</strong>
+  <div><slot /></div>
+</a>

@@ -1,0 +1,169 @@
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { HttpClientRequest } from "effect/http"
+import { Image, ImageClient } from "../../src/effect.js"
+import { ZAI } from "../../src/providers.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
+
+describe("Z.ai Images", () => {
+  it.effect("generates through the Z.ai Images API", () =>
+    Effect.gen(function* () {
+      const response = yield* Image.generate({
+        model: ZAI.configure({
+          apiKey: "test",
+          baseURL: "https://api.z.ai.test/api/paas/v4",
+          headers: { "x-default": "yes" },
+          http: { body: { configured: true, quality: "configured" }, query: { trace: "default" } },
+        }).image("glm-image"),
+        prompt: "A red circle on a white background",
+        providerOptions: {
+          quality: "hd",
+          userID: "alias-user",
+          user_id: "raw-user",
+          future_option: true,
+        },
+        http: {
+          headers: { "x-request": "yes" },
+          query: { trace: "request" },
+          body: { quality: "final", user_id: "final-user" },
+        },
+      })
+
+      expect(response.images).toHaveLength(1)
+      expect(response.image.mediaType).toBe("application/octet-stream")
+      // Z.ai documents that output URLs expire 30 days after generation; the test clock starts at 0.
+      expect(response.image.source).toEqual({
+        type: "url",
+        url: "https://cdn.z.ai/generated.png",
+        expiresAt: 30 * 24 * 60 * 60 * 1000,
+      })
+      expect(response.notices).toEqual([
+        {
+          type: "moderated",
+          message: "Z.ai Images applied a content filter for future-role at level 4.5",
+          providerMetadata: { zai: { role: "future-role", level: 4.5 } },
+        },
+      ])
+      expect(response.providerMetadata).toEqual({
+        zai: {
+          created: 1_760_335_349,
+          id: "generation-1",
+          requestID: "request-1",
+          contentFilter: [{ role: "future-role", level: 4.5 }],
+        },
+      })
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(request.url).toBe("https://api.z.ai.test/api/paas/v4/images/generations?trace=request")
+                expect(request.headers.get("authorization")).toBe("Bearer test")
+                expect(request.headers.get("x-default")).toBe("yes")
+                expect(request.headers.get("x-request")).toBe("yes")
+                expect(JSON.parse(input.text)).toEqual({
+                  model: "glm-image",
+                  prompt: "A red circle on a white background",
+                  quality: "final",
+                  user_id: "final-user",
+                  future_option: true,
+                  configured: true,
+                })
+                return input.respond(
+                  JSON.stringify({
+                    created: 1_760_335_349,
+                    id: "generation-1",
+                    request_id: "request-1",
+                    data: [{ url: "https://cdn.z.ai/generated.png" }],
+                    content_filter: [{ role: "future-role", level: 4.5 }],
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                )
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("sanitizes unpaired surrogates in outbound image requests", () =>
+    Image.generate({
+      model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image(
+        "model",
+      ),
+      prompt: "A red circle \uD800 on a white background \u{1F600}",
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toMatchObject({
+                prompt: "A red circle \uFFFD on a white background \u{1F600}",
+                metadata: { source: "default\uFFFD" },
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("lets raw native options override aliases", () =>
+    Image.generate({
+      model: ZAI.configure({ apiKey: "test" }).image("model"),
+      prompt: "test",
+      providerOptions: { quality: "future-quality", userID: "x", user_id: "raw-user" },
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toMatchObject({ quality: "future-quality", user_id: "raw-user" })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects invalid response structures", () =>
+    Effect.gen(function* () {
+      const model = ZAI.configure({ apiKey: "test" }).image("model")
+      const payloads = [
+        {},
+        { data: [] },
+        { data: [{ b64_json: "image" }] },
+        { data: [{ url: 1 }] },
+        { data: [{ url: "https://example.test/image.jpg" }], content_filter: [{ role: 1, level: "high" }] },
+      ]
+
+      yield* Effect.forEach(payloads, (payload) =>
+        Image.generate({ model, prompt: "test" }).pipe(
+          Effect.provide(
+            ImageClient.layer.pipe(
+              Layer.provide(
+                fixedResponse(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
+              ),
+            ),
+          ),
+          Effect.flip,
+          Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidProviderOutput"))),
+        ),
+      )
+    }),
+  )
+})

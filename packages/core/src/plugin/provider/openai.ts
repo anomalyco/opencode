@@ -14,9 +14,15 @@ import type { PluginInternal } from "../internal"
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
 const callbackPort = 1455
+const callbackFallbackPort = 1457
+const callbackBindAttempts = 10
+const callbackBindRetryDelay = 200
 const pollingSafetyMargin = 3000
+const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
+// Codex rejects gpt-5.5 and older models, including gpt-5.3-codex-spark, for ChatGPT accounts.
+const codexDisallowed = new Set(["gpt-5.6"])
 
 type Pkce = {
   verifier: string
@@ -30,172 +36,304 @@ type TokenResponse = {
   expires_in?: number
 }
 
-type Claims = {
-  chatgpt_account_id?: string
-  organizations?: Array<{ id: string }>
-  "https://api.openai.com/auth"?: { chatgpt_account_id?: string }
+const Claims = Schema.fromJsonString(
+  Schema.Struct({
+    chatgpt_account_id: Schema.optional(Schema.String),
+    organizations: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.String }))),
+    "https://api.openai.com/auth": Schema.optional(
+      Schema.Struct({ chatgpt_account_id: Schema.optional(Schema.String) }),
+    ),
+  }),
+)
+const decodeClaims = Schema.decodeUnknownOption(Claims)
+
+const browser = (app: App.Info) =>
+  ({
+    integrationID: Integration.ID.make("openai"),
+    method: {
+      id: browserMethodID,
+      type: "oauth",
+      label: "Codex browser (legacy)",
+    },
+    authorize: () =>
+      Effect.gen(function* () {
+        const pkce = yield* Effect.promise(generatePKCE)
+        const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
+        const code = yield* Deferred.make<string, Error>()
+        // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
+        const { createServer } = yield* Effect.promise(() => import("node:http"))
+        const server = createServer((request, response) => {
+          const url = new URL(request.url ?? "/", "http://localhost")
+          if (url.pathname !== "/auth/callback") {
+            response.writeHead(404).end("Not found")
+            return
+          }
+          const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
+          const value = url.searchParams.get("code")
+          if (error) {
+            Effect.runFork(Deferred.fail(code, new Error(error)))
+            response
+              .writeHead(400, { "Content-Type": "text/html" })
+              .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
+            return
+          }
+          if (!value || url.searchParams.get("state") !== state) {
+            const message = value ? "Invalid OAuth state" : "Missing authorization code"
+            Effect.runFork(Deferred.fail(code, new Error(message)))
+            response
+              .writeHead(400, { "Content-Type": "text/html" })
+              .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
+            return
+          }
+          Effect.runFork(Deferred.succeed(code, value))
+          response
+            .writeHead(200, { "Content-Type": "text/html" })
+            .end(OauthCallbackPage.success({ provider: "ChatGPT" }))
+        })
+        const port = yield* listen(server)
+        yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
+        const redirect = `http://localhost:${port}/auth/callback`
+        return {
+          mode: "auto" as const,
+          url: authorizeURL(redirect, pkce, state),
+          instructions: "Complete authorization in your browser. This window will close automatically.",
+          callback: Deferred.await(code).pipe(
+            Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
+            Effect.map((tokens) => credential(browserMethodID, tokens)),
+          ),
+        }
+      }),
+    refresh: (value) => refresh(browserMethodID, value, app),
+  }) satisfies IntegrationOAuthMethodRegistration
+
+function listen(server: Server) {
+  return bind(server, callbackPort).pipe(
+    Effect.as(callbackPort),
+    Effect.catchIf(addressInUse, () =>
+      cancel(callbackPort).pipe(
+        Effect.ignore,
+        Effect.andThen(Effect.sleep(callbackBindRetryDelay)),
+        Effect.andThen(bindWithRetry(server, callbackPort, callbackBindAttempts - 1)),
+        Effect.as(callbackPort),
+        Effect.catchIf(addressInUse, () =>
+          bindWithRetry(server, callbackFallbackPort, callbackBindAttempts).pipe(
+            Effect.as(callbackFallbackPort),
+            Effect.catchIf(addressInUse, () =>
+              Effect.fail(
+                new Error(
+                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose Codex device code (legacy), then try again.`,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
 }
 
-const browser = {
-  integrationID: Integration.ID.make("openai"),
-  method: {
-    id: browserMethodID,
-    type: "oauth",
-    label: "ChatGPT Pro/Plus (browser)",
-  },
-  authorize: () =>
-    Effect.gen(function* () {
-      const pkce = yield* Effect.promise(generatePKCE)
-      const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
-      const code = yield* Deferred.make<string, Error>()
-      const redirect = `http://localhost:${callbackPort}/auth/callback`
-      const server = createServer((request, response) => {
-        const url = new URL(request.url ?? "/", `http://localhost:${callbackPort}`)
-        if (url.pathname !== "/auth/callback") {
-          response.writeHead(404).end("Not found")
-          return
-        }
-        const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-        const value = url.searchParams.get("code")
-        if (error) {
-          Effect.runFork(Deferred.fail(code, new Error(error)))
-          response
-            .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
-          return
-        }
-        if (!value || url.searchParams.get("state") !== state) {
-          const message = value ? "Invalid OAuth state" : "Missing authorization code"
-          Effect.runFork(Deferred.fail(code, new Error(message)))
-          response
-            .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
-          return
-        }
-        Effect.runFork(Deferred.succeed(code, value))
-        response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: "ChatGPT" }))
-      })
-      yield* Effect.callback<void, Error>((resume) => {
-        server.once("error", (error) => resume(Effect.fail(error)))
-        server.listen(callbackPort, "localhost", () => resume(Effect.void))
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
-      return {
-        mode: "auto" as const,
-        url: authorizeURL(redirect, pkce, state),
-        instructions: "Complete authorization in your browser. This window will close automatically.",
-        callback: Deferred.await(code).pipe(
-          Effect.flatMap((value) => exchange(value, redirect, pkce)),
-          Effect.map((tokens) => credential(browserMethodID, tokens)),
-        ),
-      }
-    }),
-  refresh: (value) => refresh(browserMethodID, value),
-} satisfies IntegrationOAuthMethodRegistration
+function bindWithRetry(server: Server, port: number, attempts: number): Effect.Effect<void, Error> {
+  return bind(server, port).pipe(
+    Effect.catchIf(
+      (error) => addressInUse(error) && attempts > 1,
+      () => Effect.sleep(callbackBindRetryDelay).pipe(Effect.andThen(bindWithRetry(server, port, attempts - 1))),
+    ),
+  )
+}
 
-const headless = {
-  integrationID: Integration.ID.make("openai"),
-  method: {
-    id: headlessMethodID,
-    type: "oauth",
-    label: "ChatGPT Pro/Plus (headless)",
-  },
-  authorize: () =>
-    Effect.gen(function* () {
-      const device = yield* request<{ device_auth_id: string; user_code: string; interval: string }>(
-        `${issuer}/api/accounts/deviceauth/usercode`,
-        {
-          method: "POST",
-          headers: headers("application/json"),
-          body: JSON.stringify({ client_id: clientID }),
-        },
-      )
-      const interval = Math.max(Number.parseInt(device.interval) || 5, 1) * 1000
-      return {
-        mode: "auto" as const,
-        url: `${issuer}/codex/device`,
-        instructions: `Enter code: ${device.user_code}`,
-        callback: Effect.gen(function* () {
-          while (true) {
-            const response = yield* Effect.tryPromise({
-              try: (signal) =>
-                fetch(`${issuer}/api/accounts/deviceauth/token`, {
-                  method: "POST",
-                  headers: headers("application/json"),
-                  body: JSON.stringify({ device_auth_id: device.device_auth_id, user_code: device.user_code }),
-                  signal,
-                }),
-              catch: (cause) => cause,
-            })
-            if (response.ok) {
-              const data = (yield* Effect.promise(() => response.json())) as {
-                authorization_code: string
-                code_verifier: string
+function bind(server: Server, port: number) {
+  return Effect.callback<void, Error>((resume) => {
+    const onError = (error: Error) => resume(Effect.fail(error))
+    server.once("error", onError)
+    server.listen(port, "localhost", () => {
+      server.off("error", onError)
+      resume(Effect.void)
+    })
+  })
+}
+
+function cancel(port: number) {
+  return Effect.tryPromise({
+    try: (signal) =>
+      fetch(`http://localhost:${port}/cancel`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
+      }),
+    catch: (cause) => cause,
+  })
+}
+
+function addressInUse(error: Error) {
+  return "code" in error && error.code === "EADDRINUSE"
+}
+
+const headless = (app: App.Info) =>
+  ({
+    integrationID: Integration.ID.make("openai"),
+    method: {
+      id: headlessMethodID,
+      type: "oauth",
+      label: "Codex device code (legacy)",
+    },
+    authorize: () =>
+      Effect.gen(function* () {
+        const device = yield* request<{ device_auth_id: string; user_code: string; interval: string }>(
+          `${issuer}/api/accounts/deviceauth/usercode`,
+          {
+            method: "POST",
+            headers: headers("application/json", app),
+            body: JSON.stringify({ client_id: clientID }),
+          },
+        )
+        const interval = Math.max(Number.parseInt(device.interval) || 5, 1) * 1000
+        return {
+          mode: "auto" as const,
+          url: `${issuer}/codex/device`,
+          instructions: `Enter code: ${device.user_code}`,
+          callback: Effect.gen(function* () {
+            while (true) {
+              const response = yield* Effect.tryPromise({
+                try: (signal) =>
+                  fetch(`${issuer}/api/accounts/deviceauth/token`, {
+                    method: "POST",
+                    headers: headers("application/json", app),
+                    body: JSON.stringify({ device_auth_id: device.device_auth_id, user_code: device.user_code }),
+                    signal,
+                  }),
+                catch: (cause) => cause,
+              })
+              if (response.ok) {
+                const data = (yield* Effect.promise(() => response.json())) as {
+                  authorization_code: string
+                  code_verifier: string
+                }
+                return credential(
+                  headlessMethodID,
+                  yield* exchange(
+                    data.authorization_code,
+                    `${issuer}/deviceauth/callback`,
+                    { verifier: data.code_verifier, challenge: "" },
+                    app,
+                  ),
+                )
               }
-              return credential(
-                headlessMethodID,
-                yield* exchange(data.authorization_code, `${issuer}/deviceauth/callback`, {
-                  verifier: data.code_verifier,
-                  challenge: "",
-                }),
-              )
+              if (response.status !== 403 && response.status !== 404) {
+                return yield* Effect.fail(new Error(`Device authorization failed: ${response.status}`))
+              }
+              yield* Effect.sleep(interval + pollingSafetyMargin)
             }
-            if (response.status !== 403 && response.status !== 404) {
-              return yield* Effect.fail(new Error(`Device authorization failed: ${response.status}`))
-            }
-            yield* Effect.sleep(interval + pollingSafetyMargin)
-          }
-        }),
-      }
-    }),
-  refresh: (value) => refresh(headlessMethodID, value),
-} satisfies IntegrationOAuthMethodRegistration
+          }),
+        }
+      }),
+    refresh: (value) => refresh(headlessMethodID, value, app),
+  }) satisfies IntegrationOAuthMethodRegistration
 
 export const OpenAIPlugin = define({
-  id: "openai",
+  id: "opencode.provider.openai",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update(browser)
-      draft.method.update(headless)
+    const bus = yield* Bus.Service
+    const loading = Semaphore.makeUnsafe(1)
+    let chatgpt: Credential.OAuth | undefined
+
+    const load = Effect.fn("OpenAIPlugin.load")(function* () {
+      const connection = yield* ctx.integration.connection.active("openai")
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+        : undefined
+      chatgpt =
+        credential?.type === "oauth" &&
+        (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
+          ? credential
+          : undefined
     })
-    yield* ctx.catalog.transform(
-      Effect.fn(function* (evt) {
-        for (const item of evt.provider.list()) {
-          if (item.provider.api.type !== "aisdk") continue
-          if (item.provider.api.package !== "@ai-sdk/openai") continue
-          if (!item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) continue
-          evt.model.update(item.provider.id, ModelV2.ID.make("gpt-5-chat-latest"), (model) => {
-            // OpenAIPlugin sends OpenAI models through Responses; this alias is a
-            // chat-completions-only model, so hide it only from OpenAI's catalog.
-            model.enabled = false
-          })
-        }
-      }),
+
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update(browser(ctx.app))
+      editor.method.update(headless(ctx.app))
+    })
+    yield* load()
+    // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
+    const configured = yield* configuredSettings(Provider.ID.openai)
+    yield* ctx.provider.transform((providers) => {
+      const item = providers.get(Provider.ID.openai)
+      if (!item) return
+      const account = chatgpt?.metadata?.accountID
+      providers.update(item.provider.id, (provider) => {
+        provider.settings = Provider.mergeOverlay(provider.settings, {
+          transport: provider.settings?.transport ?? "websocket",
+          ...(chatgpt ? { baseURL: codexBaseURL } : {}),
+          // The ChatGPT backend rejects uncompressed bodies over ~1 MiB and decodes zstd.
+          ...(chatgpt && configured?.baseURL === undefined ? { encoding: provider.settings?.encoding ?? "zstd" } : {}),
+        })
+        if (!chatgpt) return
+        provider.headers = Provider.mergeHeaders(provider.headers, {
+          originator: "opencode",
+          "x-codex-beta-features": "remote_compaction_v2",
+          ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+        })
+      })
+    })
+    yield* ctx.model.transform((models) => {
+      for (const model of models.list(Provider.ID.openai)) {
+        // ChatGPT-plan tokens only authorize codex-eligible models, and the
+        // subscription covers usage, so hide the rest and zero the cost.
+        models.update(model.providerID, model.id, (draft) => {
+          if (!chatgpt) return
+          if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
+            draft.enabled = false
+            return
+          }
+          const apiID = draft.modelID ?? draft.id
+          const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
+          const major = Number(match?.[1])
+          const minor = Number(match?.[2] ?? 0)
+          if (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 5))) {
+            draft.enabled = false
+            return
+          }
+          draft.cost = []
+        })
+      }
+    })
+    yield* ctx.session.hook(
+      "model.request",
+      (evt) =>
+        Effect.gen(function* () {
+          if (!chatgpt) return
+          if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
+            evt.baseURL = codexBaseURL
+          const session = yield* ctx.session
+            .get({ sessionID: evt.sessionID })
+            .pipe(Effect.orElseSucceed(() => undefined))
+          evt.headers.originator = "opencode"
+          // ChatGPT routes its prompt cache on this header, so children share the parent's.
+          evt.headers["session-id"] = session ? SessionAffinity.get(session) : evt.sessionID
+        }),
+      { providerID: Provider.ID.openai },
     )
-    yield* ctx.aisdk.sdk(
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/openai") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/openai"))
-        evt.sdk = mod.createOpenAI(evt.options)
-      }),
-    )
-    yield* ctx.aisdk.language(
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.openai) return
-        evt.language = evt.sdk.responses(evt.model.api.id)
-      }),
+    // The ChatGPT backend rejects a requested output limit, and OpenAI counts one against rate limits.
+    const omitOutputLimit = (evt: SessionRequest) =>
+      Effect.sync(() => {
+        delete evt.options.maxTokens
+      })
+    for (const name of ["context", "compaction"] as const)
+      yield* ctx.session.hook(name, omitOutputLimit, { providerID: Provider.ID.openai })
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
+      Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
+      Stream.runForEach(refresh),
+      Effect.forkScoped({ startImmediately: true }),
     )
   }),
-} satisfies PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>)
+} satisfies PluginInternal.InternalPlugin)
 
-function headers(contentType: string) {
-  return { "Content-Type": contentType, "User-Agent": `opencode/${InstallationVersion}` }
+function headers(contentType: string, app: App.Info) {
+  return { "Content-Type": contentType, "User-Agent": App.useragent(app) }
 }
 
-function exchange(code: string, redirect: string, pkce: Pkce) {
+function exchange(code: string, redirect: string, pkce: Pkce, app: App.Info) {
   return request<TokenResponse>(`${issuer}/oauth/token`, {
     method: "POST",
-    headers: headers("application/x-www-form-urlencoded"),
+    headers: headers("application/x-www-form-urlencoded", app),
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -206,10 +344,10 @@ function exchange(code: string, redirect: string, pkce: Pkce) {
   })
 }
 
-function refresh(methodID: Integration.MethodID, value: Pick<Credential.OAuth, "refresh" | "metadata">) {
+function refresh(methodID: Integration.MethodID, value: Pick<Credential.OAuth, "refresh" | "metadata">, app: App.Info) {
   return request<TokenResponse>(`${issuer}/oauth/token`, {
     method: "POST",
-    headers: headers("application/x-www-form-urlencoded"),
+    headers: headers("application/x-www-form-urlencoded", app),
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: value.refresh,
@@ -279,14 +417,11 @@ function extractAccountID(tokens: TokenResponse) {
 function claim(token: string) {
   const part = token.split(".")[1]
   if (!part) return
-  try {
-    const claims = JSON.parse(Buffer.from(part, "base64url").toString()) as Claims
-    return (
-      claims.chatgpt_account_id ??
-      claims["https://api.openai.com/auth"]?.chatgpt_account_id ??
-      claims.organizations?.[0]?.id
-    )
-  } catch {
-    return
-  }
+  const claims = Option.getOrUndefined(decodeClaims(Buffer.from(part, "base64url").toString()))
+  if (!claims) return
+  return (
+    claims.chatgpt_account_id ??
+    claims["https://api.openai.com/auth"]?.chatgpt_account_id ??
+    claims.organizations?.[0]?.id
+  )
 }

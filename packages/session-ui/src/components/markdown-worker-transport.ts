@@ -10,9 +10,12 @@ export function createWorkerTransport<T extends { id: number; key: string }>(inp
       if (!active.has(request.key)) {
         active.set(request.key, request)
         input.post(request)
+
         return
       }
+
       const previous = queued.get(request.key)
+
       if (previous) input.supersede(previous)
       queued.set(request.key, request)
     },
@@ -20,6 +23,7 @@ export function createWorkerTransport<T extends { id: number; key: string }>(inp
       if (active.get(key)?.id !== id) return
       active.delete(key)
       const next = queued.get(key)
+
       if (!next) return
       queued.delete(key)
       active.set(key, next)
@@ -28,6 +32,7 @@ export function createWorkerTransport<T extends { id: number; key: string }>(inp
     dispose(key: string) {
       active.delete(key)
       const request = queued.get(key)
+
       if (request) input.supersede(request)
       queued.delete(key)
     },

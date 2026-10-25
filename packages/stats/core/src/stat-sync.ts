@@ -6,6 +6,7 @@ import { GeoStatRepo, rowsFromAggregates as geoRowsFromAggregates } from "./doma
 import {
   buildRetentionQueries,
   buildStatsQueries,
+  hiddenStatModels,
   toGeoAggregate,
   toModelAggregate,
   toProviderAggregate,
@@ -15,32 +16,19 @@ import { ModelStatRepo, rowsFromAggregates as modelRowsFromAggregates } from "./
 import { statProvider } from "./domain/model-normalization"
 import { ProviderStatRepo, rowsFromAggregates as providerRowsFromAggregates } from "./domain/provider"
 import { RetentionStatRepo, rowsFromAggregates as retentionRowsFromAggregates } from "./domain/retention"
-import { startOfIsoWeek, startOfUtcDay } from "./domain/stat"
 import { R2Sql, R2SqlQueryError } from "./r2-sql"
-
-const DATALAKE_INGESTION_LAG_MS = 5 * 60_000
-const STATS_DATA_START_MS = new Date("2026-05-28T00:00:00.000Z").getTime()
-const WEEK_MS = 7 * 86_400_000
-const DISPLAY_WINDOW_MS = 56 * 86_400_000
-// A retention result needs one complete activity week plus its complete return
-// week. Keep another partial week of slack around the ISO-week boundary.
-const RETENTION_INCREMENTAL_LOOKBACK_MS = 16 * 86_400_000
-// Anchor incremental passes to the ISO week containing this lookback, so the pass
-// after a week boundary still recomputes the previous week's final aggregates even
-// if the boundary pass itself failed.
-const INCREMENTAL_LOOKBACK_MS = 2 * 3_600_000
+import { syncRange } from "./sync-range"
 
 export type SyncStatsResult = { ok: true; rows: number; startedAt: string; periodStart: string; periodEnd: string }
 export type SyncStatsError = R2SqlQueryError | DatabaseError
 type SyncStatsServices = R2Sql | ModelStatRepo | ProviderStatRepo | GeoStatRepo | RetentionStatRepo
 
 export const syncStats: (options?: {
-  full?: boolean
+  history?: boolean
 }) => Effect.Effect<SyncStatsResult, SyncStatsError, SyncStatsServices> = Effect.fn("StatSync.sync")(
-  function* (options?: { full?: boolean }) {
+  function* (options?: { history?: boolean }) {
     const startedAt = yield* DateTime.nowAsDate
-    const periodEnd = new Date(Math.floor((startedAt.getTime() - DATALAKE_INGESTION_LAG_MS) / 60_000) * 60_000)
-    const periodStart = options?.full ? fullPeriodStart(periodEnd) : incrementalPeriodStart(periodEnd)
+    const range = syncRange(startedAt, options?.history)
     const r2Sql = yield* R2Sql
     const modelStats = yield* ModelStatRepo
     const providerStats = yield* ProviderStatRepo
@@ -57,9 +45,9 @@ export const syncStats: (options?: {
 
     yield* logRuntimeCheck()
 
-    const queries = buildStatsQueries(periodStart, periodEnd, undefined, catalog)
+    const queries = buildStatsQueries(range.periodStart, range.periodEnd, undefined, catalog)
     yield* Effect.logInfo(
-      `stats sync started ${JSON.stringify({ full: options?.full ?? false, periodStart, periodEnd, queries: queries.length })}`,
+      `stats sync started ${JSON.stringify({ history: options?.history ?? false, periodStart: range.periodStart, periodEnd: range.periodEnd, queries: queries.length })}`,
     )
     const rows = yield* Effect.forEach(
       queries,
@@ -93,16 +81,7 @@ export const syncStats: (options?: {
     )
     const retentionAvailable = yield* retentionStats.available()
     const retentionQueries = retentionAvailable
-      ? buildRetentionQueries(
-          options?.full
-            ? periodStart
-            : new Date(
-                Math.max(startOfUtcDay(periodEnd).getTime() - RETENTION_INCREMENTAL_LOOKBACK_MS, STATS_DATA_START_MS),
-              ),
-          startOfUtcDay(periodEnd),
-          undefined,
-          catalog,
-        )
+      ? buildRetentionQueries(range.retentionStart, range.retentionEnd, undefined, catalog)
       : []
     yield* Effect.logInfo(`stats sync querying retention ${JSON.stringify({ queries: retentionQueries.length })}`)
     const retentionRows = retentionRowsFromAggregates(
@@ -148,9 +127,9 @@ export const syncStats: (options?: {
     )
     yield* Effect.all(
       [
-        modelStats.deleteRetiredDimensions(modelRows),
+        modelStats.deleteRetiredDimensions(modelRows, hiddenStatModels()),
         providerStats.deleteRetiredDimensions(providerRows),
-        geoStats.deleteRetiredDimensions(geoRows),
+        geoStats.deleteRetiredDimensions(geoRows, hiddenStatModels()),
       ],
       { concurrency: "unbounded", discard: true },
     )
@@ -178,9 +157,10 @@ export const syncStats: (options?: {
 
     yield* Effect.logInfo(
       `stats sync complete ${JSON.stringify({
+        history: options?.history ?? false,
         startedAt: startedAt.toISOString(),
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString(),
+        periodStart: range.periodStart.toISOString(),
+        periodEnd: range.periodEnd.toISOString(),
         rows: modelRows.length,
         providerRows: providerRows.length,
         geoRows: geoRows.length,
@@ -194,31 +174,11 @@ export const syncStats: (options?: {
       ok: true,
       rows: modelRows.length,
       startedAt: startedAt.toISOString(),
-      periodStart: periodStart.toISOString(),
-      periodEnd: periodEnd.toISOString(),
+      periodStart: range.periodStart.toISOString(),
+      periodEnd: range.periodEnd.toISOString(),
     }
   },
 )
-
-// May 27 was partial, so keep stats anchored at the first complete day.
-function fullPeriodStart(periodEnd: Date) {
-  return new Date(
-    Math.max(
-      Math.min(startOfIsoWeek(periodEnd).getTime() - WEEK_MS, periodEnd.getTime() - DISPLAY_WINDOW_MS),
-      STATS_DATA_START_MS,
-    ),
-  )
-}
-
-// Events are append-only, so completed periods never change once synced; hourly
-// passes only recompute the periods the current ISO week can still touch. The daily
-// full pass refreshes the whole display window (normalization changes, retired
-// dimension cleanup).
-function incrementalPeriodStart(periodEnd: Date) {
-  return new Date(
-    Math.max(startOfIsoWeek(new Date(periodEnd.getTime() - INCREMENTAL_LOOKBACK_MS)).getTime(), STATS_DATA_START_MS),
-  )
-}
 
 function logRuntimeCheck() {
   return Effect.logInfo(

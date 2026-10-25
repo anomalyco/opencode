@@ -1,0 +1,20 @@
+---
+interface Props {
+  code: string
+}
+---
+
+<div class="docs-code-block">
+  <pre><code>{Astro.props.code}</code></pre>
+  <button type="button" data-copy-code data-code={Astro.props.code}>Copy</button>
+</div>
+
+<script>
+  document.addEventListener("click", async (event) => {
+    const button = event.target
+    if (!(button instanceof HTMLButtonElement) || !button.matches("[data-copy-code]")) return
+    await navigator.clipboard.writeText(button.dataset.code ?? "")
+    button.textContent = "Copied"
+    window.setTimeout(() => (button.textContent = "Copy"), 1500)
+  })
+</script>

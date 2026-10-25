@@ -1,23 +1,29 @@
-import { buildLocationServiceMap } from "../location-services"
-import { LocationServiceMap } from "../location-service-map"
-import { LayerNode } from "./layer-node"
-import { makeGlobalNode } from "./app-node"
+import { buildLocationServiceMap } from "../location-services.js"
+import { LocationServiceMap } from "../location-service-map.js"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Effect, Layer } from "effect"
+import { Instance } from "../instance/service.js"
 
-export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements: LayerNode.Replacements = []) {
-  let allReplacements = replacements
+const instances = makeGlobalNode({
+  service: Instance.Service,
+  layer: Layer.effect(
+    Instance.Service,
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      return Instance.Service.of({
+        provide: (session) => Effect.provide(locations.get(session.location)),
+      })
+    }),
+  ),
+  deps: [LocationServiceMap.node],
+})
 
-  // Only build the location service map if it's actually needed
-  if (LayerNode.hasUnbound(root, LocationServiceMap.node) && !hasReplacement(replacements, LocationServiceMap.node)) {
-    const locationMap = buildLocationServiceMap(replacements)
-    const locationMapNode = makeGlobalNode({ service: LocationServiceMap.Service, layer: locationMap, deps: [] })
-    allReplacements = replacements.concat([[LocationServiceMap.node, locationMapNode]])
-  }
-
-  return LayerNode.compile(root, allReplacements)
+export function build<A, E>(root: LayerNode.Graph<A, E>, replacements: LayerNode.Replacements = []) {
+  const bindings = [Instance.node.replace(instances), ...replacements]
+  return LayerNode.compile(root, {
+    replacements: [LocationServiceMap.node.replace(buildLocationServiceMap(bindings)), ...bindings],
+  })
 }
 
-function hasReplacement(replacements: LayerNode.Replacements, node: LayerNode.Node<unknown, unknown, any>) {
-  return replacements.some(([source]) => source.name === node.name)
-}
-
-export * as AppNodeBuilder from "./app-node-builder"
+export * as AppNodeBuilder from "./app-node-builder.js"

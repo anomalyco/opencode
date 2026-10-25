@@ -3,7 +3,56 @@ import { DateTime, Effect, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AbsolutePath, Agent, Location, Model, Bolt, Prompt, Session, SessionMessage } from "../src/effect"
 
-test("sessions.get returns the decoded Effect projection", async () => {
+const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
+
+test("server.info decodes the readiness response", async () => {
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({
+          version: "current",
+          pid: 123,
+          urls: ["http://localhost:3000"],
+          paths: { tmp: "/tmp/opencode" },
+        }),
+      ),
+    ),
+  )
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return yield* client.server.info()
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result).toEqual({
+    version: "current",
+    pid: 123,
+    urls: ["http://localhost:3000"],
+    paths: { tmp: "/tmp/opencode" },
+  })
+})
+
+test("vcs.base decodes nullable review-base metadata", async () => {
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const base = {
+    name: "release",
+    ref: "refs/remotes/origin/release",
+    source: "reflog",
+  }
+  for (const data of [base, null]) {
+    const httpClient = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ location, data }))),
+    )
+    const result = await Effect.gen(function* () {
+      const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+      return yield* client.vcs.base({ location: { directory: AbsolutePath.make("/repo") } })
+    }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+    expect(result.data).toEqual(data)
+    expect(result.location.directory).toBe("/repo")
+  }
+})
+
+test("session.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session))),
   )
@@ -15,13 +64,64 @@ test("sessions.get returns the decoded Effect projection", async () => {
   expect(DateTime.toEpochMillis(result.time.created)).toBe(1_717_171_717_000)
 })
 
-test("events.subscribe exposes and decodes the native Effect event stream", async () => {
+test("session instructions methods use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string; body?: unknown }> = []
+  const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]
+  const httpClient = HttpClient.make((request) => {
+    requests.push({
+      method: request.method,
+      url: request.url,
+      body: request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined,
+    })
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        request.method === "GET" ? Response.json({ data: instructions }) : new Response(null, { status: 204 }),
+      ),
+    )
+  })
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const listed = yield* client.session.instructions.entry.list({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.instructions.entry.put({
+      sessionID: Session.ID.make("ses_test"),
+      key: "review-notes",
+      value: instructions[0].value,
+    })
+    yield* client.session.instructions.entry.remove({
+      sessionID: Session.ID.make("ses_test"),
+      key: "review-notes",
+    })
+    return listed
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result).toEqual(instructions)
+  expect(requests).toEqual([
+    {
+      method: "GET",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries",
+      body: undefined,
+    },
+    {
+      method: "PUT",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
+      body: { value: { text: "Check the diff", priority: 1 } },
+    },
+    {
+      method: "DELETE",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
+      body: undefined,
+    },
+  ])
+})
+
+test("event.subscribe exposes and decodes the native Effect event stream", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
         new Response(
-          `data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n` +
+          `data: ${JSON.stringify({ id: "evt_connected", created: 0, type: "server.connected", data: {} })}\n\n` +
             `data: ${JSON.stringify(modelSwitchedEvent)}\n\n`,
           { headers: { "content-type": "text/event-stream" } },
         ),
@@ -33,14 +133,36 @@ test("events.subscribe exposes and decodes the native Effect event stream", asyn
     return yield* client.events.subscribe().pipe(Stream.runCollect)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "session.next.model.switched"])
+  expect(Array.from(events).map((event) => event.type)).toEqual(["server.connected", "session.model.selected"])
   const durable = events[1]
-  if (durable?.type !== "session.next.model.switched") throw new Error("Expected model event")
-  expect(DateTime.toEpochMillis(durable.data.timestamp)).toBe(1_717_171_717_000)
+  if (durable?.type !== "session.model.selected") throw new Error("Expected model event")
+  expect(durable.created).toBe(1_717_171_717_000)
   expect(durable.durable).toEqual({ aggregateID: "ses_test", seq: 1, version: 1 })
 })
 
-test("events.subscribe terminates on Effect protocol decode failures", async () => {
+test("shared event source runs with the Effect context captured by make", async () => {
+  const connected = { id: "evt_connected", type: "server.connected", data: {} }
+  const Token = Context.Reference("test/effect/token", { defaultValue: () => "missing" })
+  const httpClient = HttpClient.make((request) =>
+    Effect.gen(function* () {
+      const token = yield* Token
+      expect(token).toBe("captured")
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(`data: ${JSON.stringify(connected)}\n\n`, { headers: { "content-type": "text/event-stream" } }),
+      )
+    }),
+  )
+  const client = await Effect.runPromise(
+    OpenCode.make({ baseUrl: "http://localhost:3000" }).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.provideService(Token, "captured"),
+    ),
+  )
+  expect((await Effect.runPromise(Stream.runCollect(client.event.subscribe())))[0]).toEqual(connected)
+})
+
+test("event.subscribe terminates on Effect protocol decode failures", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
       HttpClientResponse.fromWeb(
@@ -60,34 +182,27 @@ test("events.subscribe terminates on Effect protocol decode failures", async () 
 })
 
 test("session methods retain decoded Effect inputs and outputs", async () => {
-  const historyQueries: Array<Record<string, string>> = []
-  let historyPage = 0
+  const logQueries: Array<Record<string, string>> = []
+  const requests: Array<{ method: string; url: string }> = []
   const httpClient = HttpClient.make((request) => {
     const url = request.url
-    if (url.includes("/event")) {
+    requests.push({ method: request.method, url })
+    if (url.includes("/log")) {
+      logQueries.push(Object.fromEntries(request.urlParams.params))
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\n`, {
+          new Response(`data: ${JSON.stringify(modelSwitchedEvent)}\n\ndata: ${JSON.stringify(synced)}\n\n`, {
             headers: { "content-type": "text/event-stream" },
           }),
         ),
       )
     }
-    if (url.includes("/history")) {
-      historyPage++
-      historyQueries.push(Object.fromEntries(request.urlParams.params))
-      return Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          Response.json(
-            historyPage === 1 ? { data: [modelSwitchedEvent], hasMore: true } : { data: [], hasMore: false },
-          ),
-        ),
-      )
-    }
     if (url.includes("/prompt")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(admission)))
+    }
+    if (url.endsWith("/compact")) {
+      return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(compactionAdmission)))
     }
     if (url.includes("/context")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ data: [] })))
@@ -104,7 +219,14 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session)))
     }
     if (request.method === "POST") {
-      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          request.url.includes("/interrupt")
+            ? Response.json({ interrupted: true })
+            : new Response(null, { status: 204 }),
+        ),
+      )
     }
     return Effect.succeed(
       HttpClientResponse.fromWeb(request, Response.json({ data: [session.data], cursor: { next: "next" } })),
@@ -117,61 +239,58 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     const created = yield* client.sessions.create({
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp/project") }),
     })
-    yield* client.sessions.switchAgent({ sessionID: Session.ID.make("ses_test"), agent: Agent.ID.make("build") })
-    yield* client.sessions.switchModel({
+    yield* client.session.view({
+      sessionID: Session.ID.make("ses_test"),
+      idle: DateTime.makeUnsafe(session.data.time.idle),
+    })
+    yield* client.session.switchAgent({ sessionID: Session.ID.make("ses_test"), agent: Agent.ID.make("build") })
+    yield* client.session.switchModel({
       sessionID: Session.ID.make("ses_test"),
       model: Model.Ref.make({ id: "claude", providerID: "anthropic" }),
     })
-    const admitted = yield* client.sessions.prompt({
+    const admitted = yield* client.session.prompt({
       sessionID: Session.ID.make("ses_test"),
-      prompt: Prompt.make({ text: "Hello" }),
+      text: "Hello",
       resume: false,
     })
-    yield* client.sessions.compact({ sessionID: Session.ID.make("ses_test") })
-    yield* client.sessions.wait({ sessionID: Session.ID.make("ses_test") })
-    const context = yield* client.sessions.context({ sessionID: Session.ID.make("ses_test") })
-    const history = yield* client.sessions.history({
-      sessionID: Session.ID.make("ses_test"),
-      after: 0,
-      limit: 1,
-    })
-    const historyNext = history.hasMore
-      ? yield* client.sessions.history({
-          sessionID: Session.ID.make("ses_test"),
-          after: history.data.at(-1)?.durable?.seq,
-          limit: 2,
-        })
-      : undefined
-    const events = yield* client.sessions
-      .events({ sessionID: Session.ID.make("ses_test"), after: 0 })
+    yield* client.session.compact({ sessionID: Session.ID.make("ses_test") })
+    yield* client.session.wait({ sessionID: Session.ID.make("ses_test") })
+    const context = yield* client.session.context({ sessionID: Session.ID.make("ses_test") })
+    const log = yield* client.session
+      .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
       .pipe(Stream.runCollect)
-    yield* client.sessions.interrupt({ sessionID: Session.ID.make("ses_test") })
-    const message = yield* client.sessions.message({
+    const interrupted = yield* client.session.interrupt({ sessionID: Session.ID.make("ses_test") })
+    const message = yield* client.session.message.get({
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, active, created, admitted, context, history, historyNext, events, message }
+    return { page, active, created, admitted, context, log, interrupted, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(DateTime.toEpochMillis(result.page.data[0].time.created)).toBe(1_717_171_717_000)
+  const listed = result.page.data[0]
+  if (!listed?.time.idle || !listed.time.viewed) throw new Error("Expected attention times")
+  expect(DateTime.toEpochMillis(listed.time.created)).toBe(1_717_171_717_000)
+  expect(DateTime.toEpochMillis(listed.time.idle)).toBe(1_717_171_717_002)
+  expect(DateTime.toEpochMillis(listed.time.viewed)).toBe(1_717_171_717_001)
   expect(result.active).toEqual({ ses_test: { type: "running" } })
+  expect(result.interrupted).toEqual({ interrupted: true })
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
   expect(result.created.id).toBe("ses_test")
   expect(Object.getPrototypeOf(result.admitted)).toBe(Object.prototype)
-  expect(Object.getPrototypeOf(result.admitted.prompt)).toBe(Object.prototype)
-  expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
+  expect(Object.getPrototypeOf(result.admitted.payload)).toBe(Object.prototype)
+  expect(DateTime.toEpochMillis(result.admitted.time.created)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
-  expect(DateTime.toEpochMillis(result.history.data[0].data.timestamp)).toBe(1_717_171_717_000)
-  expect(result.history).toEqual(expect.objectContaining({ hasMore: true }))
-  expect(result.historyNext).toEqual({ data: [], hasMore: false })
-  expect(historyQueries[0]).toEqual({ limit: "1", after: "0" })
-  expect(historyQueries[1]).toEqual({ limit: "2", after: "1" })
-  expect(DateTime.toEpochMillis(result.events[0].data.timestamp)).toBe(1_717_171_717_000)
+  expect(logQueries[0]).toEqual({ after: "0" })
+  expect(requests).toContainEqual({ method: "POST", url: "http://localhost:3000/api/session/ses_test/view" })
+  const logged = Array.from(result.log)
+  expect(logged.map((item) => item.type)).toEqual(["session.model.selected", "log.synced"])
+  expect(logged[0]?.type === "session.model.selected" && logged[0].created).toBe(1_717_171_717_000)
+  expect(logged.at(-1)).toEqual(synced)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })
 
-test("sessions.history retains the typed SessionNotFoundError", async () => {
+test("session.log retains the typed SessionNotFoundError", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
       HttpClientResponse.fromWeb(
@@ -209,6 +328,8 @@ const session = {
     time: {
       created: 1_717_171_717_000,
       updated: 1_717_171_717_000,
+      idle: 1_717_171_717_002,
+      viewed: 1_717_171_717_001,
     },
     title: "Test",
     location: { directory: "/tmp/project" },
@@ -217,12 +338,23 @@ const session = {
 
 const admission = {
   data: {
-    admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
-    prompt: { text: "Hello" },
+    type: "user",
+    payload: { text: "Hello" },
     delivery: "steer",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
+  },
+}
+
+const compactionAdmission = {
+  data: {
+    type: "compaction",
+    payload: {},
+    delivery: "queue",
+    id: "msg_compaction",
+    sessionID: "ses_test",
+    time: { created: 1_717_171_717_000 },
   },
 }
 
@@ -235,12 +367,11 @@ const modelSwitchedMessage = {
 
 const modelSwitchedEvent = {
   id: "evt_model",
-  type: "session.next.model.switched",
+  created: 1_717_171_717_000,
+  type: "session.model.selected",
   durable: { aggregateID: "ses_test", seq: 1, version: 1 },
   data: {
-    timestamp: 1_717_171_717_000,
     sessionID: "ses_test",
-    messageID: "msg_model",
     model: { id: "claude", providerID: "anthropic" },
   },
 }

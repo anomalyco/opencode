@@ -1,0 +1,175 @@
+import { describe, expect, test } from "bun:test"
+import { LLMEvent, LLMResponse } from "../src/effect.js"
+
+const reduce = (events: ReadonlyArray<LLMEvent>) => events.reduce(LLMResponse.reduce, LLMResponse.empty())
+const finishEvents = (events: ReadonlyArray<LLMEvent>) => events.filter(LLMEvent.is.finish)
+
+describe("LLMResponse reducer", () => {
+  test("assembles interleaved reasoning and text with end metadata", () => {
+    const events = [
+      LLMEvent.reasoningStart({ id: "r1" }),
+      LLMEvent.reasoningDelta({ id: "r1", text: "I should " }),
+      LLMEvent.textStart({ id: "t1" }),
+      LLMEvent.reasoningDelta({ id: "r1", text: "compare..." }),
+      LLMEvent.reasoningEnd({ id: "r1", providerMetadata: { anthropic: { signature: "sig" } } }),
+      LLMEvent.textDelta({ id: "t1", text: "Answer" }),
+      LLMEvent.textEnd({ id: "t1" }),
+      LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 5 } }),
+    ]
+    const response = LLMResponse.fromEvents(events)
+
+    expect(response?.finishReason).toEqual({ normalized: "stop" })
+    expect(response?.usage).toMatchObject({ outputTokens: 5 })
+    expect(response?.events).toEqual(events)
+    expect(response?.events.map((event) => event.type)).toEqual([
+      "reasoning-start",
+      "reasoning-delta",
+      "text-start",
+      "reasoning-delta",
+      "reasoning-end",
+      "text-delta",
+      "text-end",
+      "finish",
+    ])
+    expect(finishEvents(response?.events ?? [])).toHaveLength(1)
+    expect(response?.message.content).toEqual([
+      {
+        type: "reasoning",
+        text: "I should compare...",
+        providerMetadata: { anthropic: { signature: "sig" } },
+      },
+      { type: "text", text: "Answer" },
+    ])
+  })
+
+  test("preserves partial content without completing a failed stream", () => {
+    const state = reduce([LLMEvent.textStart({ id: "t1" }), LLMEvent.textDelta({ id: "t1", text: "partial" })])
+
+    expect(LLMResponse.complete(state)).toBeUndefined()
+    expect(state.message.content).toEqual([{ type: "text", text: "partial" }])
+  })
+
+  test("does not complete ended content without a terminal finish", () => {
+    const state = reduce([
+      LLMEvent.textStart({ id: "t1" }),
+      LLMEvent.textDelta({ id: "t1", text: "partial" }),
+      LLMEvent.textEnd({ id: "t1" }),
+    ])
+
+    expect(LLMResponse.complete(state)).toBeUndefined()
+    expect(state.message.content).toEqual([{ type: "text", text: "partial" }])
+  })
+
+  test("uses terminal usage when present and keeps prior usage when finish omits it", () => {
+    const withFinishUsage = LLMResponse.fromEvents([
+      LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: { inputTokens: 3 } }),
+      LLMEvent.finish({ reason: { normalized: "stop" }, usage: { outputTokens: 2 } }),
+    ])
+    const withoutFinishUsage = LLMResponse.fromEvents([
+      LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: { inputTokens: 3 } }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+
+    expect(withFinishUsage?.usage).toMatchObject({ outputTokens: 2 })
+    expect(withoutFinishUsage?.usage).toMatchObject({ inputTokens: 3 })
+  })
+
+  test("preserves the raw finish reason", () => {
+    const response = LLMResponse.fromEvents([
+      LLMEvent.finish({ reason: { normalized: "unknown", raw: "provider_limit" } }),
+    ])
+
+    expect(response?.finishReason).toEqual({ normalized: "unknown", raw: "provider_limit" })
+  })
+
+  test("assembles tool-call content only after the completed tool call event", () => {
+    const pending = reduce([
+      LLMEvent.toolInputStart({ id: "call_1", name: "lookup" }),
+      LLMEvent.toolInputDelta({ id: "call_1", name: "lookup", text: '{"query"' }),
+    ])
+
+    expect(pending.message.content).toEqual([])
+    expect(pending.toolInputs.call_1?.text).toBe('{"query"')
+
+    const response = LLMResponse.fromEvents([
+      ...pending.events,
+      LLMEvent.toolInputDelta({ id: "call_1", name: "lookup", text: ':"weather"}' }),
+      LLMEvent.toolInputEnd({ id: "call_1", name: "lookup" }),
+      LLMEvent.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+      LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
+    ])
+
+    expect(response?.message.content).toEqual([
+      { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+    ])
+  })
+
+  test("authoritative text-end value replaces accumulated deltas", () => {
+    const response = LLMResponse.fromEvents([
+      LLMEvent.textStart({ id: "t1" }),
+      LLMEvent.textDelta({ id: "t1", text: "Hel" }),
+      LLMEvent.textEnd({ id: "t1", text: "Hello!" }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+
+    expect(response?.message.content).toEqual([{ type: "text", text: "Hello!" }])
+    expect(response?.text).toBe("Hello!")
+  })
+
+  test("text-end without value keeps joined deltas", () => {
+    const response = LLMResponse.fromEvents([
+      LLMEvent.textStart({ id: "t1" }),
+      LLMEvent.textDelta({ id: "t1", text: "Hel" }),
+      LLMEvent.textDelta({ id: "t1", text: "lo" }),
+      LLMEvent.textEnd({ id: "t1" }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+
+    expect(response?.message.content).toEqual([{ type: "text", text: "Hello" }])
+    expect(response?.text).toBe("Hello")
+  })
+
+  test("authoritative reasoning-end value replaces only its own fragment", () => {
+    const response = LLMResponse.fromEvents([
+      LLMEvent.reasoningStart({ id: "r1:0" }),
+      LLMEvent.reasoningDelta({ id: "r1:0", text: "First summ" }),
+      LLMEvent.reasoningEnd({ id: "r1:0", text: "First summary." }),
+      LLMEvent.reasoningStart({ id: "r1:1" }),
+      LLMEvent.reasoningDelta({ id: "r1:1", text: "Second summary." }),
+      LLMEvent.reasoningEnd({ id: "r1:1" }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+
+    expect(response?.message.content).toEqual([
+      { type: "reasoning", text: "First summary." },
+      { type: "reasoning", text: "Second summary." },
+    ])
+    expect(response?.reasoning).toBe("First summary.Second summary.")
+  })
+
+  test("end value recovers a fragment that streamed no deltas", () => {
+    const response = LLMResponse.fromEvents([
+      LLMEvent.textStart({ id: "t1" }),
+      LLMEvent.textEnd({ id: "t1", text: "Hello!" }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+
+    expect(response?.message.content).toEqual([{ type: "text", text: "Hello!" }])
+    expect(response?.text).toBe("Hello!")
+  })
+
+  test("clears malformed tool input without appending an executable call", () => {
+    const state = reduce([
+      LLMEvent.toolInputStart({ id: "call_1", name: "lookup" }),
+      LLMEvent.toolInputDelta({ id: "call_1", name: "lookup", text: '{"query":"partial' }),
+      LLMEvent.toolInputError({
+        id: "call_1",
+        name: "lookup",
+        raw: '{"query":"partial',
+      }),
+    ])
+
+    expect(state.toolInputs).toEqual({})
+    expect(state.message.content).toEqual([])
+  })
+})

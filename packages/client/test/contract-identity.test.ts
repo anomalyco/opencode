@@ -21,27 +21,22 @@ import { Api } from "@bolt-ai/server/api"
 import { compile, emitPromise } from "@bolt-ai/httpapi-codegen"
 import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
 
-test("Core and Server reuse the authoritative Schema and Protocol values", () => {
-  expect(AgentV2.ID).toBe(Agent.ID)
-  expect(CoreLocation.Ref).toBe(Location.Ref)
-  expect(ModelV2.Ref).toBe(Model.Ref)
-  expect(SessionV2.Info).toBe(Session.Info)
-  expect(CoreSessionInput.Admitted).toBe(SessionInput.Admitted)
-  expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)
-  expect(CorePrompt).toBe(Prompt)
-  expect(Api.groups["server.session"].identifier).toBe("server.session")
-  expect(Object.keys(ClientApi.groups)).toEqual(Object.keys(Api.groups))
-  expect(Session.ID.create()).toStartWith("ses_")
-  expect(Project.ID.global).toBe("global")
-  expect(Provider.ID.anthropic).toBe("anthropic")
-  expect(Workspace.ID.create()).toStartWith("wrk_")
+const Client = await import("../src/effect")
+
+test("effect entrypoint exposes canonical Schema contracts", () => {
+  expect(Client.Agent).toBe(Agent)
+  expect(Client.Config).toBe(Config)
+  expect(Client.Model).toBe(Model)
+  expect(Client.Session).toBe(Session)
+  expect(Client.Vcs.Base).toBe(Vcs.Base)
 })
 
-test("client and Server contracts generate identically", () => {
-  const server = compile(Api, { groupNames, endpointNames, omitEndpoints })
-  const client = compile(ClientApi, { groupNames, endpointNames, omitEndpoints })
+test("generated Effect API names canonical and composed outputs", async () => {
+  const source = await Bun.file(new URL("../src/effect/api/api.ts", import.meta.url)).text()
 
-  expect(emitPromise(client)).toEqual(emitPromise(server))
+  expect(source).toContain("export type SessionGetOutput = Session.Info")
+  expect(source).toContain("export type EventSubscribeOutput = OpenCodeEvent")
+  expect(source).not.toContain("HttpApiClient.ForApi")
 })
 
 test("shared DTO schemas construct and decode plain objects", () => {
@@ -54,5 +49,4 @@ test("shared DTO schemas construct and decode plain objects", () => {
   expect(Object.getPrototypeOf(content)).toBe(Object.prototype)
   expect(Prompt.ast.annotations?.identifier).toBe("Prompt")
   expect(SessionMessage.AssistantText.ast.annotations?.identifier).toBe("Session.Message.Assistant.Text")
-  expect(CoreSessionMessage.AssistantText).toBe(SessionMessage.AssistantText)
 })

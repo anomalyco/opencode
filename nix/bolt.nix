@@ -8,10 +8,11 @@
   makeBinaryWrapper,
   models-dev,
   ripgrep,
+  wayland,
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
-  node_modules ? callPackage ./node-modules.nix { },
+  node_modules ? callPackage ./node_modules.nix { },
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "bolt";
@@ -52,9 +53,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   buildPhase = ''
     runHook preBuild
 
-    cd ./packages/opencode
+    cd ./packages/cli
     bun --bun ./script/build.ts --single --skip-install
-    bun --bun ./script/schema.ts schema.json
 
     runHook postBuild
   '';
@@ -74,7 +74,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
           # bun runs sysctl to detect if running on rosetta2
           ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
         )
-      }
+      } ${lib.optionalString stdenvNoCC.hostPlatform.isLinux ''
+        --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ wayland ]}
+      ''}
+
+    ln -s opencode $out/bin/opencode2
 
     runHook postInstall
   '';

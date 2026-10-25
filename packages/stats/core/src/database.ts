@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { migrate as drizzleMigrate } from "drizzle-orm/planetscale-serverless/migrator"
 import { Config, ConfigProvider, Effect, Layer, Schema } from "effect"
 import * as Context from "effect/Context"
-import * as schema from "./database/schema"
 import { Resource } from "sst/resource"
 
 export const DatabaseUrl = Schema.NonEmptyString.pipe(Schema.brand("DatabaseUrl"))
@@ -17,8 +16,8 @@ export class DatabaseSettings extends Schema.Class<DatabaseSettings>("DatabaseSe
 const decodeDatabaseSettings = Schema.decodeUnknownSync(DatabaseSettings)
 
 const config = Config.all({
-  url: Config.nonEmptyString("DATABASE_URL").pipe(Config.withDefault(Resource.StatsDatabase.url)),
-  migrationsDir: Config.nonEmptyString("DATABASE_MIGRATIONS_DIR").pipe(Config.withDefault("./migrations")),
+  url: Config.NonEmptyString("DATABASE_URL").pipe(Config.withDefault(Resource.StatsDatabase.url)),
+  migrationsDir: Config.NonEmptyString("DATABASE_MIGRATIONS_DIR").pipe(Config.withDefault("./migrations")),
 }).pipe(Config.map(decodeDatabaseSettings))
 
 export class DatabaseConfig extends Context.Service<DatabaseConfig, DatabaseSettings>()("@bolt/stats/DatabaseConfig") {
@@ -30,7 +29,7 @@ export class DatabaseConfig extends Context.Service<DatabaseConfig, DatabaseSett
 }
 
 function makeDrizzle(settings: DatabaseSettings) {
-  return drizzle({ client: new Client({ url: settings.url }), schema })
+  return drizzle({ client: new Client({ url: settings.url }) })
 }
 
 export type Drizzle = ReturnType<typeof makeDrizzle>

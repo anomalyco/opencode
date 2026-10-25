@@ -73,7 +73,7 @@ Bolt 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) �
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -85,7 +85,7 @@ Bolt 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) �
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -99,7 +99,7 @@ Bolt 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) �
 }
 ```
 
-这里我们为两个内置模型配置了全局设置：通过 `openai` 提供商访问的 `gpt-5`，以及通过 `anthropic` 提供商访问的 `claude-sonnet-4-20250514`。
+这里我们为两个内置模型配置了全局设置：通过 `openai` 提供商访问的 `gpt-6.1-sol`，以及通过 `anthropic` 提供商访问的 `claude-sonnet-5-5`。
 内置的提供商和模型名称可以在 [Models.dev](https://models.dev) 上查阅。
 
 你还可以为使用中的任何代理配置这些选项。代理配置会覆盖此处的全局选项。[了解更多](/docs/agents/#additional)。
@@ -112,7 +112,7 @@ Bolt 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) �
   "provider": {
     "bolt": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -177,7 +177,7 @@ Bolt 为许多提供商提供了默认变体：
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",

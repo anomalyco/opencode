@@ -17,9 +17,7 @@ async function handler(evt: APIEvent) {
     headers,
     body: req.body,
   })
-  const next = new Response(response.body, response)
-  next.headers.append("set-cookie", cookie(locale))
-  return next
+  return new Response(response.body, response)
 }
 
 export const GET = handler

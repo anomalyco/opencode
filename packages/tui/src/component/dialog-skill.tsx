@@ -1,27 +1,33 @@
 import { TextAttributes } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
-import { createResource, createMemo, createSignal } from "solid-js"
-import { useDialog } from "../ui/dialog"
-import { useSDK } from "../context/sdk"
+import { createResource, createMemo, createSignal, Match, Switch } from "solid-js"
+import { DIALOG_LIST_INSET, useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
+import { useData } from "../context/data"
+import type { LocationRef } from "@opencode/client"
 
 export type DialogSkillProps = {
+  location?: LocationRef
   onSelect: (skill: string) => void
 }
 
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
-  const sdk = useSDK()
-  const { theme } = useTheme()
+  const data = useData()
+  const theme = useTheme()
   dialog.setSize("large")
 
   const [loadError, setLoadError] = createSignal<unknown>()
 
   const [skills] = createResource(() =>
-    sdk.client.app
-      .skills({}, { throwOnError: true })
-      .then((result) => result.data ?? [])
+    Promise.resolve()
+      .then(async () => {
+        const current = data.location.skill.list(props.location)
+        if (current) return current
+        await data.location.skill.sync(props.location)
+        return data.location.skill.list(props.location) ?? []
+      })
       // Catch so the rejected resource never reaches the memo below: reading
       // skills() in an errored state re-throws and tears down the dialog.
       .catch((error) => {
@@ -39,10 +45,9 @@ export function DialogSkill(props: DialogSkillProps) {
     return list.map((skill) => ({
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
-      value: skill.name,
-      category: "Skills",
+      value: skill.id,
       onSelect: () => {
-        props.onSelect(skill.name)
+        props.onSelect(skill.id)
         dialog.clear()
       },
     }))
@@ -51,19 +56,37 @@ export function DialogSkill(props: DialogSkillProps) {
   return (
     <DialogSelect
       title="Skills"
-      placeholder="Search skills…"
       options={options()}
-      renderFilter={!showError()}
-      locked={showError()}
+      renderFilter={!showError() && !skills.loading}
+      locked={showError() || skills.loading}
       emptyView={
-        showError() ? (
-          <box paddingLeft={4} paddingRight={4}>
-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Could not load skills
-            </text>
-            <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
-          </box>
-        ) : undefined
+        <Switch
+          fallback={
+            <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
+              <text fg={theme.text.muted}>No skills available</text>
+            </box>
+          }
+        >
+          <Match when={showError()}>
+            <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
+              <text fg={theme.text.feedback.error.base} attributes={TextAttributes.BOLD}>
+                Could not load skills
+              </text>
+              <text fg={theme.text.muted}>{errorMessage(loadError())}</text>
+              <text fg={theme.text.muted}>Close and reopen Skills to try again.</text>
+            </box>
+          </Match>
+          <Match when={skills.loading}>
+            <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
+              <text fg={theme.text.muted}>Loading skills…</text>
+            </box>
+          </Match>
+        </Switch>
+      }
+      noMatchView={
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
+          <text fg={theme.text.muted}>No skills found</text>
+        </box>
       }
     />
   )

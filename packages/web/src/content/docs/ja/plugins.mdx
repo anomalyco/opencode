@@ -188,10 +188,6 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `session.status`
 - `session.updated`
 
-#### ToDo イベント
-
-- `todo.updated`
-
 #### シェルイベント
 
 - `shell.env`
@@ -233,6 +229,76 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 ```
 
 macOS 上で AppleScript を実行するために `osascript` を使用しています。ここでは通知を送信するために使用しています。
+
+---
+
+### .env の保護
+
+OpenCode が `.env` ファイルを読み取らないようにします。
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### 環境変数を挿入する
+
+すべてのシェル実行 (AI ツールとユーザーターミナル) に環境変数を挿入します。
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### カスタムツール
+
+プラグインは OpenCode にカスタムツールを追加することもできます。
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+`tool` ヘルパーは、OpenCode が呼び出すことができるカスタムツールを作成します。 Zod スキーマ関数を受け取り、次のようなツール定義を返します。
+
+- `description`: ツールの機能
+- `args`: ツールの引数の Zod スキーマ
+- `execute`: ツールが呼び出されたときに実行される関数
+
+カスタムツールは、組み込みツールと並行して OpenCode で使用できます。
 
 :::note
 組み込みツールと同じ名前のプラグインツールを使用すると、プラグインツールが優先されます。

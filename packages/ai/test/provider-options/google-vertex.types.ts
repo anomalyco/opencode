@@ -1,0 +1,17 @@
+import { LLM } from "../../src/effect.js"
+import { GoogleVertex } from "../../src/providers.js"
+
+const model = GoogleVertex.provider.configure({ apiKey: "test" }).model("gemini-2.5-pro")
+
+LLM.request({
+  model,
+  prompt: "Hello",
+  providerOptions: { thinkingConfig: { includeThoughts: true } },
+})
+
+LLM.request({
+  model,
+  prompt: "Hello",
+  // @ts-expect-error Vertex Gemini includeThoughts must be boolean.
+  providerOptions: { thinkingConfig: { includeThoughts: "yes" } },
+})

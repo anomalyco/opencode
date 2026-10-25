@@ -8,140 +8,311 @@ import { ProviderV2 } from "@bolt-ai/core/provider"
 import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@bolt-ai/sdk/v2/types"
 import { Effect } from "effect"
 
-type Overrides = Partial<Omit<PluginContext, "options">>
-
-export function host(overrides: Overrides = {}): PluginContext {
+type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
+  readonly session?: Partial<Plugin.Context["session"]>
+}
+export function host(overrides: Overrides = {}): Plugin.Context {
   return {
+    app: overrides.app ?? { name: "test", version: "test", channel: "test" },
+    location:
+      overrides.location ??
+      new Location.Info({
+        directory: AbsolutePath.make("/workspace"),
+        project: {
+          id: Project.ID.global,
+          directory: AbsolutePath.make("/workspace"),
+          canonical: AbsolutePath.make("/workspace"),
+        },
+      }),
     options: {},
+    rpc:
+      overrides.rpc ??
+      Object.assign(
+        () => {
+          throw new Error("unused rpc.client")
+        },
+        { register: () => Effect.die("unused rpc.register") },
+      ),
     agent: overrides.agent ?? {
+      get: () => Effect.die("unused agent.get"),
+      list: () => Effect.die("unused agent.list"),
       transform: () => Effect.die("unused agent.transform"),
       reload: () => Effect.die("unused agent.reload"),
     },
     aisdk: overrides.aisdk ?? {
-      sdk: () => Effect.die("unused aisdk.sdk"),
-      language: () => Effect.die("unused aisdk.language"),
+      hook: () => Effect.die("unused aisdk.hook"),
     },
-    catalog: overrides.catalog ?? {
-      transform: () => Effect.die("unused catalog.transform"),
-      reload: () => Effect.die("unused catalog.reload"),
+    provider: overrides.provider ?? {
+      list: () => Effect.die("unused provider.list"),
+      get: () => Effect.die("unused provider.get"),
+      transform: () => Effect.die("unused provider.transform"),
+      reload: () => Effect.die("unused provider.reload"),
+    },
+    model: overrides.model ?? {
+      list: () => Effect.die("unused model.list"),
+      default: () => Effect.die("unused model.default"),
+      transform: () => Effect.die("unused model.transform"),
+      reload: () => Effect.die("unused model.reload"),
     },
     command: overrides.command ?? {
+      list: () => Effect.die("unused command.list"),
       transform: () => Effect.die("unused command.transform"),
       reload: () => Effect.die("unused command.reload"),
     },
+    credential: overrides.credential ?? {
+      activate: () => Effect.die("unused credential.activate"),
+    },
+    event: overrides.event ?? {
+      subscribe: () => Stream.empty,
+    },
+    experimental: overrides.experimental ?? {
+      terminal: {
+        read: () => Effect.die("unused experimental.terminal.read"),
+      },
+    },
+    generate: overrides.generate ?? {
+      text: () => Effect.die("unused generate.text"),
+    },
     integration: overrides.integration ?? {
+      list: () => Effect.die("unused integration.list"),
+      get: () => Effect.die("unused integration.get"),
+      connect: {
+        key: () => Effect.die("unused integration.connect.key"),
+        external: () => Effect.die("unused integration.connect.external"),
+      },
+      oauth: {
+        connect: () => Effect.die("unused integration.oauth.connect"),
+        status: () => Effect.die("unused integration.oauth.status"),
+        complete: () => Effect.die("unused integration.oauth.complete"),
+        cancel: () => Effect.die("unused integration.oauth.cancel"),
+      },
+      command: {
+        connect: () => Effect.die("unused integration.command.connect"),
+        status: () => Effect.die("unused integration.command.status"),
+        cancel: () => Effect.die("unused integration.command.cancel"),
+      },
       transform: () => Effect.die("unused integration.transform"),
       reload: () => Effect.die("unused integration.reload"),
       connection: {
         active: () => Effect.die("unused integration.connection.active"),
         resolve: () => Effect.die("unused integration.connection.resolve"),
+        status: () => Effect.die("unused integration.connection.status"),
       },
     },
+    mcp: overrides.mcp ?? {
+      list: () => Effect.die("unused mcp.list"),
+      transform: () => Effect.die("unused mcp.transform"),
+      reload: () => Effect.die("unused mcp.reload"),
+    },
+    permission: overrides.permission ?? {
+      hook: () => Effect.die("unused permission.hook"),
+      list: () => Effect.die("unused permission.list"),
+      get: () => Effect.die("unused permission.get"),
+      reply: () => Effect.die("unused permission.reply"),
+      assert: () => Effect.die("unused permission.assert"),
+    },
     plugin: overrides.plugin ?? {
-      add: () => Effect.die("unused plugin.add"),
-      remove: () => Effect.die("unused plugin.remove"),
+      list: () => Effect.die("unused plugin.list"),
     },
     reference: overrides.reference ?? {
+      list: () => Effect.die("unused reference.list"),
       transform: () => Effect.die("unused reference.transform"),
       reload: () => Effect.die("unused reference.reload"),
     },
     skill: overrides.skill ?? {
+      list: () => Effect.die("unused skill.list"),
       transform: () => Effect.die("unused skill.transform"),
       reload: () => Effect.die("unused skill.reload"),
+    },
+    storage: overrides.storage ?? {
+      get: () => Effect.die("unused storage.get"),
+      set: () => Effect.die("unused storage.set"),
+      remove: () => Effect.die("unused storage.remove"),
+      scan: () => Effect.die("unused storage.scan"),
+    },
+    shell: overrides.shell ?? {
+      hook: () => Effect.die("unused shell.hook"),
+    },
+    tool: overrides.tool ?? {
+      transform: () => Effect.die("unused tool.transform"),
+      reload: () => Effect.die("unused tool.reload"),
+      list: () => Effect.die("unused tool.list"),
+      hook: () => Effect.die("unused tool.hook"),
+    },
+    vcs: overrides.vcs ?? {
+      base: () => Effect.die("unused vcs.base"),
+      get: () => Effect.die("unused vcs.get"),
+      branch: {
+        list: () => Effect.die("unused vcs.branch.list"),
+      },
+      status: () => Effect.die("unused vcs.status"),
+      diff: () => Effect.die("unused vcs.diff"),
+      transform: () => Effect.die("unused vcs.transform"),
+      reload: () => Effect.die("unused vcs.reload"),
+    },
+    worktree: overrides.worktree ?? {
+      list: () => Effect.die("unused worktree.list"),
+      create: () => Effect.die("unused worktree.create"),
+      remove: () => Effect.die("unused worktree.remove"),
+      refresh: () => Effect.die("unused worktree.refresh"),
+      transform: () => Effect.die("unused worktree.transform"),
+      reload: () => Effect.die("unused worktree.reload"),
+    },
+    websearch: overrides.websearch ?? {
+      providers: () => Effect.die("unused websearch.providers"),
+      query: () => Effect.die("unused websearch.query"),
+      transform: () => Effect.die("unused websearch.transform"),
+      reload: () => Effect.die("unused websearch.reload"),
+    },
+    session: {
+      hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
+      list: overrides.session?.list ?? (() => Effect.die("unused session.list")),
+      create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
+      get: overrides.session?.get ?? (() => Effect.die("unused session.get")),
+      remove: overrides.session?.remove ?? (() => Effect.die("unused session.remove")),
+      switchAgent: overrides.session?.switchAgent ?? (() => Effect.die("unused session.switchAgent")),
+      switchModel: overrides.session?.switchModel ?? (() => Effect.die("unused session.switchModel")),
+      prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
+      generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
+      command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
+      compact: overrides.session?.compact ?? (() => Effect.die("unused session.compact")),
+      update: overrides.session?.update ?? (() => Effect.die("unused session.update")),
+      move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
+      synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
+      interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
+      wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
+      context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
     },
   }
 }
 
-export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
+export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
   return {
+    get: (input) =>
+      agent.get(input.agentID).pipe(
+        Effect.flatMap((value) =>
+          value
+            ? Effect.succeed({
+                location: new Location.Info({
+                  directory: AbsolutePath.make("/"),
+                  project: {
+                    id: Project.ID.make("test"),
+                    directory: AbsolutePath.make("/"),
+                    canonical: AbsolutePath.make("/"),
+                  },
+                }),
+                data: agentInfo(value),
+              })
+            : Effect.fail(new Error(`Agent not found: ${input.agentID}`)),
+        ),
+      ),
+    list: () => Effect.die("unused agent.list"),
     reload: agent.reload,
     transform: (callback) =>
-      agent.transform((draft) =>
+      agent.transform((editor) =>
         callback({
-          list: () => draft.list().map(agentInfo),
+          list: () => editor.list().map(agentInfo),
           get: (id) => {
-            const value = draft.get(AgentV2.ID.make(id))
+            const value = editor.get(Agent.ID.make(id))
             return value && agentInfo(value)
           },
-          default: (id) => draft.default(id === undefined ? undefined : AgentV2.ID.make(id)),
+          default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
           update: (id, update) =>
-            draft.update(AgentV2.ID.make(id), (value) => {
+            editor.update(Agent.ID.make(id), (value) => {
               const current = agentInfo(value)
               update(current)
-              Object.assign(value, current, { id: AgentV2.ID.make(current.id) })
+              Object.assign(value, current, { id: Agent.ID.make(current.id) })
             }),
-          remove: (id) => draft.remove(AgentV2.ID.make(id)),
+          remove: (id) => editor.remove(Agent.ID.make(id)),
         }),
       ),
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"] {
+export function providerHost(providers: Provider.Interface): Plugin.Context["provider"] {
   return {
-    reload: catalog.reload,
+    list: () => providers.available().pipe(Effect.map(located)),
+    get: (input) =>
+      providers.get(Provider.ID.make(input.providerID)).pipe(
+        Effect.flatMap((provider) =>
+          provider === undefined
+            ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
+            : Effect.succeed(located(provider)),
+        ),
+      ),
+    reload: providers.reload,
     transform: (callback) =>
-      catalog.transform((draft) =>
+      providers.transform((editor) =>
         callback({
-          provider: {
-            list: () =>
-              draft.provider.list().map((value) => ({
-                provider: providerInfo(value.provider),
-                models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
-              })),
-            get: (id) => {
-              const value = draft.provider.get(ProviderV2.ID.make(id))
-              return (
-                value && {
-                  provider: providerInfo(value.provider),
-                  models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
-                }
-              )
-            },
-            update: (id, update) =>
-              draft.provider.update(ProviderV2.ID.make(id), (value) => {
-                const current = providerInfo(value)
-                update(current)
-                Object.assign(value, current, { id: ProviderV2.ID.make(current.id) })
-              }),
-            remove: (id) => draft.provider.remove(ProviderV2.ID.make(id)),
-          },
-          model: {
-            get: (providerID, modelID) => {
-              const value = draft.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID))
-              return value && modelInfo(value)
-            },
+          list: editor.list,
+          get: (id) => editor.get(Provider.ID.make(id)),
+          add: editor.add,
+          update: (id, update) => editor.update(Provider.ID.make(id), update),
+          remove: (id) => editor.remove(Provider.ID.make(id)),
+          models: {
+            set: (id, models) => editor.models.set(Provider.ID.make(id), models),
             update: (providerID, modelID, update) =>
-              draft.model.update(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID), (value) => {
-                const current = modelInfo(value)
-                update(current)
-                Object.assign(value, current, {
-                  id: ModelV2.ID.make(current.id),
-                  providerID: ProviderV2.ID.make(current.providerID),
-                  family: current.family === undefined ? undefined : ModelV2.Family.make(current.family),
-                  variants: current.variants.map((variant) => ({
-                    ...variant,
-                    id: ModelV2.VariantID.make(variant.id),
-                  })),
-                })
-              }),
-            remove: (providerID, modelID) =>
-              draft.model.remove(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
-            default: {
-              get: () => {
-                const value = draft.model.default.get()
-                return value && { providerID: value.providerID, modelID: value.modelID }
-              },
-              set: (providerID, modelID) =>
-                draft.model.default.set(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
-            },
+              editor.models.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+            remove: (providerID, modelID) => editor.models.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
           },
         }),
       ),
   }
 }
 
-export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
+/** Empty catalog for hosts that only need provider lookups to fall back. */
+export const noProviders: Plugin.Context["provider"] = {
+  list: () => Effect.succeed(located([])),
+  get: () => Effect.die("unused provider.get"),
+  transform: () => Effect.die("unused provider.transform"),
+  reload: () => Effect.die("unused provider.reload"),
+}
+
+export function modelHost(models: Model.Interface): Plugin.Context["model"] {
   return {
+    list: () => models.available().pipe(Effect.map(located)),
+    default: () => models.default().pipe(Effect.map(located)),
+    reload: models.reload,
+    transform: (callback) =>
+      models.transform((editor) =>
+        callback({
+          list: (id) => editor.list(id === undefined ? undefined : Provider.ID.make(id)),
+          get: (providerID, modelID) => editor.get(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          update: (providerID, modelID, update) =>
+            editor.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+          remove: (providerID, modelID) => editor.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          default: {
+            get: editor.default.get,
+            set: (providerID, modelID) => editor.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          },
+          provider: {
+            list: editor.provider.list,
+            get: (id) => editor.provider.get(Provider.ID.make(id)),
+          },
+        }),
+      ),
+  }
+}
+
+export function integrationHost(integration: Integration.Interface): Plugin.Context["integration"] {
+  return {
+    list: () => Effect.die("unused integration.list"),
+    get: () => Effect.die("unused integration.get"),
+    connect: {
+      key: () => Effect.die("unused integration.connect.key"),
+      external: () => Effect.die("unused integration.connect.external"),
+    },
+    oauth: {
+      connect: () => Effect.die("unused integration.oauth.connect"),
+      status: () => Effect.die("unused integration.oauth.status"),
+      complete: () => Effect.die("unused integration.oauth.complete"),
+      cancel: () => Effect.die("unused integration.oauth.cancel"),
+    },
+    command: {
+      connect: () => Effect.die("unused integration.command.connect"),
+      status: () => Effect.die("unused integration.command.status"),
+      cancel: () => Effect.die("unused integration.command.cancel"),
+    },
     reload: integration.reload,
     connection: {
       active: (id) => integration.connection.active(Integration.ID.make(id)),
@@ -149,28 +320,37 @@ export function integrationHost(integration: Integration.Interface): PluginConte
         integration.connection.resolve(
           connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
         ),
+      status: (input) =>
+        integration.connection.status({
+          integrationID: Integration.ID.make(input.integrationID),
+          connection:
+            input.connection.type === "credential"
+              ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
+              : input.connection,
+          status: input.status,
+        }),
     },
     transform: (callback) =>
-      integration.transform((draft) =>
+      integration.transform((editor) =>
         callback({
-          list: () => draft.list().map((value) => ({ id: value.id, name: value.name })),
+          list: () => editor.list().map((value) => ({ id: value.id, name: value.name })),
           get: (id) => {
-            const value = draft.get(Integration.ID.make(id))
+            const value = editor.get(Integration.ID.make(id))
             return value && { id: value.id, name: value.name }
           },
-          update: (id, update) => draft.update(Integration.ID.make(id), update),
-          remove: (id) => draft.remove(Integration.ID.make(id)),
+          update: (id, update) => editor.update(Integration.ID.make(id), update),
+          remove: (id) => editor.remove(Integration.ID.make(id)),
           method: {
-            list: (id) => draft.method.list(Integration.ID.make(id)).map(method),
+            list: (id) => editor.method.list(Integration.ID.make(id)),
             update: (input) => {
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
                 const refresh = input.refresh
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
-                  authorize: (inputs) =>
-                    input.authorize(inputs).pipe(
+                  authorize: (answer) =>
+                    input.authorize(answer).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {
@@ -217,87 +397,111 @@ export function integrationHost(integration: Integration.Interface): PluginConte
                 return
               }
               if (input.method.type === "env") {
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
-                  method: { ...input.method, names: [...input.method.names] },
+                  method: input.method,
                 })
                 return
               }
-              draft.method.update({
+              if (input.method.type === "command") {
+                editor.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: {
+                    ...input.method,
+                    id: Integration.MethodID.make(input.method.id),
+                  },
+                })
+                return
+              }
+              if (input.method.type === "external") {
+                editor.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: {
+                    ...input.method,
+                    id: Integration.MethodID.make(input.method.id),
+                  },
+                })
+                return
+              }
+              editor.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
                 method: input.method,
               })
             },
-            remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
+            remove: (id, item) => editor.method.remove(Integration.ID.make(id), internalMethod(item)),
           },
         }),
       ),
   }
 }
 
-function method(value: Integration.Method) {
-  if (value.type === "env") return { type: value.type, names: [...value.names] }
-  if (value.type === "key") return { type: value.type, label: value.label }
+export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["websearch"] {
+  const location = Location.Info.make({
+    directory: AbsolutePath.make("/tmp/websearch-test"),
+    project: {
+      id: Project.ID.make("websearch-test"),
+      directory: AbsolutePath.make("/tmp/websearch-test"),
+      canonical: AbsolutePath.make("/tmp/websearch-test"),
+    },
+  })
   return {
-    type: value.type,
-    id: value.id,
-    label: value.label,
-    prompts: value.prompts?.map((prompt) => {
-      if (prompt.type === "text") return { ...prompt }
-      return { ...prompt, options: prompt.options.map((option) => ({ ...option })) }
-    }),
+    providers: () => websearch.providers().pipe(Effect.map((data) => ({ location, data }))),
+    query: (input) =>
+      websearch
+        .query({ query: input.query, providerID: input.providerID && WebSearch.ID.make(input.providerID) })
+        .pipe(Effect.map((data) => ({ location, data }))),
+    reload: websearch.reload,
+    transform: (callback) =>
+      websearch.transform((editor) => {
+        callback({
+          add: (definition) =>
+            editor.add({
+              id: WebSearch.ID.make(definition.id),
+              name: definition.name,
+              execute: definition.execute,
+            }),
+          default: {
+            get: editor.default.get,
+            set: (selection) =>
+              editor.default.set(
+                selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
+              ),
+          },
+        })
+      }),
   }
 }
 
-function internalMethod(
-  value: IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod,
-): Integration.Method {
-  if (value.type === "env") return value
-  if (value.type === "key") return value
-  return {
-    ...value,
-    id: Integration.MethodID.make(value.id),
+function internalMethod(value: IntegrationMethod): Integration.Method {
+  if (value.type === "oauth" || value.type === "command" || value.type === "external") {
+    return { ...value, id: Integration.MethodID.make(value.id) }
   }
+  return value
 }
 
-function agentInfo(value: AgentV2.Info) {
+function agentInfo(value: Agent.Info) {
   return {
     ...value,
     model: value.model && { ...value.model },
-    request: { headers: { ...value.request.headers }, body: { ...value.request.body } },
+    request: {
+      settings: { ...value.request.settings },
+      headers: { ...value.request.headers },
+      body: { ...value.request.body },
+    },
     permissions: value.permissions.map((permission) => ({ ...permission })),
   }
 }
 
-function providerInfo(value: ProviderV2.MutableInfo) {
+function located<A>(data: A) {
   return {
-    ...value,
-    api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
-    request: { headers: { ...value.request.headers }, body: { ...value.request.body } },
-  }
-}
-
-function modelInfo(value: ModelV2.Info | ModelV2.MutableInfo) {
-  return {
-    ...value,
-    api: { ...value.api, settings: value.api.settings && { ...value.api.settings } },
-    capabilities: {
-      ...value.capabilities,
-      input: [...value.capabilities.input],
-      output: [...value.capabilities.output],
-    },
-    request: {
-      ...value.request,
-      headers: { ...value.request.headers },
-      body: { ...value.request.body },
-    },
-    variants: value.variants.map((variant) => ({
-      ...variant,
-      headers: { ...variant.headers },
-      body: { ...variant.body },
-    })),
-    time: { ...value.time },
-    cost: value.cost.map((cost) => ({ ...cost, tier: cost.tier && { ...cost.tier }, cache: { ...cost.cache } })),
-    limit: { ...value.limit },
+    location: new Location.Info({
+      directory: AbsolutePath.make("/"),
+      project: {
+        id: Project.ID.make("test"),
+        directory: AbsolutePath.make("/"),
+        canonical: AbsolutePath.make("/"),
+      },
+    }),
+    data,
   }
 }

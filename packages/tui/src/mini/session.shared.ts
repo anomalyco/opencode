@@ -1,0 +1,113 @@
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import { projectedPromptInput } from "../prompt/codec"
+import { requestOptions } from "./catalog.shared"
+import { promptCopy, promptSame } from "./prompt.shared"
+import type { RunInput, RunPrompt } from "./types"
+
+const LIMIT = 200
+
+export type SessionMessages = SessionMessageInfo[]
+
+type Turn = {
+  prompt: RunPrompt
+  provider: string | undefined
+  model: string | undefined
+  variant: string | undefined
+}
+
+export type RunSession = {
+  first: boolean
+  turns: Turn[]
+  model?: NonNullable<RunInput["model"]>
+  variant?: string
+}
+
+export function messagePrompt(message: Pick<SessionMessageUser, "text" | "files" | "agents" | "skills">): RunPrompt {
+  const input = projectedPromptInput(message)
+  return {
+    text: input.text,
+    parts: [
+      ...(input.files ?? []).map((file, index) => ({
+        type: "file" as const,
+        url: file.uri,
+        mime: message.files?.[index]?.mime,
+        filename: file.name,
+        ...(file.description === undefined ? {} : { description: file.description }),
+        source: file.mention
+          ? {
+              type: "file",
+              path: file.name ?? (file.uri.startsWith("data:") ? "inline attachment" : file.uri),
+              text: { start: file.mention.start, end: file.mention.end, value: file.mention.text },
+            }
+          : undefined,
+      })),
+      ...(input.agents ?? []).map((agent) => ({
+        type: "agent" as const,
+        name: agent.name,
+        source: agent.mention
+          ? { start: agent.mention.start, end: agent.mention.end, value: agent.mention.text }
+          : undefined,
+      })),
+      ...(input.skills ?? []).map((skill) => ({
+        type: "skill" as const,
+        id: skill.id,
+        source: skill.mention
+          ? { start: skill.mention.start, end: skill.mention.end, value: skill.mention.text }
+          : undefined,
+      })),
+    ],
+  }
+}
+
+export function createSession(messages: SessionMessages): RunSession {
+  return {
+    first: messages.length === 0,
+    turns: messages.flatMap((message) =>
+      message.type === "user"
+        ? [{ prompt: messagePrompt(message), provider: undefined, model: undefined, variant: undefined }]
+        : [],
+    ),
+  }
+}
+
+export async function resolveCurrentSession(
+  sdk: RunInput["sdk"],
+  sessionID: string,
+  signal?: AbortSignal,
+  limit = LIMIT,
+): Promise<RunSession> {
+  const [response, session] = await Promise.all([
+    sdk.message.list({ sessionID, limit, order: "desc" }, ...requestOptions(signal)),
+    sdk.session.get({ sessionID }, ...requestOptions(signal)),
+  ])
+  const current = createSession(response.data.toReversed())
+  return {
+    ...current,
+    turns: current.turns.map((turn) => ({
+      ...turn,
+      provider: session.model?.providerID,
+      model: session.model?.id,
+      variant: session.model?.variant,
+    })),
+    ...(session.model && {
+      model: { providerID: session.model.providerID, modelID: session.model.id },
+      variant: session.model.variant,
+    }),
+  }
+}
+
+export function sessionHistory(session: RunSession, limit = LIMIT): RunPrompt[] {
+  return session.turns
+    .map((turn) => turn.prompt)
+    .filter((prompt) => prompt.text.trim() || prompt.parts.some((part) => part.type === "file"))
+    .filter((prompt, index, prompts) => index === 0 || !promptSame(prompts[index - 1], prompt))
+    .map(promptCopy)
+    .slice(-limit)
+}
+
+export function sessionVariant(session: RunSession, model: RunInput["model"]): string | undefined {
+  if (!model) return
+  if (session.model?.providerID === model.providerID && session.model.modelID === model.modelID) return session.variant
+
+  return session.turns.findLast((turn) => turn.provider === model.providerID && turn.model === model.modelID)?.variant
+}

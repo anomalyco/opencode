@@ -14,7 +14,6 @@ const categories = [
   "blink.console",
   "blink.user_timing",
   "latencyInfo",
-  "disabled-by-default-devtools.timeline.stack",
   "disabled-by-default-v8.cpu_profiler",
 ]
 
@@ -25,6 +24,7 @@ export async function startChromeTrace(page: Page, name: string) {
   const selectors = process.env.BOLT_PERFORMANCE_SELECTOR_TRACE === "1"
   const file = await prepareChromeTrace(directory, name, selectors)
   const session = await page.context().newCDPSession(page)
+
   try {
     await session.send("Tracing.start", {
       transferMode: "ReturnAsStream",
@@ -34,6 +34,9 @@ export async function startChromeTrace(page: Page, name: string) {
           .map((category) => category.slice(1)),
         includedCategories: [
           ...categories.filter((category) => !category.startsWith("-")),
+          ...(process.env.OPENCODE_PERFORMANCE_STACK_TRACE === "1"
+            ? ["disabled-by-default-devtools.timeline.stack"]
+            : []),
           ...(selectors
             ? ["disabled-by-default-blink.debug", "disabled-by-default-devtools.timeline.invalidationTracking"]
             : []),
@@ -44,6 +47,7 @@ export async function startChromeTrace(page: Page, name: string) {
     await Promise.allSettled([session.detach()])
     throw error
   }
+
   let stopping: Promise<string> | undefined
 
   return () =>
@@ -52,13 +56,17 @@ export async function startChromeTrace(page: Page, name: string) {
         const complete = new Promise<{ stream?: string; dataLossOccurred: boolean }>((resolve) =>
           session.once("Tracing.tracingComplete", resolve),
         )
+
         await session.send("Tracing.end")
         const result = await complete
+
         if (!result.stream) throw new Error(`Chrome trace stream missing: ${file}`)
         const partial = `${file}.partial`
         await writeProtocolStream(session, result.stream, partial)
+
         if (result.dataLossOccurred) throw new Error(`Chrome trace lost data; partial capture retained: ${partial}`)
         await rename(partial, file)
+
         return file
       } finally {
         await Promise.allSettled([session.detach()])
@@ -75,6 +83,7 @@ export async function prepareChromeTrace(
   await mkdir(directory, { recursive: true })
   const run = process.env.BOLT_PERFORMANCE_RUN_ID ?? "manual"
   const hash = createHash("sha256").update(name).digest("hex").slice(0, 8)
+
   return path.join(
     directory,
     `${run}-${name.replace(/[^a-zA-Z0-9_-]/g, "-")}-${hash}-${nonce}${selectors ? "-selectors" : ""}.json`,
@@ -83,10 +92,12 @@ export async function prepareChromeTrace(
 
 async function writeProtocolStream(session: CDPSession, handle: string, file: string) {
   const output = await open(file, "wx")
+
   try {
     while (true) {
       const chunk = await session.send("IO.read", { handle })
-      await output.write(chunk.base64Encoded ? Buffer.from(chunk.data, "base64") : chunk.data)
+      await (chunk.base64Encoded ? output.write(Buffer.from(chunk.data, "base64")) : output.write(chunk.data))
+
       if (chunk.eof) break
     }
   } finally {

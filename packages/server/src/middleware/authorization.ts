@@ -14,7 +14,7 @@ function emptyCredential() {
 }
 
 function decodeCredential(input: string) {
-  return Effect.fromResult(Encoding.decodeBase64String(input)).pipe(
+  return Effect.fromResult(Base64.decodeString(input)).pipe(
     Effect.match({
       onFailure: emptyCredential,
       onSuccess: (header) => {
@@ -40,6 +40,38 @@ function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
   return Effect.succeed(emptyCredential())
 }
 
+const UNAUTHORIZED_MESSAGE = "Authentication required"
+
+// Browsers show a native credentials prompt for a Basic challenge even on fetch, which would stall the web app
+// before it can show its own sign-in screen. Only non-browser clients and page navigations get the challenge.
+function challengeRequest(request: HttpServerRequest.HttpServerRequest) {
+  const mode = request.headers["sec-fetch-mode"]
+  return mode === undefined || mode === "navigate"
+}
+
+// Matches what the Authorization middleware encodes, for requests rejected before the HttpApi runs.
+export function unauthorizedResponse(request: HttpServerRequest.HttpServerRequest) {
+  return HttpServerResponse.jsonUnsafe(
+    { _tag: "UnauthorizedError", message: UNAUTHORIZED_MESSAGE },
+    { status: 401, headers: challengeRequest(request) ? { "www-authenticate": WWW_AUTHENTICATE } : undefined },
+  )
+}
+
+export function authorizedRequest(request: HttpServerRequest.HttpServerRequest, config: ServerAuth.Info) {
+  return credentialFromRequest(request).pipe(
+    Effect.map((credential) => ServerAuth.authorized(credential, config) || authorizedSessionCookie(request, config)),
+  )
+}
+
+function authorizedSessionCookie(request: HttpServerRequest.HttpServerRequest, config: ServerAuth.Info) {
+  const token = request.cookies[ServerAuth.sessionCookieName(request.headers.host)]
+  if (!token) return false
+  // Same-site pages on other ports still send this cookie, so only same-origin requests may use it.
+  const origin = request.headers.origin
+  if (origin !== undefined && URL.parse(origin)?.host !== request.headers.host) return false
+  return ServerAuth.verifySession(token, config)
+}
+
 export const authorizationLayer = Layer.effect(
   Authorization,
   Effect.gen(function* () {
@@ -48,15 +80,25 @@ export const authorizationLayer = Layer.effect(
     return Authorization.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        // Browsers cannot set headers on WebSocket upgrades, so a ticketed PTY connect skips
-        // credential checks here; the connect handler consumes and validates the ticket.
-        if (hasPtyConnectTicketURL(new URL(request.url, "http://localhost"))) return yield* effect
-        const credential = yield* credentialFromRequest(request)
-        if (ServerAuth.authorized(credential, config)) return yield* effect
-        yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-          Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
+        const route = yield* HttpRouter.RouteContext
+        // Ticketed PTY and client MCP connects (browsers cannot set headers on WebSocket upgrades) and pairing links
+        // skip credential checks here; their handlers consume and validate the ticket or code. Use the
+        // route selected by Effect so authorization and dispatch cannot disagree about the request path.
+        const url = new URL(request.url, "http://localhost")
+        if (
+          ((route.route.path === PTY_CONNECT_PATH ||
+            route.route.path === PERSISTENT_PTY_CONNECT_PATH ||
+            route.route.path === MCP_CLIENT_PATH) &&
+            !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)) ||
+          route.route.path === PAIRING_CONNECT_PATH
         )
-        return yield* new UnauthorizedError({ message: "Authentication required" })
+          return yield* effect
+        if (yield* authorizedRequest(request, config)) return yield* effect
+        if (challengeRequest(request))
+          yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+            Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
+          )
+        return yield* new UnauthorizedError({ message: UNAUTHORIZED_MESSAGE })
       }),
     )
   }),

@@ -72,7 +72,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -84,7 +84,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -98,7 +98,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
 }
 ```
 
-ここでは、2 つの組み込みモデル (`gpt-5` プロバイダー経由でアクセスする場合は `openai`、`claude-sonnet-4-20250514` プロバイダー経由でアクセスする場合は `anthropic`) のグローバル設定を構成しています。
+ここでは、2 つの組み込みモデル (`gpt-6.1-sol` プロバイダー経由でアクセスする場合は `openai`、`claude-sonnet-5-5` プロバイダー経由でアクセスする場合は `anthropic`) のグローバル設定を構成しています。
 組み込みプロバイダーとモデル名は、[Models.dev](https://models.dev) で確認できます。
 
 使用しているエージェントに対してこれらのオプションを構成することもできます。ここでエージェント設定はグローバルオプションをオーバーライドします。 [詳細はこちら](/docs/agents/#additional)。
@@ -111,7 +111,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
   "provider": {
     "bolt": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -176,7 +176,7 @@ Bolt には、多くのプロバイダーのデフォルトのバリアントが
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",

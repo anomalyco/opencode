@@ -1,4 +1,4 @@
-export * as SessionStatusEvent from "./session-status-event"
+export * as SessionStatusEvent from "./session-status-event.js"
 
 import { Schema } from "effect"
 import { Event } from "./event"
@@ -31,8 +31,10 @@ export const Info = Schema.Union([
 ]).annotate({ identifier: "SessionStatus" })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export const Status = Event.define({
+export const Status = Event.ephemeral({
   type: "session.status",
+  // The bare SessionStatus identifier belongs to the status union above.
+  identifier: "SessionStatusUpdated",
   schema: {
     sessionID: SessionID,
     status: Info,
@@ -40,7 +42,7 @@ export const Status = Event.define({
 })
 
 // deprecated
-export const Idle = Event.define({
+export const Idle = Event.ephemeral({
   type: "session.idle",
   schema: {
     sessionID: SessionID,

@@ -1,0 +1,69 @@
+---
+import { formatOpenApiValue, openApiSchemaLabel, type OpenApiSchema } from "../lib/openapi"
+
+interface Props {
+  schema?: OpenApiSchema
+  required?: boolean
+}
+
+const schema = Astro.props.schema
+const reference = schema?.$ref?.split("/").at(-1)
+const variants = schema?.anyOf ?? schema?.oneOf ?? schema?.allOf
+const variantOperator = schema?.allOf ? "and" : "or"
+const constraints = schema
+  ? [
+      schema.pattern && `pattern ${schema.pattern}`,
+      schema.minimum !== undefined && `min ${schema.minimum}`,
+      schema.maximum !== undefined && `max ${schema.maximum}`,
+      schema.exclusiveMinimum !== undefined && `> ${schema.exclusiveMinimum}`,
+      schema.exclusiveMaximum !== undefined && `< ${schema.exclusiveMaximum}`,
+      schema.minLength !== undefined && `min length ${schema.minLength}`,
+      schema.maxLength !== undefined && `max length ${schema.maxLength}`,
+      schema.minItems !== undefined && `min items ${schema.minItems}`,
+      schema.maxItems !== undefined && `max items ${schema.maxItems}`,
+    ].filter((value): value is string => typeof value === "string")
+  : []
+---
+
+{
+  reference ? (
+    <a class="api-schema-link" href={`#schema-${reference}`}>{reference}</a>
+  ) : (
+    <div class="api-schema-node">
+      <div class="api-schema-heading">
+        <code>{openApiSchemaLabel(schema)}</code>
+        {Astro.props.required && <span class="api-required">required</span>}
+        {schema?.deprecated && <span class="api-deprecated">deprecated</span>}
+      </div>
+      {schema?.description && <p>{schema.description}</p>}
+      {schema?.enum && <div class="api-schema-values"><span>Values</span><code>{schema.enum.map(formatOpenApiValue).join(" | ")}</code></div>}
+      {schema?.const !== undefined && <div class="api-schema-values"><span>Constant</span><code>{formatOpenApiValue(schema.const)}</code></div>}
+      {schema?.default !== undefined && <div class="api-schema-values"><span>Default</span><code>{formatOpenApiValue(schema.default)}</code></div>}
+      {constraints.length > 0 && <div class="api-schema-constraints">{constraints.join(", ")}</div>}
+      {variants && (
+        <div class="api-schema-variants">
+          {variants.map((variant, index) => (
+            <div>
+              {index > 0 && <span class="api-schema-operator">{variantOperator}</span>}
+              <Astro.self schema={variant} />
+            </div>
+          ))}
+        </div>
+      )}
+      {schema?.type === "array" && schema.items && <div class="api-schema-items"><span>Items</span><Astro.self schema={schema.items} /></div>}
+      {schema?.properties && (
+        <div class="api-schema-properties">
+          {Object.entries(schema.properties).map(([name, property]) => (
+            <div class="api-schema-property">
+              <code>{name}</code>
+              <Astro.self schema={property} required={schema.required?.includes(name)} />
+            </div>
+          ))}
+        </div>
+      )}
+      {typeof schema?.additionalProperties === "object" && (
+        <div class="api-schema-items"><span>Additional properties</span><Astro.self schema={schema.additionalProperties} /></div>
+      )}
+    </div>
+  )
+}

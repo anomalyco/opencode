@@ -3,16 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, en ny anonym model, er tilgængelig i en begrænset periode",
   "go.referral.ended.label": "Advarsel",
   "go.referral.ended":
     "Henvisningsprogrammet er afsluttet. Henvisningslinks giver ikke længere kredit til dig eller den, der delte dem.",
-  "go.graph.bonus": "{{count}}× forbrug",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
-  "nav.changelog": "Changelog",
-  "nav.discord": "Discord",
-  "nav.x": "X",
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Log ind",
@@ -41,6 +36,7 @@ export const dict = {
   "email.placeholder": "E-mailadresse",
   "email.subscribe": "Tilmeld",
   "email.success": "Næsten færdig - tjek din indbakke og bekræft din e-mailadresse",
+  "email.error": "Tilmeldingen mislykkedes. Prøv igen.",
 
   "notFound.title": "Ikke fundet | opencode",
   "notFound.heading": "404 - Siden blev ikke fundet",
@@ -51,18 +47,7 @@ export const dict = {
   "notFound.logoLightAlt": "bolt logo light",
   "notFound.logoDarkAlt": "bolt logo dark",
 
-  "user.logout": "Log ud",
-
-  "auth.callback.error.codeMissing": "Ingen autorisationskode fundet.",
-
-  "workspace.select": "Vælg workspace",
-  "workspace.createNew": "+ Opret nyt workspace",
-  "workspace.modal.title": "Opret nyt workspace",
-  "workspace.modal.placeholder": "Indtast workspace-navn",
-
   "common.cancel": "Annuller",
-  "common.creating": "Opretter...",
-  "common.create": "Opret",
   "common.contactUs": "Kontakt os",
 
   "common.videoUnsupported": "Din browser understøtter ikke video-tagget.",
@@ -108,14 +93,6 @@ export const dict = {
   "temp.logoDarkAlt": "bolt logo dark",
 
   "home.banner.badge": "Ny",
-  "home.banner.text": "Introduktion af Tabs til Desktop.",
-  "home.banner.platforms": "Tilgængelig på macOS, Windows og Linux",
-  "home.banner.downloadNow": "Download nu",
-  "home.banner.downloadBetaNow": "Download desktop-betaen nu",
-  "home.promo.title": "Introduktion af Tabs til Desktop",
-  "home.promo.body": "Organiser dit arbejde og aktive sessioner med faner.",
-  "home.promo.cta": "Download den nyeste version for at komme i gang.",
-  "home.promo.close": "Luk meddelelsen om Desktop-appen",
 
   "home.hero.title": "Den open source AI-kodningsagent",
   "home.hero.subtitle.a": "Gratis modeller inkluderet, eller forbind enhver model fra enhver udbyder,",
@@ -130,8 +107,6 @@ export const dict = {
   "home.what.lsp.body": "Indlæser automatisk de rigtige LSP'er til LLM'en",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Start flere agenter parallelt på det samme projekt",
-  "home.what.shareLinks.title": "Del links",
-  "home.what.shareLinks.body": "Del et link til enhver session til reference eller debugging",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Log ind med GitHub for at bruge din Copilot-konto",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -180,7 +155,7 @@ export const dict = {
   "home.faq.a6":
     "Bolt er 100% gratis at bruge. Det kommer også med et sæt gratis modeller. Der kan være ekstra omkostninger, hvis du forbinder en anden udbyder.",
   "home.faq.q7": "Hvad med data og privatliv?",
-  "home.faq.a7.p1": "Dine data gemmes kun, når du bruger vores gratis modeller eller opretter delbare links.",
+  "home.faq.a7.p1": "Dine data gemmes kun, når du bruger vores gratis modeller.",
   "home.faq.a7.p2.beforeModels": "Læs mere om",
   "home.faq.a7.p2.modelsLink": "vores modeller",
   "home.faq.a7.p2.and": "og",
@@ -221,7 +196,7 @@ export const dict = {
     "For at dække omkostninger tilføjer Bolt kun et lille betalingsgebyr på $1.23 per $20 saldo-opfyldning.",
   "zen.faq.q5": "Hvad med data og privatliv?",
   "zen.faq.a5.beforeExceptions":
-    "Alle Zen-modeller hostes i USA. Udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning, med de",
+    "Alle Zen-modeller hostes i USA og EU. Udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning, med de",
   "zen.faq.a5.exceptionsLink": "følgende undtagelser",
   "zen.faq.q6": "Kan jeg sætte udgiftsgrænser?",
   "zen.faq.a6": "Ja, du kan sætte månedlige udgiftsgrænser i din konto.",
@@ -254,10 +229,10 @@ export const dict = {
   "zen.how.step2.link": "betal per request",
   "zen.how.step2.afterLink": "med nul markups",
   "zen.how.step3.title": "Auto-top op",
-  "zen.how.step3.body": "når din saldo når $5, tilføjer vi automatisk $20",
+  "zen.how.step3.body": "aktivér valgfri automatisk opfyldning, og vælg din saldogrænse og opfyldningsbeløbet",
   "zen.privacy.title": "Dit privatliv er vigtigt for os",
   "zen.privacy.beforeExceptions":
-    "Alle Zen-modeller er hostet i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
+    "Alle Zen-modeller er hostet i USA og EU. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
   "go.title": "Bolt Go | Kodningsmodeller til lav pris for alle",
@@ -268,10 +243,7 @@ export const dict = {
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
 
-  "go.cta.start": "Abonner på Go",
-  "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
-  "go.cta.price": "$10/måned",
   "go.plans.month": "om måneden",
   "go.plans.plus.cta": "Abonnér på Go Plus",
   "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
@@ -284,23 +256,18 @@ export const dict = {
   "go.plans.limits": "Grænser",
   "go.plans.description": "Anslåede anmodninger pr. 5 timer og månedlige grænser pr. model",
   "go.plans.legend": "Abonnementer",
-  "go.pricing.body": "Brug med enhver agent. $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
-  "go.graph.free": "Gratis",
-  "go.graph.freePill": "Big Pickle og gratis modeller",
-  "go.graph.go": "Go",
-  "go.graph.label": "Forespørgsler pr. 5 timer",
   "go.graph.period": "Forbrug",
   "go.graph.model": "Model",
   "go.graph.requests": "Estimerede anmodninger / 5 timer",
   "go.graph.allowance": "Månedligt forbrug",
   "go.graph.new": "Ny",
+  "go.graph.bonus": "{{count}}× forbrug",
   "go.graph.scale": "Ikke-lineær skala for anmodninger",
   "go.graph.showAll": "Vis alle {{count}} modeller",
   "go.graph.showLess": "Vis færre modeller",
   "go.graph.limitedRegions": "begrænsede regioner",
   "go.graph.limitedTime": "begrænset periode",
   "go.graph.usageLimits": "Forbrugsgrænser",
-  "go.graph.aria": "Forespørgsler pr. 5t: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
@@ -371,7 +338,6 @@ export const dict = {
   "go.faq.a5.retention0": "0 dage",
   "go.faq.a5.used": "Brugt",
   "go.faq.a5.notUsed": "Ikke brugt",
-  "go.faq.a5.noAgreement": "Ingen aftale",
   "go.faq.a5.notZdr": "Ikke ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API.",
@@ -381,11 +347,8 @@ export const dict = {
     "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
   "go.faq.a5.learnMore": "Læs mere",
   "go.faq.a5.deepseekRetention":
-    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 30. september 2026.",
+    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. oktober 2026.",
 
-  "go.faq.a5.beforeExceptions":
-    "Go-modeller hostes i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning, med de",
-  "go.faq.a5.exceptionsLink": "følgende undtagelser",
   "go.faq.q6": "Kan jeg tanke kredit op?",
   "go.faq.a6": "Hvis du har brug for mere forbrug, kan du tanke kredit op på din konto.",
   "go.faq.q7": "Kan jeg annullere?",
@@ -395,7 +358,7 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter i rullende perioder: 20 % af den månedlige kvote pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter i rullende perioder: 20 % af den månedlige kvote pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
   "go.faq.q10": "Kan jeg få en refusion?",
   "go.faq.a10":
     "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt din Go-kvote i den pågældende faktureringsperiode. {{contact}} for at anmode om en refusion.",
@@ -780,6 +743,7 @@ export const dict = {
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
   "download.platform.windowsX64": "Windows (x64)",
+  "download.platform.windowsArm64": "Windows (ARM64)",
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
@@ -814,6 +778,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefonnummer",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Hvad er jeres virksomheds nuværende månedlige forbrug på inferens (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Vælg et interval (valgfrit)",
+  "enterprise.form.inferenceSpend.none": "Intet forbrug endnu",
+  "enterprise.form.inferenceSpend.under1k": "Under $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K eller mere",
   "enterprise.form.message.label": "Hvilket problem prøver du at løse?",
   "enterprise.form.message.placeholder": "Vi har brug for hjælp med...",
   "enterprise.form.send": "Send",
@@ -822,7 +794,9 @@ export const dict = {
   "enterprise.form.success.submitted": "Formular indsendt med succes.",
   "enterprise.form.error.allFieldsRequired": "Alle felter er påkrævet.",
   "enterprise.form.error.invalidEmailFormat": "Ugyldigt e-mailformat.",
+  "enterprise.form.error.invalidInferenceSpend": "Vælg et gyldigt interval for inferensforbrug.",
   "enterprise.form.error.internalServer": "Intern serverfejl.",
+  "enterprise.form.error.captcha": "Captcha-verificering mislykkedes. Prøv igen.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hvad er Bolt Enterprise?",
   "enterprise.faq.a1":
@@ -849,38 +823,4 @@ export const dict = {
   "changelog.hero.subtitle": "Nye opdateringer og forbedringer til Bolt",
   "changelog.empty": "Ingen changelog-indlæg fundet.",
   "changelog.viewJson": "Se JSON",
-
-  "bench.list.title": "Benchmark",
-  "bench.list.heading": "Benchmarks",
-  "bench.list.table.agent": "Agent",
-  "bench.list.table.model": "Model",
-  "bench.list.table.score": "Score",
-  "bench.submission.error.allFieldsRequired": "Alle felter er påkrævet.",
-
-  "bench.detail.title": "Benchmark - {{task}}",
-  "bench.detail.notFound": "Opgave ikke fundet",
-  "bench.detail.na": "Ikke tilgængelig",
-  "bench.detail.labels.agent": "Agent",
-  "bench.detail.labels.model": "Model",
-  "bench.detail.labels.task": "Opgave",
-  "bench.detail.labels.repo": "Repo",
-  "bench.detail.labels.from": "Fra",
-  "bench.detail.labels.to": "Til",
-  "bench.detail.labels.prompt": "Prompt",
-  "bench.detail.labels.commit": "Commit",
-  "bench.detail.labels.averageDuration": "Gennemsnitlig varighed",
-  "bench.detail.labels.averageScore": "Gennemsnitlig score",
-  "bench.detail.labels.averageCost": "Gennemsnitlig omkostning",
-  "bench.detail.labels.summary": "Resumé",
-  "bench.detail.labels.runs": "Kørsler",
-  "bench.detail.labels.score": "Score",
-  "bench.detail.labels.base": "Basis",
-  "bench.detail.labels.penalty": "Straf",
-  "bench.detail.labels.weight": "vægt",
-  "bench.detail.table.run": "Kørsel",
-  "bench.detail.table.score": "Score (Basis - Straf)",
-  "bench.detail.table.cost": "Omkostning",
-  "bench.detail.table.duration": "Varighed",
-  "bench.detail.run.title": "Kørsel {{n}}",
-  "bench.detail.rawJson": "Rå JSON",
 } satisfies Dict

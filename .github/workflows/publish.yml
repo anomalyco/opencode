@@ -4,11 +4,8 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
-      - ci
       - dev
       - beta
-      - fix/npm-native-binary-install
-      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
@@ -23,6 +20,10 @@ on:
         description: "Override version (optional)"
         required: false
         type: string
+      release_notes:
+        description: "Reviewed V2 release notes for CHANGELOG.md and the Discord announcement (optional)"
+        required: false
+        type: string
 
 # Serialize all publish runs per ref. Keying on dispatch inputs let a
 # push-triggered run (empty inputs) race a dispatched bump run on the same
@@ -33,6 +34,9 @@ permissions:
   id-token: write
   contents: write
   packages: write
+
+env:
+  OPENCODE_CHANNEL: ${{ (github.ref_name == 'dev' && !inputs.bump && !inputs.version && 'dev') || '' }}
 
 jobs:
   version:
@@ -69,7 +73,6 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
-      repo: ${{ steps.version.outputs.repo }}
 
   build-cli:
     needs: version
@@ -81,6 +84,8 @@ jobs:
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
+        with:
+          bun-version: 1.4.4
 
       - name: Setup git committer
         id: committer
@@ -89,11 +94,9 @@ jobs:
           opencode-app-id: ${{ vars.BOLT_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Build
-        id: build
-        run: |
-          ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
-          ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+      - name: Build legacy CLI
+        if: github.ref_name != 'dev' && github.ref_name != 'beta'
+        run: ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
           BOLT_VERSION: ${{ needs.version.outputs.version }}
           BOLT_RELEASE: ${{ needs.version.outputs.release }}
@@ -111,6 +114,7 @@ jobs:
           path: packages/opencode/dist/man/*.1
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.ref_name != 'dev' && github.ref_name != 'beta'
         with:
           name: opencode-cli
           path: |
@@ -118,6 +122,7 @@ jobs:
             packages/opencode/dist/@bolt-builder/bolt-cli-linux*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.ref_name != 'dev' && github.ref_name != 'beta'
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist/@bolt-builder/bolt-cli-windows*
@@ -131,9 +136,7 @@ jobs:
       version: ${{ needs.version.outputs.version }}
 
   sign-cli-macos:
-    needs:
-      - build-cli
-      - version
+    needs: build-cli
     runs-on: macos-26
     if: github.repository == 'anomalyco/bolt'
     steps:
@@ -147,15 +150,8 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-cli
-          path: packages/opencode/dist
-
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          name: opencode-preview-cli-unsigned
+          path: packages/cli/dist
 
       - name: Sign macOS CLI binaries
         run: |
@@ -172,7 +168,7 @@ jobs:
               --force \
               --timestamp \
               --options runtime \
-              --entitlements packages/opencode/script/entitlements.plist \
+              --entitlements packages/cli/script/entitlements.plist \
               --sign "$identity" \
               "$file"
             codesign --verify --deep --strict --verbose=4 "$file"
@@ -214,8 +210,7 @@ jobs:
 
   sign-cli-windows:
     needs:
-      - build-cli
-      - version
+      - sign-cli-macos
     runs-on: blacksmith-4vcpu-windows-2025
     if: github.repository == 'bolt-builder/bolt-cli'
     env:
@@ -335,6 +330,7 @@ jobs:
             packages/opencode/dist/bolt-cli-windows-x64-baseline
 
   build-electron:
+    # Desktop packaging re-signs the bundled CLI on macOS and Windows, so it starts from the unsigned build.
     needs:
       - version
     if: github.repository == 'bolt-builder/bolt-cli'
@@ -362,6 +358,7 @@ jobs:
           - host: "windows-2025"
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
+            bun_install_flags: --cpu=*
           - host: "blacksmith-4vcpu-windows-2025"
             target: x86_64-pc-windows-msvc
             platform_flag: --win
@@ -392,6 +389,11 @@ jobs:
           else
             echo "has_api_key=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-preview-cli-unsigned
+          path: packages/cli/dist
 
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         if: runner.os == 'macOS' && steps.apple_secrets.outputs.has_cert == 'true'
@@ -474,6 +476,8 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
       - name: Package
         if: needs.version.outputs.release
@@ -579,12 +583,16 @@ jobs:
       - version
       - build-cli
       - sign-cli-macos
+      - build-node-app-archive
+      - build-node-cli
       - sign-cli-windows
       - build-electron
     # Publish whatever succeeded: the CLI build is required, but failed
     # electron/signing legs only skip their own assets instead of blocking the release.
     if: always() && !cancelled() && needs.version.result == 'success' && needs.build-cli.result == 'success'
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Versioned and beta releases wait for approval in the release environment; dev previews do not.
+    environment: ${{ needs.version.outputs.release && 'release' || '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -611,6 +619,7 @@ jobs:
       # CLI artifacts contain bolt-cli-<os>-<arch>/ dirs; restore them under dist/@bolt-builder
       # to match the layout packages/opencode/script/publish.ts expects.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name != 'dev' && github.ref_name != 'beta'
         with:
           name: opencode-cli
           path: packages/opencode/dist/@bolt-builder
@@ -624,6 +633,7 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name != 'dev' && github.ref_name != 'beta'
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist/@bolt-builder
@@ -636,12 +646,20 @@ jobs:
           path: packages/opencode/dist/@bolt-builder
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name != 'beta'
         with:
           name: bolt-preview-cli
           path: packages/cli/dist
 
       # Desktop artifacts may be partial when some electron matrix legs failed;
       # download whatever exists and release only those platforms.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.build-node-cli.result == 'success'
+        with:
+          pattern: opencode-node-cli-*
+          path: packages/cli/dist/node
+          merge-multiple: true
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release
         continue-on-error: true
@@ -693,3 +711,24 @@ jobs:
           LATEST_YML_DIR: /tmp/latest-yml
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          OPENCODE_DESKTOP_DIST: /tmp/desktop
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  notify-discord-v2:
+    needs:
+      - version
+      - publish
+    if: ${{ !cancelled() && github.repository == 'anomalyco/opencode' && github.ref_name == 'dev' && needs.version.outputs.release && needs.publish.result == 'success' }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: release
+    steps:
+      # Unlike dev, V2 publishes a tag rather than a GitHub Release event.
+      - name: Announce V2 release in Discord
+        uses: SethCohen/github-releases-to-discord@24d166886aee4646d448c8a389ff9e1ebcab3682 # v1.20.0
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          release_name: OpenCode V2 ${{ needs.version.outputs.tag }}
+          release_body: ${{ inputs.release_notes }}
+          release_html_url: https://github.com/${{ github.repository }}/tree/${{ needs.version.outputs.tag }}

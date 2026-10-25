@@ -1,0 +1,683 @@
+import { expect, test, type Locator, type Page } from "@playwright/test"
+import { NO_PROVIDER, T0, expectPath, provider, sessionHref } from "../utils/app"
+import { openDraft, openSession } from "../utils/workspace"
+
+test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
+test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
+  page,
+  context,
+}) => {
+  await page.clock.setFixedTime(T0)
+  await context.route("https://**", (route) => route.fulfill({ body: "Sign in" }))
+  const sessionID = "ses_free_limit"
+  const model = { id: "big-pickle", providerID: "opencode" }
+  const state = { authorized: false }
+
+  const view = await openSession(page, {
+    name: "FreeLimit",
+    sessions: [{ id: sessionID, agent: "build", model }],
+    onFileWrite: () => undefined,
+    provider: () => ({
+      all: [
+        {
+          id: "opencode",
+          name: "OpenCode",
+          models: {
+            "big-pickle": { id: "big-pickle", name: "Big Pickle", cost: { input: 0, output: 0 }, limit: { context: 200_000 } },
+          },
+        },
+        ...(state.authorized
+          ? [
+              {
+                id: "opencode-go",
+                integrationID: "opencode-go",
+                name: "OpenCode Go",
+                models: {
+                  "glm-5-go": { id: "glm-5-go", name: "GLM-5 Go", cost: { input: 1, output: 1 }, limit: { context: 200_000 } },
+                },
+              },
+            ]
+          : []),
+      ],
+      connected: state.authorized ? ["opencode", "opencode-go"] : ["opencode"],
+      default: { build: "opencode/big-pickle" },
+    }),
+    integrations: () => [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }] : [],
+      },
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Anomaly", method: "oauth" }] : [],
+      },
+    ],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
+    onIntegrationOAuthStatus: () => {
+      state.authorized = true
+
+      return "complete"
+    },
+    pageMessages: () => ({
+      items: [
+        { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+        { id: "msg_free_assistant", type: "assistant", agent: "build", model, content: [], time: { created: T0 + 1 } },
+      ],
+    }),
+  })
+
+  await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+
+  const error = {
+    type: "provider.free-limit",
+    message: "Free usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+
+  const durable = (seq: number) => ({ aggregateID: sessionID, seq, version: 1 as const })
+  const location = { directory: view.directory }
+
+  await view.push([
+    {
+      id: "evt_free_limit_1",
+      created: T0 + 2,
+      type: "session.step.failed",
+      location,
+      durable: durable(1),
+      data: { sessionID, assistantMessageID: "msg_free_assistant", error },
+    },
+  ])
+
+  const upsell = page.getByRole("dialog", { name: "Free limit reached" })
+  await expect(upsell).toContainText("Your free messages reset at")
+  await expect(page.getByText(/^You've used today's free messages\. They reset at /)).toBeVisible()
+  await expect(view.editor).toHaveText("Refactor the parser")
+  await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
+
+  // Subscribe -> Go sign-in -> Continue switches the model in the current session without opening a new draft tab.
+  await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
+  const connect = page.getByRole("dialog")
+  await connect.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+  const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
+  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
+  await connected.getByRole("button", { name: "Continue", exact: true }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expectPath(page, sessionHref(sessionID))
+  await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)
+  await expect(page.locator('[data-action="composer-model"]')).toContainText("GLM-5 Go")
+  await expect(view.editor).toHaveText("Refactor the parser")
+
+  // After the 24-hour window, "Don't show again" permanently suppresses the dialog across reloads, and an attachment-only draft survives.
+  const day2 = T0 + 2 * 86_400_000
+  await page.clock.setFixedTime(day2)
+
+  await view.push([
+    {
+      id: "evt_free_limit_2",
+      created: day2 + 1,
+      type: "session.step.started",
+      location,
+      durable: durable(2),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_2", agent: "build", model, started: day2 + 1 },
+    },
+    {
+      id: "evt_free_limit_3",
+      created: day2 + 2,
+      type: "session.step.failed",
+      location,
+      durable: durable(3),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_2", error },
+    },
+  ])
+
+  await upsell.getByRole("button", { name: "Don't show again", exact: true }).click()
+  await expect(upsell).toHaveCount(0)
+
+  const later = T0 + 4 * 86_400_000
+  await page.clock.setFixedTime(later)
+  await page.reload()
+  await expect(view.editor).toBeVisible()
+  await view.editor.fill("")
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "diagram.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("png-bytes"),
+  })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("diagram.png")
+
+  await view.push([
+    {
+      id: "evt_free_limit_4",
+      created: later + 3,
+      type: "session.step.started",
+      location,
+      durable: durable(4),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_3", agent: "build", model, started: later + 3 },
+    },
+    {
+      id: "evt_free_limit_5",
+      created: later + 4,
+      type: "session.step.failed",
+      location,
+      durable: durable(5),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_3", error },
+    },
+  ])
+
+  await expect(page.getByRole("status").filter({ hasText: "You've used today's free messages." })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("diagram.png")
+  await expect(view.editor).toHaveText("")
+})
+
+test("a catalog refresh cannot replace an existing session's model", async ({ page }) => {
+  const alpha = { id: "alpha", name: "Alpha", variants: { high: {} } }
+  const beta = { id: "beta", name: "Beta" }
+  const catalog = { current: provider(alpha, beta) }
+  const switches: unknown[] = []
+  const prompts: unknown[] = []
+  const sessionID = "ses_catalog_selection"
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/model`)
+      switches.push(request.postDataJSON())
+  })
+
+  const view = await openSession(page, {
+    name: "CatalogSelection",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode", variant: "high" } }],
+    provider: () => catalog.current,
+    onPrompt: (input) => void prompts.push(input.body),
+    seed: { storage: { "opencode.global.dat:model": { recent: [{ providerID: "opencode", modelID: "beta" }] } } },
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await expect(control).toHaveText("Alpha")
+  await view.editor.fill("Keep my selected model")
+
+  catalog.current = provider(beta)
+  await view.push([
+    {
+      id: "evt_catalog_missing",
+      created: T0 + 1,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("Select model")
+  await view.editor.press("Enter")
+  await expect(page.getByText("Select an agent and model", { exact: true })).toBeVisible()
+  await expect(view.editor).toHaveText("Keep my selected model")
+  expect(switches).toEqual([])
+  expect(prompts).toEqual([])
+
+  catalog.current = provider(alpha, beta)
+  await view.push([
+    {
+      id: "evt_catalog_restored",
+      created: T0 + 2,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("Alpha")
+  await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(switches).toEqual([{ model: { id: "alpha", providerID: "opencode", variant: "high" } }])
+
+  catalog.current = provider(beta)
+  await view.push([
+    {
+      id: "evt_catalog_removed",
+      created: T0 + 3,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("Select model")
+  await control.click()
+  await page
+    .getByRole("dialog", { name: "Select model" })
+    .getByRole("button", { name: "Beta Free", exact: true })
+    .click()
+  await expect(control).toHaveText("Beta")
+  await view.editor.fill("Use the replacement I chose")
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(2)
+  expect(switches).toEqual([
+    { model: { id: "alpha", providerID: "opencode", variant: "high" } },
+    { model: { id: "beta", providerID: "opencode" } },
+  ])
+})
+
+async function draft(page: Page) {
+  const { editor } = await openDraft(page, { name: "ComposerDraft", provider: NO_PROVIDER })
+  await editor.click()
+
+  return editor
+}
+
+async function expectCaretVisible(input: Locator) {
+  await expect
+    .poll(() =>
+      input.evaluate((element) => {
+        const selection = window.getSelection()
+
+        if (!selection?.isCollapsed || !selection.rangeCount || !element.contains(selection.anchorNode)) return false
+        const caret = selection.getRangeAt(0).getBoundingClientRect()
+        const viewport = (element.closest("[data-scrollable]") ?? element).getBoundingClientRect()
+
+        return caret.height > 0 && caret.top >= viewport.top - 1 && caret.bottom <= viewport.bottom + 1
+      }),
+    )
+    .toBe(true)
+}
+
+test("keeps a 25000-line crash report editable in a new session", async ({ page }) => {
+  const input = await draft(page)
+  const text = "Thread 0 Crashed:\n" + "0   Example  0x0000000100000000 frame + 32\n".repeat(25000) + "End of report"
+  await page.evaluate((text) => navigator.clipboard.writeText(text), text)
+
+  const events = await input.evaluateHandle((element) => {
+    const events = { count: 0 }
+    element.addEventListener("input", () => events.count++)
+
+    return events
+  })
+
+  await page.keyboard.press("ControlOrMeta+V")
+  await expect.poll(async () => (await input.innerText()) === text).toBe(true)
+  expect(await events.evaluate((events) => events.count)).toBe(1)
+  await expect(input).toBeFocused()
+  await expectCaretVisible(input)
+  const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll.locator(".scroll-view__viewport")).toHaveCSS("scrollbar-width", "none")
+  await expect(scroll.locator(".scroll-view__thumb")).toBeVisible()
+  await page.keyboard.type("!")
+  await expect.poll(async () => (await input.innerText()) === text + "!").toBe(true)
+  await expectCaretVisible(input)
+  const thumb = await scroll.locator(".scroll-view__thumb").boundingBox()
+  const bounds = await scroll.boundingBox()
+
+  if (!thumb || !bounds) throw new Error("Missing composer scrollbar bounds")
+  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(thumb.x + thumb.width / 2, bounds.y + 8 + thumb.height / 2)
+  await page.mouse.up()
+  await expect(scroll.locator(".scroll-view__viewport")).toHaveJSProperty("scrollTop", 0)
+  await expect(input).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+Home")
+  await page.keyboard.press("ControlOrMeta+End")
+  await expectCaretVisible(input)
+})
+
+test("a key-up never moves the caret back after later navigation", async ({ page }) => {
+  const input = await draft(page)
+  await input.pressSequentially("first line")
+  await expect(input).toHaveText("first line")
+
+  // Navigation can land before the next frame; the cursor a key-up recorded must not overwrite it there.
+  const offset = await input.evaluate(async (element) => {
+    const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!
+    const selection = window.getSelection()!
+    selection.collapse(text, 0)
+    element.dispatchEvent(new KeyboardEvent("keyup", { key: "Home", bubbles: true }))
+    selection.collapse(text, text.textContent!.length)
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+    return selection.anchorOffset
+  })
+
+  expect(offset).toBe("first line".length)
+})
+
+for (const [width, direction] of [
+  [390, "rtl"],
+  [1280, "ltr"],
+] as const) {
+  test(`reveals a multiline paste in the middle at ${width}px in ${direction}`, async ({ page }) => {
+    const input = await draft(page)
+    await page.setViewportSize({ width, height: 800 })
+    await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
+    const suffix = "\nExisting trailing content".repeat(100)
+    await input.fill("Before " + suffix)
+    await input.press("ControlOrMeta+Home")
+    await input.press("ArrowRight")
+    const text = "Pasted line /tmp/example.ts 123 \u0645\u0631\u062d\u0628\u0627\n".repeat(100) + "End of paste"
+    await page.evaluate((text) => navigator.clipboard.writeText(text), text)
+    await page.keyboard.press("ControlOrMeta+V")
+    await expect.poll(() => input.innerText()).toBe("B" + text + "efore " + suffix)
+    await expectCaretVisible(input)
+    await page.keyboard.type("!")
+    await expect.poll(() => input.innerText()).toBe("B" + text + "!efore " + suffix)
+    await expectCaretVisible(input)
+  })
+}
+
+test("pastes plain text without markup and keeps native undo", async ({ page }) => {
+  const input = await draft(page)
+
+  for (const text of [
+    "single line <b> &amp;",
+    "first\nsecond",
+    "\n\n  indented\ttext  \n\nlast\n\n",
+    'literal <b>bold</b> &amp; & < > "quotes"\n<script>not code</script>\n<img src="example">',
+    "first\r\nsecond\rthird",
+  ]) {
+    await page.evaluate((text) => navigator.clipboard.writeText(text), text)
+    await page.keyboard.press("ControlOrMeta+V")
+    const expected = text.replace(/\r\n?/g, "\n")
+    await expect.poll(() => input.innerText()).toBe(expected)
+    await expect(input.locator("b, script, img")).toHaveCount(0)
+    await page.keyboard.press("ControlOrMeta+Z")
+    await expect(input).toBeEmpty()
+    await page.keyboard.press("ControlOrMeta+Shift+Z")
+    await expect.poll(() => input.innerText()).toBe(expected)
+    await page.keyboard.press("ControlOrMeta+Z")
+    await expect(input).toBeEmpty()
+  }
+})
+
+test("replaces only the selected text and leaves the caret after the paste", async ({ page }) => {
+  const input = await draft(page)
+  await page.evaluate(() => navigator.clipboard.writeText("one\ntwo"))
+  await page.keyboard.type("before replace after")
+  await expect(input).toHaveText("before replace after")
+  await page.evaluate(() => document.fonts.ready)
+
+  const word = await input.evaluate((element) => {
+    const range = document.createRange()
+    range.setStart(element.firstChild!, 7)
+    range.setEnd(element.firstChild!, 14)
+    const rect = range.getBoundingClientRect()
+
+    return { x: rect.x, y: rect.y + rect.height / 2, width: rect.width }
+  })
+
+  await page.mouse.move(word.x, word.y)
+  await page.mouse.down()
+  await page.mouse.move(word.x + word.width, word.y, { steps: 5 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("replace")
+  await page.keyboard.press("ControlOrMeta+V")
+  await expect.poll(() => input.innerText()).toBe("before one\ntwo after")
+  await page.keyboard.press("ControlOrMeta+Z")
+  await expect(input).toHaveText("before replace after")
+  await page.keyboard.press("ControlOrMeta+Shift+Z")
+  await expect.poll(() => input.innerText()).toBe("before one\ntwo after")
+  await page.keyboard.type("!")
+  await expect.poll(() => input.innerText()).toBe("before one\ntwo! after")
+})
+
+test("shows the dropzone and attaches a dropped file", async ({ page }) => {
+  const writes: { path: string; directory: string; body: string }[] = []
+  await openDraft(page, {
+    name: "ComposerDraft",
+    provider: NO_PROVIDER,
+    onFileWrite: (write) => void writes.push(write),
+  })
+  const surface = page.locator('[data-component="new-session"]')
+  const dropzone = page.locator('[data-component="session-dropzone"]')
+
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer()
+    value.items.add(new File(["Dropzone fixture"], "dropzone.txt", { type: "text/plain" }))
+
+    return value
+  })
+
+  await expect(dropzone).toHaveCount(0)
+  await surface.dispatchEvent("dragover", { dataTransfer: transfer })
+  await expect(dropzone).toHaveAttribute("data-visible", "true")
+  await expect(dropzone).toContainText("Drop files to add")
+
+  await surface.dispatchEvent("drop", { dataTransfer: transfer })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
+  await expect(dropzone).toHaveCount(0)
+  // The file is uploaded to its own directory in the server's temporary directory, then attached by path.
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      {
+        path: expect.stringMatching(/\/uploads\/[0-9a-f-]{36}\/dropzone\.txt$/),
+        directory: "C:/OpenCode/ComposerDraft",
+        body: "Dropzone fixture",
+      },
+    ])
+  await expect(page.locator('[data-component="upload-progress"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
+})
+
+test("keeps a narrow session composer contained when invoking a built-in", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 })
+  const { editor } = await openSession(page, { name: "ComposerCommand", provider: NO_PROVIDER })
+  const composer = page.locator('[data-component="composer"]')
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+
+  await editor.fill("keep me")
+  await composer.getByRole("button", { name: "Add images and files" }).click()
+  await page.getByRole("menuitem", { name: "Commands" }).click()
+  await page.locator('[data-suggestion-id="model.choose"]').click()
+
+  const dialog = page.getByRole("dialog", { name: "Select model", exact: true })
+  const search = dialog.getByRole("searchbox", { name: "Search models", exact: true })
+  await expect(search).toBeFocused()
+  await expect(editor).toHaveText("keep me")
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+
+  await editor.fill("/model")
+  await expect(page.locator('[data-suggestion-id="model.choose"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(search).toBeFocused()
+  await expect(editor).toBeEmpty()
+})
+
+test("keeps focus in a dialog that replaces the model dialog and returns it to the composer caret", async ({
+  page,
+}) => {
+  const { editor } = await openSession(page, { name: "ComposerDialogFocus", provider: NO_PROVIDER })
+  await editor.fill("keep me")
+  await editor.press("End")
+  await editor.press("ArrowLeft")
+  await editor.press("ArrowLeft")
+  await editor.press("ArrowLeft")
+  await editor.press("ControlOrMeta+'")
+
+  const models = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(models.getByRole("searchbox", { name: "Search models", exact: true })).toBeFocused()
+  await models.getByRole("button", { name: "Manage models", exact: true }).click()
+  await expect(models).toBeHidden()
+
+  const manage = page.getByRole("dialog", { name: "Manage models", exact: true })
+  const search = manage.getByRole("searchbox", { name: "Search models", exact: true })
+  await expect(search).toBeFocused()
+  // Code behind the dialog that focuses the composer must not pull focus out of the open dialog.
+  await editor.evaluate((element) => element.focus())
+  await expect(search).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(manage).toBeHidden()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("keep, me")
+})
+
+test("lists slash commands in their built-in order", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ComposerSlash",
+    provider: NO_PROVIDER,
+    commands: [
+      { name: "init", description: "Create AGENTS.md" },
+      { name: "review", description: "Review changes" },
+    ],
+    // A sent message enables /undo, /compact and /fork.
+    pageMessages: () => ({ items: [{ id: "msg_slash", type: "user", text: "Hello", time: { created: T0 } }] }),
+  })
+
+  await editor.fill("/")
+  await expect(page.locator('[data-component="composer-suggestions"] [data-suggestion-id] bdi')).toHaveText([
+    "/init",
+    "/review",
+    "/new",
+    "/undo",
+    "/compact",
+    "/fork",
+    "/export",
+    "/open",
+    "/terminal",
+    "/mcp",
+    "/model",
+    "/connect",
+    "/btw",
+  ])
+})
+
+const followUp = "Add follow-up, / for commands, @ for context…"
+
+for (const row of [
+  { state: "an idle", copy: "Ask anything, / for commands, @ for context…" },
+  { state: "a running", copy: followUp, sessionStatus: { ses_placeholder: { type: "running" } } },
+  {
+    state: "an idle queued",
+    copy: followUp,
+    inbox: [
+      {
+        id: "inb_placeholder",
+        sessionID: "ses_placeholder",
+        time: { created: T0 },
+        type: "user",
+        payload: { text: "Queued follow-up" },
+        delivery: "queue",
+      },
+    ],
+  },
+]) {
+  test(`shows the placeholder for ${row.state} session and the shell example in shell mode`, async ({ page }) => {
+    const { editor } = await openSession(page, {
+      name: "ComposerPlaceholder",
+      sessions: [{ id: "ses_placeholder", title: "Placeholder" }],
+      sessionStatus: row.sessionStatus,
+      inbox: row.inbox,
+    })
+
+    const scroll = page.locator('[data-component="composer-scroll"]')
+    await expect(scroll).toHaveText(row.copy)
+    await editor.pressSequentially("!")
+    await expect(scroll).toHaveText("Enter shell command… git status")
+  })
+}
+
+test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
+  const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
+
+  const managed = (id: string, canonical: string, name: string, models: ReturnType<typeof model>) => ({
+    id,
+    canonical,
+    integrationID: "opencode",
+    name: `Anomaly / ${name}`,
+    models,
+  })
+
+  await openSession(page, {
+    name: "ComposerConsoleProviders",
+    provider: {
+      all: [
+        managed("opencode", "opencode", "OpenCode", model("console-model", "Console Model")),
+        managed("console-google", "google", "Google", model("managed-gemini", "Managed Gemini")),
+        managed("console-openai", "openai", "OpenAI", model("managed-gpt", "Managed GPT")),
+        { id: "google", canonical: "google", name: "Google", models: model("direct-gemini", "Direct Gemini") },
+      ],
+      connected: ["opencode", "console-google", "console-openai", "google"],
+      default: { providerID: "opencode", modelID: "console-model" },
+    },
+    seed: {
+      storage: {
+        "opencode.global.dat:model": {
+          user: [
+            ["opencode", "console-model"],
+            ["console-google", "managed-gemini"],
+            ["console-openai", "managed-gpt"],
+            ["google", "direct-gemini"],
+          ].map(([providerID, modelID]) => ({ providerID, modelID, visibility: "show" })),
+          recent: [],
+          variant: {},
+        },
+      },
+    },
+  })
+
+  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitemradio", { name: "Direct Gemini", exact: true })).toBeVisible()
+  const headings = menu.locator('[data-slot="menu-v2-group-label"]')
+  await expect(headings).toHaveCount(4)
+  await expect(headings.filter({ hasText: /^GoogleAnomaly$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^Google$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^OpenAI$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^OpenCode$/ })).toHaveCount(1)
+  await expect(menu.getByText(/Anomaly \//)).toHaveCount(0)
+})
+
+test("shows thinking on hover or a non-default selection while preserving keyboard access", async ({ page }) => {
+  const { editor: input } = await openSession(page, {
+    name: "ComposerThinking",
+    provider: provider({ id: "thinking-model", name: "Thinking Model", variants: { high: {} } }),
+  })
+
+  const composer = page.locator('[data-component="composer"]')
+  const control = composer.getByRole("button", { name: "Choose model variant" })
+  const option = (name: string) => page.getByRole("menuitemradio", { name, exact: true })
+
+  await page.mouse.move(0, 0)
+  await expect(control).toHaveText("default")
+  await expect(control).toHaveCSS("opacity", "0")
+  await expect(control).toHaveCSS("pointer-events", "none")
+
+  await input.hover()
+  await expect(control).toHaveCSS("opacity", "1")
+
+  // The menu keeps the control visible after the pointer leaves.
+  await control.click()
+  await expect(option("high")).toBeVisible()
+  await page.mouse.move(0, 0)
+  await expect(control).toHaveAttribute("aria-expanded", "true")
+  await expect(control).toHaveCSS("opacity", "1")
+  await option("high").click()
+
+  await input.click()
+  await page.mouse.move(0, 0)
+  await expect(control).toHaveText("high")
+  await expect(control).toHaveCSS("opacity", "1")
+
+  await control.click()
+  await option("default").click()
+  await input.click()
+  await page.mouse.move(0, 0)
+  await expect(control).toHaveText("default")
+  await expect(control).toHaveCSS("opacity", "0")
+
+  // The single-agent fixture has only Add and Model before the thinking trigger.
+  await page.keyboard.press("Tab")
+  await expect(composer.getByRole("button", { name: "Add images and files" })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(composer.getByRole("button", { name: "Thinking Model" })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(control).toBeFocused()
+  await expect(control).toHaveCSS("opacity", "1")
+  await page.keyboard.press("Enter")
+  await expect(option("default")).toBeFocused()
+  await expect(control).toHaveCSS("opacity", "1")
+  await page.keyboard.press("Escape")
+  await expect(control).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(control).toHaveCSS("opacity", "0")
+})

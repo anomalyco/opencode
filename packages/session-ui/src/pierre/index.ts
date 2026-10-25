@@ -1,8 +1,21 @@
-import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
+import {
+  DiffLineAnnotation,
+  FileContents,
+  FileDiffOptions,
+  registerCustomTheme,
+  type SelectedLineRange,
+} from "@pierre/diffs"
+import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
 import { ComponentProps } from "solid-js"
 import { lineCommentStyles } from "../components/line-comment-styles"
 
-export type DiffProps<T = {}> = FileDiffOptions<T> & {
+// Pierre resolves themes on the main thread and hands them to its workers, so register before any viewer renders.
+registerCustomTheme(OpenCodeTheme.name, () => Promise.resolve(OpenCodeTheme), "zed")
+
+// Viewers and worker pools must agree: the pool's options win whenever it renders.
+export const highlightOptions = { theme: OpenCodeTheme.name, preferredHighlighter: "highlights" } as const
+
+export type DiffProps<T = {}> = FileDiffOptions<T, undefined> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
@@ -17,19 +30,36 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 const unsafeCSS = `
 :host {
   --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
+  /* Pierre mixes 15% in dark mode, which makes collapsed rows read as highlighted. */
+  --diffs-bg-separator-override: light-dark(
+    color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
+    color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer))
+  );
+  --diffs-bg-addition-emphasis-override: light-dark(
+    rgb(from var(--v2-green-600) r g b / 0.2),
+    rgb(from var(--v2-green-600) r g b / 0.4)
+  );
+  --diffs-bg-deletion-emphasis-override: light-dark(
+    rgb(from var(--v2-red-600) r g b / 0.2),
+    rgb(from var(--v2-red-600) r g b / 0.4)
+  );
+  --diffs-fg-number-override: var(--v2-text-text-faint);
+  --diffs-fg-number-addition-override: light-dark(var(--v2-green-900), var(--v2-green-400));
+  --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
+  /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
+  text-wrap-style: auto;
 }
 
 [data-diff],
 [data-file] {
-  /* Pierre 1.2 mixes these override targets at 12% in light mode and 20% in dark mode. */
   --diffs-bg-deletion-override: light-dark(
-    color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-deletion-base)),
-    color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base))
+    rgb(from var(--v2-red-600) r g b / 0.05),
+    rgb(from var(--v2-red-600) r g b / 0.1)
   );
   --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
   --diffs-bg-addition-override: light-dark(
-    color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-addition-base)),
-    color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base))
+    rgb(from var(--v2-green-600) r g b / 0.05),
+    rgb(from var(--v2-green-800) r g b / 0.1)
   );
   --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
   --diffs-selection-base: var(--v2-background-bg-accent);
@@ -51,14 +81,47 @@ const unsafeCSS = `
   width: 2px;
 }
 
+[data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before {
+  background-color: light-dark(var(--v2-green-900), var(--v2-green-400));
+}
+
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
   background-image: none;
-  background-color: var(--diffs-deletion-base);
+  background-color: light-dark(var(--v2-red-800), var(--v2-red-500));
 }
 
 [data-background] [data-column-number] {
   --mix-light: 88%;
   --mix-dark: 80%;
+}
+
+/* Changed-row overrides are final translucent fills, so Pierre must not blend them into the background again. */
+[data-background]
+  :is([data-line], [data-no-newline], [data-column-number], [data-gutter-buffer]):is(
+    [data-line-type='change-addition'],
+    [data-line-type='change-deletion']
+  ) {
+  --mix-light: 0%;
+  --mix-dark: 0%;
+}
+
+/* Syntax colors are inline styles on token spans, so emphasized text needs !important to stay legible on its highlight. */
+[data-line-type='change-addition'] [data-diff-span],
+[data-line-type='change-addition'] [data-diff-span] * {
+  color: light-dark(var(--v2-green-1200), var(--v2-text-text-base)) !important;
+}
+
+[data-line-type='change-deletion'] [data-diff-span],
+[data-line-type='change-deletion'] [data-diff-span] * {
+  color: light-dark(var(--v2-red-1200), var(--v2-text-text-base)) !important;
+}
+
+:is([data-separator-content], [data-expand-button]) {
+  color: var(--v2-text-text-faint);
+}
+
+[data-expand-button]:hover {
+  color: var(--diffs-fg);
 }
 
 [data-diff-type='split'] [data-additions],
@@ -137,6 +200,19 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+@media (max-width: 767px) {
+  /* File annotations share the code column; reclaim the number gutter. Pierre only measures column widths for
+     scrolling files with annotations, so derive the gutter from the code grid width instead. */
+  [data-file][data-overflow='wrap'] [data-code] {
+    container-type: inline-size;
+  }
+
+  [data-file][data-overflow='wrap'] [data-line-annotation] {
+    margin-inline-start: calc(100% - 100cqi);
+    z-index: 4;
+  }
+}
+
 @media (pointer: fine) {
   [data-gutter-utility-slot] {
     opacity: 0;
@@ -185,7 +261,7 @@ ${lineCommentStyles}
 
 `
 
-export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
+export function createDefaultOptions<T>(style: FileDiffOptions<T, undefined>["diffStyle"]) {
   return {
     theme: "Bolt",
     themeType: "system",
@@ -197,7 +273,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     disableBackground: false,
     expansionLineCount: 20,
     hunkSeparators: "line-info-basic",
-    lineDiffType: style === "split" ? "word-alt" : "none",
+    lineDiffType: "word-line",
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,

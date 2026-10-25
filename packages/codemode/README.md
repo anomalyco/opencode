@@ -1,19 +1,24 @@
 # @bolt-ai/codemode
 
-Effect-native confined code execution over explicit, schema-described tools.
+This is our take on code mode: a lightweight, pure interpreter for a JavaScript-like language built around calling
+tools. It supports familiar JavaScript syntax with a few key differences and limitations. See the
+[interpreter support checklist](./interpreter-support.md) for more details.
 
-CodeMode lets a model write a small JavaScript program that can call only the tools supplied by the host. The program can sequence calls, transform plain data, branch, loop, and run independent calls in parallel without receiving ambient filesystem, process, network, module, or application authority.
+Rather than trying to sandbox arbitrary JavaScript, CodeMode only runs the language features we implement. Programs
+cannot directly access the network, filesystem, processes, or application APIs. They can interact with the outside
+world only through tools provided by the host, which can also limit execution time, tool calls, output size, and data.
 
-The package is currently private to this workspace. Its API is designed around one-shot and reusable execution:
+The idea of code mode was originally introduced by Cloudflare. See
+[their post](https://blog.cloudflare.com/code-mode/) to learn more about the concept and their isolate-based approach.
 
-```ts
-// One execution
-yield * CodeMode.execute({ tools, code })
+## How it differs from JavaScript
 
-// A reusable runtime
-const runtime = CodeMode.make({ tools, limits })
-yield * runtime.execute(code)
-```
+- **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
+  globals the host adds through extensions. Timers, `process`, filesystem access, imports, and modules are unavailable.
+- **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
+  anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.
+- **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
+  becomes `null`.
 
 ## Install
 
@@ -31,8 +36,6 @@ Hosts interact with CodeMode through `effect` (tool `run` implementations, `Effe
 
 ## Quick Start
 
-Define tools with Effect Schema, then place them in the object tree exposed to programs as `tools`:
-
 ```ts
 import { CodeMode, Tool } from "@bolt-ai/codemode"
 import { Effect, Schema } from "effect"
@@ -41,120 +44,85 @@ const lookupOrder = Tool.make({
   description: "Look up an order by ID",
   input: Schema.Struct({ id: Schema.String }),
   output: Schema.Struct({ id: Schema.String, status: Schema.String }),
-  run: ({ id }) => Effect.succeed({ id, status: "open" }),
+  execute: ({ id }) => Effect.succeed({ id, status: "open" }),
 })
 
 const runtime = CodeMode.make({
-  tools: {
-    orders: {
-      lookup: lookupOrder,
-    },
-  },
+  tools: { orders: { lookup: lookupOrder } },
 })
 
-const result =
-  yield *
+const result = await Effect.runPromise(
   runtime.execute(`
-  const order = await tools.orders.lookup({ id: "order_42" })
-  return { id: order.id, needsAttention: order.status !== "complete" }
-`)
+    const order = await tools.orders.lookup({ id: "order_42" })
+    return { id: order.id, needsAttention: order.status !== "complete" }
+  `),
+)
 ```
 
-`result` is always a `CodeMode.Result`. Program, validation, limit, and tool failures are returned as diagnostics rather than failing the Effect. Host interruption remains interruption.
-
-Successful result values are JSON-safe data. A program that returns `undefined`, including by reaching the end without `return`, produces `null`; nested `undefined` values are normalized to `null` as well.
+`result` is always a [`CodeMode.Result`](#results).
 
 ## API
 
 ### `Tool.make`
 
-```ts
-const tool = Tool.make({
-  description,
-  input, // Effect Schema (validating) or JSON Schema (render-only)
-  output, // optional; same choice
-  run,
-})
-```
+`input` and `output` accept either an Effect Schema or a render-only JSON Schema document. Effect Schema input is
+decoded before `execute`; Effect Schema output is decoded and safely copied before the program sees it. JSON Schemas
+only shape the model-visible signature. Without `output`, the signature uses `Promise<void>`.
 
-`input` and `output` each accept a validating Effect Schema or a render-only JSON Schema document (the natural shape for adapter-provided tools whose schemas arrive as JSON Schema, e.g. MCP definitions). Effect Schema input is decoded before `run` is invoked, and `run` returns the encoded representation of an Effect Schema `output`, which CodeMode decodes and copies before exposing it to the program. JSON Schemas only shape the model-visible signature; values pass through unvalidated (they still cross the plain-data boundary).
+Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
-`output` is optional. Without it the tool's signature advertises `Promise<unknown>` and the host result is exposed as-is.
-
-The description and schemas are part of the model-visible tool contract. Keep descriptions concrete and put authorization in `run` or in the service it calls.
-
-Public tool types are grouped under the same namespace: `Tool.Definition`, `Tool.Options`, `Tool.SchemaType`, and `Tool.JsonSchema`.
-
-### `CodeMode.execute`
-
-Use `CodeMode.execute` for a single execution:
-
-```ts
-const result =
-  yield *
-  CodeMode.execute({
-    tools: { orders: { lookup: lookupOrder } },
-    code: `return await tools.orders.lookup({ id: "order_42" })`,
-    limits: { maxToolCalls: 10 },
-    onToolCallStart: (call) => Effect.logDebug("CodeMode tool started", call),
-    onToolCallEnd: (call) => Effect.logDebug("CodeMode tool settled", call),
-  })
-```
-
-The Effect environment is inferred from the supplied tools. CodeMode does not erase service requirements introduced by tool implementations.
-
-### `CodeMode.make`
-
-Use `CodeMode.make` when the tool set and execution policy are reused:
+Nested records are the shorthand for ordinary namespaces. Use `Namespace.make` when a namespace needs a description:
 
 ```ts
 const runtime = CodeMode.make({
-  tools: { orders: { lookup: lookupOrder } },
-  limits: { timeoutMs: 30_000 },
+  tools: {
+    orders: Namespace.make({
+      description: "Purchases, fulfillment, and shipment tracking",
+      tools: { lookup: lookupOrder },
+    }),
+  },
 })
-
-runtime.catalog() // structured tool descriptions
-runtime.instructions() // model-facing syntax and tool guide
-runtime.execute(source) // CodeMode.Result
 ```
 
-`CodeMode.Input`, `CodeMode.Result`, `CodeMode.Success`, `CodeMode.Failure`, `CodeMode.Diagnostic`, and `CodeMode.DiagnosticKind` are both Effect schemas and their inferred TypeScript types. Hosts can combine `CodeMode.Input` and `CodeMode.Result` with `runtime.instructions()` and `runtime.execute()` when constructing a framework-specific agent tool.
+Namespace descriptions are optional and participate in search matching for every descendant tool. Names still come
+from record keys, so the wrapper does not repeat `orders`. Dots in keys create nested paths; other characters use
+bracket notation, such as `tools.context7["resolve-library-id"](...)`.
 
-All other CodeMode types use the same namespace: `CodeMode.Options`, `CodeMode.ExecuteOptions`, `CodeMode.Runtime`, `CodeMode.ExecutionLimits`, `CodeMode.DiscoveryOptions`, `CodeMode.DataValue`, `CodeMode.ToolDescription`, and the `CodeMode.ToolCall*` observation types.
+### `CodeMode.execute` and `CodeMode.make`
 
-### Results
+`CodeMode.execute({ ...options, code })` runs once. `CodeMode.make(options)` creates a reusable runtime:
 
 ```ts
-type Result = Success | Failure
+const runtime = CodeMode.make({ tools, limits: { timeoutMs: 30_000 } })
 
-interface Success {
-  readonly ok: true
-  readonly value: CodeMode.DataValue
-  readonly logs?: ReadonlyArray<string>
-  readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
-}
-
-interface Failure {
-  readonly ok: false
-  readonly error: CodeMode.Diagnostic
-  readonly logs?: ReadonlyArray<string>
-  readonly truncated?: boolean
-  readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
-}
+runtime.catalog() // structured tool descriptions
+runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 ```
 
-`toolCalls` contains the names of calls admitted by the runtime in call order. It is retained on failure so hosts can audit partial execution without exposing inputs or host failures. `truncated` is present when the value or logs were cut to fit `maxOutputBytes` (see Execution Limits).
+The Effect environment is inferred from the supplied tools. `hooks` surround every call the program makes into the
+host: `tool.before`/`tool.after` receive `{ name, input }` with decoded input, `extension.before`/`extension.after`
+receive `{ extension, name, args }`. An `after` hook also receives how the call ended (`success` with its value,
+`failure` with its error, or `interrupted`). A failing `before` hook denies the call, and the program catches the
+failure as a thrown error.
 
-### Tool-call hooks
+### `Extension.make`
 
-`onToolCallStart` receives `{ index, name, input }` after input decoding and before tool execution. The input is decoded host-side data and may include values produced by schema transformations; applications should avoid logging sensitive tool arguments indiscriminately.
+Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the
+catalog, not counted against `maxToolCalls`, and not described to the model; the host decides what they mean.
 
-`onToolCallEnd` receives `{ index, name, input, durationMs, outcome, message? }` when an admitted call settles. `outcome` is `"success"` or `"failure"`; `message` is the model-safe failure message and is present only on failure. Interrupted calls (for example when the execution timeout fires) do not produce an end event. Both hooks are Effect-returning and must not fail.
+```ts
+const web = Extension.make({ name: "web", globals: { fetch: (url: string) => globalThis.fetch(url) } })
+const runtime = CodeMode.make({ tools, extensions: [web] })
+```
+
+Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
+copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
+extension throws at `CodeMode.make`.
 
 ### OpenAPI tools
 
-`OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Dotted `operationId` values form namespaces such as `v2.session.get`. Missing IDs receive a flat method/path fallback such as `getUsersById`; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
+`OpenAPI.fromSpec` converts an OpenAPI 3.x document into one tool per supported operation. Dotted `operationId` values
+create namespaces:
 
 ```ts
 import { CodeMode, OpenAPI } from "@bolt-ai/codemode"
@@ -170,16 +138,67 @@ const api = OpenAPI.fromSpec({
 })
 
 const runtime = CodeMode.make({ tools: { opencode: api.tools } })
-const result = await Effect.runPromise(runtime.execute(code).pipe(Effect.provide(FetchHttpClient.layer)))
 ```
 
-`fromSpec` is synchronous and returns `{ tools, skipped }`. The initial adapter supports query `form`/`deepObject`, path/header `simple`, JSON request bodies, JSON responses, and text responses; unsupported parameter encodings, non-JSON request bodies, binary responses, and streaming operations land in `skipped` instead of producing broken tools. Operation and path servers take precedence over document servers unless `baseUrl` explicitly overrides all of them. Tool inputs flatten path, query, header, and closed object-body fields into one model-facing object while retaining their HTTP locations internally. Cross-location name collisions receive a location prefix such as `path_id` and `query_id`; composed, nullable, dictionary, conditionally-required, and non-object JSON bodies remain under `body`. Auth is never model-visible. Responses are limited to 50 MiB, and non-2xx responses become safe tool failures carrying the status and a size-capped body summary. Deferred capabilities are tracked in `src/openapi/TODO.md`.
+The synchronous result is `{ tools, skipped }`. Operations with unsupported parameter encodings, request bodies
+without JSON content, WebSocket or SSE semantics, or binary responses are reported in `skipped`.
 
-Supported bearer, basic, header, and query authentication follows OpenAPI `security` semantics and is resolved host-side via `auth.resolve` - credential storage, OAuth flows, and token refresh never enter the compiler. Cookie authentication alternatives are discarded; an operation is skipped when it has no supported alternative. See the option docstrings in `src/openapi/types.ts` for the full semantics. Generated tools require `HttpClient.HttpClient` (from `effect/unstable/http`) in the Effect environment - provide `FetchHttpClient.layer` or a custom/test client layer at execution. The supplied client owns redirect policy; credentialed hosts should reject redirects or strip credentials when the origin changes.
+Authentication is resolved by the host and never shown to the model. Generated tools require `HttpClient.HttpClient`.
+Request signatures omit `readOnly` properties; response signatures omit `writeOnly` properties. These JSON Schemas
+shape model-visible signatures but do not filter runtime values: nested JSON body properties and decoded server
+responses pass through unchanged. See `src/openapi/types.ts` for option details.
+
+## Results
+
+Every execution returns:
+
+```ts
+type Result =
+  | {
+      readonly ok: true
+      readonly value: CodeMode.DataValue
+      readonly warnings?: ReadonlyArray<CodeMode.Diagnostic>
+      readonly logs?: ReadonlyArray<string>
+      readonly truncated?: boolean
+      readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
+    }
+  | {
+      readonly ok: false
+      readonly error: CodeMode.Diagnostic
+      readonly logs?: ReadonlyArray<string>
+      readonly truncated?: boolean
+      readonly toolCalls: ReadonlyArray<CodeMode.ToolCall>
+    }
+```
+
+`value` is JSON-safe. `warnings` are non-fatal diagnostics, `logs` contain program console output, and `truncated`
+indicates that retained output was cut by `maxOutputBytes`. `toolCalls` retains admitted calls in order, including after
+failure.
+
+Diagnostic kinds:
+
+| Kind                    | Meaning                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `ParseError`            | Source is empty or cannot be parsed.                                                           |
+| `UnsupportedSyntax`     | Parsed JavaScript is outside the supported subset.                                             |
+| `UnknownTool`           | The program referenced an unavailable tool.                                                    |
+| `InvalidToolInput`      | Tool input failed schema decoding or safe-data copying.                                        |
+| `InvalidToolOutput`     | Tool output failed schema decoding or safe-data copying.                                       |
+| `InvalidDataValue`      | Program data violated the plain-data contract.                                                 |
+| `ToolCallLimitExceeded` | The program exceeded `maxToolCalls`.                                                           |
+| `TimeoutExceeded`       | Execution timed out; as a warning, background work was interrupted after the program returned. |
+| `ToolFailure`           | A tool refused or failed.                                                                      |
+| `ExecutionFailure`      | The program threw or another execution error occurred.                                         |
+| `Truncated`             | Warning only: additional warnings were omitted by `maxOutputBytes`.                            |
+
+Host failures and defects report their messages and underlying causes. Invalid outputs include the validation or
+copying error. Interruption propagates without becoming an error diagnostic.
 
 ## Discovery
 
-The agent-tool instructions use a budgeted catalog. Every tool namespace is always listed with its tool count regardless of budget, and as many complete, JSDoc-annotated tool signatures (each with a one-line description) as fit an estimated-token budget are inlined. Schema field descriptions and tags are part of each signature's measured cost. Selection is round-robin across namespaces for fairness: in each round (namespaces alphabetical), every namespace still holding un-inlined tools attempts to place its next-cheapest signature against the shared budget, and a namespace whose next signature does not fit drops out while the others keep going - so every namespace gets some representation before any namespace gets everything. The instructions state exactly how comprehensive the list is, both overall (`COMPLETE list` vs `PARTIAL - N of M shown`) and per namespace (`(3 tools)`, `(3 tools, 1 shown)`, `(3 tools, none shown)`).
+`runtime.catalog()` returns structured descriptors — exact path, description, and generated TypeScript signature — for
+every visible tool. Hosts render their own model-facing instructions from these descriptors; `CodeMode.searchSignature`
+and `CodeMode.toolExpression(path)` supply the exact callable forms.
 
 The catalog-entry budget defaults to 2,000 estimated tokens (characters / 4, the same heuristic Bolt uses). It applies only to full tool entries shown in the catalog; fixed instructions and namespace summaries are not counted. Override it when constructing a runtime:
 
@@ -257,13 +276,13 @@ CodeMode is an orchestration language, not a general JavaScript runtime.
 
 ## Execution Limits
 
-The limits are exactly three knobs:
+| Limit            | Default   | Controls                        |
+| ---------------- | --------- | ------------------------------- |
+| `timeoutMs`      | unlimited | Total execution time.           |
+| `maxToolCalls`   | unlimited | Admitted tool calls.            |
+| `maxOutputBytes` | unlimited | Retained result value and logs. |
 
-| Limit            |              Default | Bounds                                                               |
-| ---------------- | -------------------: | -------------------------------------------------------------------- |
-| `timeoutMs`      |    none - no timeout | Wall-clock execution time.                                           |
-| `maxToolCalls`   |     none - unlimited | Tool calls admitted during the execution.                            |
-| `maxOutputBytes` | none - no truncation | Model-facing output: the serialized result value plus captured logs. |
+Execution limits have no default values.
 
 No limit has a default, on purpose: execution budgets are host policy, not library policy - a host that wants a bound sets one; a host that can interrupt the execution fiber (as Bolt does on user cancel) may set no timeout, and a host with its own tool-output truncation (as Bolt has) may leave `maxOutputBytes` unset. A host with neither should set `maxOutputBytes`, or oversized results silently flood model context.
 

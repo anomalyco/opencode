@@ -5,10 +5,16 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
+    "./simulation": "./src/simulation.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit"
+    "build": "bun run script/build.ts",
+    "generate": "bun run script/generate-openapi.ts",
+    "check:generated": "bun run script/generate-openapi.ts --check",
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@bolt-ai/schema": "workspace:*",
@@ -17,6 +23,8 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:",
+    "prettier": "3.6.2",
+    "typescript": "catalog:"
   }
 }

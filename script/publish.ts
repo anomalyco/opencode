@@ -10,6 +10,13 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 const tag = `v${Script.version}`
 
+// Beta dogfoods the desktop app. The CLI and SDK packages ship from dev.
+if (Script.channel === "beta") {
+  console.log("\n=== desktop ===\n")
+  await $`bun ./packages/desktop/scripts/publish.ts`
+  process.exit(0)
+}
+
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
     absolute: true,
@@ -25,7 +32,20 @@ async function prepareReleaseFiles() {
   }
 
   await $`bun install`
-  await $`./packages/sdk/js/script/build.ts`
+}
+
+async function writeChangelog() {
+  const notes = process.env["OPENCODE_RELEASE_NOTES"]?.trim()
+  if (!notes) return
+  const file = Bun.file("CHANGELOG.md")
+  const text = await file.text()
+  const lines = text.split("\n")
+  if (lines.some((line) => line === `## ${tag}` || line.startsWith(`## ${tag} `))) return
+  const index = lines.findIndex((line) => line.startsWith("## "))
+  const head = (index === -1 ? lines : lines.slice(0, index)).join("\n").trimEnd()
+  const rest = index === -1 ? "" : lines.slice(index).join("\n")
+  const entry = `## ${tag} — ${new Date().toISOString().slice(0, 10)}\n\n${notes}\n`
+  await file.write(`${head}\n\n${entry}${rest ? `\n${rest}` : ""}`)
 }
 
 if (Script.release && !Script.preview) {
@@ -35,8 +55,7 @@ if (Script.release && !Script.preview) {
 
 await prepareReleaseFiles()
 
-console.log("\n=== cli ===\n")
-await $`bun ./packages/opencode/script/publish.ts`
+if (Script.release) await $`bun ./packages/desktop/scripts/publish.ts --dry-run`
 
 // The preview cli, sdk, plugin, and ui packages still publish under the
 // `@bolt-ai` npm scope, which Bolt does not own; publishing them would fail
@@ -88,5 +107,14 @@ if (Script.release && !Script.preview) {
 }
 
 if (Script.release) {
-  await $`gh release edit ${tag} --draft=false --repo ${process.env.GH_REPO}`
+  console.log("\n=== desktop ===\n")
+  await $`bun ./packages/desktop/scripts/publish.ts`
 }
+
+// WinGet submission is paused until our packages are accepted into microsoft/winget-pkgs.
+// if (Script.release && Script.channel === "latest") {
+//   console.log("\n=== winget ===\n")
+//   // Everything else is published by now, and WinGet validation can reject a submission for reasons unrelated to the release.
+//   if ((await $`bun ./script/publish-winget.ts`.nothrow()).exitCode !== 0)
+//     console.log("::warning::WinGet submission failed; see the winget step output above")
+// }

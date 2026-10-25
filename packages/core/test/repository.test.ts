@@ -41,6 +41,12 @@ describe("Repository", () => {
     })
   })
 
+  test("caches a host with a port under a directory per host part", () => {
+    expect(Repository.cachePath("/cache", Repository.parseRemote("ssh://git@example.com:2222/owner/repo"))).toBe(
+      path.join("/cache", "example.com", "2222", "owner", "repo"),
+    )
+  })
+
   test("keeps local file repositories distinct from remote repositories", () => {
     const localPath = path.resolve("repo.git")
     const reference = Repository.parse(pathToFileURL(localPath).href)
@@ -60,6 +66,18 @@ describe("Repository", () => {
     expect(() => Repository.validateBranch("-bad")).toThrow(Repository.InvalidBranchError)
     expect(() => Repository.validateBranch("bad..branch")).toThrow(Repository.InvalidBranchError)
     expect(() => Repository.validateBranch("bad branch")).toThrow(Repository.InvalidBranchError)
+  })
+
+  test.each([
+    "..:repo",
+    "git@..:repo",
+    "../owner/repo",
+    "ssh://../repo",
+    "ssh://..:22/repo",
+    "https://%2e%2e/owner/repo",
+    ".:repo",
+  ])("rejects %s because its host contains a relative path segment", (input) => {
+    expect(() => Repository.parseRemote(input)).toThrow(Repository.InvalidReferenceError)
   })
 
   test("compares cache identity independent of input spelling", () => {

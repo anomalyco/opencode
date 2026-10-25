@@ -1,6 +1,6 @@
 import { Collapsible as Kobalte, CollapsibleRootProps } from "@kobalte/core/collapsible"
 import { ComponentProps, ParentProps, splitProps } from "solid-js"
-import { Icon } from "./icon"
+import { Icon } from "@opencode/ui/icon"
 
 export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
   class?: string
@@ -10,6 +10,7 @@ export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
 
 function CollapsibleRoot(props: CollapsibleProps) {
   const [local, others] = splitProps(props, ["class", "classList", "variant"])
+
   return (
     <Kobalte
       data-component="collapsible"
@@ -35,7 +36,7 @@ function CollapsibleArrow(props?: ComponentProps<"div">) {
   return (
     <div data-slot="collapsible-arrow" {...(props || {})}>
       <span data-slot="collapsible-arrow-icon">
-        <Icon name="chevron-down" size="small" />
+        <Icon name="fill-triangle-down" size="small" />
       </span>
     </div>
   )

@@ -1,0 +1,219 @@
+export * as WellKnown from "./wellknown.js"
+
+import { Integration } from "@opencode/schema/integration"
+import { Context, Effect, Layer, Ref, Schema, Semaphore } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { isDeepStrictEqual } from "node:util"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { Bus } from "./bus.js"
+import { KV } from "./kv.js"
+
+export interface Auth extends Schema.Schema.Type<typeof Auth> {}
+export const Auth = Schema.Struct({
+  command: Schema.Array(Schema.String),
+  env: Schema.String,
+}).annotate({ identifier: "WellKnown.Auth" })
+
+export interface RemoteConfig extends Schema.Schema.Type<typeof RemoteConfig> {}
+export const RemoteConfig = Schema.Struct({
+  url: Schema.String,
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+}).annotate({ identifier: "WellKnown.RemoteConfig" })
+
+export interface Config extends Schema.Schema.Type<typeof Config> {}
+export const Config = Schema.Record(Schema.String, Schema.Json).annotate({ identifier: "WellKnown.Config" })
+
+export interface Manifest extends Schema.Schema.Type<typeof Manifest> {}
+export const Manifest = Schema.Struct({
+  auth: Schema.optional(Auth),
+  config: Schema.optional(Schema.NullOr(Config)),
+  remote_config: Schema.optional(RemoteConfig),
+}).annotate({ identifier: "WellKnown.Manifest" })
+
+export interface ResolveInput {
+  readonly origin: string
+  readonly variables?: Readonly<Record<string, string>>
+}
+
+export interface Entry {
+  readonly origin: string
+  readonly integrationID: Integration.ID
+  readonly manifest: Manifest
+}
+
+export interface Interface {
+  readonly entries: () => Effect.Effect<readonly Entry[], Error>
+  readonly snapshot: () => readonly Entry[]
+  readonly refresh: () => Effect.Effect<boolean, Error>
+  readonly add: (origin: string) => Effect.Effect<Entry, Error>
+  readonly remove: (origin: string) => Effect.Effect<void>
+  /** Resolves and caches the configuration for a registered source. */
+  readonly resolve: (entry: Entry, variables: Readonly<Record<string, string>>) => Effect.Effect<Config[], Error>
+  /** Returns the last configuration resolved for an origin, kept until the source is removed. */
+  readonly cached: (origin: string) => Effect.Effect<Config[]>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/WellKnown") {}
+
+export const Event = {
+  Updated: Bus.ephemeral({ type: "wellknown.updated", schema: {} }),
+}
+
+const requestTimeout = "15 seconds"
+
+export const inspect = Effect.fn("WellKnown.inspect")(function* (origin: string) {
+  const url = `${origin.replace(/\/+$/, "")}/.well-known/opencode`
+  const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
+  return yield* http.execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson)).pipe(
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(Manifest)),
+    Effect.timeout(requestTimeout),
+    Effect.mapError((cause) => new Error(`Failed to load wellknown manifest from ${url}`, { cause })),
+  )
+})
+
+export const resolve = Effect.fn("WellKnown.resolve")(function* (input: ResolveInput) {
+  const manifest = yield* inspect(input.origin)
+  return yield* resolveEntry(
+    { origin: input.origin, integrationID: Integration.ID.make(input.origin.replace(/\/+$/, "")), manifest },
+    input.variables ?? {},
+  )
+})
+
+const resolveEntry = Effect.fnUntraced(function* (entry: Entry, variables: Readonly<Record<string, string>>) {
+  const configs = entry.manifest.config ? [entry.manifest.config] : []
+  if (!entry.manifest.remote_config) return configs
+
+  const substitute = (value: string) =>
+    value.replace(/\{env:([^}]+)\}/g, (_, name: string) => variables[name] ?? process.env[name] ?? "")
+  const url = substitute(entry.manifest.remote_config.url)
+  const headers = Object.fromEntries(
+    Object.entries(entry.manifest.remote_config.headers ?? {}).map(([key, value]) => [key, substitute(value)]),
+  )
+  const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
+  const remote = yield* http
+    .execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers)))
+    .pipe(
+      Effect.flatMap(HttpClientResponse.schemaBodyJson(Config)),
+      Effect.timeout(requestTimeout),
+      Effect.mapError((cause) => new Error(`Failed to load wellknown remote config from ${url}`, { cause })),
+    )
+  if (Schema.is(Config)(remote.config)) return [...configs, remote.config]
+  return [...configs, remote]
+})
+
+const sourcesKey = "wellknown:sources"
+const Sources = Schema.Array(Schema.String)
+const manifestKey = (origin: string) => `wellknown:manifest:${origin}`
+const configKey = (origin: string) => `wellknown:config:${origin}`
+const Configs = Schema.Array(Config)
+
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const http = yield* HttpClient.HttpClient
+    const kv = yield* KV.Service
+    const bus = yield* Bus.Service
+    const cache = yield* Ref.make(new Map<string, Entry>())
+    const lock = Semaphore.makeUnsafe(1)
+    const loadEntry = Effect.fn("WellKnown.loadEntry")(function* (origin: string) {
+      const manifest = yield* inspect(origin).pipe(
+        Effect.provideService(HttpClient.HttpClient, http),
+        Effect.tap((manifest) => kv.set(manifestKey(origin), manifest)),
+        // An unreachable source keeps its last manifest so its remote config still loads after a restart.
+        Effect.catch((error) =>
+          kv
+            .get(manifestKey(origin))
+            .pipe(
+              Effect.flatMap((cached) =>
+                Schema.is(Manifest)(cached)
+                  ? Effect.logWarning("failed to load wellknown manifest", { origin, error }).pipe(Effect.as(cached))
+                  : Effect.fail(error),
+              ),
+            ),
+        ),
+      )
+      return { origin, integrationID: Integration.ID.make(origin), manifest }
+    })
+
+    const load = Effect.fn("WellKnown.load")(function* () {
+      const value = yield* kv.get(sourcesKey)
+      const origins = Schema.is(Sources)(value) ? value : []
+      const current = yield* Ref.get(cache)
+      const entries = yield* Effect.forEach(origins, (origin) => {
+        const cached = current.get(origin)
+        if (cached) return Effect.succeed(cached)
+        return loadEntry(origin)
+      })
+      yield* Ref.set(cache, new Map(entries.map((entry) => [entry.origin, entry])))
+      return entries
+    })
+
+    const refresh = Effect.fn("WellKnown.refresh")(
+      function* () {
+        const value = yield* kv.get(sourcesKey)
+        const origins = Schema.is(Sources)(value) ? value : []
+        if (!origins.length) return false
+        const entries = yield* Effect.forEach(origins, loadEntry)
+        const next = new Map(entries.map((entry) => [entry.origin, entry]))
+        const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
+        if (!changed) return false
+        yield* Ref.set(cache, next)
+        yield* bus.publish(Event.Updated, {}, { global: true })
+        return true
+      },
+      (effect) => lock.withPermit(effect),
+    )
+
+    return Service.of({
+      entries: load,
+      snapshot: () => Array.from(Ref.getUnsafe(cache).values()),
+      refresh,
+      add: Effect.fn("WellKnown.add")(
+        function* (value) {
+          const origin = value.replace(/\/+$/, "")
+          const entry = yield* loadEntry(origin)
+          if (!entry.manifest.auth) return yield* Effect.fail(new Error(`No authentication method found at ${origin}`))
+          const sources = yield* kv.get(sourcesKey)
+          const origins = Schema.is(Sources)(sources) ? sources : []
+          yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
+          yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
+          yield* bus.publish(Event.Updated, {}, { global: true })
+          return entry
+        },
+        (effect, _value) => lock.withPermit(effect),
+      ),
+      remove: Effect.fn("WellKnown.remove")(
+        function* (value) {
+          const origin = value.replace(/\/+$/, "")
+          const sources = yield* kv.get(sourcesKey)
+          const origins = Schema.is(Sources)(sources) ? sources : []
+          yield* kv.set(
+            sourcesKey,
+            origins.filter((item) => item !== origin),
+          )
+          yield* kv.remove(manifestKey(origin))
+          yield* kv.remove(configKey(origin))
+          yield* Ref.update(cache, (current) => {
+            const next = new Map(current)
+            next.delete(origin)
+            return next
+          })
+          yield* bus.publish(Event.Updated, {}, { global: true })
+        },
+        (effect, _value) => lock.withPermit(effect),
+      ),
+      resolve: Effect.fn("WellKnown.resolveEntry")(function* (entry, variables) {
+        const configs = yield* resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http))
+        yield* kv.set(configKey(entry.origin), configs)
+        return configs
+      }),
+      cached: Effect.fn("WellKnown.cached")(function* (origin) {
+        const value = yield* kv.get(configKey(origin))
+        return Schema.is(Configs)(value) ? [...value] : []
+      }),
+    })
+  }),
+)
+
+export const node = makeGlobalNode({ service: Service, layer, deps: [httpClient, KV.node, Bus.node] })

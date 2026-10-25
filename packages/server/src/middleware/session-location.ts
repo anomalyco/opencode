@@ -19,48 +19,17 @@ export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
   error: [InvalidRequestError, SessionNotFoundError],
 }) {}
 
-const decodeSessionID = Schema.decodeUnknownEffect(SessionV2.ID)
-
 export const sessionLocationLayer = Layer.effect(
   SessionLocationMiddleware,
   Effect.gen(function* () {
-    const { db } = yield* Database.Service
-    const locations = yield* LocationServiceMap.Service
+    const sessions = yield* Session.Service
+    const instances = yield* Instance.Service
 
     return SessionLocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const route = yield* HttpRouter.RouteContext
-        const sessionID = yield* decodeSessionID(route.params.sessionID).pipe(
-          Effect.mapError(
-            () =>
-              new InvalidRequestError({
-                message: "Invalid session ID",
-                field: "sessionID",
-              }),
-          ),
-        )
-        const row = yield* db
-          .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row)
-          return yield* new SessionNotFoundError({
-            sessionID,
-            message: `Session not found: ${sessionID}`,
-          })
-
-        return yield* effect.pipe(
-          Effect.provide(
-            locations.get(
-              Location.Ref.make({
-                directory: AbsolutePath.make(row.directory),
-                workspaceID: row.workspaceID ? WorkspaceV2.ID.make(row.workspaceID) : undefined,
-              }),
-            ),
-          ),
-        )
+        const session = yield* sessionInfo(sessions, route.params.sessionID)
+        return yield* effect.pipe(instances.provide(session), locationErrors)
       }),
     )
   }),

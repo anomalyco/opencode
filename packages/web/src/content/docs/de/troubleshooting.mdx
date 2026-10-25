@@ -223,8 +223,8 @@ Modelle sollten so referenziert werden: `<providerId>/<modelId>`
 
 Beispiele:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 Um zu sehen, auf welche Modelle du Zugriff hast, fuehre `opencode models` aus.

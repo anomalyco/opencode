@@ -5,6 +5,7 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -16,6 +17,7 @@ permissions:
 
 jobs:
   nix-eval:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:

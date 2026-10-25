@@ -10,20 +10,18 @@ import { createServer } from "node:http"
 import { createRoutes } from "@bolt-ai/server/routes"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
-import { Daemon } from "../../services/daemon"
+import { ServerProcess } from "../../server-process"
 
 export default Runtime.handler(
   Commands.commands.serve,
-  Effect.fn("cli.serve")(function* (input) {
-    return yield* Effect.scoped(
-      Effect.gen(function* () {
-        const daemon = yield* Daemon.Service
-        const address = yield* listen(input.hostname, input.port, yield* daemon.password())
-        if (input.register) yield* daemon.register(address)
-        console.log(`server listening on ${HttpServer.formatAddress(address)}`)
-        return yield* Effect.never
-      }),
-    )
+  Effect.fnUntraced(function* (input) {
+    if (input.service && input.stdio) return yield* Effect.fail(new Error("--service and --stdio cannot be combined"))
+    return yield* ServerProcess.run({
+      mode: input.service ? "service" : input.stdio ? "stdio" : "default",
+      hostname: Option.getOrUndefined(input.hostname),
+      port: Option.getOrUndefined(input.port),
+      cors: input.cors.length > 0 ? input.cors : undefined,
+    })
   }),
 )
 

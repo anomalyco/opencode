@@ -1,1 +1,1 @@
-export * from "./v1/session"
+export * from "./v1/session.js"

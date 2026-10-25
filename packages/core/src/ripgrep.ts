@@ -1,4 +1,4 @@
-export * as Ripgrep from "./ripgrep"
+export * as Ripgrep from "./ripgrep.js"
 
 import fs from "node:fs"
 import path from "node:path"
@@ -18,7 +18,6 @@ import { RipgrepBinary } from "./ripgrep/binary"
  */
 
 const ERROR_BYTES = 8 * 1024
-const MAX_RECORD_BYTES = 64 * 1024
 const MAX_SUBMATCHES = 100
 
 // Extra agent-only ignore rules: .boltignore uses .gitignore syntax and hides
@@ -93,15 +92,16 @@ const RawMatch = Schema.Struct({
     ),
   }),
 })
+const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
 
 type RawMatchData = (typeof RawMatch.Type)["data"]
 
-export class Error extends Schema.TaggedErrorClass<Error>()("Ripgrep.Error", {
+export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export class InvalidPatternError extends Schema.TaggedErrorClass<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
+export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
   pattern: Schema.String,
   message: Schema.String,
 }) {}
@@ -110,6 +110,7 @@ export interface FindInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
+  readonly exclude?: readonly string[]
   readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
@@ -130,6 +131,8 @@ export interface GrepInput {
   readonly pattern: string
   readonly file?: string
   readonly include?: string
+  readonly literal?: boolean
+  readonly caseSensitive?: boolean
   readonly limit: number
   readonly signal?: AbortSignal
 }
@@ -144,13 +147,19 @@ export class Service extends Context.Service<Service, Interface>()("@bolt/v2/Rip
 
 const failure = (message: string, cause?: unknown) => new Error({ message, cause })
 
+const normalizePath = (value: string) =>
+  value
+    .replace(/^(?:\.[\\/])+/u, "")
+    .replace(/^[\\/]+/u, "")
+    .replaceAll("\\", "/")
+
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const process = yield* AppProcess.Service
+    const environment = yield* Environment.Service
     const binary = yield* RipgrepBinary.Service
 
     const run = <A>(input: {
@@ -164,7 +173,8 @@ const layer = Layer.effect(
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* process.spawn(
+          // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
+          const handle = yield* environment.spawner.spawn(
             ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
@@ -183,10 +193,9 @@ const layer = Layer.effect(
             }),
             Stream.take(input.limit + 1),
             Stream.runCollect,
-            Effect.map((chunk) => [...chunk]),
           )
           const truncated = rows.length > input.limit
-          if (truncated) return { items: rows.slice(0, input.limit), truncated, partial: false }
+          if (truncated) return rows.slice(0, input.limit)
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
@@ -196,7 +205,7 @@ const layer = Layer.effect(
           if (code !== 0 && code !== 1 && code !== 2) {
             return yield* failure(stderr.trim() || `ripgrep failed with code ${code}`)
           }
-          return { items: code === 1 ? [] : rows, truncated: false, partial: code === 2 }
+          return code === 1 ? [] : rows
         }),
       )
       const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
@@ -229,7 +238,7 @@ const layer = Layer.effect(
           parse: (line) => Effect.succeed(rebase(line, scoped.prefix)),
         }).pipe(
           Effect.map((result) =>
-            result.items.map((relative) =>
+            result.map((relative) =>
               Entry.make({
                 path: RelativePath.make(relative),
                 type: "file",
@@ -290,20 +299,15 @@ const layer = Layer.effect(
             target,
           ],
           parse: (line) =>
-            (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
-              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
-              : Effect.try({
-                  try: () => JSON.parse(line) as unknown,
-                  catch: (cause) => failure("Invalid ripgrep JSON output", cause),
-                })
-            ).pipe(
+            decodeJsonRecord(line).pipe(
+              Effect.mapError((cause) => failure("Invalid ripgrep JSON output", cause)),
               Effect.flatMap((json) => {
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
-                  return Effect.succeed(undefined)
+                  return Effect.undefined
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
                   Effect.map((match) => ({
                     ...match.data,
-                    path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
+                    path: { text: normalizePath(match.data.path.text) },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
@@ -316,22 +320,19 @@ const layer = Layer.effect(
               const relative = rebase(match.path.text, scoped.prefix)
               return Match.make({
                 entry: Entry.make({
-                  path: RelativePath.make(relative),
+                  path: RelativePath.make(match.path.text),
                   type: "file",
                 }),
                 line: match.line_number,
                 offset: match.absolute_offset,
-                text:
-                  match.lines.text.length > 2_000
-                    ? match.lines.text.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "..."
-                    : match.lines.text,
+                text: match.lines.text.length > 2_000 ? match.lines.text.slice(0, 2_000) + "..." : match.lines.text,
                 submatches: match.submatches.map((submatch) => ({
                   text: submatch.match.text,
                   start: submatch.start,
                   end: submatch.end,
                 })),
-              })
-            }),
+              }),
+            ),
           ),
         )
       },
@@ -339,4 +340,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node, RipgrepBinary.node] })

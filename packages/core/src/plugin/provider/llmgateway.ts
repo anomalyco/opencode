@@ -1,9 +1,9 @@
 import { Effect } from "effect"
-import { define } from "../internal"
-import { Integration } from "../../integration"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Integration } from "../../integration.js"
 
 export const LLMGatewayPlugin = define({
-  id: "llmgateway",
+  id: "opencode.provider.llmgateway",
   effect: Effect.fn(function* (ctx) {
     const integrations = yield* Integration.Service
     yield* ctx.catalog.transform(

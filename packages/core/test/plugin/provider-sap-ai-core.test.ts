@@ -13,43 +13,24 @@ import { PluginTestLayer } from "./fixture"
 const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
 const it = testEffect(PluginTestLayer)
 const npm = Npm.Service.of({
-  add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-  install: () => Effect.void,
-  which: () => Effect.succeed(undefined),
+  add: (name) => Effect.succeed({ directory: "", name }),
+  resolve: (name) => Effect.succeed({ directory: "", name }),
+  check: () => Effect.succeed(false),
+  update: (name) => Effect.succeed({ directory: "", name }),
+  which: () => Effect.undefined,
 })
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
-  const aisdk = yield* AISDK.Service
+  const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   yield* SapAICorePlugin.effect(host).pipe(Effect.provideService(Npm.Service, npm))
 })
 
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      for (const [key, value] of Object.entries(vars)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() => {
-        for (const [key, value] of Object.entries(previous)) {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        }
-      }),
-  )
-}
-
 function model(providerID: string) {
-  return ModelV2.Info.make({
-    ...ModelV2.Info.empty(ProviderV2.ID.make(providerID), ModelV2.ID.make("sap-model")),
-    api: { id: ModelV2.ID.make("sap-model"), type: "aisdk", package: fixtureProvider },
+  return Model.Info.make({
+    ...Model.Info.default(Provider.ID.make(providerID), Model.ID.make("sap-model")),
+    modelID: Model.ID.make("sap-model"),
+    package: Provider.aisdk(fixtureProvider),
   })
 }
 
@@ -59,7 +40,6 @@ describe("SapAICorePlugin", () => {
       { AICORE_SERVICE_KEY: undefined, AICORE_DEPLOYMENT_ID: "deployment", AICORE_RESOURCE_GROUP: "resource-group" },
       () =>
         Effect.gen(function* () {
-          const plugin = yield* PluginV2.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           const sdk = yield* aisdk.runSDK({
@@ -82,7 +62,6 @@ describe("SapAICorePlugin", () => {
       },
       () =>
         Effect.gen(function* () {
-          const plugin = yield* PluginV2.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           const sdk = yield* aisdk.runSDK({
@@ -101,7 +80,6 @@ describe("SapAICorePlugin", () => {
       { AICORE_SERVICE_KEY: undefined, AICORE_DEPLOYMENT_ID: "deployment", AICORE_RESOURCE_GROUP: "resource-group" },
       () =>
         Effect.gen(function* () {
-          const plugin = yield* PluginV2.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           const sdk = yield* aisdk.runSDK({
@@ -117,7 +95,6 @@ describe("SapAICorePlugin", () => {
 
   it.effect("uses the callable SDK for language selection", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const sdk = Object.assign((modelID: string) => ({ modelID, provider: "callable" }), {
@@ -135,7 +112,6 @@ describe("SapAICorePlugin", () => {
       { AICORE_SERVICE_KEY: undefined, AICORE_DEPLOYMENT_ID: "deployment", AICORE_RESOURCE_GROUP: "resource-group" },
       () =>
         Effect.gen(function* () {
-          const plugin = yield* PluginV2.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           const sdk = yield* aisdk.runSDK({

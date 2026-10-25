@@ -12,6 +12,7 @@ test("compresses repeated repaint states without losing frame samples", () => {
     mounted: 1,
     center: "content",
   }
+
   const trace = {
     timeOriginEpochMs: 1_000,
     startedAtPerformanceMs: 100,
@@ -26,7 +27,9 @@ test("compresses repeated repaint states without losing frame samples", () => {
     running: false,
     stop() {},
   }
+
   const compressed = compressCachedRepaintTrace(trace)
+
   const samples = compressed.samples.flatMap((group) =>
     group.observedAtMs.map((observedAtMs) => ({ observedAtMs, ...group.state })),
   )

@@ -19,7 +19,35 @@ export const SessionMessagesQuery = Schema.Struct({
         "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
     }),
   ),
+  type: Schema.optional(Schema.Literals(Object.keys(MessageTypes) as ReadonlyArray<SessionMessage.Type>)).annotate({
+    description:
+      "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors.",
+  }),
 }).annotate({ identifier: "SessionMessagesQuery" })
+
+const PublicLocationSwitched = Schema.Struct({
+  ...Struct.omit(SessionMessage.LocationSwitched.fields, ["location", "previous"]),
+  location: Location.PublicRef,
+  previous: Schema.Struct({
+    location: Location.PublicRef,
+    projectID: SessionMessage.LocationSwitched.fields.projectID,
+    subpath: SessionMessage.LocationSwitched.fields.subpath,
+  }).pipe(Schema.optional),
+}).annotate({ identifier: "Session.Message.LocationSwitched" })
+
+export const PublicSessionMessage = Schema.Union([
+  SessionMessage.AgentSelected,
+  SessionMessage.ModelSelected,
+  PublicLocationSwitched,
+  SessionMessage.User,
+  SessionMessage.Synthetic,
+  SessionMessage.System,
+  SessionMessage.Skill,
+  SessionMessage.Shell,
+  SessionMessage.Assistant,
+  SessionMessage.Compaction,
+  SessionMessage.Idle,
+]).annotate({ identifier: "Session.Message.Info" })
 
 export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
@@ -27,7 +55,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       params: { sessionID: Session.ID },
       query: SessionMessagesQuery,
       success: Schema.Struct({
-        data: Schema.Array(SessionMessage.Message),
+        data: Schema.Array(PublicSessionMessage),
         cursor: Schema.Struct({
           previous: Schema.String.pipe(Schema.optional),
           next: Schema.String.pipe(Schema.optional),
@@ -36,16 +64,16 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.session.messages",
+        identifier: "session.message.list",
         summary: "Get session messages",
         description:
-          "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
+          "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",
       }),
     ),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "messages",
+      title: "session",
       description: "Experimental message routes.",
     }),
   )

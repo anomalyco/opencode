@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
-import { ServerConnection } from "@/context/server"
-import { selectPromptTab } from "@/context/prompt"
-import type { Tab } from "@/context/tabs"
+import { ServerConnection } from "@/runtime/server/registry"
+import { selectPromptTab } from "@/composer/persistence"
+import type { Tab } from "@/shell/tabs/tabs"
 
 test("selects the explicitly scoped session tab instead of the active tab", () => {
   const server = ServerConnection.Key.make("local")
+
   const tabs: Tab[] = [
     { type: "session", server, sessionId: "A" },
     { type: "session", server, sessionId: "B" },

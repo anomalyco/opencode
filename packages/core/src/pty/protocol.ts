@@ -1,4 +1,4 @@
-export * as PtyProtocol from "./protocol"
+export * as PtyProtocol from "./protocol.js"
 
 // Wire protocol for PTY websocket transports. The PTY domain service is transport-free; server
 // routes adapt Pty.attach to websockets with these helpers so every surface speaks one protocol.

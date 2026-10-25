@@ -1,0 +1,181 @@
+import { describe, expect, test } from "bun:test"
+import { Effect, Schema, Stream } from "effect"
+import { LLM, LLMRequest, LLMResponse } from "../src/effect.js"
+import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { LanguageModel } from "../src/schema/index.js"
+import { testEffect } from "./lib/effect.js"
+import { dynamicResponse } from "./lib/http.js"
+
+const updateModel = (model: LanguageModel, patch: Partial<LanguageModel.Input>) => LanguageModel.update(model, patch)
+
+const Json = Schema.fromJsonString(Schema.Unknown)
+const encodeJson = Schema.encodeSync(Json)
+
+type FakeBody = {
+  readonly body: string
+}
+
+const FakeEvent = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("finish"), reason: Schema.Literal("stop") }),
+])
+type FakeEvent = Schema.Schema.Type<typeof FakeEvent>
+const decodeFakeEvents = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(FakeEvent)))
+
+const fakeFraming: FramingDef<FakeEvent> = {
+  id: "fake-json-array",
+  frame: (bytes) =>
+    Stream.fromEffect(
+      bytes.pipe(
+        Stream.decodeText(),
+        Stream.runFold(
+          () => "",
+          (text, event) => text + event,
+        ),
+        Effect.flatMap(decodeFakeEvents),
+        Effect.orDie,
+      ),
+    ).pipe(Stream.flatMap(Stream.fromIterable)),
+}
+
+const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
+  event.type === "finish"
+    ? { type: "finish", reason: { normalized: event.reason } }
+    : { type: "text-delta", id: "text-0", text: event.text }
+
+const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
+  id: "fake",
+  body: {
+    schema: Schema.Struct({
+      body: Schema.String,
+    }),
+    from: (request) =>
+      Effect.succeed({
+        body: [
+          ...request.messages
+            .flatMap((message) => message.content)
+            .filter((part) => part.type === "text")
+            .map((part) => part.text),
+          ...request.tools.map((tool) => `tool:${tool.name}:${tool.description}`),
+        ].join("\n"),
+      }),
+  },
+  stream: {
+    event: FakeEvent,
+    initial: () => undefined,
+    step: (state, event) => Effect.succeed([state, [raiseEvent(event)]] as const),
+  },
+})
+
+const fake = Route.make({
+  id: "fake",
+  protocol: fakeProtocol,
+  endpoint: Endpoint.path("/chat"),
+  framing: fakeFraming,
+})
+const configuredFake = fake.with({ endpoint: { baseURL: "https://fake.local" } })
+
+const gemini = Route.make({
+  id: "gemini-fake",
+  protocol: fakeProtocol,
+  endpoint: Endpoint.path("/chat"),
+  framing: fakeFraming,
+})
+const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local" } })
+
+const request = LLM.request({
+  id: "req_1",
+  model: LanguageModel.make({
+    id: "fake-model",
+    provider: "fake-provider",
+    route: configuredFake,
+  }),
+  prompt: "hello",
+})
+
+const echoLayer = dynamicResponse(({ text, respond }) =>
+  Effect.succeed(
+    respond(
+      encodeJson([
+        { type: "text", text: `echo:${text}` },
+        { type: "finish", reason: "stop" },
+      ]),
+    ),
+  ),
+)
+
+const it = testEffect(echoLayer)
+const unterminated = testEffect(
+  dynamicResponse(({ respond }) => Effect.succeed(respond(encodeJson([{ type: "text", text: "partial" }])))),
+)
+
+describe("llm route", () => {
+  it.effect("stream and generate use the route pipeline", () =>
+    Effect.gen(function* () {
+      const llm = yield* LLMClient.Service
+      const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
+      const response = yield* llm.generate(request)
+      const reduced = LLMResponse.fromEvents(events)
+
+      expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"])
+      expect(reduced).toBeDefined()
+      if (!reduced) throw new Error("stream reducer did not produce a completed response")
+      expect(response.events).toEqual(events)
+      expect(response.message).toEqual(reduced.message)
+      expect(response.usage).toEqual(reduced.usage)
+      expect(response.finishReason).toEqual(reduced.finishReason)
+      expect(response.message.content).toEqual([{ type: "text", text: 'echo:{"body":"hello"}' }])
+    }),
+  )
+
+  unterminated.effect("fails when the normalized stream ends without a terminal event", () =>
+    Effect.gen(function* () {
+      const error = yield* (yield* LLMClient.Service).stream(request).pipe(Stream.runDrain, Effect.flip)
+
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(error.message).toContain("The provider response ended unexpectedly.")
+    }),
+  )
+
+  it.effect("selects routes by model route value", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, { model: updateModel(request.model, { route: configuredGemini }) }),
+      )
+
+      expect(prepared.route).toBe("gemini-fake")
+    }),
+  )
+
+  test("builds models from configured routes", () => {
+    const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
+
+    expect(configured.model({ id: "fake-model" })).toMatchObject({
+      provider: "fake-provider",
+    })
+  })
+
+  it.effect("does not register duplicate route ids globally", () =>
+    Effect.gen(function* () {
+      const duplicate = Route.make({
+        id: "fake",
+        protocol: Protocol.make({
+          ...fakeProtocol,
+          body: {
+            ...fakeProtocol.body,
+            from: () => Effect.succeed({ body: "late-default" }),
+          },
+        }),
+        endpoint: Endpoint.path("/chat", { baseURL: "https://fake.local" }),
+        framing: fakeFraming,
+      })
+
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, { model: updateModel(request.model, { route: duplicate }) }),
+      )
+
+      expect(prepared.body).toEqual({ body: "late-default" })
+    }),
+  )
+})

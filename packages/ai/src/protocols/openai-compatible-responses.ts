@@ -1,0 +1,21 @@
+import { Route } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { OpenResponses } from "./open-responses.js"
+
+const ADAPTER = "openai-compatible-responses"
+
+/**
+ * Deployment adapter for providers that expose an Open Responses-compatible
+ * `/responses` endpoint. Provider helpers configure identity, endpoint, and
+ * auth while the semantic protocol remains provider-neutral.
+ */
+export const route = Route.make({
+  id: ADAPTER,
+  providerMetadataKey: "openresponses",
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path(OpenResponses.PATH),
+  transport: OpenResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
+
+export * as OpenAICompatibleResponses from "./openai-compatible-responses.js"

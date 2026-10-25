@@ -1,76 +1,114 @@
-export * as Model from "./model"
+export * as Model from "./model.js"
 
 import { Schema } from "effect"
 import { Provider } from "./provider"
 import { optional, statics } from "./schema"
 
-export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
 export type ID = typeof ID.Type
 
-export const VariantID = Schema.String.pipe(Schema.brand("VariantID"))
+const Updated = ephemeral({ type: "model.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
+
+export const VariantID = Schema.String.pipe(Schema.brand("Model.VariantID"))
 export type VariantID = typeof VariantID.Type
 
 export const Ref = Schema.Struct({
   id: ID,
   providerID: Provider.ID,
   variant: VariantID.pipe(optional),
-}).annotate({ identifier: "Model.Ref" })
+})
+  .annotate({ identifier: "Model.Ref" })
+  .pipe(
+    statics((schema) => ({
+      parse: (input: string) => {
+        const providerEnd = input.indexOf("/")
+        if (providerEnd <= 0) throw new Error(`Invalid model reference: ${input}`)
+        const providerID = input.slice(0, providerEnd)
+        const variantStart = input.indexOf("#", providerEnd + 1)
+        const id = input.slice(providerEnd + 1, variantStart === -1 ? undefined : variantStart)
+        const variant = variantStart === -1 ? undefined : input.slice(variantStart + 1)
+        if (!id || providerID.includes("#") || (variant !== undefined && (!variant || variant.includes("#"))))
+          throw new Error(`Invalid model reference: ${input}`)
+        return schema.make({
+          providerID: Provider.ID.make(providerID),
+          id: ID.make(id),
+          ...(variant ? { variant: VariantID.make(variant) } : {}),
+        })
+      },
+    })),
+  )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
-export const Family = Schema.String.pipe(Schema.brand("Family"))
+export { Compatibility, MaxTokensField, ReasoningField }
+
+export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
+
+export const Settings = Schema.StructWithRest(
+  Schema.Struct({
+    compaction: Provider.Compaction.pipe(optional),
+    encoding: Provider.Encoding.pipe(optional),
+  }),
+  // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
+  [Schema.Record(Schema.String, Schema.Any)],
+).annotate({ identifier: "Model.Settings" })
+export type Settings = typeof Settings.Type
+
+export const Overlays = {
+  settings: Settings.pipe(optional),
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  body: Schema.Record(Schema.String, Schema.Any).pipe(optional),
+}
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
-}).annotate({ identifier: "Model.Capabilities" })
+  /** Whether the model accepts a sampling temperature. Unknown when unset. */
+  temperature: Schema.Boolean.pipe(optional),
+})
+  .annotate({ identifier: "Model.Capabilities" })
+  .pipe(
+    statics(() => ({
+      default: () => ({ tools: true, input: ["text", "image"], output: ["text"] }) satisfies Capabilities,
+    })),
+  )
 
 export interface Cost extends Schema.Schema.Type<typeof Cost> {}
 export const Cost = Schema.Struct({
   tier: Schema.Struct({
-    type: Schema.Literal("context"),
+    type: Schema.tag("context"),
     size: Schema.Int,
   }).pipe(optional),
-  input: Schema.Finite,
-  output: Schema.Finite,
+  input: Money.USDPerMillionTokens,
+  output: Money.USDPerMillionTokens,
   cache: Schema.Struct({
-    read: Schema.Finite,
-    write: Schema.Finite,
+    read: Money.USDPerMillionTokens,
+    write: Money.USDPerMillionTokens,
   }),
 }).annotate({ identifier: "Model.Cost" })
 
-export const Api = Schema.Union([
-  Schema.Struct({
-    id: ID,
-    ...Provider.AISDK.fields,
-  }),
-  Schema.Struct({
-    id: ID,
-    ...Provider.Native.fields,
-  }),
-])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Model.Api" })
-export type Api = typeof Api.Type
+export interface Variant extends Schema.Schema.Type<typeof Variant> {}
+export const Variant = Schema.Struct({
+  id: VariantID,
+  ...Overlays,
+}).annotate({ identifier: "Model.Variant" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
+  modelID: ID,
   providerID: Provider.ID,
+  canonical: Provider.ID.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
-  api: Api,
+  compatibility: Compatibility.pipe(optional),
+  package: Provider.Package.pipe(optional),
+  ...Overlays,
   capabilities: Capabilities,
-  request: Schema.Struct({
-    ...Provider.Request.fields,
-    variant: Schema.String.pipe(optional),
-  }),
-  variants: Schema.Struct({
-    id: VariantID,
-    ...Provider.Request.fields,
-  }).pipe(Schema.Array),
+  variants: Schema.Array(Variant),
   time: Schema.Struct({
     released: Schema.Finite,
   }),
@@ -83,23 +121,22 @@ export const Info = Schema.Struct({
     output: Schema.Int,
   }),
 })
-  .annotate({ identifier: "ModelV2.Info" })
+  .annotate({ identifier: "Model.Info" })
   .pipe(
-    statics((schema) => ({
-      empty: (providerID: Provider.ID, modelID: ID) =>
-        schema.make({
-          id: modelID,
+    statics(() => ({
+      default: (providerID: Provider.ID, id: ID) =>
+        ({
+          id,
+          modelID: id,
           providerID,
-          name: modelID,
-          api: { id: modelID, type: "native", settings: {} },
-          capabilities: { tools: false, input: [], output: [] },
-          request: { headers: {}, body: {} },
+          name: id,
+          capabilities: Capabilities.default(),
           variants: [],
           time: { released: 0 },
           cost: [],
           status: "active",
           enabled: true,
-          limit: { context: 0, output: 0 },
-        }),
+          limit: { context: 200_000, output: 32_000 },
+        }) satisfies Info,
     })),
   )

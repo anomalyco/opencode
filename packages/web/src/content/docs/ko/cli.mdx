@@ -48,16 +48,6 @@ opencode CLI는 아래 명령들도 제공합니다.
 
 ---
 
-### agent
-
-opencode용 에이전트를 관리합니다.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 `serve` 또는 `web` 명령으로 이미 실행 중인 opencode 백엔드 서버에 터미널을 연결합니다.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | 이어서 실행할 때 세션 포크 (`--continue` 또는 `--session`과 함께 사용) |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `BOLT_SERVER_PASSWORD`)                    |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `BOLT_SERVER_USERNAME` 또는 `opencode`) |
-
----
-
-#### create
-
-커스텀 설정으로 새 에이전트를 만듭니다.
-
-```bash
-opencode agent create
-```
-
-이 명령은 커스텀 시스템 프롬프트와 도구 설정을 사용해 새 에이전트를 만드는 과정을 안내합니다.
-
----
-
-#### list
-
-사용 가능한 모든 에이전트를 표시합니다.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -452,7 +420,6 @@ opencode import <file>
 
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---

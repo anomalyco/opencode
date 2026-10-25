@@ -3,12 +3,10 @@ import type { FileDiffInfo } from "@bolt-ai/client/promise"
 import { createSimpleContext } from "@bolt-ai/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
-export type NormalizedProviderListResponse = {
-  all: Map<string, Provider>
-  defaultModel?: {
-    providerID: string
-    modelID: string
-  } | null
+export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
+
+type ProviderCatalog = {
+  all: Map<string, { models: Record<string, { name: string }> }>
   default: {
     [key: string]: string
   }
@@ -20,26 +18,28 @@ type Data = {
     name: string
     color?: string
   }[]
-  provider?: NormalizedProviderListResponse
-  session: Session[]
+  provider?: ProviderCatalog
+  session: SessionSummary[]
   session_status: {
     [sessionID: string]: SessionStatus
   }
   session_diff: {
-    [sessionID: string]: (SnapshotFileDiff | FileDiffInfo)[]
+    [sessionID: string]: FileDiffInfo[]
   }
   session_diff_preload?: {
-    [sessionID: string]: PreloadMultiFileDiffResult<any>[]
+    [sessionID: string]: PreloadMultiFileDiffResult<unknown, undefined>[]
   }
-  message: {
-    [sessionID: string]: Message[]
-  }
-  part: {
-    [messageID: string]: Part[]
-  }
-  part_text_accum_delta?: {
-    [partID: string]: string
-  }
+}
+
+/** Names a finished turn by its Session and the user message that opened it. */
+export type TurnDiffInput = { sessionID: string; from: string }
+
+/** The host's cache of the files each finished turn changed. */
+export type TurnDiffSource = {
+  /** The turn's diffs, or undefined until they load. */
+  get: (input: TurnDiffInput) => readonly FileDiffInfo[] | undefined
+  /** Starts loading the turn's diffs unless they are cached or already loading. */
+  load: (input: TurnDiffInput) => void
 }
 
 export type NavigateToSessionFn = (sessionID: string) => void
@@ -52,8 +52,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     sessionID?: string
+    shellRunning?: (id: string) => boolean
+    shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
+    turnDiff?: TurnDiffSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
+    backgroundCompaction?: boolean
   }) => {
     return {
       get store() {
@@ -65,8 +70,14 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       get sessionID() {
         return props.sessionID
       },
+      get backgroundCompaction() {
+        return props.backgroundCompaction === true
+      },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      shellRunning: props.shellRunning,
+      shellOutput: props.shellOutput,
+      turnDiff: props.turnDiff,
     }
   },
 })

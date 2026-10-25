@@ -1,7 +1,7 @@
-export * as ConfigMCPV1 from "./mcp"
+export * as ConfigMCPV1 from "./mcp.js"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { PositiveInt } from "../../schema.js"
 
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),

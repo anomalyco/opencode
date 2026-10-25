@@ -8,6 +8,8 @@ import { AbsolutePath } from "@bolt-ai/core/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
+import PROMPT_INITIALIZE from "../../src/plugin/command/initialize.txt"
+import PROMPT_REVIEW from "../../src/plugin/command/review.txt"
 
 const directory = AbsolutePath.make("/repo/packages/app")
 const project = AbsolutePath.make("/repo")
@@ -15,15 +17,43 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory }, { projectDirectory: project })),
 )
-const it = testEffect(AppNodeBuilder.build(CommandV2.node, [[Location.node, locationLayer]]))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Command.node, Mcp.node, Bus.node]), [
+    Mcp.node.replace(emptyMcpLayer),
+    Location.node.replace(locationLayer),
+  ]),
+)
 
 describe("CommandPlugin.Plugin", () => {
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
-      const command = yield* CommandV2.Service
+      const command = yield* Command.Service
+      const prompts: {
+        text: string
+        files?: readonly { readonly uri: string }[]
+        delivery?: "steer" | "queue"
+      }[] = []
       yield* CommandPlugin.Plugin.effect(
         host({
-          command: { transform: command.transform, reload: command.reload },
+          command: {
+            list: () => Effect.die("unused command.list"),
+            transform: command.transform,
+            reload: command.reload,
+          },
+          session: {
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_test"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: input.delivery ?? "steer",
+                })
+              }),
+          },
         }),
       ).pipe(
         Effect.provideService(
@@ -36,12 +66,64 @@ describe("CommandPlugin.Plugin", () => {
         name: "init",
         description: "guided AGENTS.md setup",
       })
-      expect((yield* command.get("init"))?.template).toContain("`/repo`")
       expect(yield* command.get("review")).toMatchObject({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
-        subtask: true,
       })
+      yield* command.execute({
+        name: "init",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "extra context", files: [{ uri: "file:///tmp/context.md" }] },
+          delivery: "queue",
+        },
+      })
+      yield* command.execute({
+        name: "review",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "  branch $& $$ $` $'  " },
+          delivery: "steer",
+        },
+      })
+      yield* command.execute({
+        name: "init",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "" },
+          delivery: "steer",
+        },
+      })
+      yield* command.execute({
+        name: "review",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "   " },
+          delivery: "steer",
+        },
+      })
+      expect(prompts).toEqual([
+        {
+          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
+          files: [{ uri: "file:///tmp/context.md" }],
+          delivery: "queue",
+        },
+        {
+          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
+          files: undefined,
+          delivery: "steer",
+        },
+        {
+          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          files: undefined,
+          delivery: "steer",
+        },
+        {
+          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          files: undefined,
+          delivery: "steer",
+        },
+      ])
     }),
   )
 })

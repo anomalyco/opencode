@@ -28,14 +28,14 @@ import { LineCommentV2OverflowIcon } from "@bolt-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@bolt-ai/ui/v2/menu-v2"
 import "./session-review-v2.css"
 
-type ReviewDiff = (SnapshotFileDiff & { file: string }) | FileDiffInfo | VcsFileDiff
+type ReviewDiff = (PresentationFileDiff & { file: string }) | FileDiffInfo
 
 export type SessionReviewFilePreviewV2Props = {
   file: string
   diff: ReviewDiff
   diffStyle: SessionReviewDiffStyle
   expandMode?: SessionReviewExpandMode
-  readFile?: (path: string) => Promise<FileContent | undefined>
+  readFile?: (path: string) => Promise<PresentationFileContent | undefined>
   onLineComment?: (comment: SessionReviewLineComment) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
@@ -47,13 +47,17 @@ export type SessionReviewFilePreviewV2Props = {
 
 function statusLabel(status: ViewDiff["status"]) {
   if (status === "added") return "A"
+
   if (status === "deleted") return "D"
+
   return "M"
 }
 
 function statusType(status: ViewDiff["status"]) {
   if (status === "added") return "added"
+
   if (status === "deleted") return "deleted"
+
   return "modified"
 }
 
@@ -64,33 +68,35 @@ function selectionSide(range: SelectedLineRange) {
 function selectionPreview(diff: ViewDiff, range: SelectedLineRange) {
   const side = selectionSide(range)
   const contents = text(diff, side)
+
   if (contents.length === 0) return undefined
+
   return previewSelectedLines(contents, range)
 }
 
-function ReviewCommentMenuV2(props: {
+function ReviewCommentMenu(props: {
   labels: SessionReviewCommentActions
   onEdit: VoidFunction
   onDelete: VoidFunction
 }) {
   return (
     <div onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-      <MenuV2 gutter={4}>
-        <MenuV2.Trigger
+      <Menu gutter={4}>
+        <Menu.Trigger
           as="button"
           type="button"
           data-slot="line-comment-v2-overflow"
           aria-label={props.labels.moreLabel}
         >
-          <LineCommentV2OverflowIcon />
-        </MenuV2.Trigger>
-        <MenuV2.Portal>
-          <MenuV2.Content>
-            <MenuV2.Item onSelect={props.onEdit}>{props.labels.editLabel}</MenuV2.Item>
-            <MenuV2.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</MenuV2.Item>
-          </MenuV2.Content>
-        </MenuV2.Portal>
-      </MenuV2>
+          <LineCommentOverflowIcon />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Item onSelect={props.onEdit}>{props.labels.editLabel}</Menu.Item>
+            <Menu.Item onSelect={props.onDelete}>{props.labels.deleteLabel}</Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </div>
   )
 }
@@ -111,6 +117,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     ...normalize(props.diff),
     preloaded: "preloaded" in props.diff ? props.diff.preloaded : undefined,
   }))
+
   const diffCanRender = createMemo(() => view().additions !== 0 || view().deletions !== 0)
   const mediaKind = createMemo(() => mediaKindFromPath(props.file))
   const comments = createMemo(() => (props.comments ?? []).filter((comment) => comment.file === props.file))
@@ -156,7 +163,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     editSubmitLabel: props.lineCommentActions?.saveLabel,
     renderCommentActions: props.lineCommentActions
       ? (comment, controls) => (
-          <ReviewCommentMenuV2 labels={props.lineCommentActions!} onEdit={controls.edit} onDelete={controls.remove} />
+          <ReviewCommentMenu labels={props.lineCommentActions!} onEdit={controls.edit} onDelete={controls.remove} />
         )
       : undefined,
   })
@@ -167,11 +174,13 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
 
   createEffect(() => {
     const focus = props.focusedComment
+
     if (!focus) return
+
     if (focus.file !== props.file) {
       // The focused file has no mounted preview (e.g. not in the current diff
       // set); clear the focus anyway so it cannot hijack a later diff refresh.
-      // V1 clears unconditionally the same way.
+      // Clear unconditionally so an unavailable file cannot retain stale focus.
       untrack(() => {
         const token = focusToken
         requestAnimationFrame(() => {
@@ -179,6 +188,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
           props.onFocusedCommentChange?.(null)
         })
       })
+
       return
     }
 
@@ -186,23 +196,29 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       setStore("opened", focus.id)
 
       const comment = (props.comments ?? []).find((item) => item.file === focus.file && item.id === focus.id)
+
       if (comment) setStore("selection", cloneSelectedLineRange(comment.selection))
 
       // The diff renders asynchronously, so poll for the comment anchor before
       // scrolling; clear the focus once handled so revisiting the file does not
-      // re-open a stale comment (mirrors the v1 review behavior).
+      // re-open a stale comment.
       focusToken++
       const token = focusToken
+
       const scrollTo = (attempt: number) => {
         if (token !== focusToken) return
         const anchor = scrollRef?.querySelector(`[data-comment-id="${focus.id}"]`)
+
         if (anchor instanceof HTMLElement) {
           anchor.scrollIntoView({ block: "center" })
+
           return
         }
+
         if (attempt >= 120) return
         requestAnimationFrame(() => scrollTo(attempt + 1))
       }
+
       requestAnimationFrame(() => scrollTo(0))
       requestAnimationFrame(() => {
         if (token !== focusToken) return

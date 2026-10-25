@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "MiniMax-M2.7",
+    "tags": [
+      "prefix:minimax-messages",
+      "provider:minimax",
+      "protocol:anthropic-messages",
+      "text",
+      "usage",
+      "reasoning"
+    ],
+    "name": "minimax-messages/m2-7-streams-default-thinking",
+    "recordedAt": "2026-09-29T05:27:50.902Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/anthropic/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-M2.7\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is 173 multiplied by 219? Reply with only the final integer.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"stream\":true,\"max_tokens\":1536}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"419c5ecf093decc95250bc4cc3afce52\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"MiniMax-M2.7\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"cache_creation_input_tokens\":21,\"cache_read_input_tokens\":36}}}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"The user\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" asks: \\\"What is 173 multiplied by 219? Reply with only the final integer.\\\"\\n\\nWe need to calculate 173 * 219 = ?\\n\\nLet's compute.\\n\\n173 *\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" 219:\\n\\nOption 1: compute 173 * 200 = 34,600 (actually 173*200 = 34,600\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"? Wait 173 * 200 = 34,600? Let's check: 173 * 2 = 346, then times 100 = 34,600. Yes\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\".)\\n\\n173 * 19 = 173 * 20 - 173 = 3,460 - 173 = 3\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\",287.\\n\\nAdd them: 34,600 + 3,287 = 37,887.\\n\\nThus product is 37,887.\\n\\nAlternatively, compute \"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"219 * 173: 219*100 = 21,900; 219*70 = 15,330; 219*3 = 657\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"; sum = 21,900 + 15,330 = 37,230; +657 = 37,887. Same.\\n\\nThus answer: 378\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"87.\\n\\nThe user wants only the final integer. So reply \\\"37887\\\". No other text.\\n\\nThus final answer: 37887.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"48b0f683a3fb6cfc2e060ff709c12a905c76d2e5bdddc709fb5b1cfc5aa600f7\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"37887\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"input_tokens\":0,\"output_tokens\":259,\"cache_creation_input_tokens\":21,\"cache_read_input_tokens\":36,\"output_tokens_details\":{\"thinking_tokens\":256}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

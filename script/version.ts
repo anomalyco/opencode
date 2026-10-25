@@ -4,7 +4,6 @@ import { Script } from "@bolt-ai/script"
 import { $ } from "bun"
 
 const output = [`version=${Script.version}`]
-const sha = process.env.GITHUB_SHA ?? (await $`git rev-parse HEAD`.text()).trim()
 
 if (!Script.preview) {
   await $`bun script/changelog.ts --to ${sha}`.cwd(process.cwd())
@@ -29,8 +28,6 @@ if (!Script.preview) {
   output.push(`release=${release.databaseId}`)
   output.push(`tag=${release.tagName}`)
 }
-
-output.push(`repo=${process.env.GH_REPO}`)
 
 if (process.env.GITHUB_OUTPUT) {
   await Bun.write(process.env.GITHUB_OUTPUT, output.join("\n"))

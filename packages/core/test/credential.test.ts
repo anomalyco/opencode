@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
+import { eq, sql } from "drizzle-orm"
 import { Effect } from "effect"
 import { Credential } from "@bolt-ai/core/credential"
 import { LayerNode } from "@bolt-ai/core/effect/layer-node"
 import { Integration } from "@bolt-ai/core/integration"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(LayerNode.compile(Credential.node))
+const it = testEffect(LayerNode.compile(LayerNode.group([Credential.node, Bus.node, Database.node])))
 
 describe("Credential", () => {
   it.effect("stores, updates, lists, and removes credentials", () =>
@@ -22,15 +23,241 @@ describe("Credential", () => {
       yield* credentials.update(created.id, { label: "Personal" })
       expect((yield* credentials.list(integrationID))[0]?.label).toBe("Personal")
 
+      const additional = yield* credentials.create({
+        integrationID,
+        label: "Additional",
+        value: Credential.Key.make({ type: "key", key: "additional" }),
+      })
+      expect(yield* credentials.list(integrationID)).toEqual([
+        expect.objectContaining({ id: created.id, label: "Personal" }),
+        additional,
+      ])
+
+      yield* credentials.remove(additional.id)
+      expect(yield* credentials.list(integrationID)).toEqual([
+        expect.objectContaining({ id: created.id, label: "Personal" }),
+      ])
+    }),
+  )
+
+  it.effect("reads key form answers stored in configuration before v2.1 as metadata", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const db = (yield* Database.Service).db
+      const integrationID = Integration.ID.make("azure")
+      // A row from an earlier release, which the current schema would otherwise strip.
+      const legacy = {
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "older" },
+        configuration: { resourceName: "answered" },
+      }
+      yield* db.run(
+        sql`INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred_legacy', ${integrationID}, 'Legacy', ${JSON.stringify(legacy)}, 1, 0, 0)`,
+      )
+
+      expect((yield* credentials.get(Credential.ID.make("cred_legacy")))?.value).toEqual({
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "answered" },
+      })
+    }),
+  )
+
+  it.effect("publishes global events only for observable credential mutations", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      const integrationID = Integration.ID.make("openai")
+      const events = new Array<Event.Payload>()
+      yield* bus.listen((event) => Effect.sync(() => events.push(event)))
+
+      const older = yield* credentials
+        .create({ integrationID, value: Credential.Key.make({ type: "key", key: "older" }) })
+        .pipe(
+          Effect.provideService(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make("project"), workspaceID: Workspace.ID.make("wrk_test") }),
+            ),
+          ),
+        )
+      const newer = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "newer" }),
+      })
+
+      yield* credentials.activate(newer.id)
+      yield* credentials.activate(Credential.ID.create())
+      yield* credentials.activate(older.id)
+      yield* credentials.activate(older.id)
+      yield* credentials.update(older.id, {})
+      yield* credentials.update(Credential.ID.create(), { label: "Missing" })
+      yield* credentials.update(older.id, { label: "default" })
+      yield* credentials.update(older.id, { value: Credential.Key.make({ type: "key", key: "refreshed" }) })
+      yield* credentials.update(older.id, { label: "Renamed" })
+      yield* credentials.remove(Credential.ID.create())
+      yield* credentials.remove(newer.id)
+      yield* credentials.remove(newer.id)
+      expect((yield* credentials.list(integrationID)).at(-1)?.id).toBe(older.id)
+
       const replacement = yield* credentials.create({
         integrationID,
-        label: "Replacement",
         value: Credential.Key.make({ type: "key", key: "replacement" }),
       })
-      expect(yield* credentials.list(integrationID)).toEqual([replacement])
-
       yield* credentials.remove(replacement.id)
+      expect((yield* credentials.list(integrationID)).at(-1)?.id).toBe(older.id)
+      yield* credentials.remove(older.id)
       expect(yield* credentials.list(integrationID)).toEqual([])
+
+      expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: newer.id } },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: replacement.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: null } },
+      ])
+      expect(events.every((event) => !("location" in event))).toBeTrue()
+    }),
+  )
+
+  it.effect("promotes the newest remaining legacy credential when the effective selection is removed", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const integrationID = Integration.ID.make("openai")
+      const oldest = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "oldest" }),
+      })
+      const newer = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "newer" }),
+      })
+      const newest = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "newest" }),
+      })
+      yield* database.db
+        .update(CredentialTable)
+        .set({ active: null })
+        .where(eq(CredentialTable.integration_id, integrationID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const events = new Array<Event.Payload>()
+      yield* bus.listen((event) => Effect.sync(() => events.push(event)))
+      yield* credentials.activate(newest.id)
+      yield* credentials.remove(oldest.id)
+      yield* credentials.remove(newest.id)
+
+      expect(yield* credentials.list(integrationID)).toEqual([newer])
+      expect(
+        yield* database.db
+          .select({ active: CredentialTable.active })
+          .from(CredentialTable)
+          .where(eq(CredentialTable.id, newer.id))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ active: true })
+      expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: newer.id } },
+      ])
+    }),
+  )
+
+  it.effect("activates older credentials without affecting other integrations", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const otherIntegrationID = Integration.ID.make("anthropic")
+      const older = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "older" }),
+      })
+      const newer = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "newer" }),
+      })
+      const otherOlder = yield* credentials.create({
+        integrationID: otherIntegrationID,
+        value: Credential.Key.make({ type: "key", key: "other-older" }),
+      })
+      const otherNewer = yield* credentials.create({
+        integrationID: otherIntegrationID,
+        value: Credential.Key.make({ type: "key", key: "other-newer" }),
+      })
+
+      yield* credentials.activate(older.id)
+      expect(yield* credentials.list(integrationID)).toEqual([newer, older])
+      expect(yield* credentials.list(otherIntegrationID)).toEqual([otherOlder, otherNewer])
+
+      yield* credentials.activate(Credential.ID.create())
+      expect((yield* credentials.list(integrationID)).at(-1)).toEqual(older)
+
+      yield* credentials.activate(otherOlder.id)
+      expect(yield* credentials.list(otherIntegrationID)).toEqual([otherNewer, otherOlder])
+      expect((yield* credentials.list(integrationID)).at(-1)).toEqual(older)
+
+      yield* credentials.remove(older.id)
+      expect((yield* credentials.list(integrationID)).at(-1)).toEqual(newer)
+      expect((yield* credentials.list(otherIntegrationID)).at(-1)).toEqual(otherOlder)
+    }),
+  )
+
+  it.effect("creates credentials with a requested ID without taking over the current selection", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const integrationID = Integration.ID.make("openai")
+      const events = new Array<Event.Payload>()
+      yield* bus.listen((event) => Effect.sync(() => events.push(event)))
+
+      const first = yield* credentials.create({
+        id: Credential.ID.make("cred_0000imported"),
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "first" }),
+        activate: false,
+      })
+      expect(first.id).toBe(Credential.ID.make("cred_0000imported"))
+      expect((yield* credentials.list(integrationID)).at(-1)).toEqual(first)
+
+      const legacy = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "legacy" }),
+      })
+      yield* database.db
+        .update(CredentialTable)
+        .set({ active: null })
+        .where(eq(CredentialTable.integration_id, integrationID))
+        .run()
+        .pipe(Effect.orDie)
+      const imported = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "imported" }),
+        activate: false,
+      })
+
+      expect(yield* credentials.list(integrationID)).toEqual([first, imported, legacy])
+      expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: first.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: legacy.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+      ])
     }),
   )
 })

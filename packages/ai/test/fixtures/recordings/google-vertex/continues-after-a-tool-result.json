@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:google-vertex",
+      "provider:google-vertex",
+      "protocol:gemini"
+    ],
+    "name": "google-vertex/continues-after-a-tool-result",
+    "recordedAt": "2026-09-24T01:06:20.321Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"id\":\"call_paris_1\",\"name\":\"lookup_weather\",\"args\":{\"city\":\"Paris\"}},\"thoughtSignature\":\"skip_thought_signature_validator\"}]},{\"role\":\"user\",\"parts\":[{\"functionResponse\":{\"id\":\"call_paris_1\",\"name\":\"lookup_weather\",\"response\":{\"name\":\"lookup_weather\",\"content\":\"18C, light rain\"}}}]}],\"tools\":[{\"functionDeclarations\":[{\"name\":\"lookup_weather\",\"description\":\"Look up the current weather for a city\",\"parametersJsonSchema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}]}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"text\": \"The weather\"}]}}],\"usageMetadata\": {\"trafficType\": \"ON_DEMAND\"},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-09-24T01:06:19.664329Z\",\"responseId\": \"i3e0aonGKPCnrb8Pm97yiQs\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"text\": \" in Paris is currently 18°C with light rain.\"}]}}],\"usageMetadata\": {\"trafficType\": \"ON_DEMAND\"},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-09-24T01:06:19.664329Z\",\"responseId\": \"i3e0aonGKPCnrb8Pm97yiQs\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"role\": \"model\",\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"AY89a19mRwbMV0dQccZShfDptLQ20vI7Rg/LSyPDwW1Wt62fQvRT/2nUWW13cMmgYbd2VGGtrZIbnj+hxHMZt1NK2RyJIkg/FB13\"}]},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 59,\"candidatesTokenCount\": 15,\"totalTokenCount\": 74,\"trafficType\": \"ON_DEMAND\",\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 59}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 15}]},\"modelVersion\": \"gemini-3.5-flash\",\"createTime\": \"2026-09-24T01:06:19.664329Z\",\"responseId\": \"i3e0aonGKPCnrb8Pm97yiQs\"}\r\n\r\n"
+      }
+    }
+  ]
+}

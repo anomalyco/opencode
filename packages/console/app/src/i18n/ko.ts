@@ -3,16 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "새로운 익명 모델 Space Bunny Free를 한정된 기간 동안 사용할 수 있습니다",
   "go.referral.ended.label": "경고",
   "go.referral.ended":
     "추천 프로그램이 종료되었습니다. 추천 링크로는 더 이상 본인이나 링크를 공유한 사람에게 크레딧이 지급되지 않습니다.",
-  "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
-  "nav.changelog": "변경 내역",
-  "nav.discord": "Discord",
-  "nav.x": "X",
   "nav.enterprise": "엔터프라이즈",
   "nav.zen": "Zen",
   "nav.login": "로그인",
@@ -41,6 +36,7 @@ export const dict = {
   "email.placeholder": "이메일 주소",
   "email.subscribe": "구독",
   "email.success": "거의 완료되었습니다. 이메일 수신함을 확인하고 주소를 인증해주세요.",
+  "email.error": "구독하지 못했습니다. 다시 시도해주세요.",
 
   "notFound.title": "페이지를 찾을 수 없음 | Bolt",
   "notFound.heading": "404 - 페이지를 찾을 수 없음",
@@ -51,18 +47,7 @@ export const dict = {
   "notFound.logoLightAlt": "bolt 밝은 로고",
   "notFound.logoDarkAlt": "bolt 어두운 로고",
 
-  "user.logout": "로그아웃",
-
-  "auth.callback.error.codeMissing": "인증 코드를 찾을 수 없습니다.",
-
-  "workspace.select": "워크스페이스 선택",
-  "workspace.createNew": "+ 새 워크스페이스 만들기",
-  "workspace.modal.title": "새 워크스페이스 만들기",
-  "workspace.modal.placeholder": "워크스페이스 이름 입력",
-
   "common.cancel": "취소",
-  "common.creating": "생성 중...",
-  "common.create": "만들기",
   "common.contactUs": "문의하기",
 
   "common.videoUnsupported": "브라우저가 비디오 태그를 지원하지 않습니다.",
@@ -108,14 +93,6 @@ export const dict = {
   "temp.logoDarkAlt": "bolt 어두운 로고",
 
   "home.banner.badge": "신규",
-  "home.banner.text": "데스크톱 탭을 소개합니다.",
-  "home.banner.platforms": "macOS, Windows, Linux에서 사용할 수 있습니다",
-  "home.banner.downloadNow": "지금 다운로드",
-  "home.banner.downloadBetaNow": "데스크톱 베타 다운로드",
-  "home.promo.title": "데스크톱 탭을 소개합니다",
-  "home.promo.body": "탭으로 작업과 활성 세션을 정리하세요.",
-  "home.promo.cta": "최신 버전을 다운로드하여 시작하세요.",
-  "home.promo.close": "데스크톱 앱 안내 닫기",
 
   "home.hero.title": "오픈 소스 AI 코딩 에이전트",
   "home.hero.subtitle.a": "무료 모델이 포함되어 있으며, 어떤 제공자의 모델이든 연결 가능합니다.",
@@ -129,8 +106,6 @@ export const dict = {
   "home.what.lsp.body": "LLM에 적합한 LSP를 자동으로 로드합니다",
   "home.what.multiSession.title": "멀티 세션",
   "home.what.multiSession.body": "동일한 프로젝트에서 여러 에이전트를 병렬로 실행하세요",
-  "home.what.shareLinks.title": "링크 공유",
-  "home.what.shareLinks.body": "참조나 디버깅을 위해 세션 링크를 공유하세요",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "GitHub로 로그인하여 Copilot 계정을 사용하세요",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -179,7 +154,7 @@ export const dict = {
   "home.faq.a6":
     "Bolt는 100% 무료로 사용할 수 있습니다. 무료 모델 세트도 포함되어 있습니다. 다른 제공자를 연결할 경우 추가 비용이 발생할 수 있습니다.",
   "home.faq.q7": "데이터와 프라이버시는 어떤가요?",
-  "home.faq.a7.p1": "데이터와 정보는 무료 모델을 사용하거나 공유 링크를 생성할 때만 저장됩니다.",
+  "home.faq.a7.p1": "데이터와 정보는 무료 모델을 사용할 때만 저장됩니다.",
   "home.faq.a7.p2.beforeModels": "더 알아보기:",
   "home.faq.a7.p2.modelsLink": "모델",
   "home.faq.a7.p2.and": "및",
@@ -218,7 +193,7 @@ export const dict = {
   "zen.faq.a4.p3": "비용을 충당하기 위해 Bolt는 $20 잔액 충전 시 $1.23의 소액 결제 처리 수수료만 추가합니다.",
   "zen.faq.q5": "데이터와 프라이버시는 어떤가요?",
   "zen.faq.a5.beforeExceptions":
-    "모든 Zen 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지(zero-retention) 정책을 따르며, 모델 학습에 귀하의 데이터를 사용하지 않습니다. 단,",
+    "모든 Zen 모델은 미국과 EU에서 호스팅됩니다. 제공자들은 데이터 보존 금지(zero-retention) 정책을 따르며, 모델 학습에 귀하의 데이터를 사용하지 않습니다. 단,",
   "zen.faq.a5.exceptionsLink": "다음 예외",
   "zen.faq.q6": "지출 한도를 설정할 수 있나요?",
   "zen.faq.a6": "네, 계정에서 월간 지출 한도를 설정할 수 있습니다.",
@@ -251,10 +226,10 @@ export const dict = {
   "zen.how.step2.link": "요청당 지불",
   "zen.how.step2.afterLink": "(마크업 0)",
   "zen.how.step3.title": "자동 충전",
-  "zen.how.step3.body": "잔액이 $5에 도달하면 자동으로 $20가 충전됩니다",
+  "zen.how.step3.body": "선택적으로 자동 충전을 켜고 잔액 기준과 충전 금액을 설정하세요",
   "zen.privacy.title": "귀하의 프라이버시는 우리에게 중요합니다",
   "zen.privacy.beforeExceptions":
-    "모든 Zen 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
+    "모든 Zen 모델은 미국과 EU에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "Bolt Go | 모두를 위한 저비용 코딩 모델",
@@ -264,10 +239,7 @@ export const dict = {
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
 
-  "go.cta.start": "Go 구독하기",
-  "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go 구독하기",
-  "go.cta.price": "$10/월",
   "go.plans.month": "/월",
   "go.plans.plus.cta": "Go Plus 구독하기",
   "go.plans.plus.description": "Go Plus는 월 $40로 더 높은 사용 한도를 제공합니다.",
@@ -280,24 +252,18 @@ export const dict = {
   "go.plans.limits": "사용 한도",
   "go.plans.description": "모델별 5시간당 예상 요청 횟수 및 월간 사용 한도",
   "go.plans.legend": "요금제",
-  "go.pricing.body":
-    "어떤 에이전트와도 사용할 수 있습니다. 월 $10. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
-  "go.graph.free": "무료",
-  "go.graph.freePill": "Big Pickle 및 무료 모델",
-  "go.graph.go": "Go",
-  "go.graph.label": "5시간당 요청 수",
   "go.graph.period": "사용량",
   "go.graph.model": "모델",
   "go.graph.requests": "예상 요청 횟수 / 5시간",
   "go.graph.allowance": "월간 사용량",
   "go.graph.new": "신규",
+  "go.graph.bonus": "사용량 {{count}}배",
   "go.graph.scale": "요청 수는 비선형 눈금으로 표시됩니다",
   "go.graph.showAll": "전체 {{count}}개 모델 보기",
   "go.graph.showLess": "접기",
   "go.graph.limitedRegions": "일부 지역에서만 제공",
   "go.graph.limitedTime": "한정된 기간",
   "go.graph.usageLimits": "사용 한도",
-  "go.graph.aria": "5시간당 요청 수: {{free}} 대 {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
@@ -368,7 +334,6 @@ export const dict = {
   "go.faq.a5.retention0": "0일",
   "go.faq.a5.used": "사용됨",
   "go.faq.a5.notUsed": "사용되지 않음",
-  "go.faq.a5.noAgreement": "합의 없음",
   "go.faq.a5.notZdr": "ZDR 아님",
   "go.faq.a5.grokRetention":
     "ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다.",
@@ -376,10 +341,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다.",
   "go.faq.a5.learnMore": "자세히 알아보기",
-  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 9월 30일까지 유효합니다.",
-  "go.faq.a5.beforeExceptions":
-    "Go 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
-  "go.faq.a5.exceptionsLink": "다음 예외",
+  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 10월 31일까지 유효합니다.",
   "go.faq.q6": "크레딧을 충전할 수 있나요?",
   "go.faq.a6": "사용량이 더 필요한 경우 계정에서 크레딧을 충전할 수 있습니다.",
   "go.faq.q7": "취소할 수 있나요?",
@@ -389,7 +351,7 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
   "go.faq.q10": "환불받을 수 있나요?",
   "go.faq.a10":
     "결제일로부터 14일 이내이며 해당 결제 기간에 Go 사용 한도를 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
@@ -773,6 +735,7 @@ export const dict = {
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
   "download.platform.windowsX64": "Windows (x64)",
+  "download.platform.windowsArm64": "Windows (ARM64)",
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
@@ -807,6 +770,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "name@company.com",
   "enterprise.form.phone.label": "전화번호",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "귀사의 현재 월간 AI 추론 비용(USD)은 얼마인가요?",
+  "enterprise.form.inferenceSpend.placeholder": "범위 선택 (선택 사항)",
+  "enterprise.form.inferenceSpend.none": "아직 지출 없음",
+  "enterprise.form.inferenceSpend.under1k": "$1K 미만",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 이상",
   "enterprise.form.message.label": "어떤 문제를 해결하고 싶으신가요?",
   "enterprise.form.message.placeholder": "도움이 필요한 부분은...",
   "enterprise.form.send": "전송",
@@ -815,7 +786,9 @@ export const dict = {
   "enterprise.form.success.submitted": "양식이 성공적으로 제출되었습니다.",
   "enterprise.form.error.allFieldsRequired": "모든 필드는 필수 항목입니다.",
   "enterprise.form.error.invalidEmailFormat": "유효하지 않은 이메일 형식입니다.",
+  "enterprise.form.error.invalidInferenceSpend": "유효한 추론 비용 범위를 선택하세요.",
   "enterprise.form.error.internalServer": "내부 서버 오류입니다.",
+  "enterprise.form.error.captcha": "캡차 인증에 실패했습니다. 다시 시도해 주세요.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Bolt 엔터프라이즈란 무엇인가요?",
   "enterprise.faq.a1":
@@ -842,38 +815,4 @@ export const dict = {
   "changelog.hero.subtitle": "Bolt의 새로운 업데이트 및 개선 사항",
   "changelog.empty": "변경 내역 항목을 찾을 수 없습니다.",
   "changelog.viewJson": "JSON 보기",
-
-  "bench.list.title": "벤치마크",
-  "bench.list.heading": "벤치마크",
-  "bench.list.table.agent": "에이전트",
-  "bench.list.table.model": "모델",
-  "bench.list.table.score": "점수",
-  "bench.submission.error.allFieldsRequired": "모든 필드는 필수 항목입니다.",
-
-  "bench.detail.title": "벤치마크 - {{task}}",
-  "bench.detail.notFound": "태스크를 찾을 수 없음",
-  "bench.detail.na": "N/A",
-  "bench.detail.labels.agent": "에이전트",
-  "bench.detail.labels.model": "모델",
-  "bench.detail.labels.task": "태스크",
-  "bench.detail.labels.repo": "저장소",
-  "bench.detail.labels.from": "From",
-  "bench.detail.labels.to": "To",
-  "bench.detail.labels.prompt": "프롬프트",
-  "bench.detail.labels.commit": "커밋",
-  "bench.detail.labels.averageDuration": "평균 소요 시간",
-  "bench.detail.labels.averageScore": "평균 점수",
-  "bench.detail.labels.averageCost": "평균 비용",
-  "bench.detail.labels.summary": "요약",
-  "bench.detail.labels.runs": "실행 횟수",
-  "bench.detail.labels.score": "점수",
-  "bench.detail.labels.base": "기본",
-  "bench.detail.labels.penalty": "페널티",
-  "bench.detail.labels.weight": "가중치",
-  "bench.detail.table.run": "실행",
-  "bench.detail.table.score": "점수 (기본 - 페널티)",
-  "bench.detail.table.cost": "비용",
-  "bench.detail.table.duration": "소요 시간",
-  "bench.detail.run.title": "실행 {{n}}",
-  "bench.detail.rawJson": "Raw JSON",
 } satisfies Dict

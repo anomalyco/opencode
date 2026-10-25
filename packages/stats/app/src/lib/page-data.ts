@@ -73,6 +73,7 @@ export async function loadModelPage(labParam: string, modelParam: string) {
   return {
     catalog: {
       entry,
+      stealthSpecs: entry ? null : (catalog.stealthSpecs[statModel(stats?.model ?? modelParam, undefined)] ?? null),
       labs: catalog.labs.map((item) => ({ id: item.id, name: item.name })),
       labModels:
         catalog.labs

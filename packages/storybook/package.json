@@ -12,11 +12,14 @@
     "@bolt-ai/session-ui": "workspace:*",
     "@bolt-ai/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
-    "@storybook/addon-a11y": "^10.2.13",
-    "@storybook/addon-docs": "^10.2.13",
-    "@storybook/addon-links": "^10.2.13",
-    "@storybook/addon-onboarding": "^10.2.13",
-    "@storybook/addon-vitest": "^10.2.13",
+    "@storybook/addon-a11y": "10.4.4",
+    "@storybook/addon-docs": "10.4.4",
+    "@storybook/addon-links": "10.4.4",
+    "@storybook/addon-onboarding": "10.4.4",
+    "@storybook/addon-vitest": "10.4.4",
+    "@storybook/builder-vite": "10.4.4",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/solid-query": "5.91.4",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "18.0.25",
@@ -26,6 +29,7 @@
     "storybook": "^10.2.13",
     "storybook-solidjs-vite": "^10.0.9",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "7.3.6",
+    "vite-plugin-solid": "2.11.12"
   }
 }

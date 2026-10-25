@@ -43,11 +43,15 @@
     align-self: stretch;
   }
 
+  [data-slot="session-turn-thinking-row"] {
+    width: 100%;
+    margin-top: 12px;
+  }
+
   [data-slot="session-turn-thinking"] {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 12px;
     width: 100%;
     min-width: 0;
     color: var(--text-weak);
@@ -77,6 +81,48 @@
     overflow-wrap: anywhere;
     word-break: break-word;
     overflow-y: auto;
+  }
+
+  [data-component="card"]:is([data-kind="session-retry-card"], [data-kind="session-error-card"]) {
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  [data-component="card"][data-kind="session-retry-card"] {
+    --card-pad-l: 0px;
+    --card-pad-r: 0px;
+
+    &::before {
+      display: none;
+    }
+
+    [data-slot="session-turn-retry-message"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    [data-slot="session-turn-retry-info"] {
+      margin-top: 4px;
+      color: var(--v2-text-text-faint);
+      font-family: var(--v2-font-family-sans);
+      font-size: 13px;
+      font-weight: 440;
+      line-height: var(--line-height-compact);
+      letter-spacing: -0.04px;
+    }
+  }
+
+  [data-component="card"][data-kind="session-error-card"] {
+    --card-pad-y: 0px;
+    --card-pad-l: 0px;
+    --card-pad-r: 0px;
+
+    &::before {
+      display: none;
+    }
   }
 
   [data-slot="session-turn-assistant-content"] {
@@ -122,9 +168,12 @@
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     cursor: pointer;
-    opacity: 0;
     transition: opacity 0.15s ease;
     margin-left: 4px;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
   [data-component="session-turn-diffs-group"]:hover [data-slot="session-turn-diffs-toggle"] {
@@ -225,16 +274,6 @@
 
   [data-slot="session-turn-diff-view"]::-webkit-scrollbar {
     display: none;
-  }
-}
-
-body:not([data-new-layout]) [data-component="session-turn"] {
-  .error-card {
-    color: var(--text-on-critical-base);
-  }
-
-  [data-slot="session-turn-diffs-header"] {
-    background-color: var(--background-stronger);
   }
 }
 

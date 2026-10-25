@@ -1,0 +1,89 @@
+---
+import CodeBlock from "./CodeBlock.astro"
+
+interface Props {
+  id: string
+  label: string
+  tabs: Array<{
+    label: string
+    code: string
+  }>
+}
+---
+
+<div class="docs-code-tabs" data-code-tabs>
+  <div class="docs-code-tabs-list" role="tablist" aria-label={Astro.props.label}>
+    {
+      Astro.props.tabs.map((tab, index) => (
+        <button
+          type="button"
+          role="tab"
+          id={`${Astro.props.id}-tab-${index}`}
+          aria-controls={`${Astro.props.id}-panel-${index}`}
+          aria-selected={index === 0 ? "true" : "false"}
+          tabindex={index === 0 ? 0 : -1}
+          data-code-tab
+        >
+          {tab.label}
+        </button>
+      ))
+    }
+  </div>
+  {
+    Astro.props.tabs.map((tab, index) => (
+      <div
+        role="tabpanel"
+        id={`${Astro.props.id}-panel-${index}`}
+        aria-labelledby={`${Astro.props.id}-tab-${index}`}
+        hidden={index !== 0}
+        data-code-panel
+      >
+        <CodeBlock code={tab.code} />
+      </div>
+    ))
+  }
+</div>
+
+<script>
+  const selectTab = (button: HTMLButtonElement) => {
+    const tabs = button.closest<HTMLElement>("[data-code-tabs]")
+    if (!tabs) return
+    const buttons = [...tabs.querySelectorAll<HTMLButtonElement>("[data-code-tab]")]
+    const panels = [...tabs.querySelectorAll<HTMLElement>("[data-code-panel]")]
+    const selected = buttons.indexOf(button)
+    buttons.forEach((item, index) => {
+      item.setAttribute("aria-selected", String(index === selected))
+      item.tabIndex = index === selected ? 0 : -1
+    })
+    panels.forEach((panel, index) => (panel.hidden = index !== selected))
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return
+    const button = event.target.closest<HTMLButtonElement>("[data-code-tab]")
+    if (!button) return
+    selectTab(button)
+  })
+
+  document.addEventListener("keydown", (event) => {
+    if (!(event.target instanceof HTMLButtonElement) || !event.target.matches("[data-code-tab]")) return
+    const tabs = event.target.closest<HTMLElement>("[data-code-tabs]")
+    if (!tabs) return
+    const buttons = [...tabs.querySelectorAll<HTMLButtonElement>("[data-code-tab]")]
+    const selected = buttons.indexOf(event.target)
+    const next =
+      event.key === "Home"
+        ? buttons[0]
+        : event.key === "End"
+          ? buttons.at(-1)
+          : event.key === "ArrowRight"
+            ? buttons[(selected + 1) % buttons.length]
+            : event.key === "ArrowLeft"
+              ? buttons[(selected - 1 + buttons.length) % buttons.length]
+              : undefined
+    if (!next) return
+    event.preventDefault()
+    selectTab(next)
+    next.focus()
+  })
+</script>

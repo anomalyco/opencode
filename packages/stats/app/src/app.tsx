@@ -2,6 +2,7 @@ import { MetaProvider, Title } from "@solidjs/meta"
 import { Router } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
 import { Suspense } from "solid-js"
+import { PatternRipple } from "./component/pattern-ripple"
 import { I18nProvider, useI18n } from "./context/i18n"
 import { LanguageProvider } from "./context/language"
 import { strip } from "./lib/language"
@@ -23,6 +24,7 @@ export default function App() {
           <I18nProvider>
             <MetaProvider>
               <AppMeta />
+              <PatternRipple />
               <Suspense>{props.children}</Suspense>
             </MetaProvider>
           </I18nProvider>

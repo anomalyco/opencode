@@ -10,7 +10,8 @@
   },
   "scripts": {
     "start": "bun src/stat-sync.ts",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -22,7 +23,7 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

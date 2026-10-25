@@ -1,4 +1,4 @@
-export * as SkillDiscovery from "./discovery"
+export * as SkillDiscovery from "./discovery.js"
 
 import path from "path"
 import { Context, Effect, Layer, Schedule, Schema } from "effect"
@@ -36,15 +36,7 @@ function isSafeRelativePath(value: string) {
     !path.win32.isAbsolute(value) &&
     segments.every((segment) => {
       try {
-        const decoded = decodeURIComponent(segment)
-        return (
-          decoded.length > 0 &&
-          decoded !== "." &&
-          decoded !== ".." &&
-          !decoded.includes("/") &&
-          !decoded.includes("\\") &&
-          !decoded.includes("\0")
-        )
+        return isSafeSegment(decodeURIComponent(segment))
       } catch {
         return false
       }
@@ -110,7 +102,7 @@ const layer = Layer.effect(
         )
         if (!data) return []
 
-        const sourceRoot = path.resolve(global.cache, "skills", Bun.hash(base).toString(16))
+        const sourceRoot = path.resolve(global.cache, "skills", Hash.fast(base))
         return yield* Effect.forEach(
           data.skills.flatMap((skill) => {
             if (!isSafeSegment(skill.name)) {
@@ -145,10 +137,9 @@ const layer = Layer.effect(
                 file,
               }
             })
-            if (files.some((file) => file === undefined)) {
+            if (!files.every((file): file is { url: string; destination: string; file: string } => file !== undefined))
               return []
-            }
-            return [{ skill, root, versionFile, files: files as { url: string; destination: string; file: string }[] }]
+            return [{ skill, root, versionFile, files }]
           }),
           ({ skill, root, versionFile, files }) =>
             Effect.gen(function* () {
@@ -156,7 +147,7 @@ const layer = Layer.effect(
               const current =
                 version === undefined
                   ? undefined
-                  : yield* fs.readFileStringSafe(versionFile).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                  : yield* fs.readFileStringSafe(versionFile).pipe(Effect.orElseSucceed(() => undefined))
               if (version === undefined || current === version) {
                 yield* Effect.forEach(files, (file) => download(file.url, file.destination), {
                   concurrency: fileConcurrency,

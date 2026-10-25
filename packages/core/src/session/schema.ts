@@ -1,4 +1,4 @@
-export * as SessionSchema from "./schema"
+export * as SessionSchema from "@opencode/schema/session"
 
 import { Session } from "@bolt-ai/schema/session"
 

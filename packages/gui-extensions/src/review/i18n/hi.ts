@@ -1,0 +1,15 @@
+export default {
+  "tab.title": "समीक्षा",
+  "tab.count.one": "{{count}} फ़ाइल बदली गई",
+  "tab.count.other": "{{count}} फ़ाइलें बदली गईं",
+  "mobile.title.one": "परिवर्तन",
+  "mobile.title.other": "परिवर्तन",
+  "empty.git": "अभी तक कोई अप्रतिबद्ध परिवर्तन नहीं",
+  "empty.branch": "अभी तक शाखा में कोई परिवर्तन नहीं",
+  "git.title": "एक Git रिपॉजिटरी बनाएं",
+  "git.description": "इस प्रोजेक्ट में परिवर्तनों को ट्रैक करें, समीक्षा करें और पूर्ववत करें",
+  loadingChanges: "परिवर्तन लोड हो रहे हैं…",
+  noChanges: "कोई परिवर्तन नहीं",
+  "settings.wrapLines.title": "पंक्तियाँ लपेटें",
+  "settings.wrapLines.description": "मोबाइल डिफ़ में लंबी पंक्तियों को क्षैतिज रूप से स्क्रॉल करने के बजाय लपेटें",
+}

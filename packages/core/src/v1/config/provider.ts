@@ -1,14 +1,9 @@
-export * as ConfigProviderV1 from "./provider"
+export * as ConfigProviderV1 from "./provider.js"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { PositiveInt } from "../../schema.js"
 
 export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "active"])
-
-const InterleavedField = Schema.Union([
-  Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
-  Schema.String,
-])
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -22,9 +17,9 @@ export const Model = Schema.Struct({
   interleaved: Schema.optional(
     Schema.Union([
       Schema.Boolean,
-      InterleavedField,
+      Schema.String,
       Schema.Struct({
-        field: InterleavedField,
+        field: Schema.String,
       }),
     ]),
   ),
@@ -98,30 +93,16 @@ export const Info = Schema.Struct({
         setCacheKey: Schema.optional(Schema.Boolean).annotate({
           description: "Enable promptCacheKey for this provider (default false)",
         }),
-        timeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
-          }),
-        ).annotate({
+        timeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
           description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
         }),
-        headerTimeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description:
-              "Timeout in milliseconds to wait for response headers (default: 300000). Set to false to disable timeout.",
-          }),
-        ).annotate({
+        headerTimeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
           description:
-            "Timeout in milliseconds to wait for response headers (default: 300000). Set to false to disable timeout.",
+            "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
         }),
-        chunkTimeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description:
-              "Timeout in milliseconds between streamed SSE chunks for this provider (default: 300000). If no chunk arrives within this window, the request is aborted. Set to false to disable timeout.",
-          }),
-        ).annotate({
+        chunkTimeout: Schema.optional(PositiveInt).annotate({
           description:
-            "Timeout in milliseconds between streamed SSE chunks for this provider (default: 300000). If no chunk arrives within this window, the request is aborted. Set to false to disable timeout.",
+            "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],

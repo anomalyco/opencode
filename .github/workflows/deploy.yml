@@ -5,6 +5,7 @@ on:
     branches:
       - dev
       - production
+      - beta
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -29,6 +30,7 @@ jobs:
           node-version: "24"
 
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        if: github.ref_name != 'beta'
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           role-session-name: opencode-${{ github.run_id }}
@@ -41,7 +43,6 @@ jobs:
           PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
           PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
           STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
-          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "muse-spark-1.3",
+    "tags": [
+      "prefix:meta-messages",
+      "provider:meta",
+      "protocol:meta-messages",
+      "tool",
+      "tool-loop",
+      "reasoning"
+    ],
+    "name": "meta-messages/replays-encrypted-thinking-through-a-tool-loop",
+    "recordedAt": "2026-09-29T05:29:52.700Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Look up the current weather in Paris using lookup_weather. After receiving the result, report Paris's weather in one short sentence.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"name\":\"lookup_weather\",\"description\":\"Look up current weather\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false},\"cache_control\":{\"type\":\"ephemeral\"}}],\"tool_choice\":{\"type\":\"auto\"},\"stream\":true,\"max_tokens\":1024,\"thinking\":{\"type\":\"adaptive\",\"display\":\"omitted\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_6abb4ccec3772e65cd44417d\",\"model\":\"muse-spark-1.3\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"data\":\"Q-PaDgFT_IXY3RXUUduHqe1_WSgTF5_gMh29lCBV6vhfXW34eU6nJO7gUfRPczMK4nZfQhrqQewRujwjtNKR69DHHqTP35Q0jDnuZ4GZX9qBZT1OH9JhcMl1FxvccpatEcuH2Nju9Rf12KFHAOm9eKK6wFiaZgEHcT1wPbRYVZVZ8VxLeKk-ED3wkmWFhUFJRLSgJguWBMvEMbtIUlAKsJ6qkUxClfQKMm3eft1yf9ajseT32eloGzBE48IhyXu6tpeUDs9UatFgZOHKtHmvtKsPqRw-ddbimLnMtdkexwa8xR7EVTVuwBezunqhssfYAdR4c4t6VDpACh2UL3LcVUF9b0reiwpUfdpYrwjpB3bTCWyzGjwvIwGeuoR6VrWHz5nqVbt3bBprJXqJ4IRLKAXFFlMhClkz0MFNPBufcXSdh9i9NjbNp5c8lXCSkhMfhYX9B9KbQKl3DxUCjEY_VZk0nQJwt9zQVwTzWPzl9fTkBWrdebpXCg-z4lPmU5GLyGY3MlF24eDoSfJfqibF1HHqztluSHi4XEulrwMh4dpZmLhlLxlFxwnC8LjY_Rg8uOyzeoCzsMj-R9WrZ6n9jLZrxJPVo17nFjsuSwt6zMRS9Cna6adGFso0jIKF4BNTcZXlVt0b_TWA9AY4xpGSaAQXKYRBdAZNzTK5hj-bvyfWVTBepTBKm7pAtJW2e05mVBFDqRwEr3kcKkMTRMEj8vztSX4sNjV7Sw6bDbPjb_uFeoaNkq1ua9N7ZkKsyLn80ysWQ6IL-B_AVM1toAI0bVVYQmHbRSz1MgybcT5vjK2TWfCgxBuqw1ARU3oEM1iWTvpuHkFDNGeZnT4IWc_z_vLtQVnqSlqXPtnAmJ0WJgvQGSBhojSa9QMxRz_l4LZHmXUtfdMdUHTbrZwbfoL6eIyZf43ah-sXILJWTX9wXuYqnaclwvuO3EFiDUioSIBxWvAj2HNe5HpzayuvJqneRAukiVynt9SOo79VcBKAFsHW_KhUz58KjndfvOFP7byXv_W6Xa00ve_3GEaCANjFIl7ratBEuFYtpbVTT7TGIyGmuPQTVnGe7CAcFiAvGSwoaMwqvdGheKxeR7_cZvSYREeUnL5mXev8-MKY6_AtddOanQhf9pshxAXrIUtVFqin5MGhL2j787niURU9-o_VhLgzaIqfjbfMKkzdZ3-ESyDloOeD3CwoAsD_AVIrQZQHYbpYzFYasH0VrItar07ItxWZt_sCehTOi7Jtk5G8e7fd1HtCWmrp2iArioSIp8aLOphI9lazM7taIpfF_y0EMt3x5ENSvhtEmSk4kCJQnNyRv21uHT4uD0XjdQJbHeoRhzHDxoLHUOqAX9fGBzMFO8ZsWJxl8ebiCJeJ9Jzzr9bXeUKH5cP2VymoXPs3AWBrTpw1WfADM5sjHDJLzw\",\"type\":\"redacted_thinking\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":1,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"I'll look up the current weather in Paris.\",\"type\":\"text_delta\"},\"index\":1,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":1,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"id\":\"call_01a0eba40810714cbd0a8a84496badc7\",\"input\":{},\"name\":\"lookup_weather\",\"type\":\"tool_use\"},\"index\":2,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"partial_json\":\"{\\\"city\\\":\\\"Paris\\\"}\",\"type\":\"input_json_delta\"},\"index\":2,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":2,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"type\":\"message_delta\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":564,\"output_tokens\":97,\"output_tokens_details\":{\"thinking_tokens\":29}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Look up the current weather in Paris using lookup_weather. After receiving the result, report Paris's weather in one short sentence.\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"redacted_thinking\",\"data\":\"Q-PaDgFT_IXY3RXUUduHqe1_WSgTF5_gMh29lCBV6vhfXW34eU6nJO7gUfRPczMK4nZfQhrqQewRujwjtNKR69DHHqTP35Q0jDnuZ4GZX9qBZT1OH9JhcMl1FxvccpatEcuH2Nju9Rf12KFHAOm9eKK6wFiaZgEHcT1wPbRYVZVZ8VxLeKk-ED3wkmWFhUFJRLSgJguWBMvEMbtIUlAKsJ6qkUxClfQKMm3eft1yf9ajseT32eloGzBE48IhyXu6tpeUDs9UatFgZOHKtHmvtKsPqRw-ddbimLnMtdkexwa8xR7EVTVuwBezunqhssfYAdR4c4t6VDpACh2UL3LcVUF9b0reiwpUfdpYrwjpB3bTCWyzGjwvIwGeuoR6VrWHz5nqVbt3bBprJXqJ4IRLKAXFFlMhClkz0MFNPBufcXSdh9i9NjbNp5c8lXCSkhMfhYX9B9KbQKl3DxUCjEY_VZk0nQJwt9zQVwTzWPzl9fTkBWrdebpXCg-z4lPmU5GLyGY3MlF24eDoSfJfqibF1HHqztluSHi4XEulrwMh4dpZmLhlLxlFxwnC8LjY_Rg8uOyzeoCzsMj-R9WrZ6n9jLZrxJPVo17nFjsuSwt6zMRS9Cna6adGFso0jIKF4BNTcZXlVt0b_TWA9AY4xpGSaAQXKYRBdAZNzTK5hj-bvyfWVTBepTBKm7pAtJW2e05mVBFDqRwEr3kcKkMTRMEj8vztSX4sNjV7Sw6bDbPjb_uFeoaNkq1ua9N7ZkKsyLn80ysWQ6IL-B_AVM1toAI0bVVYQmHbRSz1MgybcT5vjK2TWfCgxBuqw1ARU3oEM1iWTvpuHkFDNGeZnT4IWc_z_vLtQVnqSlqXPtnAmJ0WJgvQGSBhojSa9QMxRz_l4LZHmXUtfdMdUHTbrZwbfoL6eIyZf43ah-sXILJWTX9wXuYqnaclwvuO3EFiDUioSIBxWvAj2HNe5HpzayuvJqneRAukiVynt9SOo79VcBKAFsHW_KhUz58KjndfvOFP7byXv_W6Xa00ve_3GEaCANjFIl7ratBEuFYtpbVTT7TGIyGmuPQTVnGe7CAcFiAvGSwoaMwqvdGheKxeR7_cZvSYREeUnL5mXev8-MKY6_AtddOanQhf9pshxAXrIUtVFqin5MGhL2j787niURU9-o_VhLgzaIqfjbfMKkzdZ3-ESyDloOeD3CwoAsD_AVIrQZQHYbpYzFYasH0VrItar07ItxWZt_sCehTOi7Jtk5G8e7fd1HtCWmrp2iArioSIp8aLOphI9lazM7taIpfF_y0EMt3x5ENSvhtEmSk4kCJQnNyRv21uHT4uD0XjdQJbHeoRhzHDxoLHUOqAX9fGBzMFO8ZsWJxl8ebiCJeJ9Jzzr9bXeUKH5cP2VymoXPs3AWBrTpw1WfADM5sjHDJLzw\"},{\"type\":\"text\",\"text\":\"I'll look up the current weather in Paris.\"},{\"type\":\"tool_use\",\"id\":\"call_01a0eba40810714cbd0a8a84496badc7\",\"name\":\"lookup_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_01a0eba40810714cbd0a8a84496badc7\",\"content\":\"{\\\"condition\\\":\\\"sunny\\\"}\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"name\":\"lookup_weather\",\"description\":\"Look up current weather\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false},\"cache_control\":{\"type\":\"ephemeral\"}}],\"tool_choice\":{\"type\":\"none\"},\"stream\":true,\"max_tokens\":1024,\"thinking\":{\"type\":\"adaptive\",\"display\":\"omitted\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_6abb4cd0b3f15768e1ae4287\",\"model\":\"muse-spark-1.3\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"data\":\"Q-PaDgF70ZwJMdvZQh6urOFUjgHa2IrdJbBv8RFXDpivwOudmj9QoCi81uRWeArjn_7V2nNk6i6jlHMjN7ACeZUE-faBnl4bTI10Fs0w0SSgcdkMaume2hpXBrZB85wlEttQviz-Pc5EHhAzU5QFIrK83CQkhJENqcfY3NJW1-55JFqlXmWSFV0GtNp3clG7V0LR1Zaq54hqIUY5iwf1pB8VIXLxPca3LwXMGbQPgjOgj_WNKHEBGl6mIafeca1OlGuDrJPN9tWBhlfxJCkcRU0zl14NA8chEyr96N40KrPewjVAlWO3jSejy9V7PnglilNewhUXOEQ75w2tYiZDajBfz6iG_n27zD3uvgD3QQthdyeUhJqlBaX81zMIe39Ctfo-cX-62cKwE3_EHy_7SxkwY5Olbf_bwL4GGzR39MObZoyv8-ZU1kwwVuSLXuDFvIx6iaAMZ50U4xXYbOphAaw2rylql0_kiPlFS9V3Fr_Jvx4vplj-8xh9JI7Uu9t9O7ltECpN9Qfu32fqxzWy9-ZVIh15gzhyegNeICBOcz6b9s3CIFHnzRcU69Ru9-lbydKv7scII_2xxLd-wlHQDCXHXyTeTeZjbTRiul0u5J2m8gGefF-j0lVChJOh8F4vBltzYTFTiQoSP8KtL61VJOt6dLsxOQA0Rq4PR5Lcs2fAfJbKb7jYB23bmXvQQ1d76keuvq_yoSIhrSyxLvXRCxouoWttkI8QC0u7O5pZUIPVfiYMI-j3bbc63BFOu4wAGbckm8Txo-gAY8UYAAwMBX17SD5EcTR82njKmd1R0Y8XOJLiwZRlN0ou-syq8xhahVgd0VcyB1HKr1f9mbhJdqFkKGpWh9-SR6jT6fKCCFxeMA3caczpG5wP_q5SGgyUiK0GWYpHabjSeJWac-04TDOfqL4QwLEKuL4PjlINe9OZY1n1lPJa2_MS9YGt6qlgLe3uZSEBwHk-ul5_yRetU8bd7lYcwDtUHT6puEkdjqeYwYQ8XWkUjoYwvSIMB_2v_owa5p9gPzf5Fr_zWqG7pizrStNNHq1MjXQX8Pl4Z6e2LZ2NjItfjR1GKdErNEJWXyh0oHCQKD1fIOXl64lpQorAHUcKV2HZm_SkwV7kxvzAfhdeT9Fe3AXZmtPBS1m0ZMMYNMYsNKb813JnWu8LvNg_zgXLBWsiB-hl4kCk1NKVAsCoA0i8JUFnGGm_uQp6t06a5NQYEXvi5A0akZTacle4UTBflNdsIVR6tSaO_m49nnr-XYSIh3tEzfjOsXpFz5L_A9SBDdPSGpcMJrs00nl1wDpF78OKC8NhwkIx8ydwF5A-ecXf91SbgqzVgv2T-wzuziA1wjJbPsGzTxP_wULUc2P5-ftFAMpsiRHB_-7hq6ZGo3HwNWjK2DTTN_89u7RCjuErEVPXUv-2fQ\",\"type\":\"redacted_thinking\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":1,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"It's sunny in Paris right now.\",\"type\":\"text_delta\"},\"index\":1,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":1,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"type\":\"message_delta\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":152,\"output_tokens\":55,\"output_tokens_details\":{\"thinking_tokens\":38}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:venice-chat",
+      "provider:venice",
+      "protocol:venice-chat",
+      "text",
+      "reasoning",
+      "toggle"
+    ],
+    "name": "venice-chat/qwen-disables-reasoning",
+    "recordedAt": "2026-10-05T02:59:04.614Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.venice.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"qwen3-6-27b\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 23 multiplied by 17 plus 9? Reply with just the number.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":4096,\"reasoning\":{\"enabled\":false},\"venice_parameters\":{\"include_venice_system_prompt\":false}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"service_tier\":null,\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":null,\"content\":\"4\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":null,\"content\":\"0\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":null,\"content\":\"0\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":null,\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":\"stop\"}]}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RxYUpStKYw7YgEZcXjsb2dOt\",\"object\":\"chat.completion.chunk\",\"created\":1791169144,\"model\":\"qwen3-6-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":32,\"completion_tokens\":4,\"total_tokens\":36},\"cost\":{\"usd\":0.0000234,\"diem\":0}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

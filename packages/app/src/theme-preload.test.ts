@@ -4,18 +4,19 @@ const src = await Bun.file(new URL("../public/oc-theme-preload.js", import.meta.
 
 const run = () => Function(src)()
 
+const setSystemDark = (matches: boolean) =>
+  Object.defineProperty(window, "matchMedia", {
+    value: () => ({ matches }) as MediaQueryList,
+    configurable: true,
+  })
+
 beforeEach(() => {
   document.head.innerHTML = ""
   document.documentElement.removeAttribute("data-theme")
   document.documentElement.removeAttribute("data-color-scheme")
+  document.documentElement.style.removeProperty("background-color")
   localStorage.clear()
-  Object.defineProperty(window, "matchMedia", {
-    value: () =>
-      ({
-        matches: false,
-      }) as MediaQueryList,
-    configurable: true,
-  })
+  setSystemDark(false)
 })
 
 describe("theme preload", () => {
@@ -24,7 +25,8 @@ describe("theme preload", () => {
     localStorage.setItem("bolt-theme-css-light", "--background-base:#fff;")
     localStorage.setItem("bolt-theme-css-dark", "--background-base:#000;")
 
-    run()
+      if (stored) localStorage.setItem("opencode-color-scheme", stored)
+      run()
 
     expect(document.documentElement.dataset.theme).toBe("oc-2")
     expect(document.documentElement.dataset.colorScheme).toBe("light")
@@ -38,9 +40,12 @@ describe("theme preload", () => {
     localStorage.setItem("bolt-theme-id", "nightowl")
     localStorage.setItem("bolt-theme-css-light", "--background-base:#fff;")
 
+    if (scheme) localStorage.setItem("opencode-color-scheme", scheme)
+    localStorage.setItem(key, css)
     run()
 
     expect(document.documentElement.dataset.theme).toBe("nightowl")
-    expect(document.getElementById("oc-theme-preload")?.textContent).toContain("--background-base:#fff;")
+    expect(document.documentElement.dataset.colorScheme).toBe(expected)
+    expect(document.getElementById("oc-theme-preload")?.textContent).toContain(css)
   })
 })

@@ -22,4 +22,66 @@ describe("SkillPlugin.Plugin", () => {
       )
     }),
   )
+
+describe("SkillPlugin.Plugin", () => {
+  it.effect("registers built-in skills", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* SkillPlugin.Plugin.effect(
+        host({
+          app: { name: "test", version: "1.2.3", channel: "beta" },
+          skill: {
+            list: () => Effect.die("unused skill.list"),
+            transform: skill.transform,
+            reload: skill.reload,
+          },
+        }),
+      ).pipe(Effect.provide(config()))
+      const skills = yield* skill.list()
+      const report = skills.find((item) => item.id === "report")
+
+      expect(skills).toContainEqual(
+        expect.objectContaining({
+          id: "opencode",
+          name: "OpenCode",
+          description: expect.stringContaining("any question about OpenCode itself"),
+        }),
+      )
+      expect(skills).toContainEqual(
+        expect.objectContaining({
+          id: "report",
+          name: "Report",
+          description: expect.stringContaining("opencode issue"),
+        }),
+      )
+      expect(report?.content).toContain("- opencode version: 1.2.3")
+      expect(report?.content).toContain("- install/channel: beta")
+    }),
+  )
+
+  it.effect("reports canonical configured plugin sources with existing labels and ordering", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* SkillPlugin.Plugin.effect(
+        host({
+          skill: {
+            list: () => Effect.die("unused skill.list"),
+            transform: skill.transform,
+            reload: skill.reload,
+          },
+        }),
+      )
+      const report = (yield* skill.list()).find((item) => item.id === "report")
+      expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
+    }).pipe(
+      Effect.provide(
+        config([
+          "package-plugin",
+          "-disabled",
+          "local.ts",
+          { package: "package-plugin", options: { enabled: true } },
+        ]),
+      ),
+    ),
+  )
 })

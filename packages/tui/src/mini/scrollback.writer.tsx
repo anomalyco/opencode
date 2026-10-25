@@ -1,0 +1,380 @@
+import { createScrollbackWriter, useRenderer } from "@opentui/solid"
+import {
+  MarkdownRenderable,
+  TextAttributes,
+  TextRenderable,
+  type ColorInput,
+  type Renderable,
+  type ScrollbackRenderContext,
+  type ScrollbackWriter,
+  type SyntaxStyle,
+} from "@opentui/core"
+import { For, Match, Switch, createMemo, onCleanup } from "solid-js"
+import { entryBody, entryFlags } from "./entry.body"
+import { monoMarkdownRenderable, monoMarkdownTableOptions } from "./mono"
+import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
+import { toolFiletype, toolStructuredFinal } from "./tool"
+import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
+import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit, TurnSummary } from "./types"
+import { todoMarker } from "../util/todo"
+import { PatchDiff } from "../component/patch-diff"
+
+export function entryGroupKey(commit: StreamCommit): string | undefined {
+  if (!commit.partID) {
+    return undefined
+  }
+
+  const part = `${commit.messageID ?? ""}\u0000${commit.partID}`
+  if (toolStructuredFinal(commit)) {
+    return `tool:${part}:final`
+  }
+
+  return `${commit.kind}:${part}`
+}
+
+export function sameEntryGroup(left: StreamCommit | undefined, right: StreamCommit): boolean {
+  if (!left) {
+    return false
+  }
+
+  const current = entryGroupKey(left)
+  const next = entryGroupKey(right)
+  return Boolean(current && next && current === next)
+}
+
+function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody(commit)): EntryLayout {
+  if (commit.image) return "block"
+  if (commit.kind === "tool") {
+    if (body.type === "structured" || body.type === "markdown") {
+      return "block"
+    }
+
+    if (
+      commit.phase === "progress" &&
+      commit.toolState === "completed" &&
+      body.type === "text" &&
+      body.content.includes("\n")
+    ) {
+      return "block"
+    }
+
+    return "inline"
+  }
+
+  return "block"
+}
+
+export function separatorRows(
+  prev: StreamCommit | undefined,
+  next: StreamCommit,
+  body: RunEntryBody = entryBody(next),
+): number {
+  if (!prev || sameEntryGroup(prev, next)) {
+    return 0
+  }
+
+  if (entryLayout(prev) === "inline" && entryLayout(next, body) === "inline") {
+    return 0
+  }
+
+  return 1
+}
+
+export function RunEntryContent(props: {
+  commit: StreamCommit
+  body?: RunEntryBody
+  theme?: RunTheme
+  opts?: ScrollbackOptions
+}) {
+  const renderer = useRenderer()
+  const borrowers: Renderable[] = []
+  let fallback: SyntaxStyle | undefined
+  const theme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
+  const body = createMemo(() => props.body ?? entryBody(props.commit, props.opts))
+  const style = createMemo(() => entryLook(props.commit, theme().entry))
+  const syntax = () => theme().block.syntax ?? (fallback ??= entrySyntax(RUN_THEME_FALLBACK, renderer.nativeScene))
+  onCleanup(() => {
+    if (!fallback) return
+    // Solid defers removed-node destruction; release borrowers before their fallback style.
+    borrowers.forEach((node) => node.destroyRecursively())
+    fallback.destroy()
+  })
+  const color = createMemo(() => entryColor(props.commit, theme()))
+  const suppressBackgrounds = createMemo(() => props.opts?.suppressBackgrounds === true)
+  const diffBg = (color: ColorInput) => (suppressBackgrounds() ? transparent : color)
+  const streaming = createMemo(() => props.commit.phase === "progress")
+  const text = createMemo(() => {
+    const next = body()
+    return next.type === "text" ? next : undefined
+  })
+  const code = createMemo(() => {
+    const next = body()
+    return next.type === "code" ? next : undefined
+  })
+  const structured = createMemo(() => {
+    const next = body()
+    return next.type === "structured" ? next.snapshot : undefined
+  })
+  const markdown = createMemo(() => {
+    const next = body()
+    return next.type === "markdown" ? next : undefined
+  })
+  const code_snapshot = createMemo(() => {
+    const next = structured()
+    return next?.kind === "code" ? next : undefined
+  })
+  const diff_snapshot = createMemo(() => {
+    const next = structured()
+    return next?.kind === "diff" ? next : undefined
+  })
+  const task_snapshot = createMemo(() => {
+    const next = structured()
+    return next?.kind === "task" ? next : undefined
+  })
+  const todo_snapshot = createMemo(() => {
+    const next = structured()
+    return next?.kind === "todo" ? next : undefined
+  })
+  const todoColor = (status: string) => {
+    if (status === "in_progress") return theme().block.warning
+    if (status === "cancelled") return theme().block.faint
+    return theme().block.muted
+  }
+  const question_snapshot = createMemo(() => {
+    const next = structured()
+    return next?.kind === "question" ? next : undefined
+  })
+
+  return (
+    <Switch fallback={null}>
+      <Match when={props.commit.compaction}>
+        <box width="100%" flexDirection="row" alignItems="center">
+          <box border={["top"]} borderColor={theme().block.muted} flexGrow={1} />
+          <box paddingLeft={1} paddingRight={1}>
+            <text fg={theme().block.muted}>{props.commit.text}</text>
+          </box>
+          <box border={["top"]} borderColor={theme().block.muted} flexGrow={1} />
+        </box>
+      </Match>
+      <Match when={text()}>
+        <text width="100%" wrapMode="word" fg={style().fg} attributes={style().attrs}>
+          {text()!.content}
+        </text>
+      </Match>
+      <Match when={code()}>
+        <code
+          ref={(node: Renderable) => borrowers.push(node)}
+          width="100%"
+          wrapMode="word"
+          filetype={code()!.filetype}
+          drawUnstyledText={false}
+          streaming={streaming()}
+          syntaxStyle={syntax()}
+          content={code()!.content}
+          fg={color()}
+        />
+      </Match>
+      <Match when={code_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            {code_snapshot()!.title}
+          </text>
+          <box width="100%" paddingLeft={1}>
+            <line_number width="100%" fg={theme().block.muted} minWidth={3} paddingRight={1}>
+              <code
+                ref={(node: Renderable) => borrowers.push(node)}
+                width="100%"
+                wrapMode="char"
+                filetype={toolFiletype(code_snapshot()!.file)}
+                streaming={false}
+                syntaxStyle={syntax()}
+                content={code_snapshot()!.content}
+                fg={theme().block.text}
+              />
+            </line_number>
+          </box>
+        </box>
+      </Match>
+      <Match when={diff_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          {diff_snapshot()!.items.map((item) => (
+            <box width="100%" flexDirection="column" gap={1}>
+              <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                {item.title}
+              </text>
+              {item.diff.trim() ? (
+                <box ref={(node: Renderable) => borrowers.push(node)} width="100%" paddingLeft={1}>
+                  <PatchDiff
+                    diff={item.diff}
+                    hunkFg={theme().block.diffLineNumber}
+                    view="unified"
+                    filetype={toolFiletype(item.file)}
+                    syntaxStyle={syntax()}
+                    showLineNumbers={true}
+                    width="100%"
+                    wrapMode="word"
+                    fg={theme().block.text}
+                    addedBg={diffBg(theme().block.diffAddedBg)}
+                    removedBg={diffBg(theme().block.diffRemovedBg)}
+                    contextBg={diffBg(theme().block.diffContextBg)}
+                    addedSignColor={theme().block.diffHighlightAdded}
+                    removedSignColor={theme().block.diffHighlightRemoved}
+                    lineNumberFg={theme().block.diffLineNumber}
+                    lineNumberBg={diffBg(theme().block.diffContextBg)}
+                    addedLineNumberBg={diffBg(theme().block.diffAddedLineNumberBg)}
+                    removedLineNumberBg={diffBg(theme().block.diffRemovedLineNumberBg)}
+                  />
+                </box>
+              ) : (
+                <text width="100%" wrapMode="word" fg={theme().block.diffRemoved}>
+                  -{item.deletions ?? 0} line{item.deletions === 1 ? "" : "s"}
+                </text>
+              )}
+            </box>
+          ))}
+        </box>
+      </Match>
+      <Match when={task_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            {task_snapshot()!.title}
+          </text>
+          <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
+            {task_snapshot()!.rows.map((row) => (
+              <text width="100%" wrapMode="word" fg={theme().block.text}>
+                {row}
+              </text>
+            ))}
+            {task_snapshot()!.tail ? (
+              <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                {task_snapshot()!.tail}
+              </text>
+            ) : null}
+          </box>
+        </box>
+      </Match>
+      <Match when={todo_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            # Todos
+          </text>
+          <box width="100%" flexDirection="column" gap={0}>
+            {todo_snapshot()!.items.map((item) => (
+              <box width="100%" flexDirection="row" gap={0}>
+                <text flexShrink={0} fg={todoColor(item.status)}>
+                  {todoMarker(item.status, props.opts?.mono === true)}{" "}
+                </text>
+                <text
+                  flexGrow={1}
+                  flexShrink={1}
+                  minWidth={0}
+                  wrapMode="word"
+                  fg={todoColor(item.status)}
+                  attributes={item.status === "cancelled" ? TextAttributes.STRIKETHROUGH : undefined}
+                >
+                  {item.content}
+                </text>
+              </box>
+            ))}
+          </box>
+        </box>
+      </Match>
+      <Match when={question_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            # Questions
+          </text>
+          <box width="100%" flexDirection="column" gap={1}>
+            {question_snapshot()!.items.map((item) => (
+              <box width="100%" flexDirection="column" gap={0}>
+                <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                  {item.question}
+                </text>
+                <text width="100%" wrapMode="word" fg={theme().block.text}>
+                  {item.answer}
+                </text>
+              </box>
+            ))}
+            {question_snapshot()!.tail ? (
+              <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                {question_snapshot()!.tail}
+              </text>
+            ) : null}
+          </box>
+        </box>
+      </Match>
+      <Match when={markdown()}>
+        {/* Mono hooks mutate renderables, so toggling needs a fresh Markdown leaf. */}
+        <For each={[props.opts?.mono === true]}>
+          {(mono) => (
+            <markdown
+              ref={(renderable: MarkdownRenderable) => {
+                borrowers.push(renderable)
+                if (mono) monoMarkdownRenderable(renderable)
+              }}
+              width="100%"
+              syntaxStyle={syntax()}
+              streaming={streaming()}
+              content={markdown()!.content}
+              fg={color()}
+              tableOptions={mono ? monoMarkdownTableOptions : { widthMode: "content" }}
+            />
+          )}
+        </For>
+      </Match>
+    </Switch>
+  )
+}
+
+export function entryWriter(input: {
+  commit: StreamCommit
+  body?: RunEntryBody
+  theme?: RunTheme
+  opts?: ScrollbackOptions
+}): ScrollbackWriter {
+  return createScrollbackWriter((ctx) => {
+    const theme = input.theme ?? RUN_THEME_FALLBACK
+    const syntax = entrySyntax(theme, ctx.renderContext.nativeScene)
+    // The writer tears down its Solid root after destroying the snapshot tree.
+    onCleanup(() => syntax.destroy())
+    return (
+      <RunEntryContent
+        commit={input.commit}
+        body={input.body}
+        theme={{ ...theme, block: { ...theme.block, syntax } }}
+        opts={{ ...input.opts, suppressBackgrounds: true }}
+      />
+    )
+  }, entryFlags(input.commit))
+}
+
+export function spacerWriter(): ScrollbackWriter {
+  return (ctx: ScrollbackRenderContext) => ({
+    root: new TextRenderable(ctx.renderContext, {
+      width: Math.max(1, Math.trunc(ctx.width)),
+      height: 1,
+      content: "",
+    }),
+    width: Math.max(1, Math.trunc(ctx.width)),
+    height: 1,
+    startOnNewLine: true,
+    trailingNewline: true,
+  })
+}
+
+export function turnSummaryWriter(input: TurnSummary & { theme: RunTheme; mono?: boolean }) {
+  return createScrollbackWriter(
+    () => (
+      <box width="100%" height={1}>
+        <text wrapMode="none" truncate>
+          <span style={{ fg: input.theme.block.text }}>{input.agent}</span>
+          <span style={{ fg: input.theme.block.muted }}>
+            {" "}
+            {input.mono ? "-" : "·"} {input.model} {input.mono ? "-" : "·"} {input.duration}
+          </span>
+        </text>
+      </box>
+    ),
+    { startOnNewLine: true, trailingNewline: false },
+  )
+}

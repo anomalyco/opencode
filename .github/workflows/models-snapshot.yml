@@ -6,7 +6,7 @@ permissions:
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "0 0,12 * * *"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-          ref: v2
+          ref: dev
 
       # The refresh script only needs `fetch`; skip the monorepo install.
       - name: Setup Bun
@@ -55,8 +55,8 @@ jobs:
           git add "$FILE"
           git commit -m "chore(core): refresh bundled models.dev snapshot"
 
-          git pull --rebase --autostash origin v2
-          git push origin HEAD:v2 --no-verify
+          git pull --rebase --autostash origin dev
+          git push origin HEAD:dev --no-verify
 
           echo "### models.dev snapshot" >> "$GITHUB_STEP_SUMMARY"
           echo "Status: committed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"

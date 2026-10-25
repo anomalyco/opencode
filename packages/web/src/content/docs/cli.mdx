@@ -72,7 +72,7 @@ opencode agent create
 
 This command will guide you through creating a new agent with a custom system prompt and permission configuration. Anything you don't allow is denied in the generated agent's frontmatter.
 
-#### Flags
+##### Flags
 
 | Flag                                        | Short | Description                                                                                                                                                                                                                |
 | ------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -178,6 +178,16 @@ Logs you out of a provider by clearing it from the credentials file.
 
 ```bash
 opencode auth logout
+```
+
+---
+
+### completion
+
+Generate a shell completion script.
+
+```bash
+opencode completion
 ```
 
 ---
@@ -493,7 +503,6 @@ You can import from a local file or an Bolt share URL.
 
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -612,6 +621,64 @@ opencode debug [command]
 
 ---
 
+#### agent
+
+Show a loaded agent's configuration. Use `opencode agent list` to list all agents.
+
+```bash
+opencode debug agent build
+```
+
+---
+
+#### config
+
+Show the resolved configuration.
+
+```bash
+opencode debug config
+```
+
+---
+
+#### paths
+
+Show global paths (data, config, cache, state).
+
+```bash
+opencode debug paths
+```
+
+This prints all global paths. To print the database path, use:
+
+```bash
+opencode db path
+```
+
+---
+
+#### Other debug commands
+
+| Command                                     | Description                                              |
+| ------------------------------------------- | -------------------------------------------------------- |
+| `opencode debug info`                       | Show the version, OS, terminal, and configured plugins   |
+| `opencode debug skill`                      | List available skills                                    |
+| `opencode debug scrap`                      | List known projects                                      |
+| `opencode debug file list <path>`           | List files in a directory                                |
+| `opencode debug file read <path>`           | Read a file as JSON with base64-encoded content          |
+| `opencode debug file search <query>`        | Search file paths                                        |
+| `opencode debug rg files`                   | List files using ripgrep; accepts `--glob` and `--limit` |
+| `opencode debug rg search <pattern>`        | Search file contents; accepts `--glob` and `--limit`     |
+| `opencode debug lsp diagnostics <file>`     | Get LSP diagnostics for a file                           |
+| `opencode debug lsp symbols <query>`        | Search workspace symbols                                 |
+| `opencode debug lsp document-symbols <uri>` | Get symbols from a document                              |
+| `opencode debug snapshot track`             | Track the current snapshot state                         |
+| `opencode debug snapshot patch <hash>`      | Show changed files for a snapshot hash                   |
+| `opencode debug snapshot diff <hash>`       | Show the diff for a snapshot hash                        |
+| `opencode debug startup`                    | Print startup timing                                     |
+
+---
+
 ### uninstall
 
 Uninstall Bolt and remove all related files.
@@ -651,11 +718,18 @@ To upgrade to a specific version.
 opencode upgrade v0.1.48
 ```
 
+To upgrade to OpenCode 2 and remove OpenCode 1:
+
+```bash
+opencode upgrade --major
+```
+
 #### Flags
 
 | Flag                                   | Short | Description                                                       |
 | -------------------------------------- | ----- | ----------------------------------------------------------------- |
 | <nobr><code>{"--method"}</code></nobr> | `-m`  | The installation method that was used; curl, npm, pnpm, bun, brew |
+| <nobr><code>{"--major"}</code></nobr>  |       | Upgrade to OpenCode 2 and remove OpenCode 1                       |
 
 ---
 

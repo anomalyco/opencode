@@ -42,6 +42,7 @@ export function required(config: Info) {
   return Option.isSome(config.password) && config.password.value !== ""
 }
 
+// Session tokens issued by pairing links are accepted anywhere the password is.
 export function authorized(credentials: DecodedCredentials, config: Info) {
   if (Option.isNone(config.password)) return false
   // Evaluate both comparisons so a username mismatch does not skip the
@@ -66,8 +67,24 @@ export function header(credentials?: Credentials) {
   return `Basic ${Buffer.from(`${credentials?.username ?? process.env.BOLT_SERVER_USERNAME ?? "bolt"}:${password}`).toString("base64")}`
 }
 
-export function headers(credentials?: Credentials) {
-  const authorization = header(credentials)
-  if (!authorization) return undefined
-  return { Authorization: authorization }
+export function verifySession(token: string, config: Info, now = Date.now()) {
+  if (Option.isNone(config.password)) return false
+  const parts = token.split(".")
+  if (parts.length !== 2) return false
+  const expires = Number(parts[0])
+  if (!Number.isSafeInteger(expires) || expires * 1000 <= now) return false
+  const expected = Buffer.from(sign(config.password.value, parts[0]))
+  const actual = Buffer.from(parts[1])
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
+}
+
+// Browsers share cookies across ports on the same host, so the name carries the port to keep local servers apart.
+export function sessionCookieName(host: string | undefined) {
+  const port = URL.parse(`http://${host ?? ""}`)?.port
+  return port ? `opencode_session_${port}` : "opencode_session"
+}
+
+function sign(password: string, payload: string) {
+  const key = createHmac("sha256", password).update("opencode-session-v1").digest()
+  return createHmac("sha256", key).update(payload).digest("base64url")
 }

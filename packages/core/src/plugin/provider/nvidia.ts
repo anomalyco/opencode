@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { define } from "../internal"
+import { define } from "@opencode/plugin/effect/plugin"
 
 export const NvidiaPlugin = define({
-  id: "nvidia",
+  id: "opencode.provider.nvidia",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {

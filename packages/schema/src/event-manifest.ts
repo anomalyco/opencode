@@ -1,45 +1,52 @@
-export * as EventManifest from "./event-manifest"
+export * as EventManifest from "./event-manifest.js"
 
-import { Catalog } from "./catalog"
-import { Durable } from "./durable-event-manifest"
-import { Event } from "./event"
-import { FileSystem } from "./filesystem"
-import { FileSystemWatcher } from "./filesystem-watcher"
-import { InstallationEvent } from "./installation-event"
-import { Integration } from "./integration"
-import { LegacyEvent } from "./legacy-event"
-import { LspEvent } from "./lsp-event"
-import { McpEvent } from "./mcp-event"
-import { ModelsDev } from "./models-dev"
-import { Permission } from "./permission"
-import { PermissionV1 } from "./permission-v1"
-import { Plugin } from "./plugin"
-import { Project } from "./project"
-import { ProjectDirectories } from "./project-directories"
-import { Pty } from "./pty"
-import { Question } from "./question"
-import { QuestionV1 } from "./question-v1"
-import { Reference } from "./reference"
-import { ServerEvent } from "./server-event"
-import { SessionCompactionEvent } from "./session-compaction-event"
-import { SessionEvent } from "./session-event"
-import { SessionStatusEvent } from "./session-status-event"
-import { SessionTodo } from "./session-todo"
-import { SessionV1 } from "./session-v1"
-import { TuiEvent } from "./tui-event"
-import { VcsEvent } from "./vcs-event"
-import { WorkspaceEvent } from "./workspace-event"
-import { WorktreeEvent } from "./worktree-event"
+import { Schema } from "effect"
+import { Agent } from "./agent.js"
+import { Command } from "./command.js"
+import { Config } from "./config.js"
+import { Credential } from "./credential.js"
+import { Durable } from "./durable-event-manifest.js"
+import { Event } from "./event.js"
+import { FileSystem } from "./filesystem.js"
+import { FileSystemV1 } from "./filesystem-v1.js"
+import { Form } from "./form.js"
+import { InstallationEvent } from "./installation-event.js"
+import { Integration } from "./integration.js"
+import { LegacyEventV1 } from "./legacy-event.js"
+import { LspEvent } from "./lsp-event.js"
+import { LocationEvent } from "./location-event.js"
+import { McpEvent } from "./mcp-event.js"
+import { Model } from "./model.js"
+import { ModelsDev } from "./models-dev.js"
+import { Permission } from "./permission.js"
+import { PersistentPty } from "./persistent-pty.js"
+import { Plugin } from "./plugin.js"
+import { Project } from "./project.js"
+import { Provider } from "./provider.js"
+import { Worktree } from "./worktree.js"
+import { Pty } from "./pty.js"
+import { Reference } from "./reference.js"
+import { ServerEvent } from "./server-event.js"
+import { Shell } from "./shell.js"
+import { Skill } from "./skill.js"
+import { SessionEvent } from "./session-event.js"
+import { SessionStatusEvent } from "./session-status-event.js"
+import { TuiEvent } from "./tui-event.js"
+import { VcsEvent } from "./vcs-event.js"
+import { WorkspaceEvent } from "./workspace-event.js"
+import { WorktreeEvent } from "./worktree-event.js"
+import { WebSearch } from "./websearch.js"
 
-const sessionV1DurableDefinitions = SessionV1.Event.Definitions.filter((definition) => definition.durable !== undefined)
-const sessionV1LiveDefinitions = SessionV1.Event.Definitions.filter((definition) => definition.durable === undefined)
-
-const coreDefinitions = Event.inventory(...sessionV1DurableDefinitions, ...SessionEvent.Definitions)
+const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
 const foundationDefinitions = Event.inventory(
+  ...LocationEvent.Definitions,
   ...ModelsDev.Event.Definitions,
+  ...Credential.Event.Definitions,
   ...Integration.Event.Definitions,
-  ...Catalog.Event.Definitions,
+  ...Provider.Event.Definitions,
+  ...Model.Event.Definitions,
+  ...Agent.Event.Definitions,
   ...coreDefinitions,
 )
 
@@ -48,33 +55,43 @@ const featureDefinitions = Event.inventory(
   ...Reference.Event.Definitions,
   ...Permission.Event.Definitions,
   ...Plugin.Event.Definitions,
-  ...ProjectDirectories.Event.Definitions,
-  ...FileSystemWatcher.Event.Definitions,
+  ...Project.Event.Definitions,
+  ...Worktree.Event.Definitions,
+  ...Command.Event.Definitions,
+  ...Config.Event.Definitions,
+  ...Skill.Event.Definitions,
   ...Pty.Event.Definitions,
-  ...Question.Event.Definitions,
+  ...PersistentPty.Event.Definitions,
+  ...Shell.Event.Definitions,
+  ...Form.Event.Definitions,
+  ...WebSearch.Event.Definitions,
 )
 
 export const ServerDefinitions = Event.inventory(
   ...foundationDefinitions,
   ...featureDefinitions,
-  ...SessionTodo.Event.Definitions,
+  // Current events the TUI consumes from the public stream.
+  ...SessionStatusEvent.Definitions,
+  ...TuiEvent.Definitions,
+  ...InstallationEvent.Definitions,
+  ...VcsEvent.Definitions,
+  McpEvent.StatusChanged,
+  McpEvent.ResourcesChanged,
 )
+export const Server = Event.latest(ServerDefinitions)
+export type ServerEvent = Schema.Schema.Type<(typeof ServerDefinitions)[number]>
+export const isServer = (event: { readonly type: string }): event is ServerEvent => Server.has(event.type)
 
 export const Definitions = Event.inventory(
   ...foundationDefinitions,
-  ...sessionV1LiveDefinitions,
   ...InstallationEvent.Definitions,
   ...featureDefinitions,
-  ...SessionTodo.Event.Definitions,
   ...LspEvent.Definitions,
-  ...PermissionV1.Event.Definitions,
   ...TuiEvent.Definitions,
   ...McpEvent.Definitions,
-  ...LegacyEvent.Definitions,
-  ...Project.Event.Definitions,
+  ...LegacyEventV1.Definitions,
+  ...FileSystemV1.Event.Definitions,
   ...SessionStatusEvent.Definitions,
-  ...QuestionV1.Event.Definitions,
-  ...SessionCompactionEvent.Definitions,
   ...VcsEvent.Definitions,
   ...WorkspaceEvent.Definitions,
   ...WorktreeEvent.Definitions,

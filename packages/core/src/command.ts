@@ -1,4 +1,4 @@
-export * as CommandV2 from "./command"
+export * as Command from "./command.js"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Types } from "effect"
@@ -7,58 +7,96 @@ import { State } from "./state"
 
 export const Info = Command.Info
 export type Info = Command.Info
+export { Event } from "@opencode/schema/command"
 
-export type Data = {
-  commands: Map<string, Types.DeepMutable<Info>>
+export interface Invocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
 }
 
-export type Draft = {
-  list: () => readonly Info[]
-  get: (name: string) => Info | undefined
-  update: (name: string, update: (command: Types.DeepMutable<Info>) => void) => void
-  remove: (name: string) => void
+export interface Definition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export type Editor = {
+  add: (definition: Definition) => void
+}
+
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Command.NotFoundError", {
+  command: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class ExecutionError extends Schema.TaggedError<ExecutionError>()("Command.ExecutionError", {
+  command: Schema.String,
+  message: Schema.String,
+}) {}
+
+export interface Interface extends State.Transformable<Editor> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
+  readonly execute: (input: {
+    readonly name: string
+    readonly invocation: Invocation
+  }) => Effect.Effect<void, NotFoundError | ExecutionError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@bolt/v2/Command") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
-  Effect.sync(() => {
-    const state = State.create<Data, Draft>({
-      initial: () => ({ commands: new Map() }),
-      draft: (draft) => ({
-        list: () => Array.from(draft.commands.values()) as Info[],
-        get: (name) => draft.commands.get(name),
-        update: (name, update) => {
-          const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
-          if (!draft.commands.has(name)) draft.commands.set(name, current)
-          update(current)
-          current.name = name
-        },
-        remove: (name) => {
-          draft.commands.delete(name)
-        },
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const state = State.create<Map<string, Definition>, Editor>({
+      name: "command",
+      initial: () => new Map(),
+      editor: (editor) => ({
+        add: (definition) => editor.set(definition.name, definition),
       }),
+      notify: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
     })
+    const info = (definition: Definition) =>
+      Info.make({
+        name: definition.name,
+        description: definition.description,
+      })
 
     return Service.of({
       reload: state.reload,
       transform: state.transform,
-      get: Effect.fn("CommandV2.get")(function* (name) {
-        return state.get().commands.get(name)
-      }),
-      list: Effect.fn("CommandV2.list")(function* () {
-        return Array.from(state.get().commands.values())
+      get: Effect.fn("Command.get")((name) =>
+        Effect.sync(() => {
+          const definition = state.get().get(name)
+          return definition ? info(definition) : undefined
+        }),
+      ),
+      list: Effect.fn("Command.list")(() => Effect.sync(() => Array.from(state.get().values(), info))),
+      execute: Effect.fn("Command.execute")(function* (input) {
+        const definition = state.get().get(input.name)
+        if (!definition)
+          return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
+        return yield* definition.execute(input.invocation).pipe(
+          Effect.tapError((error) => Effect.logError("command execution failed", { command: input.name, error })),
+          Effect.mapError((error) => new ExecutionError({ command: input.name, message: errorMessage(error) })),
+        )
       }),
     })
   }),
 )
 
-export const locationLayer = layer
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Bus.node],
+})
 
-export const node = makeLocationNode({ service: Service, layer, deps: [] })
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string")
+    return error.message
+  return "Command execution failed"
+}

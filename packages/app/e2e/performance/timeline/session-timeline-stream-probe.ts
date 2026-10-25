@@ -1,7 +1,14 @@
 import type { Page } from "@playwright/test"
 
 const STREAM_MARKER_PATTERN = "stream-(\\d+)"
+
 const STREAM_FRAGMENT_COUNT = 18
+
+declare global {
+  interface Window {
+    __timelineStreamBenchmark?: TimelineProbeState
+  }
+}
 
 type TimelineProbeState = {
   started: number
@@ -72,8 +79,10 @@ export async function installTimelineStreamProbe(
       const row = part?.closest<HTMLElement>("[data-timeline-row]")
       const markdown = part?.querySelector<HTMLElement>('[data-component="markdown"]')
       const root = part?.closest<HTMLElement>(".scroll-view__viewport")
+
       if (!part || !row || !markdown || !root) throw new Error("missing streaming benchmark nodes")
       const viewport = root.getBoundingClientRect()
+
       const state: TimelineProbeState = {
         started: 0,
         ended: Infinity,
@@ -91,6 +100,7 @@ export async function installTimelineStreamProbe(
         visibleRows: new Set(
           [...root.querySelectorAll("[data-timeline-key]")].filter((element) => {
             const rect = element.getBoundingClientRect()
+
             return rect.bottom > viewport.top && rect.top < viewport.bottom
           }),
         ),
@@ -121,26 +131,39 @@ export async function installTimelineStreamProbe(
         cleanup: () => {},
         start: () => {},
       }
-      ;(window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark = state
+
+      window.__timelineStreamBenchmark = state
       const scrollTo = Element.prototype.scrollTo
+      const scrollToPoint: (this: Element, x: number, y: number) => void = scrollTo
+      const scrollToOptions: (this: Element, options?: ScrollToOptions) => void = scrollTo
       const scrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")!
+
       if (profileVisual) {
-        Element.prototype.scrollTo = function (...args) {
+        // The two `scrollTo` overloads differ by arity: `(options?)` or `(x, y)`.
+        function measuredScrollTo(this: Element, ...args: [options?: ScrollToOptions] | [x: number, y: number]) {
           state.scroll.calls += 1
-          const top = typeof args[0] === "object" ? args[0]?.top : args[1]
-          if (typeof top === "number") {
+          const top = args.length === 2 ? args[1] : args[0]?.top
+
+          if (top !== undefined) {
             const target = Math.min(top, this.scrollHeight - this.clientHeight)
+
             if (Math.abs(this.scrollTop - target) < 1) state.scroll.callNoops += 1
           }
+
           if (state.scroll.lastCallFrame === state.scroll.frame) state.scroll.sameFrameCalls += 1
           state.scroll.lastCallFrame = state.scroll.frame
-          return scrollTo.apply(this, args)
+
+          if (args.length === 2) scrollToPoint.call(this, args[0], args[1])
+          else scrollToOptions.call(this, args[0])
         }
+
+        Element.prototype.scrollTo = measuredScrollTo
         Object.defineProperty(Element.prototype, "scrollTop", {
           configurable: true,
           get: scrollTop.get,
           set(value) {
             state.scroll.assignments += 1
+
             if (Math.abs(this.scrollTop - value) < 1) state.scroll.assignmentNoops += 1
             scrollTop.set!.call(this, value)
           },
@@ -150,34 +173,40 @@ export async function installTimelineStreamProbe(
       const recordLongTasks = (entries: PerformanceEntry[]) => {
         if (!state.running) return
         state.longTasks.push(
-          ...entries
-            .filter((entry) => entry.startTime >= state.started && entry.startTime <= state.ended)
-            .map((entry) => entry.duration),
+          ...entries.flatMap((entry) =>
+            entry.startTime >= state.started && entry.startTime <= state.ended ? [entry.duration] : [],
+          ),
         )
       }
+
       const longTaskObserver = new PerformanceObserver((list) => recordLongTasks(list.getEntries()))
       longTaskObserver.observe({ type: "longtask" })
+
       const recordLayoutShifts = (entries: PerformanceEntry[]) => {
         if (!state.running) return
         state.layoutShifts.push(
-          ...entries
-            .map((entry) => {
-              const shift = entry as LayoutShiftEntry
-              if (shift.startTime < state.started || shift.hadRecentInput) return
-              return shift.value
-            })
-            .filter((value): value is number => value !== undefined),
+          ...entries.flatMap((entry) => {
+            // SAFETY: this observer only subscribes to "layout-shift" entries, which carry `value` and `hadRecentInput`.
+            const shift = entry as LayoutShiftEntry
+
+            if (shift.startTime < state.started || shift.hadRecentInput) return []
+
+            return [shift.value]
+          }),
         )
       }
+
       const layoutShiftObserver = profileVisual
         ? new PerformanceObserver((list) => recordLayoutShifts(list.getEntries()))
         : undefined
+
       layoutShiftObserver?.observe({ type: "layout-shift", buffered: true })
 
       const visible = (element: Element) => {
         const rect = element.getBoundingClientRect()
         const viewport = root.getBoundingClientRect()
         const style = getComputedStyle(element)
+
         return (
           element.isConnected &&
           rect.width > 0 &&
@@ -189,6 +218,7 @@ export async function installTimelineStreamProbe(
           Number(style.opacity) > 0
         )
       }
+
       const critical = [
         "[data-timeline-part-id]",
         '[data-component="edit-content"]',
@@ -197,19 +227,26 @@ export async function installTimelineStreamProbe(
         '[data-component="markdown-code"]',
         "[data-markdown-block]",
       ].join(",")
+
       const describe = (element: Element) => {
         const cached = state.subtreeKeys.get(element)
+
         if (!element.isConnected && cached) return cached
         const part = element.closest<HTMLElement>("[data-timeline-part-id]")?.dataset.timelinePartId ?? "unknown"
+
         const block = element
           .closest<HTMLElement>("[data-markdown-key]")
           ?.dataset.markdownKey?.replace(/:(?:code|full|live)$/, "")
+
         const component =
           element.getAttribute("data-component") ?? element.getAttribute("data-markdown-block") ?? element.tagName
+
         const key = `${part}:${block ?? "root"}:${component}`
         state.subtreeKeys.set(element, key)
+
         return key
       }
+
       const recordMutations = (records: MutationRecord[]) => {
         if (!state.running) return
         records.forEach((record) => {
@@ -218,6 +255,7 @@ export async function installTimelineStreamProbe(
               state.visibleMounts += 1
               state.visibleRows.add(node)
             }
+
             if (!(node instanceof Element)) return
             const added = [node, ...node.querySelectorAll(critical)].filter((element) => element.matches(critical))
             added.forEach((element) => {
@@ -227,37 +265,46 @@ export async function installTimelineStreamProbe(
           record.removedNodes.forEach((node) => {
             if (node instanceof HTMLElement && node.matches("[data-timeline-key]") && state.visibleRows.delete(node))
               state.visibleUnmounts += 1
+
             if (!(node instanceof Element)) return
             const removed = [node, ...node.querySelectorAll(critical)].filter((element) => element.matches(critical))
             removed.forEach((element) => {
               const key = describe(element)
+
               if (state.visibleSubtrees.get(key) === element) state.visibleSubtreeUnmounts.push(key)
             })
           })
         })
       }
+
       const mutationObserver = profileVisual ? new MutationObserver(recordMutations) : undefined
       mutationObserver?.observe(root, { childList: true, subtree: true })
       const currentPart = () => root.querySelector<HTMLElement>(`[data-timeline-part-id="${textPartID}"]`)
+
       const observeProgress = (at: number) => {
         if (!state.running) return
         const content = currentPart()?.textContent ?? ""
+
         const index = content.includes("benchmark-complete")
           ? finalIndex
           : Number(content.match(new RegExp(markerPattern, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
+
         if (index >= 0 && index !== state.applied.at(-1)?.index) state.applied.push({ at, index })
       }
+
       const progressObserver = new MutationObserver(() => observeProgress(performance.now()))
       progressObserver.observe(root, { characterData: true, childList: true, subtree: true })
       state.cleanup = () => {
         recordLongTasks(longTaskObserver.takeRecords())
         recordLayoutShifts(layoutShiftObserver?.takeRecords() ?? [])
         recordMutations(mutationObserver?.takeRecords() ?? [])
+
         if (progressObserver.takeRecords().length) observeProgress(performance.now())
         longTaskObserver.disconnect()
         layoutShiftObserver?.disconnect()
         mutationObserver?.disconnect()
         progressObserver.disconnect()
+
         if (!profileVisual) return
         Element.prototype.scrollTo = scrollTo
         Object.defineProperty(Element.prototype, "scrollTop", scrollTop)
@@ -267,12 +314,15 @@ export async function installTimelineStreamProbe(
         if (!state.running) return
         state.frameAt.push(now)
         observeProgress(now)
+
         if (minimal) {
           state.frames.push(now - state.previous)
           state.previous = now
           requestAnimationFrame(sample)
+
           return
         }
+
         setTimeout(() => {
           if (!state.running) return
           state.scroll.frame += 1
@@ -290,11 +340,16 @@ export async function installTimelineStreamProbe(
             headerHeight: header?.getBoundingClientRect().height ?? 0,
           })
           const viewport = root.getBoundingClientRect()
+
           if (profileVisual) {
             const visibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
-              .map((element) => ({ element, rect: element.getBoundingClientRect() }))
-              .filter((item) => item.rect.bottom > viewport.top && item.rect.top < viewport.bottom)
+              .flatMap((element) => {
+                const rect = element.getBoundingClientRect()
+
+                return rect.bottom > viewport.top && rect.top < viewport.bottom ? [{ element, rect }] : []
+              })
               .sort((a, b) => a.rect.top - b.rect.top)
+
             state.visibleRows = new Set(visibleRows.map((item) => item.element))
             const rows = visibleRows.map((item) => item.rect)
             rows.slice(1).forEach((rect, index) => {
@@ -306,11 +361,15 @@ export async function installTimelineStreamProbe(
             state.maxPartTopMovement = Math.max(state.maxPartTopMovement, Math.abs(partTop - state.previousPartTop))
             state.previousPartTop = partTop
           }
+
           const visibleRow = [...root.querySelectorAll<HTMLElement>("[data-timeline-row]")].some((element) => {
             const rect = element.getBoundingClientRect()
+
             return rect.bottom > viewport.top && rect.top < viewport.bottom
           })
+
           if (!visibleRow) state.blanks += 1
+
           if (profileVisual) {
             const subtrees = new Map<string, { element: Element; rendered: boolean }>()
             const visibleSubtrees = new Map<string, Element>()
@@ -318,6 +377,7 @@ export async function installTimelineStreamProbe(
               const key = describe(element)
               const rect = element.getBoundingClientRect()
               const style = getComputedStyle(element)
+
               const rendered =
                 element.isConnected &&
                 rect.width > 0 &&
@@ -325,9 +385,12 @@ export async function installTimelineStreamProbe(
                 style.display !== "none" &&
                 style.visibility !== "hidden" &&
                 Number(style.opacity) > 0
+
               subtrees.set(key, { element, rendered })
+
               if (rendered && rect.bottom > viewport.top && rect.top < viewport.bottom) {
                 const previous = state.visibleSubtrees.get(key)
+
                 if (previous && previous !== element && key.startsWith(`${textPartID}:`))
                   state.visibleSubtreeReplacements += 1
                 visibleSubtrees.set(key, element)
@@ -335,28 +398,35 @@ export async function installTimelineStreamProbe(
             })
             state.visibleSubtrees.forEach((element, key) => {
               const current = subtrees.get(key)
+
               if (key.startsWith(`${textPartID}:`) && !current?.rendered) {
                 const markdown = part.querySelector<HTMLElement>('[data-component="markdown"]')
                 state.visibleSubtreeDropouts.push(
                   `${key}:projection=${markdown?.dataset.markdownProjectionLength}/${markdown?.dataset.markdownProjectionBlocks}:result=${markdown?.dataset.markdownResultLength}/${markdown?.dataset.markdownResultBlocks}:applied=${markdown?.dataset.markdownAppliedBlocks}:dom=${markdown?.children.length}`,
                 )
               }
+
               if (element.matches('[data-component="file"]')) {
                 const hadLines = element.hasAttribute("data-profiler-had-lines")
                 const hasLines = element.shadowRoot?.querySelector("[data-line]") != null
+
                 if (hasLines) element.setAttribute("data-profiler-had-lines", "")
+
                 if (hadLines && !hasLines) state.visibleSubtreeDropouts.push(`${key}:shadow-lines`)
               }
             })
             state.visibleSubtrees = visibleSubtrees
           }
+
           if (profileVisual && duration > 33.34) {
             const livePart = currentPart()
             const content = livePart?.textContent ?? ""
             const complete = content.includes("benchmark-complete")
+
             const index = complete
               ? finalIndex
               : Number(content.match(new RegExp(markerPattern, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
+
             state.slowFrames.push({
               duration,
               index,
@@ -367,16 +437,18 @@ export async function installTimelineStreamProbe(
                   : index >= 0
                     ? "stream"
                     : "unknown",
-              tokenSpans: livePart?.querySelectorAll(".shiki span").length ?? 0,
+              tokenSpans: livePart?.querySelectorAll(".highlights span").length ?? 0,
               blocks: livePart?.querySelectorAll("[data-markdown-block]").length ?? 0,
               codeBlocks: livePart?.querySelectorAll('[data-component="markdown-code"]').length ?? 0,
               height: livePart?.getBoundingClientRect().height ?? 0,
               distance: root.scrollHeight - root.clientHeight - root.scrollTop,
             })
           }
+
           requestAnimationFrame(sample)
         }, 0)
       }
+
       state.start = () => {
         state.started = performance.now()
         state.previous = state.started
@@ -390,7 +462,8 @@ export async function installTimelineStreamProbe(
 
 export function startTimelineStreamProbe(page: Page) {
   return page.evaluate(() => {
-    const state = (window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark
+    const state = window.__timelineStreamBenchmark
+
     if (!state) throw new Error("missing streaming benchmark state")
     state.start()
   })
@@ -403,6 +476,7 @@ export function layoutShiftValue(
   start: number,
 ) {
   if (entry.startTime < start || entry.hadRecentInput) return
+
   return entry.value
 }
 
@@ -412,6 +486,7 @@ export function removeVisibleRow<T>(visible: Set<T>, row: T) {
 
 export function streamProgress(content: string) {
   const index = Number(content.match(new RegExp(STREAM_MARKER_PATTERN, "g"))?.at(-1)?.match(/\d+/)?.[0] ?? -1)
+
   return {
     index,
     phase: content.includes("benchmark-complete")
@@ -429,7 +504,8 @@ export async function collectTimelineStreamMetrics(
   options: { textPartID: string; finalIndex: number; navigations: string[] },
 ) {
   return page.evaluate(({ textPartID, finalIndex, navigations }) => {
-    const state = (window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark
+    const state = window.__timelineStreamBenchmark
+
     if (!state) throw new Error(`missing streaming benchmark state after navigation: ${JSON.stringify(navigations)}`)
     state.ended = performance.now()
     state.cleanup()
@@ -439,23 +515,29 @@ export async function collectTimelineStreamMetrics(
     const markdown = part?.querySelector<HTMLElement>('[data-component="markdown"]')
     const sorted = state.frames.slice().sort((a, b) => a - b)
     const duration = state.frames.reduce((sum, value) => sum + value, 0)
+
     const longestSlowStreak = state.frames.reduce(
       (result, value) => {
         const current = value > 33.34 ? result.current + 1 : 0
+
         return { current, longest: Math.max(result.longest, current) }
       },
       { current: 0, longest: 0 },
     ).longest
+
     const busyStart = state.applied.at(0)?.at
     const completion = state.applied.find((value) => value.index === finalIndex)
     const busyEnd = completion?.at
+
     const busyFrames =
       busyStart === undefined || busyEnd === undefined
         ? []
         : state.frames.filter((_, index) => state.frameAt[index]! >= busyStart && state.frameAt[index]! <= busyEnd)
+
     const busySorted = busyFrames.slice().sort((a, b) => a - b)
     const busyDuration = busyFrames.reduce((sum, value) => sum + value, 0)
     const completionObservedMs = (completion?.at ?? NaN) - state.started
+
     const visual = state.profileVisual
       ? {
           layoutShiftValueSum: state.layoutShifts.reduce((sum, value) => sum + value, 0),
@@ -485,6 +567,7 @@ export async function collectTimelineStreamMetrics(
           slowRafGapPhases: Object.fromEntries(
             ["stream", "boundary", "complete", "unknown"].map((phase) => {
               const frames = state.slowFrames.filter((frame) => frame.phase === phase)
+
               return [
                 phase,
                 {
@@ -498,6 +581,7 @@ export async function collectTimelineStreamMetrics(
           scroll: state.scroll,
         }
       : null
+
     const geometry = state.minimal
       ? null
       : {
@@ -509,10 +593,12 @@ export async function collectTimelineStreamMetrics(
             .filter((value, index, values) => index === 0 || value !== values[index - 1]),
           bottomDriftTransitions: state.geometry.slice(1).filter((value, index) => {
             const previous = state.geometry[index]?.distance ?? 0
+
             return previous <= 1 && value.distance > 1
           }).length,
           blankSamples: state.blanks,
         }
+
     return {
       capabilities: { visual: state.profileVisual, geometry: !state.minimal },
       completionObservedMs,

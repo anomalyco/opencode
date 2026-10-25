@@ -9,18 +9,20 @@ import {
 import {
   assistantMessage,
   partUpdated,
+  renderedPartID,
   setupTimeline,
   shell,
   textPart,
   userMessage,
   waitForVisualSettle,
-} from "./fixture"
+} from "../../utils/timeline"
 
 // Fractional scaling exercises different browser rounding than the baseline.
 for (const deviceScaleFactor of [1, 1.25]) {
   test(`keeps shell growth ordered at device scale ${deviceScaleFactor}`, async ({ page }, testInfo) => {
     const shellID = `prt_dpr_${String(deviceScaleFactor).replace(".", "_")}_01_shell`
     const followingID = `prt_dpr_${String(deviceScaleFactor).replace(".", "_")}_02_following`
+
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -33,17 +35,23 @@ for (const deviceScaleFactor of [1, 1.25]) {
       deviceScaleFactor,
       seedHistory: true,
     })
+
     await waitForVisualSettle(page, [
-      `[data-timeline-part-id="${shellID}"]`,
-      `[data-timeline-part-id="${followingID}"]`,
+      `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
+
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
     await timeline.send(partUpdated(shell(shellID, "running", lines(20))), 180)
     await timeline.send(partUpdated(shell(shellID, "completed", lines(20))), 500)
@@ -58,6 +66,7 @@ for (const reducedMotion of [true]) {
   }, testInfo) => {
     const shellID = `prt_motion_${reducedMotion}_01_shell`
     const followingID = `prt_motion_${reducedMotion}_02_following`
+
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -70,17 +79,23 @@ for (const reducedMotion of [true]) {
       cpuRate: 4,
       seedHistory: true,
     })
+
     await waitForVisualSettle(page, [
-      `[data-timeline-part-id="${shellID}"]`,
-      `[data-timeline-part-id="${followingID}"]`,
+      `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+      `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
+
     const regions = defineVisualRegions({
-      shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+      shell: {
+        selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
+        closest: '[data-timeline-row="AssistantPart"]',
+      },
       following: {
-        selector: `[data-timeline-part-id="${followingID}"]`,
+        selector: `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
     await timeline.send(partUpdated(shell(shellID, "completed", lines(10))), 500)
     const trace = await stopVisualProbe<keyof typeof regions>(page)

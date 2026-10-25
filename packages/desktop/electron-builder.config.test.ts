@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test"
+import { statSync } from "node:fs"
+import { cp, mkdtemp, rm } from "node:fs/promises"
+import { createRequire } from "node:module"
+import os from "node:os"
+import path from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Configuration } from "electron-builder"
+import { getConfig } from "./electron-builder.config"
+import { CLI_BINARIES, nodePtyPackage } from "./scripts/utils"
 
 const legacyDesktopEntry = "resources/linux/bolt-desktop.desktop"
 
@@ -14,27 +22,27 @@ for (const channel of channels) {
     const previous = process.env.BOLT_CHANNEL
     process.env.BOLT_CHANNEL = channel.channel
 
-    const module = await import(`./electron-builder.config.ts?channel=${channel.channel}`)
-    const config = module.default as Configuration
+  if (target !== undefined) process.env.OPENCODE_CLI_TARGET = target
+  else delete process.env.OPENCODE_CLI_TARGET
 
     if (previous === undefined) delete process.env.BOLT_CHANNEL
     else process.env.BOLT_CHANNEL = previous
 
-    expect(config.appId).toBe(channel.appId)
-    expect(config.extraMetadata?.desktopName).toBe(`${channel.appId}.desktop`)
-    expect(config.linux?.executableName).toBe(channel.appId)
-    expect(config.linux?.desktop?.entry?.StartupWMClass).toBe(channel.appId)
-    expect(config.deb?.fpm).toContainEqual(expect.stringContaining(`/usr/share/metainfo/${channel.appId}.metainfo.xml`))
-    expect(config.rpm?.fpm).toContainEqual(expect.stringContaining(`/usr/share/metainfo/${channel.appId}.metainfo.xml`))
-  })
+    if (previous !== undefined) process.env.OPENCODE_CHANNEL = previous
+
+    if (previousTarget !== undefined) process.env.OPENCODE_CLI_TARGET = previousTarget
+  }
 }
 
 test("keeps a hidden prod launcher for old Linux pins", async () => {
   const previous = process.env.BOLT_CHANNEL
   process.env.BOLT_CHANNEL = "prod"
 
-  const module = await import("./electron-builder.config.ts?compat=prod")
-  const config = module.default as Configuration
+  return new FileMatcher(dir, "", (value: string) => value, [
+    "**/*",
+    ...patterns.filter((value) => value.startsWith("!")),
+  ]).createFilter()
+}
 
   if (previous === undefined) delete process.env.BOLT_CHANNEL
   else process.env.BOLT_CHANNEL = previous

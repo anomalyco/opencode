@@ -1,10 +1,9 @@
 import { domain } from "./stage"
 import { EMAILOCTOPUS_API_KEY } from "./app"
-import { SECRET } from "./secret"
 
-////////////////
-// DATABASE
-////////////////
+// Archived Zen request/response dumps (writer removed May 2026). Retained on purpose; nothing reads or writes them.
+new sst.cloudflare.Bucket("ZenData")
+new sst.cloudflare.Bucket("ZenDataNew")
 
 const cluster = planetscale.getDatabaseOutput({
   name: "bolt",
@@ -243,57 +242,35 @@ const DISCORD_INCIDENT_WEBHOOK_URL = new sst.Secret("DISCORD_INCIDENT_WEBHOOK_UR
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 const ENTERPRISE_SALES_INBOX_EMAIL = new sst.Secret("ENTERPRISE_SALES_INBOX_EMAIL")
+// OpenCode API key for Jev spam scoring of enterprise form submissions.
+const ENTERPRISE_SPAM_API_KEY = new sst.Secret("ENTERPRISE_SPAM_API_KEY")
+// hCaptcha guards the enterprise form; the site key is public and baked into the client bundle.
+const HCAPTCHA_SITE_KEY = new sst.Secret("HCAPTCHA_SITE_KEY")
+const HCAPTCHA_SECRET_KEY = new sst.Secret("HCAPTCHA_SECRET_KEY")
 
 const SALESFORCE_CLIENT_ID = new sst.Secret("SALESFORCE_CLIENT_ID")
 const SALESFORCE_CLIENT_SECRET = new sst.Secret("SALESFORCE_CLIENT_SECRET")
 const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
 
-const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
-  handler: "packages/console/function/src/log-processor.ts",
-  link: [SECRET.HoneycombApiKey],
-})
-
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
   link: [
-    bucket,
-    bucketNew,
-    database,
-    SECRET.UpstashRedisRestUrl,
-    SECRET.UpstashRedisRestToken,
-    AUTH_API_URL,
-    consoleMigration,
-    STRIPE_WEBHOOK_SECRET,
-    SECRET.SupportApiKey,
-    DISCORD_INCIDENT_WEBHOOK_URL,
-    SECRET.HoneycombWebhookSecret,
-    STRIPE_SECRET_KEY,
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
     ENTERPRISE_SALES_INBOX_EMAIL,
+    ENTERPRISE_SPAM_API_KEY,
+    HCAPTCHA_SECRET_KEY,
     SALESFORCE_CLIENT_ID,
     SALESFORCE_CLIENT_SECRET,
     SALESFORCE_INSTANCE_URL,
-    ZEN_BLACK_PRICE,
-    ZEN_LITE_PRICE,
-    new sst.Secret("ZEN_LIMITS"),
-    new sst.Secret("ZEN_SESSION_SECRET"),
-    new sst.Secret("CLOUDFLARE_ACCESS_CLIENT_ID"),
-    ...ZEN_MODELS,
-    ...($dev
-      ? [
-          new sst.Secret("CLOUDFLARE_DEFAULT_ACCOUNT_ID", process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID!),
-          new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
-        ]
-      : []),
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),
-    VITE_AUTH_URL: auth.url.apply((url) => url!),
-    VITE_STRIPE_PUBLISHABLE_KEY: STRIPE_PUBLISHABLE_KEY.value,
+    VITE_CONSOLE_MARKETING_ENABLED: $app.stage === "dev" ? "true" : "false",
+    VITE_HCAPTCHA_SITE_KEY: HCAPTCHA_SITE_KEY.value,
   },
   transform: {
     server: {
@@ -304,19 +281,8 @@ new sst.cloudflare.x.SolidStart("Console", {
             ...(flags ?? []),
             "global_fetch_strictly_public",
           ])
-          args.tailConsumers = [{ service: logProcessor.nodes.worker.scriptName }]
         },
       },
     },
   },
-})
-
-////////////////
-// HELPERS
-////////////////
-
-export const stat = new sst.cloudflare.Worker("Stat", {
-  handler: "packages/console/function/src/stat.ts",
-  link: [database],
-  url: true,
 })

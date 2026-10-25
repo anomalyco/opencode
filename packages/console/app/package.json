@@ -3,7 +3,8 @@
   "version": "1.20.7",  "type": "module",
   "license": "MIT",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
     "dev": "vite dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.bolt.ai VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
     "build": "bun ./script/generate-sitemap.ts && vite build && bun ../../opencode/script/schema.ts ./.output/public/config.json ./.output/public/tui.json",
@@ -12,7 +13,6 @@
   "dependencies": {
     "@cloudflare/vite-plugin": "1.15.2",
     "@ibm/plex": "6.4.1",
-    "@jsx-email/render": "1.1.1",
     "@kobalte/core": "catalog:",
     "@openauthjs/openauth": "catalog:",
     "@bolt-ai/console-core": "workspace:*",
@@ -24,20 +24,17 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
-    "@stripe/stripe-js": "8.6.1",
-    "@upstash/redis": "1.38.0",
-    "chart.js": "4.5.1",
+    "aws4fetch": "1.0.20",
     "nitro": "3.0.1-alpha.1",
     "number-flow": "0.6.2",
     "solid-js": "catalog:",
     "solid-list": "0.3.0",
-    "solid-stripe": "0.8.1",
     "vite": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "@webgpu/types": "0.1.54",
     "typescript": "catalog:",
     "wrangler": "4.50.0"

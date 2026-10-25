@@ -57,19 +57,18 @@ Ou você pode configurá-lo manualmente.
        permissions:
          id-token: write
        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+         - name: Checkout repository
+           uses: actions/checkout@v6
+           with:
+             fetch-depth: 1
+             persist-credentials: false
 
           - name: Run Bolt
            uses: bolt-builder/bolt-cli/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
-             model: anthropic/claude-sonnet-4-20250514
-             # share: true
+             model: anthropic/claude-sonnet-5-5
              # github_token: xxxx
    ```
 
@@ -257,7 +256,7 @@ Substitua o prompt padrão para personalizar o comportamento do opencode para se
 ```yaml title=".github/workflows/bolt.yml"
 - uses: bolt-builder/bolt-cli/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Revise este pull request:
       - Verifique problemas de qualidade de código

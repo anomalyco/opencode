@@ -12,7 +12,8 @@
     "./domain/*": "./src/domain/*.ts",
     "./r2-sql": "./src/r2-sql.ts",
     "./runtime": "./src/runtime.ts",
-    "./stat-sync": "./src/stat-sync.ts"
+    "./stat-sync": "./src/stat-sync.ts",
+    "./sync-range": "./src/sync-range.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
@@ -22,7 +23,9 @@
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
     "honeycomb:backfill": "bun src/honeycomb-backfill.ts",
-    "typecheck": "tsgo --noEmit"
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@planetscale/database": "1.19.0",
@@ -34,7 +37,7 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "drizzle-kit": "catalog:",
     "typescript": "catalog:"
   },

@@ -3,7 +3,6 @@
 exports[`TUI inline tool wrapping snapshots consecutive grep, glob, and read rows at a narrow width 1`] = `
 "   ✱ Grep "BOLT.*DB|database|sqlite|drizzle|dev.*db|data.
      *dir|xdg|APPDATA" in packages/opencode/src (151 matches)
-
    ✱ Glob "**/*db*" in packages/opencode (6 matches)
    → Read packages/opencode/src/storage/db.ts [offset=1, limit=130]
    → Read packages/opencode/src/index.ts [offset=1, limit=100]
@@ -14,7 +13,6 @@ exports[`TUI inline tool wrapping snapshots consecutive grep, glob, and read row
 exports[`TUI inline tool wrapping snapshots expanded tool errors under the tool text 1`] = `
 "   ✱ Grep "BOLT.*DB|database|sqlite|drizzle|dev.*db|data.
      *dir|xdg|APPDATA" in packages/opencode/src (151 matches)
-
    ✱ Glob "**/*db*" in packages/opencode (6 matches)
    → Read packages/opencode/src/storage/db.ts [offset=1, limit=130]
    → Read packages/opencode/src/index.ts [offset=1, limit=100]

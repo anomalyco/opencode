@@ -1,0 +1,705 @@
+import { describe, expect, test } from "bun:test"
+import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
+import { AIError, HttpContext } from "../src/schema/index.js"
+import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
+
+describe("provider error classification", () => {
+  test("classifies provider token limit messages as context overflow", () => {
+    const messages = [
+      "tokens in request more than max tokens allowed",
+      "Requested token count exceeds the model's maximum context length of 131072 tokens.",
+      "Requested input length 600010 exceeds maximum input length 131071",
+      "Input length (265330) exceeds model's maximum context length (262144).",
+      "Input length 131393 exceeds the maximum allowed input length of 131040 tokens.",
+      "The input (516368 tokens) is longer than the model's context length (262144 tokens).",
+      "The input is longer than the model's context length trace_id: 39d8c3a5c6c91dbc8dd9055f0b37e084",
+      "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
+      "Range of input length should be [1, 129024]",
+      "Too many tokens",
+      "Input validation error: `inputs` tokens + `max_new_tokens` must be <= 131073. Given: 600035 `inputs` tokens and 16 `max_new_tokens`",
+      "Token limit exceeded",
+      "Prompt exceeds max length",
+      "The input is too long for the selected model.",
+      "This text request is too large for the model's configured input limit.",
+    ]
+
+    expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
+  test("classifies Anthropic request_too_large as recoverable overflow", () => {
+    expect(
+      classifyProviderFailure({
+        message: '{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}',
+        status: 400,
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(isContextOverflow("413 status code (no body)")).toBe(true)
+  })
+
+  test("classifies generic request size failures separately from context overflow", () => {
+    const failures = [
+      classifyProviderFailure({ message: "request too large", status: 413 }),
+      classifyProviderFailure({ message: "upstream request entity too large", status: 502 }),
+    ]
+
+    expect(failures).toEqual(
+      failures.map(() => expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" })),
+    )
+  })
+
+  test("does not classify rate limits as context overflow", () => {
+    const messages = [
+      "Throttling error: Too many tokens, please wait before trying again.",
+      "Rate limit exceeded, please retry after 30 seconds.",
+      "Too many requests. Please slow down.",
+    ]
+
+    expect(messages.some(isContextOverflow)).toBe(false)
+  })
+
+  test("classifies V1 plain-text rate limit fallbacks", () => {
+    expect(
+      [
+        "Request rate increased too quickly",
+        "Rate limit exceeded, please try again later",
+        "Too many requests, please slow down",
+      ].map((message) => classifyProviderFailure({ message })._tag),
+    ).toEqual(["RateLimit", "RateLimit", "RateLimit"])
+  })
+
+  test("classifies V1 JSON rate limit fallbacks", () => {
+    expect(
+      [
+        '{"type":"error","error":{"type":"too_many_requests"}}',
+        '{"type":"error","error":{"code":"rate_limit_exceeded"}}',
+        '{"code":"bad_request","error":{"code":"rate_limit_exceeded"}}',
+        '{"type":"error","error":{"code":"unknown","type":"too_many_requests"}}',
+      ].map((message) => classifyProviderFailure({ message })._tag),
+    ).toEqual(["RateLimit", "RateLimit", "RateLimit", "RateLimit"])
+  })
+
+  test("classifies V1 overloaded provider codes", () => {
+    expect(
+      ['{"code":"resource_exhausted"}', '{"code":"service_unavailable"}', '{"code":"slow_down"}'].map(
+        (message) => classifyProviderFailure({ message })._tag,
+      ),
+    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
+  })
+
+  test("classifies retryable server messages as provider internal", () => {
+    const message =
+      "The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing."
+
+    expect(
+      [
+        message,
+        "Try again",
+        "Please retry your request shortly.",
+        "You can retry the request.",
+        "Try your request again.",
+        "The service is temporarily at capacity.",
+        "The model is overloaded.",
+        "Service unavailable",
+        "Internal server error",
+        "The server is busy.",
+        "Provider returned error",
+        "Provider returned an error",
+        "ResourceExhausted",
+        "Upstream connection failed",
+        "Exceeded request buffer limit while retrying upstream",
+      ].map((message) => classifyProviderFailure({ message })._tag),
+    ).toEqual(Array(15).fill("ProviderInternal"))
+    expect(
+      classifyProviderFailure({ message: "Provider request failed", rawBody: "Please try again later." })._tag,
+    ).toBe("ProviderInternal")
+  })
+
+  test("prioritizes specific failures over retryable server text", () => {
+    expect(
+      [
+        classifyProviderFailure({ message: "Invalid credentials, try again", status: 401 }),
+        classifyProviderFailure({ message: "Quota exceeded, try again", status: 429 }),
+        classifyProviderFailure({ message: "Rate limit exceeded, try again" }),
+        classifyProviderFailure({ message: "Upstream request failed: validation failed", status: 400 }),
+        classifyProviderFailure({ message: "Try again", status: 200 }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["Authentication", "QuotaExceeded", "RateLimit", "InvalidRequest", "ProviderInternal"])
+  })
+
+  test("classifies Azure content filter rejections by their structured codes", () => {
+    const message = "The response was filtered"
+    const azure = {
+      error: {
+        message,
+        type: null,
+        param: "prompt",
+        code: "content_filter",
+        status: 400,
+        innererror: { code: "ResponsibleAIPolicyViolation", content_filter_result: {} },
+      },
+    }
+    const innerOnly = { error: { message, code: null, innererror: { code: "ResponsibleAIPolicyViolation" } } }
+
+    expect(classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(azure) })._tag).toBe("ContentPolicy")
+    expect(classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(innerOnly) })._tag).toBe(
+      "ContentPolicy",
+    )
+  })
+
+  test("classifies policy rejections that reuse generic request codes by the provider explanation", () => {
+    const openai = {
+      error: {
+        message:
+          "Invalid prompt: your prompt was flagged as potentially violating our usage policy. Please try again with a different prompt.",
+        type: "invalid_request_error",
+        param: null,
+        code: "invalid_prompt",
+      },
+    }
+    const anthropic = {
+      type: "error",
+      error: { type: "invalid_request_error", message: "Output blocked by content filtering policy" },
+    }
+
+    expect(
+      [openai, anthropic].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 400, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
+  test("classifies OpenRouter typed policy errors across its API skins", () => {
+    const chat = {
+      id: "gen-abc123",
+      object: "chat.completion.chunk",
+      error: {
+        code: 403,
+        message: "Your input was flagged",
+        metadata: { error_type: "content_policy_violation", reasons: ["violence"], flagged_input: "..." },
+      },
+      choices: [{ index: 0, delta: { content: "" }, finish_reason: "error" }],
+    }
+    const responses = {
+      type: "response.failed",
+      response: {
+        id: "resp_abc123",
+        status: "failed",
+        error: { code: "image_content_policy_violation", message: "Your input was flagged" },
+        error_type: "content_policy_violation",
+      },
+    }
+    const messages = {
+      type: "error",
+      error: { type: "invalid_request_error", message: "Claude refused to respond", error_type: "refusal" },
+    }
+
+    expect(
+      [
+        classifyProviderFailure({ message: chat.error.message, status: 403, rawBody: JSON.stringify(chat) }),
+        classifyProviderFailure({ message: responses.response.error.message, rawBody: JSON.stringify(responses) }),
+        classifyProviderFailure({ message: messages.error.message, rawBody: JSON.stringify(messages) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
+    const stability = { id: "a1b2", name: "content_moderation", errors: ["Your request was flagged"] }
+    expect(
+      classifyProviderFailure({ message: "Forbidden", status: 403, rawBody: JSON.stringify(stability) })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("classifies Alibaba Model Studio data inspection failures", () => {
+    const alibaba = {
+      request_id: "1537ecc9-6873-93f7-9865-6fe4eb1d7851",
+      code: "DataInspectionFailed",
+      message: "Green net check failed for text (input): Input data may contain inappropriate content.",
+    }
+
+    expect(
+      classifyProviderFailure({ message: alibaba.message, status: 400, rawBody: JSON.stringify(alibaba) })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("classifies OpenAI image moderation blocks directly and through the Vercel AI Gateway", () => {
+    const message =
+      "Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include the request ID req_123."
+    const openai = {
+      error: {
+        message,
+        type: "image_generation_user_error",
+        param: null,
+        code: "moderation_blocked",
+        moderation_details: { moderation_stage: "input", categories: ["other"] },
+      },
+    }
+    // The gateway keeps OpenAI's message but replaces its type and drops the code.
+    const vercel = {
+      error: {
+        message,
+        type: "AI_APICallError",
+        param: { error: message, statusCode: 400, name: "AI_APICallError", message, isRetryable: false },
+      },
+    }
+
+    expect(
+      [openai, vercel].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 400, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
+  test("recovers policy codes that OpenCode Zen preserves only in its message label", () => {
+    // Zen drops upstream codes outside its allow-list and replaces the type, but
+    // `Protocol.errorMessage` keeps the original code as a `[code]` prefix.
+    const zen = {
+      error: {
+        type: "server_error",
+        message: "Upstream request failed: [content_filter] The response was filtered",
+      },
+    }
+
+    expect(
+      classifyProviderFailure({ message: zen.error.message, status: 400, rawBody: JSON.stringify(zen) })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("keeps invalid_prompt schema validation failures as invalid requests", () => {
+    // Bedrock Mantle reports request validation failures under `invalid_prompt`
+    // with a pydantic dump that lists every input union member's fields.
+    const message = [
+      "SubmitRequestFailure: code=-32602, msg=219 validation errors for ResponsesRequest",
+      "input.list[union[EasyInputMessageParam,ResponseComputerToolCallParam]].2.ResponseComputerToolCallParam.pending_safety_checks",
+      "  Field required [type=missing, input_value={'content': [...], 'role': 'assistant', 'type': 'message'}, input_type=dict]",
+    ].join("\n")
+    const failure = classifyProviderFailure({
+      message,
+      status: 200,
+      rawBody: JSON.stringify({ response: { status: "failed", error: { code: "invalid_prompt", message } } }),
+    })
+
+    expect(failure._tag).toBe("InvalidRequest")
+  })
+
+  test("does not infer content policy from policy phrases outside the provider explanation", () => {
+    const failure = classifyProviderFailure({
+      message: "Provider request failed with HTTP 400",
+      status: 400,
+      rawBody: JSON.stringify({ error: { message: "Unknown parameter: content_policy_id" } }),
+    })
+
+    expect(failure._tag).toBe("InvalidRequest")
+  })
+
+  test("classifies transient client statuses as provider internal", () => {
+    expect([408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag)).toEqual([
+      "ProviderInternal",
+      "ProviderInternal",
+    ])
+  })
+
+  test("classifies any remaining 4xx status as an invalid request", () => {
+    expect(
+      [400, 404, 418, 422, 451].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag),
+    ).toEqual(Array(5).fill("InvalidRequest"))
+  })
+
+  test("classifies 402 as exhausted quota", () => {
+    expect(classifyProviderFailure({ message: "Payment Required", status: 402 })._tag).toBe("QuotaExceeded")
+  })
+
+  test("classifies OpenCode Zen account limits as quota rather than throttling", () => {
+    const typed = (type: string, message: string) => ({ type: "error", error: { type, message } })
+    const substituted = (message: string) => ({
+      error: { type: "server_error", message: `Upstream request failed: ${message}` },
+    })
+    const cases: ReadonlyArray<[number, { error: { message: string } }]> = [
+      [429, typed("GoUsageLimitError", "Go usage limit exceeded")],
+      [429, typed("BudgetLimitError", "A budget policy for this model has been reached.")],
+      // Google clients get Google's envelope, naming the refusal in its ErrorInfo.
+      [
+        429,
+        {
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "A budget policy for this model has been reached.",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                reason: "BudgetLimitError",
+                domain: "opencode.ai",
+                metadata: { coverage: "models", resetsAt: "2026-11-01T00:00:00.000Z" },
+              },
+            ],
+          },
+        },
+      ],
+      [429, typed("FreeUsageLimitError", "Rate limit exceeded. Please try again later.")],
+      [402, typed("CreditLimitExceeded", "Credit limit exceeded.")],
+      [402, substituted("Insufficient account funds")],
+      [402, substituted("Account invoice is overdue")],
+      [429, substituted("Account budget exceeded")],
+    ]
+    expect(
+      cases.map(
+        ([status, body]) =>
+          classifyProviderFailure({ message: body.error.message, status, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(Array(8).fill("QuotaExceeded"))
+  })
+
+  test("classifies Z.ai plan and balance limits as quota rather than throttling", () => {
+    const zai = (code: string, message: string) => ({ error: { code, message } })
+    const cases = [
+      zai("1113", "Insufficient balance or no resource package. Please recharge."),
+      zai("1308", "Usage limit reached for 5 hours. Your limit will reset at 2026-10-01 00:00:00"),
+      zai(
+        "1309",
+        "Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.",
+      ),
+      zai("1310", "Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-01 00:00:00"),
+      zai("1311", "Your current subscription plan does not yet include access to glm-5"),
+      zai("1314", "Your enterprise package has expired. Please contact your enterprise administrator."),
+      // Z.ai's Anthropic-compatible endpoint wraps the code and request ID into the message.
+      {
+        type: "error",
+        error: {
+          type: "rate_limit_error",
+          code: "1309",
+          message:
+            "[1309][Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.][20260929132151e73af01340d54b58]",
+        },
+      },
+    ]
+    expect(
+      cases.map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(Array(cases.length).fill("QuotaExceeded"))
+  })
+
+  test("classifies Z.ai prompt length rejections as context overflow", () => {
+    const cases = [
+      { error: { code: "1261", message: "Prompt 超长" } },
+      { error: { code: "1261", message: "Prompt too long" } },
+      {
+        type: "error",
+        error: { type: "invalid_request_error", code: "1261", message: "[1261][Prompt too long][2026092913]" },
+      },
+    ]
+    expect(
+      cases.map((body) => {
+        const reason = classifyProviderFailure({
+          message: body.error.message,
+          status: 400,
+          rawBody: JSON.stringify(body),
+        })
+        return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
+      }),
+    ).toEqual(["context-overflow", "context-overflow", "context-overflow"])
+  })
+
+  test("classifies Z.ai sensitive content rejections as content policy", () => {
+    const message =
+      "System detected potentially unsafe or sensitive content in input or generation. Please avoid using prompts that may generate sensitive content. Thank you for your cooperation."
+    expect(
+      classifyProviderFailure({
+        message,
+        status: 400,
+        rawBody: JSON.stringify({ error: { code: "1301", message } }),
+      })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("keeps Z.ai throttling and overload retryable", () => {
+    expect(
+      [
+        { error: { code: "1302", message: "Rate limit reached for requests" } },
+        { error: { code: "1305", message: "The service may be temporarily overloaded, please try again later" } },
+      ].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["RateLimit", "RateLimit"])
+  })
+
+  test("classifies Bedrock throttling as a retryable rate limit, not context overflow", () => {
+    // Bedrock throttles with 429 ThrottlingException and a "Too many tokens" message; the token
+    // phrasing used to classify it as overflow and compact the session instead of retrying.
+    const bodies = [
+      '{"message":"Too many tokens, please wait before trying again."}',
+      '{"message":"Too many tokens per day, please wait before trying again."}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body),
+          status: 429,
+          rawBody: body,
+        }),
+      })
+      expect(error.reason._tag).toBe("RateLimit")
+      expect(isContextOverflowFailure(error)).toBe(false)
+      expect(isRetryable(error)).toBe(true)
+    }
+    expect(isContextOverflow("Too many tokens, please wait before trying again.")).toBe(false)
+    expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
+    // Plain overflow phrasing without the throttle cue still compacts.
+    expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("does not infer context overflow from known throttling exceptions", () => {
+    const cases = [
+      { status: 429, data: { code: "ThrottlingException" } },
+      { status: 429, rawBody: '{"__type":"com.amazonaws.bedrock#ThrottlingException"}' },
+      { rawBody: '{"exception":{"type":"throttlingException"}}' },
+      {
+        status: 429,
+        http: new HttpContext({
+          url: "https://bedrock.test/model/example/converse-stream",
+          status: 429,
+          headers: { "x-amzn-errortype": "ThrottlingException:http://internal.amazon.com/coral/" },
+        }),
+      },
+    ]
+    for (const input of cases) {
+      for (const message of ["Token limit exceeded", "Too many tokens, please try again later"]) {
+        const error = new AIError({ reason: classifyProviderFailure({ ...input, message }) })
+        expect(error.reason._tag).toBe("RateLimit")
+        expect(isContextOverflowFailure(error)).toBe(false)
+        expect(isRetryable(error)).toBe(true)
+      }
+    }
+    expect(
+      classifyProviderFailure({
+        message: "prompt is too long",
+        status: 400,
+        data: { code: "ValidationException" },
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+  })
+
+  test("does not let substituted server codes make a 4xx retryable", () => {
+    const openai = { error: { type: "server_error", message: "Upstream request failed: Model is unavailable." } }
+    const anthropic = {
+      type: "error",
+      error: { type: "api_error", message: "Upstream request failed: Model is unavailable." },
+    }
+    expect(
+      [openai, anthropic].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 400, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["InvalidRequest", "InvalidRequest"])
+    // Without a contradicting status the same codes still mark provider trouble.
+    expect(classifyProviderFailure({ message: openai.error.message, rawBody: JSON.stringify(openai) })._tag).toBe(
+      "ProviderInternal",
+    )
+    expect(
+      classifyProviderFailure({ message: openai.error.message, status: 200, rawBody: JSON.stringify(openai) })._tag,
+    ).toBe("ProviderInternal")
+  })
+
+  test("classifies nested provider codes when a top-level code is also present", () => {
+    expect(
+      [
+        '{"code":"bad_request","error":{"code":"usage_not_included"}}',
+        '{"code":"bad_request","error":{"code":"server_error"}}',
+        '{"code":"bad_request","error":{"type":"invalid_request_error"}}',
+      ].map((message) => classifyProviderFailure({ message })._tag),
+    ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
+  })
+
+  test("leaves unrecognized failures unclassified for the retry default", () => {
+    expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "network error" })._tag).toBe("UnknownProvider")
+  })
+})
+
+describe("provider error rawBody classification", () => {
+  test("classifies provider envelopes without separate code inputs", () => {
+    const cases = [
+      ['{"type":"error","error":{"type":"overloaded_error","message":"Try again"}}', "ProviderInternal"],
+      ['{"error":{"code":"insufficient_quota","message":"Request failed"}}', "QuotaExceeded"],
+      [
+        '{"type":"response.failed","response":{"error":{"code":"authentication_error","message":"Denied"}}}',
+        "Authentication",
+      ],
+      ['{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Try again"}}', "ProviderInternal"],
+      ['{"exception":{"type":"throttlingException","details":{"message":"Try again"}}}', "RateLimit"],
+    ] as const
+    for (const [rawBody, expected] of cases) {
+      const reason = classifyProviderFailure({ message: "Request failed", rawBody })
+      expect(reason._tag).toBe(expected)
+      expect(reason.body).toBe(rawBody)
+      expect(reason).not.toHaveProperty("code")
+    }
+  })
+
+  test("classifies separately supplied SDK data without replacing the response body", () => {
+    const data = { error: { code: "authentication_error" } }
+    for (const value of [data, JSON.stringify(data)]) {
+      const reason = classifyProviderFailure({
+        message: "Request failed",
+        status: 400,
+        rawBody: '{"message":"Request failed"}',
+        data: value,
+      })
+      expect(reason._tag).toBe("Authentication")
+      expect(reason.body).toBe('{"message":"Request failed"}')
+    }
+  })
+
+  test("classifies Workers AI context window rejections as context overflow despite HTTP 413", () => {
+    const message =
+      "AiError: Ai: The estimated number of input and maximum output tokens (900047) exceeded this model context window limit (32000). (17851589-f2e6-405d-b67c-5550e52ee1c1)"
+    const reason = classifyProviderFailure({
+      message,
+      status: 413,
+      rawBody: JSON.stringify({ errors: [{ message, code: 5021 }], success: false, result: {}, messages: [] }),
+    })
+    expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
+  test("classifies Amazon Nova input token rejections as context overflow", () => {
+    const message =
+      "The model returned the following errors: Input Tokens Exceeded: Number of input tokens exceeds maximum length. Please update the input to try again."
+    const reason = classifyProviderFailure({
+      message,
+      rawBody: JSON.stringify({
+        headers: {
+          ":exception-type": { type: "string", value: "validationException" },
+          ":content-type": { type: "string", value: "application/json" },
+          ":message-type": { type: "string", value: "exception" },
+        },
+        body: JSON.stringify({ message }),
+      }),
+    })
+    expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
+  test("separates Cohere prompt overflow from output limit rejections", () => {
+    const classify = (message: string) => {
+      const reason = classifyProviderFailure({
+        message,
+        status: 400,
+        rawBody: JSON.stringify({ error_type: "TOO_MANY_TOKENS", message }),
+      })
+      return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
+    }
+    expect(
+      classify(
+        "too many tokens: size limit exceeded by 168512 tokens. Try using shorter or fewer inputs. The limit for this model is 132000 tokens.",
+      ),
+    ).toBe("context-overflow")
+    expect(
+      classify(
+        "too many tokens: max tokens must be less than or equal to 4096, the maximum output length for this model - received 1000000.",
+      ),
+    ).toBeUndefined()
+  })
+
+  test("classifies invalid API keys reported as HTTP 400 as authentication failures", () => {
+    const rawBody = JSON.stringify({
+      error: {
+        code: 400,
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "API_KEY_INVALID",
+            domain: "googleapis.com",
+          },
+          {
+            "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+            locale: "en-US",
+            message: "API key not valid. Please pass a valid API key.",
+          },
+        ],
+      },
+    })
+    expect(
+      classifyProviderFailure({ message: "API key not valid. Please pass a valid API key.", status: 400, rawBody })
+        ._tag,
+    ).toBe("Authentication")
+    // xAI
+    expect(
+      classifyProviderFailure({
+        message: "Incorrect API key provided. You can obtain an API key from https://console.x.ai.",
+        status: 400,
+        rawBody: '{"code":"invalid-argument","error":"Incorrect API key provided."}',
+      })._tag,
+    ).toBe("Authentication")
+  })
+
+  test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
+    const reason = classifyProviderFailure({
+      message: "Request failed",
+      rawBody: '{"error":{"message":"This model\'s maximum context length is 40960 tokens"}}',
+    })
+    expect(reason._tag).toBe("InvalidRequest")
+    expect(reason).toMatchObject({ classification: "context-overflow" })
+  })
+
+  test("extracts nested codes from the raw payload", () => {
+    expect(
+      classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
+    ).toBe("QuotaExceeded")
+    // Z.ai Responses stream rejections
+    expect(
+      classifyProviderFailure({
+        message: "Unknown Model, please check the model code.",
+        rawBody: '{"type":"response.failed","response":{"error":{"code":"model_not_found"}}}',
+      })._tag,
+    ).toBe("InvalidRequest")
+    expect(
+      classifyProviderFailure({
+        message: "Your GLM Coding Plan package has expired and is temporarily unavailable.",
+        rawBody: '{"type":"response.failed","response":{"error":{"code":"permission_denied"}}}',
+      })._tag,
+    ).toBe("Authentication")
+  })
+})
+
+describe("provider error messages", () => {
+  test("reads messages from common error body layouts", () => {
+    expect(
+      [
+        '{"error":{"message":"Invalid API Key","type":"invalid_request_error"}}',
+        '{"code":"invalid-argument","error":"Incorrect API key provided."}',
+        '{"message":"1 validation error detected"}',
+        '{"Message":"Invalid API Key format: Must start with pre-defined prefix"}',
+        '{"type":"about:blank","title":"Gone","status":410,"detail":"The model has reached its end of life"}',
+        '{"result":null,"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}',
+      ].map(providerErrorMessage),
+    ).toEqual([
+      "Invalid API Key",
+      "Incorrect API key provided.",
+      "1 validation error detected",
+      "Invalid API Key format: Must start with pre-defined prefix",
+      "The model has reached its end of life",
+      "Authentication error",
+    ])
+  })
+
+  test("prefers the nested error message over a top-level message", () => {
+    expect(providerErrorMessage('{"message":"Bad Request","error":{"message":"model not found"}}')).toBe(
+      "model not found",
+    )
+  })
+
+  test("ignores blank, non-string, and non-JSON messages", () => {
+    expect(
+      [
+        '{"error":{"message":"  "}}',
+        '{"message":{"detail":[{"msg":"too high"}]}}',
+        '{"errors":[]}',
+        "invalid parameter",
+      ].map(providerErrorMessage),
+    ).toEqual([undefined, undefined, undefined, undefined])
+  })
+})

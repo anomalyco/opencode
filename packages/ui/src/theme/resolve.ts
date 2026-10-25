@@ -13,48 +13,62 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const error = generateScale(colors.error, isDark)
   const info = generateScale(colors.info, isDark)
   const interactive = generateScale(colors.interactive, isDark)
+
   const amber = generateScale(
     shift(colors.warning, isDark ? { h: -16, l: -0.058, c: 1.14 } : { h: -22, l: -0.082, c: 0.94 }),
     isDark,
   )
+
   const blue = generateScale(shift(colors.interactive, { h: -12, l: 0.128, c: 1.12 }), isDark)
+
   const diffAdd = generateScale(
     colors.diffAdd ?? shift(colors.success, { c: isDark ? 0.7 : 0.55, l: isDark ? -0.18 : 0.14 }),
     isDark,
   )
+
   const diffDelete = generateScale(
     colors.diffDelete ?? shift(colors.error, { c: isDark ? 0.82 : 0.7, l: isDark ? -0.08 : 0.08 }),
     isDark,
   )
+
   const ink = colors.ink ?? colors.neutral
   const tint = colors.compact ? hexToOklch(ink) : undefined
+
   const body = tint
     ? shift(ink, {
         l: isDark ? Math.max(0, 0.88 - tint.l) * 0.4 : -Math.max(0, tint.l - 0.18) * 0.24,
         c: isDark ? 1.04 : 1.02,
       })
     : undefined
+
   const backgroundOverride = overrides["background-base"]
   const backgroundHex = getHex(backgroundOverride)
   const overlay = Boolean(backgroundOverride) && !backgroundHex
+
   const content = (seed: HexColor, scale: HexColor[]) => {
     const base = hexToOklch(seed)
     const value = isDark ? (base.l > 0.84 ? shift(seed, { c: 1.18 }) : scale[10]) : scale[10]
+
     return shift(value, { l: isDark ? 0.034 : -0.024, c: isDark ? 1.3 : 1.18 })
   }
+
   const modified = () => {
     if (!colors.compact) return isDark ? "#ffba92" : "#FF8C00"
     const warningHue = hexToOklch(colors.warning).h
     const deleteHue = hexToOklch(colors.diffDelete ?? colors.error).h
     const delta = Math.abs(((((deleteHue - warningHue) % 360) + 540) % 360) - 180)
+
     if (delta < 48) return isDark ? "#ffba92" : "#FF8C00"
+
     return content(colors.warning, warning)
   }
+
   const surface = (
     seed: HexColor,
     alpha: { base: number; weak: number; weaker: number; strong: number; stronger: number },
   ) => {
     const base = alphaTone(seed, alpha.base)
+
     return {
       base,
       weak: alphaTone(seed, alpha.weak),
@@ -63,11 +77,15 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
       stronger: alphaTone(seed, alpha.stronger),
     }
   }
+
   const background = backgroundHex ?? neutral[0]
+
   const alphaTone = (color: HexColor, alpha: number) =>
     overlay ? (withAlpha(color, alpha) as ColorValue) : blend(color, background, alpha)
+
   const borderTone = (light: number, dark: number) =>
     alphaTone(ink, isDark ? Math.min(1, dark + 0.024 + (colors.compact ? 0.08 : 0)) : Math.min(1, light + 0.024))
+
   const diffHiddenSurface = surface(
     isDark ? shift(colors.interactive, { c: 0.55, l: 0 }) : shift(colors.interactive, { c: 0.45, l: 0.08 }),
     isDark
@@ -93,21 +111,27 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const infob = info[isDark ? 6 : 4]
   const infow = info[isDark ? 5 : 3]
   const infos = info[10]
+
   const lum = (hex: HexColor) => {
     const rgb = hexToRgb(hex)
     const lift = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+
     return 0.2126 * lift(rgb.r) + 0.7152 * lift(rgb.g) + 0.0722 * lift(rgb.b)
   }
+
   const hit = (a: HexColor, b: HexColor) => {
     const x = lum(a)
     const y = lum(b)
     const light = Math.max(x, y)
     const dark = Math.min(x, y)
+
     return (light + 0.05) / (dark + 0.05)
   }
+
   const on = (fill: HexColor) => {
     const light = "#ffffff" as HexColor
     const dark = "#000000" as HexColor
+
     return hit(light, fill) > hit(dark, fill) ? light : dark
   }
 
@@ -432,6 +456,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
 
   if (colors.compact && "text-weak" in overrides && !("text-weaker" in overrides)) {
     const weak = tokens["text-weak"]
+
     if (weak.startsWith("#")) {
       tokens["text-weaker"] = shift(weak as HexColor, { l: isDark ? -0.12 : 0.12, c: 0.75 })
     } else {
@@ -443,6 +468,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
     if (!("markdown-text" in overrides)) {
       tokens["markdown-text"] = tokens["text-base"]
     }
+
     if (!("markdown-code-block" in overrides)) {
       tokens["markdown-code-block"] = tokens["text-base"]
     }
@@ -472,6 +498,7 @@ interface ThemeColors {
 
 function getColors(variant: ThemeVariant): ThemeColors {
   const input = variant as { palette?: unknown; seeds?: unknown }
+
   if (input.palette && input.seeds) {
     throw new Error("Theme variant cannot define both `palette` and `seeds`")
   }
@@ -523,6 +550,7 @@ function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): H
 
 function getHex(value: ColorValue | undefined): HexColor | undefined {
   if (!value?.startsWith("#")) return
+
   return value as HexColor
 }
 

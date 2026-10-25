@@ -1,0 +1,8 @@
+id: no-star-import
+valid:
+  - import { Foo } from "./foo"
+  - import Foo from "./foo"
+  - export * as Foo from "./foo"
+invalid:
+  - import * as Foo from "./foo"
+  - import type * as Foo from "./foo"

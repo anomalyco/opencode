@@ -154,12 +154,9 @@ opencode-serveren viser følgende APIer.
 | `DELETE` | `/session/:id`                           | Slett en økt og alle dens data           | Returnerer `boolean`                                                                  |
 | `PATCH`  | `/session/:id`                           | Oppdater øktegenskaper                   | body: `{ title? }`, returnerer <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | Hent en økts barneøkter                  | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
-| `GET`    | `/session/:id/todo`                      | Hent gjøremålslisten for en økt          | Returnerer <a href={typesUrl}><code>Todo[]</code></a>                                 |
 | `POST`   | `/session/:id/init`                      | Analyser appen og lag `AGENTS.md`        | body: `{ messageID, providerID, modelID }`, returnerer `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Fork en eksisterende økt ved en melding  | body: `{ messageID? }`, returnerer <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Avbryt en kjørende økt                   | Returnerer `boolean`                                                                  |
-| `POST`   | `/session/:id/share`                     | Del en økt                               | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
-| `DELETE` | `/session/:id/share`                     | Slutt å dele en økt                      | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
 | `GET`    | `/session/:id/diff`                      | Hent diff for denne økten                | spørring: `messageID?`, returnerer <a href={typesUrl}><code>FileDiff[]</code></a>     |
 | `POST`   | `/session/:id/summarize`                 | Oppsummer økten                          | body: `{ providerID, modelID }`, returnerer `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | Tilbakestill en melding                  | body: `{ messageID, partID? }`, returnerer `boolean`                                  |

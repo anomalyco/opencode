@@ -34,7 +34,7 @@ Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, 
 ## Write frontmatter
 
 Each `SKILL.md` must start with YAML frontmatter.
-Only these fields are recognized:
+Use these Agent Skills fields:
 
 - `name` (required)
 - `description` (required)
@@ -42,7 +42,7 @@ Only these fields are recognized:
 - `compatibility` (optional)
 - `metadata` (optional, string-to-string map)
 
-Unknown frontmatter fields are ignored.
+Unknown frontmatter fields are ignored. OpenCode 1 does not use metadata to control slash commands or automatic skill selection.
 
 ---
 

@@ -23,6 +23,7 @@ import {
   formatCatalogLabName,
   isKnownCatalogLab,
   type ModelCatalogEntry,
+  type ModelCatalogSpecs,
 } from "../model-catalog"
 import { SectionHeading } from "../section-heading"
 import { setStatsPageCacheHeaders } from "../stats-cache"
@@ -203,7 +204,7 @@ export default function StatsModel() {
                   labName={labName()}
                   formerName={formerName()}
                 />
-                <ModelOverview catalog={catalogEntry() ?? null} />
+                <ModelOverview specs={catalogEntry() ?? page()?.catalog.stealthSpecs ?? null} />
                 <ModelMomentumSection data={stats() ?? null} />
                 <ModelUsageSection data={stats() ?? null} />
                 <ModelUniqueUsersSection data={stats() ?? null} />
@@ -433,38 +434,30 @@ function ModelHeroSparkline(props: { data: StatsModelPageData }) {
   )
 }
 
-function ChevronDownIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
-      <path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" />
-    </svg>
-  )
-}
-
-function ModelOverview(props: { catalog: ModelCatalogEntry | null }) {
+function ModelOverview(props: { specs: ModelCatalogSpecs | null }) {
   const i18n = useI18n()
   const language = useLanguage()
   const specs = createMemo(() => [
     {
       label: i18n.t("model.context"),
-      value: formatCatalogLimit(props.catalog?.limit?.context, i18n.t("home.unknown")),
+      value: formatCatalogLimit(props.specs?.limit?.context, i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.output"),
-      value: formatCatalogLimit(props.catalog?.limit?.output, i18n.t("home.unknown")),
+      value: formatCatalogLimit(props.specs?.limit?.output, i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.knowledge"),
-      value: formatCatalogMonth(props.catalog?.knowledge, language.tag(language.locale()), i18n.t("home.unknown")),
+      value: formatCatalogMonth(props.specs?.knowledge, language.tag(language.locale()), i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.release"),
-      value: formatCatalogMonth(props.catalog?.releaseDate, language.tag(language.locale()), i18n.t("home.unknown")),
+      value: formatCatalogMonth(props.specs?.releaseDate, language.tag(language.locale()), i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.inputs"),
       value: formatCatalogModalities(
-        props.catalog?.modalities.input ?? [],
+        props.specs?.modalities.input ?? [],
         language.tag(language.locale()),
         i18n.t("home.unknown"),
       ),
@@ -1373,11 +1366,6 @@ function capitalizeLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function formatRankMove(change: number) {
-  if (change > 0) return `+${change}`
-  return `${change}`
-}
-
 function formatHeroRank(rank: number | null) {
   if (rank === null) return "--"
   return String(rank).padStart(2, "0")
@@ -1410,14 +1398,6 @@ function sparklinePoints(values: number[]) {
 
 function formatSparklinePoint(value: number) {
   return Number(value.toFixed(2)).toString()
-}
-
-function formatModelRankMoveLabel(data: StatsModelPageData, i18n: ReturnType<typeof useI18n>) {
-  if (data.rank === null) return i18n.t("model.noUsageLastWeek")
-  if (data.previousRank === null) return i18n.t("model.newThisWeek")
-  const change = data.previousRank - data.rank
-  if (change === 0) return i18n.t("model.sameAsPreviousWeek")
-  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(change) })
 }
 
 function formatTokens(value: number) {

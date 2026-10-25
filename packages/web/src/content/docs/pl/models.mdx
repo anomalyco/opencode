@@ -74,7 +74,7 @@ Można globalnie skorzystać z opcji modelu poprzez plik config.
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ Można globalnie skorzystać z opcji modelu poprzez plik config.
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ Można globalnie skorzystać z opcji modelu poprzez plik config.
 }
 ```
 
-Tutaj konfigurujemy urządzenia globalne dla dwóch modeli: `gpt-5` w przypadku dostępu za pośrednictwem dostawcy `openai` i `claude-sonnet-4-20250514` w przypadku dostępu za pośrednictwem dostawcy `anthropic`.
+Tutaj konfigurujemy urządzenia globalne dla dwóch modeli: `gpt-6.1-sol` w przypadku dostępu za pośrednictwem dostawcy `openai` i `claude-sonnet-5-5` w przypadku dostępu za pośrednictwem dostawcy `anthropic`.
 Wbudowane nazwy dostawców i modele można znaleźć na [Models.dev](https://models.dev).
 
 Można także skorzystać z opcji dla dowolnych agentów, których używa się. Konfiguracja agenta jest dostępna jako opcja globalna. [Dowiedz się więcej](/docs/agents/#additional).
@@ -113,7 +113,7 @@ Można również zastosować alternatywne warianty, które wykluczają. Warianty
   "provider": {
     "bolt": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ Można uwzględnić warianty lub dodać własne:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",

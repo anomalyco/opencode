@@ -1,0 +1,236 @@
+@property --file-tree-v2-row-overlay {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+[data-component="file-tree-v2"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  min-width: 100%;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"] {
+  --file-tree-v2-row-overlay: transparent;
+
+  box-sizing: border-box;
+  width: 100%;
+  min-width: max-content;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding-inline-end: 8px;
+  overflow: clip;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--v2-text-text-muted);
+  text-align: start;
+  cursor: pointer;
+  scroll-margin-block: 8px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    --file-tree-v2-row-overlay 120ms ease;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-label"] {
+  margin-inline-end: 12px;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-ignored] {
+  color: var(--v2-text-text-faint);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"]:hover {
+  --file-tree-v2-row-overlay: var(--v2-overlay-simple-overlay-hover);
+
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] {
+  --file-tree-v2-row-overlay: var(--v2-overlay-simple-overlay-pressed);
+
+  color: var(--v2-text-text-base);
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected]:hover {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-context-trigger"][data-context-menu-open]
+  [data-slot="file-tree-v2-row"]:not([data-selected]) {
+  --file-tree-v2-row-overlay: var(--v2-overlay-simple-overlay-hover);
+
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-guide"] {
+  position: absolute;
+  top: 0;
+  margin-top: -2px;
+  height: calc(100% + 2px);
+  width: 1px;
+  pointer-events: none;
+  background-color: var(--v2-border-border-muted);
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"]:hover [data-slot="file-tree-v2-guide"] {
+  opacity: 0.5;
+}
+
+[data-component="file-tree-v2"] .filetree-icon--mono {
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-component="file-tree-v2"] .filetree-iconpair .filetree-icon--color {
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] .filetree-iconpair .filetree-icon--color {
+  opacity: 1;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] .filetree-iconpair .filetree-icon--mono {
+  opacity: 0;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"] {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"] svg {
+  transition: transform 120ms ease;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"]:not([data-expanded]) svg {
+  transform: rotate(-90deg);
+}
+
+[data-component="file-tree-v2"]:dir(rtl) [data-slot="file-tree-v2-chevron"]:not([data-expanded]) svg {
+  transform: rotate(90deg);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] [data-slot="file-tree-v2-chevron"] {
+  color: var(--v2-text-text-base);
+}
+
+[data-component="file-tree-v2"] .filetree-iconpair {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="file-tree-v2"] .filetree-iconpair [data-component="file-icon"] {
+  position: absolute;
+  inset: 0;
+}
+
+/* Every row ends in the change letter or a blank end that sticks inside the pane while long rows
+   scroll. It fades the label out over 16px like tab titles and redraws the row's rounded end, so a
+   row that runs past the pane edge looks like a row that fits. */
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"]) {
+  --file-tree-v2-end-inset: 8px;
+
+  flex: none;
+  align-self: stretch;
+  position: sticky;
+  inset-inline-end: var(--file-tree-v2-end-inset);
+  z-index: 1;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-end"] {
+  --file-tree-v2-end-inset: 10px;
+}
+
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before,
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  pointer-events: none;
+}
+
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+  inset-inline-end: 100%;
+  width: 16px;
+  background:
+    linear-gradient(to right, transparent, var(--file-tree-v2-row-overlay)),
+    linear-gradient(to right, transparent, var(--v2-background-bg-base));
+}
+
+[data-component="file-tree-v2"]:dir(rtl)
+  :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+  background:
+    linear-gradient(to left, transparent, var(--file-tree-v2-row-overlay)),
+    linear-gradient(to left, transparent, var(--v2-background-bg-base));
+}
+
+/* The row through its rounded end. The shadow paints the pane past it, outside its corners too. */
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  inset-inline: 0 calc(-1 * var(--file-tree-v2-end-inset));
+  z-index: -1;
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
+  background:
+    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
+  box-shadow: 8px 0 0 6px var(--v2-background-bg-base);
+}
+
+[data-component="file-tree-v2"]:dir(rtl) :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  box-shadow: -8px 0 0 6px var(--v2-background-bg-base);
+}
+
+@keyframes file-tree-v2-end-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Scrolled to the end, every label is whole, so the fade clears. */
+@supports (animation-timeline: scroll()) {
+  [data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+    animation: file-tree-v2-end-fade linear both;
+    animation-timeline: scroll(nearest inline);
+    animation-range: calc(100% - 16px) 100%;
+  }
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  font-size: 11px;
+  font-weight: 530;
+  line-height: 1;
+  letter-spacing: -0.04px;
+  text-align: center;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    "tnum" on,
+    "lnum" on;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {
+  color: var(--v2-state-fg-info);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="added"] {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="deleted"] {
+  color: var(--v2-state-fg-danger);
+}

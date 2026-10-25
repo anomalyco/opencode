@@ -43,8 +43,12 @@ function wordmark(pad = "") {
   })
 }
 
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
-  const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
+export type SessionEpilogue = { readonly title: string; readonly sessionID?: string }
+
+// Printed after the TUI closes.
+export function epilogue(input: { readonly session?: SessionEpilogue; readonly updatedVersion?: string }) {
+  if (!input.session && !input.updatedVersion) return
+  const row = (label: string, value: string) => `  ${dim}${label.padEnd(10, " ")}${reset}${bold}${value}${reset}`
   return [
     ...wordmark("  "),
     "",

@@ -1,54 +1,29 @@
-import { randomUUID } from "node:crypto"
-import { mkdirSync, rmSync } from "node:fs"
-import * as http from "node:http"
-import { createServer } from "node:net"
-import { homedir, tmpdir } from "node:os"
-import { join } from "node:path"
-import { getCACertificates, setDefaultCACertificates } from "node:tls"
-import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+// Imported first so its evaluation stamps the moment Electron handed control to this module.
+import { marks } from "./lifecycle/marks"
+import { app } from "electron"
+import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
+import { startSidecarProbe } from "./service/sidecar-probe"
+import { registerStorageSnapshotHandler } from "./storage/snapshot"
+import { createEarlyWindow } from "./windows/early"
+import { rendererAssetsServed } from "./windows/protocol"
+import { registerRendererScheme } from "./windows/scheme"
 
-import { Deferred, Effect, Fiber } from "effect"
-import contextMenu from "electron-context-menu"
+// This module stays small on purpose. Electron holds the ready event until the entry module has
+// finished, and the first window should be on screen before the rest of the main process — a few
+// hundred milliseconds of module evaluation and layers — loads. Configuration and the scheme must
+// precede ready; the window is created the moment ready fires; everything else is imported after.
+configureApplication()
 
-import type { ServerReadyData } from "../preload/types"
-import { checkAppExists, resolveAppPath } from "./apps"
-import { CHANNEL } from "./constants"
-import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
-import { forwardInitializationFailure } from "./initialization"
-import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
-import { createMenu } from "./menu"
-import {
-  finishFirstLaunchOnboarding,
-  initializeOldLayoutEligibility,
-  isFirstLaunchOnboardingPending,
-  isOldLayoutEligible,
-} from "./onboarding"
-import {
-  getDefaultServerUrl,
-  preferAppEnv,
-  setDefaultServerUrl,
-  spawnLocalServer,
-  type SidecarListener,
-} from "./server"
-import { setupAutoUpdater, showUpdaterDialog } from "./updater"
-import { safeWebContentsURL } from "./window-state"
-import {
-  getLastFocusedWindow,
-  registerRendererProtocol,
-  setRelaunchHandler,
-  setAppQuitting,
-  setBackgroundColor,
-  setDockIcon,
-  restoreMainWindows,
-} from "./windows"
-import { createWslServersController } from "./wsl/servers"
-import { registerWslIpcHandlers } from "./wsl/ipc"
-import { spawnWslSidecar } from "./wsl/sidecar"
-import { migrate } from "./migrate"
-import { cleanupStoreFiles } from "./store-cleanup"
-import { startBackgroundCli } from "./background-cli"
-import { setNativeTranslations } from "./native-translations"
+if (acquireApplicationLock()) {
+  registerRendererScheme()
+  // Window first, then the bundle: starting the import before ready delays ready itself, because the
+  // module graph evaluates on the same thread Chromium needs to finish initialising.
+  void app.whenReady().then(async () => {
+    marks.ready = Date.now()
+    registerStorageSnapshotHandler()
+    createEarlyWindow()
+    marks.window = Date.now()
+    startSidecarProbe()
 
 const APP_NAMES: Record<string, string> = {
   dev: "Bolt Dev",

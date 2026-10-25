@@ -15,6 +15,7 @@ test("route cleanup cannot invalidate an owner list being disposed", async () =>
     const button = document.createElement("button")
     button.textContent = "Back"
     button.addEventListener("click", () => history.set({ value: "/", scroll: false, replace: false }))
+
     return [
       createComponent(Title, {
         get children() {
@@ -29,6 +30,7 @@ test("route cleanup cannot invalidate an owner list being disposed", async () =>
     const button = document.createElement("button")
     button.textContent = "Go"
     button.addEventListener("click", () => history.set({ value: "/project", scroll: false, replace: false }))
+
     return button
   }
 

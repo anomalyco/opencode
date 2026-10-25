@@ -19,21 +19,17 @@ function eventData(data: unknown): Sse.Event {
 
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const feed = yield* EventFeed.Service
     return handlers.handleRaw("event.subscribe", () =>
       Effect.gen(function* () {
         const connected = {
-          id: EventV2.ID.create(),
+          id: Event.ID.create(),
           type: "server.connected",
           data: {},
-        }
+        } as const
         const output = Stream.unwrap(
-          Effect.gen(function* () {
-            // Acquiring the bounded stream installs its listener before readiness is observable.
-            const live = yield* EventV2.allBounded(events, subscriberCapacity)
-            return Stream.make(connected).pipe(Stream.concat(live))
-          }),
-        ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))
+          feed.subscribe.pipe(Effect.map((live) => Stream.make(EventFeed.frame(connected)).pipe(Stream.concat(live)))),
+        )
         const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))
         return HttpServerResponse.stream(
           output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }), Stream.encodeText),

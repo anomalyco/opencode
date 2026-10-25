@@ -7,7 +7,7 @@ import {
   validateTimelineEvent,
   validateTimelineMessages,
   type PartSeed,
-} from "./fixture"
+} from "../../utils/timeline"
 
 describe("timeline fixture validation", () => {
   test("accepts a valid timeline", () => {
@@ -17,7 +17,7 @@ describe("timeline fixture validation", () => {
   test("rejects malformed SDK values at runtime", () => {
     expect(() =>
       assistantMessage([], {
-        error: { name: "APIError", data: { message: "failed" } } as never,
+        error: { type: "APIError", message: 1 } as never,
       }),
     ).toThrow()
     expect(() =>
@@ -29,6 +29,17 @@ describe("timeline fixture validation", () => {
           properties: { sessionID: "ses_timeline_stability", status: { type: "retry", attempt: 1 } },
         },
       }),
+    ).toThrow()
+    expect(() => validateTimelineMessages([{ ...userMessage(), id: "invalid" } as never])).toThrow()
+    expect(() => validateTimelineMessages([{ ...userMessage(), time: { created: "invalid" } } as never])).toThrow()
+    expect(() =>
+      validateTimelineMessages([
+        userMessage(),
+        {
+          ...assistantMessage(),
+          content: [{ type: "tool", id: "call_invalid", name: "shell", state: { status: "completed" } }],
+        } as never,
+      ]),
     ).toThrow()
   })
 
@@ -42,8 +53,8 @@ describe("timeline fixture validation", () => {
   test("assigns deterministic event IDs", () => {
     const first = event("session.status", { sessionID: "ses_timeline_stability", status: { type: "busy" } })
     const second = event("session.status", { sessionID: "ses_timeline_stability", status: { type: "idle" } })
-    expect(first.payload.id).toMatch(/^evt_timeline_\d{4}$/)
-    expect(Number(second.payload.id.slice(-4))).toBe(Number(first.payload.id.slice(-4)) + 1)
+    expect(first.id).toMatch(/^evt_timeline_\d{4}$/)
+    expect(Number(second.id.slice(-4))).toBe(Number(first.id.slice(-4)) + 1)
   })
 })
 
@@ -51,12 +62,11 @@ if (false) {
   const userSeed = { id: "prt_type_user", type: "text", text: "typed" } satisfies PartSeed<"user">
   userMessage([userSeed])
 
-  // @ts-expect-error Tool completion fields are not valid while pending.
-  toolPart("prt_invalid_pending", "bash", "pending", {}, { output: "impossible" })
-  // @ts-expect-error Tool completion fields are not valid while running.
-  toolPart("prt_invalid_running", "bash", "running", {}, { output: "impossible" })
+  // @ts-expect-error Tool completion fields are not valid while streaming.
+  toolPart("prt_invalid_streaming", "shell", "streaming", {}, { output: "impossible" })
+  toolPart("prt_valid_running", "shell", "running", {}, { output: "progressive output" })
   // @ts-expect-error Tool error fields are not valid after completion.
-  toolPart("prt_invalid_completed", "bash", "completed", {}, { error: "impossible" })
+  toolPart("prt_invalid_completed", "shell", "completed", {}, { error: "impossible" })
 
   assistantMessage([
     // @ts-expect-error Agent references belong to user messages, not assistant messages.

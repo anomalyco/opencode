@@ -37,106 +37,154 @@ import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { promptLocationNode } from "./fixture/prompt-location"
+import { permissionLayer } from "./lib/permission"
+import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 
-const cassette =
-  process.env.RECORD === "true"
-    ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
-        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-        mode: "record",
-      })
-    : HttpRecorder.http("session-runner/openai-chat-streams-text", {
-        directory: path.resolve(import.meta.dir, "fixtures/recordings"),
-      })
+const cassetteName = "session-runner/openai-chat-streams-text"
+const cassetteDirectory = path.resolve(import.meta.dir, "fixtures/recordings")
+if (process.env.RECORD === "true") {
+  if (process.env.CI !== undefined) throw new Error("Unset CI before recording HTTP cassettes")
+  HttpRecorder.removeCassetteSync(cassetteName, { directory: cassetteDirectory })
+}
+const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDirectory })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
-const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
-    assert: () => Effect.die("unused"),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer()
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
     auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
     generation: { maxTokens: 20, temperature: 0 },
   })
-  .model({ id: "gpt-4o-mini" })
-const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
-const systemContext = AppNodeBuilder.build(SystemContextRegistry.node)
-const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
-const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
-  [Snapshot.node, Snapshot.noopLayer],
-  [LayerNodePlatform.llmClient, client],
-  [SessionRunnerModel.node, models],
-  [SystemContextRegistry.node, systemContext],
-  [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-  [SkillGuidance.node, skillGuidance],
-  [ReferenceGuidance.node, referenceGuidance],
-  [Config.node, config],
-  [PermissionV2.node, permission],
-  [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-])
-const execution = Layer.effect(
-  SessionExecution.Service,
-  Effect.gen(function* () {
-    const sessionRunner = yield* SessionRunner.Service
-    const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
-    })
-    return SessionExecution.Service.of({
-      active: coordinator.active,
-      resume: coordinator.run,
-      wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
-    })
-  }),
-).pipe(Layer.provide(runnerLayer))
-const it = testEffect(
+  .model({ id: "gpt-4o-mini", compatibility: { supportsPromptCacheKey: true } })
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: () =>
+    Effect.succeed(
+      SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost: [],
+        limit: { context: 200_000, output: 20 },
+      }),
+    ),
+})
+const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty) })
+const instructionContext = Layer.mock(InstructionDiscovery.Service, {
+  project: true,
+  global: true,
+  load: () => Effect.succeed(Instructions.empty),
+})
+const skillInstructions = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
+const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
+  load: () => Effect.succeed(Instructions.empty),
+})
+const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
+const config = Config.testLayer()
+const promptModels = Layer.mock(Model.Service, {
+  get: () => Effect.undefined,
+  all: () => Effect.succeed([]),
+  available: () => Effect.succeed([]),
+  default: () => Effect.undefined,
+  small: () => Effect.undefined,
+})
+const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
+  AppNodeBuilder.build(SessionRunnerLLM.node, [
+    Snapshot.node.replace(Snapshot.noopLayer),
+    LayerNodePlatform.llmClient.replace(llmClient),
+    SessionRunnerModel.node.replace(models),
+    InstructionBuiltIns.node.replace(systemContext),
+    InstructionDiscovery.node.replace(instructionContext),
+    Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    SkillInstructions.node.replace(skillInstructions),
+    ReferenceInstructions.node.replace(referenceInstructions),
+    McpInstructions.node.replace(mcpInstructions),
+    Config.node.replace(config),
+    Permission.node.replace(permission),
+    PluginSupervisor.node.replace(Layer.empty),
+    Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+  ])
+const execution = (llmClient: Layer.Layer<LLMClientService>) =>
+  Layer.effect(
+    SessionExecution.Service,
+    Effect.gen(function* () {
+      const sessionRunner = yield* SessionRunner.Service
+      const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
+        drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }).pipe(Effect.asVoid),
+      })
+      return SessionExecution.Service.of({
+        active: coordinator.active,
+        isActive: coordinator.isActive,
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        interrupt: (sessionID) => coordinator.interrupt(sessionID),
+        awaitIdle: coordinator.awaitIdle,
+      })
+    }),
+  ).pipe(Layer.provide(runnerLayer(llmClient)), Layer.orDie)
+const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
-      EventV2.node,
+      Bus.node,
       SessionProjector.node,
       SessionStore.node,
-      AgentV2.node,
-      ToolRegistry.node,
+      Agent.node,
+      Model.node,
+      PluginHooks.node,
+      Tool.node,
       SessionRunnerModel.node,
-      SystemContextRegistry.node,
-      SkillGuidance.node,
-      ReferenceGuidance.node,
+      InstructionBuiltIns.node,
+      InstructionDiscovery.node,
+      SkillInstructions.node,
+      ReferenceInstructions.node,
       Config.node,
       Snapshot.node,
       SessionRunnerLLM.node,
-      SessionV2.node,
+      Session.node,
     ]),
     [
-      [LayerNodePlatform.llmClient, client],
-      [PermissionV2.node, permission],
-      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-      [SessionRunnerModel.node, models],
-      [SystemContextRegistry.node, systemContext],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-      [SkillGuidance.node, skillGuidance],
-      [ReferenceGuidance.node, referenceGuidance],
-      [Config.node, config],
-      [Snapshot.node, Snapshot.noopLayer],
-      [SessionExecution.node, execution],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      LocationServiceMap.node.replace(promptLocationNode),
+      LayerNodePlatform.llmClient.replace(llmClient),
+      Permission.node.replace(permission),
+      Model.node.replace(promptModels),
+      SessionRunnerModel.node.replace(models),
+      InstructionBuiltIns.node.replace(systemContext),
+      InstructionDiscovery.node.replace(instructionContext),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      SkillInstructions.node.replace(skillInstructions),
+      ReferenceInstructions.node.replace(referenceInstructions),
+      Config.node.replace(config),
+      Snapshot.node.replace(Snapshot.noopLayer),
+      PluginSupervisor.node.replace(Layer.empty),
+      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+      SessionExecution.node.replace(execution(llmClient)),
     ],
-  ),
-)
-const sessionID = SessionV2.ID.make("ses_runner_recorded")
+  )
+const it = testEffect(testLayer(client))
+const sessionID = Session.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
-  it.effect("executes one recorded V2 prompt through the recorded HTTP transport", () =>
+  it.effect("executes one recorded prompt through the recorded HTTP transport", () =>
     Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const models = yield* Model.Service
+      const hooks = yield* PluginHooks.Service
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => {
+          agent.mode = "primary"
+          agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
+        }),
+      )
+      const pluginHost = host({
+        agent: agentHost(agents),
+        model: modelHost(models),
+        provider: noProviders,
+        session: { hook: (name, callback) => hooks.register("session", name, callback) },
+      })
+      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
+      yield* IdentityPlugin.Plugin.effect(pluginHost)
       const { db } = yield* Database.Service
       yield* db
         .insert(ProjectTable)
@@ -157,10 +205,10 @@ describe("SessionRunnerLLM recorded", () => {
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
-      const session = yield* SessionV2.Service
+      const session = yield* Session.Service
       const prompt = yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Say hello in one short sentence." }),
+        text: "Say hello in one short sentence.",
         resume: false,
       })
 
@@ -181,12 +229,14 @@ describe("SessionRunnerLLM recorded", () => {
           .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.next.prompt.admitted.1",
-        "session.next.prompted.1",
-        "session.next.step.started.1",
-        "session.next.text.started.1",
-        "session.next.text.ended.1",
-        "session.next.step.ended.2",
+        "session.inbox.enqueued.1",
+        "session.instructions.updated.2",
+        "session.inbox.delivered.1",
+        "session.step.started.1",
+        "session.text.started.1",
+        "session.text.ended.1",
+        "session.step.streamed.1",
+        "session.step.ended.1",
       ])
     }),
   )

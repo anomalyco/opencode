@@ -1,4 +1,4 @@
-export * as Credential from "./credential"
+export * as Credential from "./credential.js"
 
 import { Schema } from "effect"
 import { IntegrationMethodID } from "./integration-id"
@@ -7,9 +7,24 @@ import { NonNegativeInt, optional, statics } from "./schema"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
+  Schema.annotate({ identifier: "Credential.ID" }),
   statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type
+
+const Updated = ephemeral({
+  type: "credential.updated",
+  schema: {},
+})
+const Switched = ephemeral({
+  type: "credential.switched",
+  schema: { integrationID: IntegrationID, credentialID: Schema.NullOr(ID) },
+})
+export const Event = {
+  Updated,
+  Switched,
+  Definitions: inventory(Updated, Switched),
+}
 
 export interface OAuth extends Schema.Schema.Type<typeof OAuth> {}
 export const OAuth = Schema.Struct({
@@ -28,7 +43,33 @@ export const Key = Schema.Struct({
   metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "Credential.Key" })
 
-export const Value = Schema.Union([OAuth, Key])
+/** References a credential source whose secrets and renewal are managed outside the credential store. */
+export interface External extends Schema.Schema.Type<typeof External> {}
+export const External = Schema.Struct({
+  type: Schema.Literal("external"),
+  methodID: IntegrationMethodID,
+  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
+}).annotate({ identifier: "Credential.External" })
+
+export const Value = Schema.Union([OAuth, Key, External])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Credential.Value" })
 export type Value = Schema.Schema.Type<typeof Value>
+
+export interface Entry extends Schema.Schema.Type<typeof Entry> {}
+export const Entry = Schema.Struct({
+  id: ID,
+  integrationID: IntegrationID,
+  label: Schema.String,
+  active: Schema.Boolean,
+  value: Value,
+}).annotate({ identifier: "Credential.Entry" })
+
+export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
+export const CreateInput = Schema.Struct({
+  id: optional(ID),
+  integrationID: IntegrationID,
+  label: optional(Schema.String),
+  value: Value,
+  activate: optional(Schema.Boolean),
+}).annotate({ identifier: "Credential.CreateInput" })

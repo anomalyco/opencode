@@ -2,7 +2,8 @@ import { EOL } from "node:os"
 import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
-import { Daemon } from "../../services/daemon"
+import { Service, type Endpoint } from "@opencode/client/effect/service"
+import { ServerConnection } from "../../services/server-connection"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
 
@@ -17,11 +18,13 @@ type OpenApi = {
 export default Runtime.handler(
   Commands.commands.api,
   Effect.fn("cli.api")(function* (input) {
-    const daemon = yield* Daemon.Service
-    const transport = yield* daemon.transport()
+    const server = yield* ServerConnection.resolve({
+      mismatch: "ignore",
+    })
+    const endpoint = server.endpoint
     const params = Option.getOrElse(input.param, () => ({}))
-    const request = yield* resolveRequest(transport, input.request, params)
-    const headers = new Headers(transport.headers)
+    const request = yield* resolveRequest(endpoint, input.request, params)
+    const headers = new Headers(Service.headers(endpoint))
     for (const header of input.header) {
       const index = header.indexOf(":")
       if (index < 1) return yield* Effect.fail(new Error(`Invalid header, expected name:value: ${header}`))
@@ -31,7 +34,7 @@ export default Runtime.handler(
     if (body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
 
     const response = yield* Effect.tryPromise(() =>
-      fetch(new URL(request.path, transport.url), {
+      fetch(new URL(request.path, endpoint.url), {
         method: request.method,
         headers,
         body,
@@ -57,16 +60,12 @@ export function rawRequest(input: readonly string[]) {
   return { method: input[0].toUpperCase(), path: input[1] }
 }
 
-function resolveRequest(
-  transport: { url: string; headers: RequestInit["headers"] },
-  input: readonly string[],
-  params: Record<string, string>,
-) {
+function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
   const raw = rawRequest(input)
   if (raw) return Effect.succeed(raw)
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/openapi.json", transport.url), { headers: transport.headers })
+    const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
     if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
     return resolveOperation((await response.json()) as OpenApi, input[0], params)
   })

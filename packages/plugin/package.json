@@ -4,17 +4,25 @@
   "version": "1.20.7",  "type": "module",
   "license": "MIT",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
-    "build": "tsc"
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./tool": "./src/tool.ts",
-    "./tui": "./src/tui.ts",
-    "./v2/effect": "./src/v2/effect/index.ts",
-    "./v2/effect/integration": "./src/v2/effect/integration.ts",
-    "./v2/effect/plugin": "./src/v2/effect/plugin.ts",
-    "./v2/promise": "./src/v2/promise/index.ts"
+    ".": "./src/promise/index.ts",
+    "./effect": "./src/effect/index.ts",
+    "./host": "./src/host.ts",
+    "./runtime": "./src/runtime.ts",
+    "./tui": "./src/tui/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "imports": {
+    "#plugin-source": {
+      "bun": "./src/source.bun.ts",
+      "node": "./src/source.node.ts",
+      "default": "./src/source.node.ts"
+    }
   },
   "files": [
     "dist"
@@ -26,28 +34,35 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.4.5",
-    "@opentui/keymap": ">=0.4.5",
-    "@opentui/solid": ">=0.4.5"
+    "@opencode/theme": "workspace:*",
+    "@opentui/core": ">=0.6.8",
+    "@opentui/solid": ">=0.6.8",
+    "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
-    "@opentui/core": {
+    "@opencode/theme": {
       "optional": true
     },
-    "@opentui/keymap": {
+    "@opentui/core": {
       "optional": true
     },
     "@opentui/solid": {
       "optional": true
+    },
+    "solid-js": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@opencode/theme": "workspace:*",
     "@opentui/core": "catalog:",
-    "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
+    "@tsconfig/bun": "catalog:",
     "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "solid-js": "catalog:",
     "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

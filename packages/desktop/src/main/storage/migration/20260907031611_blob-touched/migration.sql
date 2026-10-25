@@ -1,0 +1,1 @@
+ALTER TABLE `blob` ADD `touched_at` integer DEFAULT 0 NOT NULL;

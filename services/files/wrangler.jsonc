@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opencode-files",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "env": {
+    "dev": {
+      "name": "opencode-dev-files",
+      "routes": [{ "pattern": "dev.opencode.ai/files/*", "zone_name": "opencode.ai" }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "opencode-dev-files" }],
+    },
+    "production": {
+      "name": "opencode-production-files",
+      "routes": [{ "pattern": "opencode.ai/files/*", "zone_name": "opencode.ai" }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "opencode-production-files" }],
+    },
+  },
+}

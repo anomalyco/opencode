@@ -2,34 +2,38 @@
 import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@bolt-ai/plugin/tui"
 import type { SnapshotFileDiff, VcsFileDiff } from "@bolt-ai/sdk/v2"
 import {
+  MouseButton,
   TextAttributes,
-  type BorderSides,
   type BoxRenderable,
-  type DiffRenderable,
+  type RGBA,
+  type MouseEvent,
   type ScrollBoxRenderable,
 } from "@opentui/core"
-import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
-import { useBindings, useCommandShortcut } from "../../keymap"
-import { useTheme } from "../../context/theme"
-import { useTerminalDimensions } from "@opentui/solid"
-import path from "path"
+import { filetype } from "../../util/filetype"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
-import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
+import { DiffFileMenu } from "./diff-viewer-file-menu"
+import { DiffViewerImage, isDiffImageFile } from "./diff-viewer-image"
+import { DIALOG_LIST_INSET, DialogHeader, DialogLayout } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
+import { EmptyBorder } from "../../ui/border"
+import { SESSION_PANEL_SPLIT_MIN_WIDTH } from "../../ui/layout"
+import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
+import { createDebouncedSignal } from "../../util/signal"
+import { type DiffSource, useConfig } from "../../config"
+import { locationKey } from "../../context/data"
+import { useTheme, useThemes } from "../../context/theme"
+import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
   fileTreeFileSelection,
   type FileTreeRow,
   flattenFileTree,
-  moveFileTreeSelection,
-  moveFileTreeSelectionToFirstChild,
-  moveFileTreeSelectionToParent,
   movePatchFileIndex,
   orderedPatchFileIndexes,
-  setFileTreeDirectoryExpanded,
   showDiffViewerFileTree,
   singlePatchFileIndex,
   toggleFileTreeDirectory,
@@ -40,15 +44,12 @@ const MIN_SPLIT_WIDTH = 100
 const FILE_TREE_WIDTH = 32
 const PLAIN_TEXT_FILETYPE = "bolt-plain-text"
 const VCS_DIFF_CONTEXT_LINES = 12
-const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
-const KV_SINGLE_PATCH = "diff_viewer_single_patch"
-const KV_VIEW = "diff_viewer_view"
-type DiffMode = "git" | "branch" | "last-turn"
-type DiffViewerFocus = "patches" | "files"
+type DiffMode = DiffSource
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
+type FileMenuState = { readonly fileIndex: number; readonly x: number; readonly y: number }
 
-type DiffFile = {
+export type DiffFile = {
   readonly file: string
   readonly patch?: string
   readonly additions: number
@@ -56,184 +57,350 @@ type DiffFile = {
   readonly status: "added" | "deleted" | "modified"
 }
 
-const normalizeDiffs = (diffs: readonly (VcsFileDiff | SnapshotFileDiff)[]): DiffFile[] =>
-  diffs.flatMap((item) =>
-    item.file
-      ? [
-          {
-            file: item.file,
-            patch: item.patch,
-            additions: item.additions,
-            deletions: item.deletions,
-            status: item.status ?? "modified",
-          } satisfies DiffFile,
-        ]
-      : [],
-  )
-
-function filetype(input?: string) {
-  if (!input) return "none"
-  const language = LANGUAGE_EXTENSIONS[path.extname(input)]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
-  return language
-}
+const normalizeDiffs = (diffs: readonly FileDiffInfo[]): DiffFile[] =>
+  diffs.map((item) => ({
+    file: item.file,
+    patch: item.patch,
+    additions: item.additions,
+    deletions: item.deletions,
+    status: item.status,
+  }))
 
 function storedView(value: unknown): DiffView | undefined {
   if (value === "split" || value === "unified") return value
 }
 
-function diffSourceLabel(mode: DiffMode) {
-  if (mode === "last-turn") return "last turn"
-  if (mode === "branch") return "main branch"
-  return "working tree"
+const DIFF_SOURCES = {
+  branch: { label: "All", description: "Branch + local changes" },
+  committed: { label: "Committed", description: "Branch commits only" },
+  working: { label: "Uncommitted", description: "Local changes only" },
+  turn: { label: "Last turn", description: "Latest session turn" },
+} satisfies Record<DiffMode, { label: string; description: string }>
+
+const VCS_SOURCES = ["branch", "committed", "working"] as const
+
+const needsBase = (mode: DiffMode) => mode === "branch" || mode === "committed"
+
+function DiffViewer(props: {
+  context: Plugin.Context
+  sessionID?: string
+  initialMode?: DiffMode
+  panel?: PanelInput
+  onClose: () => void
+}) {
+  const config = useConfig()
+  const [memory, updateMemory] = props.context.storage.memory<{
+    source?: DiffMode
+    bases: Record<string, string>
+  }>("review", { initial: { bases: {} } })
+  const sessionID = () => props.sessionID
+  const sources = (): readonly DiffMode[] => (sessionID() ? [...VCS_SOURCES, "turn"] : VCS_SOURCES)
+  const initialMode = props.initialMode ?? memory.source ?? config.data.diffs?.source ?? "branch"
+  const [mode, setMode] = createSignal(sources().includes(initialMode) ? initialMode : "branch")
+  const location = createMemo(
+    () => {
+      const id = sessionID()
+      return id
+        ? (props.context.data.session.get(id)?.location ?? props.context.data.location.default())
+        : props.context.data.location.default()
+    },
+    undefined,
+    { equals: (a, b) => a.directory === b.directory },
+  )
+  const baseKey = createMemo(() =>
+    JSON.stringify([locationKey(location()), props.context.data.location.vcs.info(location())?.branch.current]),
+  )
+  const selectedBase = () => memory.bases[baseKey()]
+  // Mode changes share the same lazy base lookup until this viewer is closed.
+  const bases = new Map<string, ReturnType<Plugin.Context["client"]["vcs"]["base"]>>()
+  const [reportedBases, setReportedBases] = createSignal<ReadonlyMap<string, Vcs.Base | null>>(new Map())
+  const loadBase = (location: LocationRef, key: string) => {
+    const cached = bases.get(key)
+    if (cached) return cached
+    const pending = props.context.client.vcs.base({ location }).then((result) => {
+      setReportedBases((known) => new Map(known).set(key, result.data))
+      return result
+    })
+    bases.set(key, pending)
+    return pending
+  }
+  const diffInput = createMemo(() => {
+    const current = mode()
+    const id = sessionID()
+    if (current === "turn" && id) return { mode: current, sessionID: id }
+    const vcs = current === "turn" ? "branch" : current
+    return {
+      mode: vcs,
+      location: location(),
+      key: baseKey(),
+      selected: needsBase(vcs) ? selectedBase() : undefined,
+    }
+  })
+  const [diff, { refetch }] = createResource(diffInput, async (input) => {
+    if (input.mode === "turn") {
+      return {
+        base: null,
+        files: normalizeDiffs(
+          await props.context.client.session.diff({ sessionID: input.sessionID, context: VCS_DIFF_CONTEXT_LINES }),
+        ),
+      }
+    }
+    const base = !needsBase(input.mode)
+      ? undefined
+      : input.selected
+        ? { name: input.selected, ref: input.selected }
+        : (await loadBase(input.location, input.key)).data
+    if (input !== diffInput() || (input.mode === "committed" && !base)) {
+      return { base: null, files: [] }
+    }
+    const result = await props.context.client.vcs.diff({
+      location: input.location,
+      mode: input.mode,
+      ...(base ? { base: base.ref } : {}),
+      context: VCS_DIFF_CONTEXT_LINES,
+    })
+    return { base, files: normalizeDiffs(result.data ?? []) }
+  })
+  // Each completed turn replaces the last one.
+  createEffect((previous) => {
+    if (mode() !== "turn") return undefined
+    const id = sessionID()
+    const status = id ? props.context.data.session.status(id) : undefined
+    if (previous === "running" && status === "idle") void refetch()
+    return status
+  })
+  const sourceBase = () => {
+    const ref = selectedBase()
+    return ref ? { name: ref, ref } : reportedBases().get(baseKey())
+  }
+  const result = () => (diff.error || diff.loading ? undefined : diff())
+  const sourceDetail = () => {
+    if (mode() === "turn") return diff.error ? "Diff unavailable" : undefined
+    if (mode() === "working") return "vs HEAD"
+    if (diff.error) return "Base or diff unavailable"
+    if (!result()) return "Resolving diff…"
+    const base = result()?.base
+    if (!base) return "Base not reported"
+    return `vs ${base.name}`
+  }
+  return (
+    <DiffViewerContent
+      context={props.context}
+      files={result()?.files ?? []}
+      loading={diff.loading}
+      error={diff.error}
+      mode={mode()}
+      sources={sources()}
+      sourceDetail={sourceDetail()}
+      sourceBase={sourceBase()}
+      unavailable={mode() === "committed" && !!result() && !result()?.base}
+      preferences={config.data.diffs}
+      panel={props.panel}
+      loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
+      onPreferencesChange={(value) => {
+        void config
+          .update((draft) => {
+            draft.diffs = { ...draft.diffs, ...value }
+          })
+          .catch(() => {})
+      }}
+      onClose={props.onClose}
+      onSwitchSource={(mode) => {
+        updateMemory((draft) => {
+          draft.source = mode
+        })
+        setMode(mode)
+      }}
+      onChooseBase={() => {
+        const target = { ...location() }
+        const key = baseKey()
+        if (!memory.bases[key]) void loadBase(target, key).catch(() => {})
+        props.context.ui.dialog.show(() => (
+          <DiffBaseDialog
+            context={props.context}
+            location={target}
+            current={memory.bases[key] ?? reportedBases().get(key)?.ref}
+            onSelect={(ref) =>
+              updateMemory((draft) => {
+                draft.bases[key] = ref
+              })
+            }
+          />
+        ))
+      }}
+    />
+  )
 }
 
-function DiffViewer(props: { api: TuiPluginApi }) {
+function DiffRoute(props: {
+  context: Plugin.Context
+  data?: { mode?: DiffMode; sessionID?: string; returnRoute?: Route }
+}) {
   const dimensions = useTerminalDimensions()
-  const themeState = useTheme()
-  const theme = () => props.api.theme.current
-  const params = () =>
-    ("params" in props.api.route.current ? props.api.route.current.params : undefined) as
-      | {
-          mode?: DiffMode
-          sessionID?: string
-          messageID?: string
-          returnRoute?: TuiRouteCurrent
-        }
-      | undefined
-  const mode = () => params()?.mode ?? "git"
-  const diffInput = createMemo(() => {
-    const sessionID = params()?.sessionID
-    return {
-      mode: mode(),
-      sessionID,
-      messageID: params()?.messageID,
-      directory: sessionID ? props.api.state.session.get(sessionID)?.directory : undefined,
-    }
-  })
-  const [diff] = createResource(diffInput, async (input) => {
-    if (input.mode === "last-turn") {
-      const sessionID = input.sessionID
-      if (!sessionID) return []
-      const result = await props.api.client.session.diff(
-        { sessionID, messageID: input.messageID },
-        { throwOnError: true },
-      )
-      return normalizeDiffs(result.data ?? [])
-    }
-
-    const result = await props.api.client.vcs.diff(
-      { directory: input.directory, mode: input.mode, context: VCS_DIFF_CONTEXT_LINES },
-      { throwOnError: true },
-    )
-    return normalizeDiffs(result.data ?? [])
-  })
-  const files = createMemo(() => diff() ?? [])
-  const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
-  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(
-    props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false,
+  return (
+    <box position="absolute" zIndex={2500} left={0} top={0} width={dimensions().width} height={dimensions().height}>
+      <DiffViewer
+        context={props.context}
+        sessionID={props.data?.sessionID}
+        initialMode={props.data?.mode}
+        onClose={() => props.context.ui.router.navigate(props.data?.returnRoute ?? { type: "home" })}
+      />
+    </box>
   )
-  const showFileTree = createMemo(() => showDiffViewerFileTree(fileTreeEnabled(), files().length))
-  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get<boolean>(KV_SINGLE_PATCH, false) === true)
-  const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? 33 : 0) - 4)
-  const patchLeftBorder = createMemo<BorderSides[]>(() => (showFileTree() ? ["left"] : []))
+}
+
+function DiffBaseDialog(props: {
+  context: Plugin.Context
+  location: LocationRef
+  current?: string
+  onSelect: (ref: string) => void
+}) {
+  const theme = props.context.theme.surface("dialog")
+  const [search, setSearch] = createDebouncedSignal("", 150)
+  const [branches] = createResource(search, (search) =>
+    props.context.client.vcs.branch.list({ location: props.location, search, limit: 100 }),
+  )
+  const Empty = () => (
+    <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
+      <text fg={branches.error ? theme.text.feedback.error.base : theme.text.muted}>
+        {branches.loading
+          ? "Loading branches…"
+          : branches.error
+            ? "Could not load branches. Reopen the picker to try again."
+            : "No branches found"}
+      </text>
+    </box>
+  )
+
+  return (
+    <DialogSelect
+      title="Base branch"
+      placeholder="Search local and remote branches"
+      skipFilter
+      current={props.current?.replace(/^refs\/(heads|remotes)\//, "")}
+      onFilter={setSearch}
+      emptyView={<Empty />}
+      noMatchView={<Empty />}
+      footer={<text fg={theme.text.muted}>Remembered until the TUI exits</text>}
+      options={(branches.loading || branches.error ? [] : (branches()?.data ?? [])).map((name) => ({
+        title: name,
+        value: name,
+        onSelect() {
+          props.onSelect(name)
+          props.context.ui.dialog.clear()
+        },
+      }))}
+    />
+  )
+}
+
+type DiffPreferences = { tree?: boolean; single?: boolean; view?: "auto" | DiffView; fullscreen?: boolean }
+
+export function DiffViewerContent(props: {
+  context: Plugin.Context
+  files: readonly DiffFile[]
+  loading?: boolean
+  error?: unknown
+  mode: DiffMode
+  sources: readonly DiffMode[]
+  sourceDetail?: string
+  sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
+  unavailable?: boolean
+  loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
+  preferences?: DiffPreferences
+  panel?: PanelInput
+  onPreferencesChange?: (value: DiffPreferences) => void
+  onClose: () => void
+  onSwitchSource: (mode: DiffMode) => void
+  onChooseBase?: () => void
+}) {
+  const renderer = useRenderer()
+  const dimensions = useTerminalDimensions()
+  const config = useConfig()
+  const dialog = props.context.ui.dialog
+  const theme = useTheme()
+  const currentSyntax = useThemes().currentSyntax
+  const files = () => props.files
+  const docked = () => props.panel?.presentation === "panel"
+  const width = () => props.panel?.width ?? dimensions().width
+  // Docked panels and narrow full screens share the compact layout: no file tree, flush cards, and a footer.
+  const compact = () => docked() || width() < FULL_LAYOUT_MIN_WIDTH
+  // Full screen has no pane beside it to focus, and is always the active input scope.
+  const focused = () => !docked() || props.panel?.focused === true
+  // The side panel sits on the slot's raised surface; full screen keeps the base background.
+  const surface = () => (docked() ? theme.background.raised.base : theme.background.base)
+  // Cards are inset from the pane edges; the gaps between them run edge to edge.
+  const inset = () => (compact() ? 0 : FULL_INSET)
+  const mode = () => props.mode
+  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(props.preferences?.tree ?? true)
+  const showFileTree = createMemo(() => !compact() && showDiffViewerFileTree(fileTreeEnabled(), files().length))
+  const [singlePatch, setSinglePatch] = createSignal(props.preferences?.single ?? false)
+  const fileTreeWidth = createMemo(() =>
+    Math.max(FILE_TREE_MIN_WIDTH, Math.min(FILE_TREE_MAX_WIDTH, Math.floor(width() / 4))),
+  )
+  const patchPaneWidth = createMemo(() => width() - (showFileTree() ? fileTreeWidth() : 0) - inset() * 2)
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
-  const defaultView = createMemo(() => {
-    if (props.api.tuiConfig.diff_style === "stacked") return "unified"
-    return splitAvailable() ? "split" : "unified"
-  })
-  const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.api.kv.get(KV_VIEW)))
-  const view = createMemo(() => (splitAvailable() ? (viewOverride() ?? defaultView()) : "unified"))
+  const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.preferences?.view))
+  const view = createMemo(() =>
+    splitAvailable() ? (viewOverride() ?? storedView(props.preferences?.view) ?? "split") : "unified",
+  )
   const fileTree = createMemo(() => buildFileTree(files()))
   const [expandedFileNodes, setExpandedFileNodes] = createSignal<ReadonlySet<number>>(new Set())
-  const [highlightedFileNode, setHighlightedFileNode] = createSignal<number | undefined>()
-  const [lastHighlightedFileNode, setLastHighlightedFileNode] = createSignal<number | undefined>()
-  const [activePatchFileIndex, setActivePatchFileIndex] = createSignal<number | undefined>()
   const [selectedFileIndex, setSelectedFileIndex] = createSignal<number | undefined>()
   const [reviewedFileNames, setReviewedFileNames] = createSignal<ReadonlySet<string>>(new Set())
-  const patchScrollAcceleration = createMemo(() => getScrollAcceleration(props.api.tuiConfig))
-  const fileRows = createMemo(() => flattenFileTree(fileTree(), expandedFileNodes()))
+  const [exhaustedFileIndex, setExhaustedFileIndex] = createSignal<number | undefined>()
+  const [fileMenu, setFileMenu] = createSignal<FileMenuState>()
+  const patchScrollAcceleration = createMemo(() => getScrollAcceleration(config.data))
   const patchFileIndexes = createMemo(() => orderedPatchFileIndexes(flattenFileTree(fileTree())))
-  const focusRunner = (input: Record<DiffViewerFocus, () => void>) => () => input[focus()]()
-  const switchFocusShortcut = useCommandShortcut("diff.switch_focus")
-  const nextHunkShortcut = useCommandShortcut("diff.next_hunk")
-  const previousHunkShortcut = useCommandShortcut("diff.previous_hunk")
-  const nextFileShortcut = useCommandShortcut("diff.next_file")
-  const previousFileShortcut = useCommandShortcut("diff.previous_file")
-  const toggleFileTreeShortcut = useCommandShortcut("diff.toggle_file_tree")
-  const singlePatchShortcut = useCommandShortcut("diff.single_patch")
-  const switchSourceShortcut = useCommandShortcut("diff.switch_source")
-  const toggleViewShortcut = useCommandShortcut("diff.toggle_view")
-  const markReviewedShortcut = useCommandShortcut("diff.mark_reviewed")
-  const helpShortcut = useCommandShortcut("diff.help")
+  const helpShortcut = () => props.context.keymap.shortcuts("diff.help")[0]
   let scroll: ScrollBoxRenderable | undefined
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
-  const diffNodeByFileIndex = new Map<number, DiffRenderable>()
+  const patchDiffByFileIndex = new Map<number, PatchDiffRef>()
   const [selectedHunk, setSelectedHunk] = createSignal<SelectedHunk | undefined>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
-  const [patchFillerHeight, setPatchFillerHeight] = createSignal(0)
-
-  onCleanup(() => props.api.ui.dialog.clear())
 
   createEffect(() => {
     setExpandedFileNodes(allExpandedFileTreeDirectories(fileTree()))
-    setHighlightedFileNode(undefined)
-    setLastHighlightedFileNode(undefined)
-    setActivePatchFileIndex(undefined)
     setSelectedFileIndex(undefined)
     setSelectedHunk(undefined)
     setReviewedFileNames(new Set<string>())
+    setExhaustedFileIndex(undefined)
+    setFileMenu(undefined)
   })
 
-  const ensureHighlightedFileNode = () => {
-    const highlighted = highlightedFileNode()
-    if (highlighted !== undefined && fileRows().some((row) => row.id === highlighted)) return
-    const lastHighlighted = lastHighlightedFileNode()
-    const next =
-      lastHighlighted !== undefined && fileRows().some((row) => row.id === lastHighlighted)
-        ? lastHighlighted
-        : fileRows().find((row) => row.fileIndex !== undefined)?.id
-    setHighlightedFileNode(next)
-  }
-
-  const setHighlighted = (node: number | undefined) => {
-    setHighlightedFileNode(node)
-    if (node !== undefined) setLastHighlightedFileNode(node)
-  }
-
-  const moveFileSelection = (offset: number) =>
-    setHighlighted(moveFileTreeSelection(fileRows(), highlightedFileNode(), offset))
-
-  const clearFileTreePatchState = () => {
-    setHighlightedFileNode(undefined)
-    setActivePatchFileIndex(undefined)
+  const clearPatchSelection = () => {
+    setPendingPatchScrollFileIndex(undefined)
     setSelectedHunk(undefined)
+    if (!singlePatch()) setSelectedFileIndex(undefined)
   }
 
-  const scrollPatchNodeToTop = (patchNode: BoxRenderable) => {
-    requestAnimationFrame(() => {
-      if (!scroll) return
-      const scrollDelta = patchNode.y - scroll.viewport.y
-      const contentY = scroll.scrollTop + scrollDelta
-      const offset = contentY === 0 ? 0 : 1
-      scroll.scrollBy(scrollDelta + offset)
-    })
+  const scrollPage = (direction: -1 | 1, divisor: 1 | 2) => {
+    clearPatchSelection()
+    if (scroll) scroll.scrollBy(direction * Math.max(1, Math.floor(scroll.viewport.height / divisor)))
+  }
+
+  const scrollPatchNodeToTop = (patchNode: BoxRenderable, offset?: number) => {
+    if (!scroll || patchNode.isDestroyed) return
+    const contentY = patchNode.y - scroll.content.y
+    // The fixed pane edge replaces the leading separator when jumping to a later file.
+    scroll.scrollTo(contentY + (offset ?? (contentY > 0 ? 1 : 0)))
   }
 
   const revealFileTreeFile = (fileIndex: number) => {
     const selection = fileTreeFileSelection(fileTree(), fileIndex)
     if (!selection) return
     setExpandedFileNodes((expanded) => {
+      if ([...selection.expandedNodes].every((node) => expanded.has(node))) return expanded
       const next = new Set(expanded)
       selection.expandedNodes.forEach((node) => next.add(node))
       return next
     })
-    setHighlighted(selection.highlightedNode)
   }
 
   const selectPatchFile = (fileIndex: number) => {
+    setPendingPatchScrollFileIndex(undefined)
+    setExhaustedFileIndex(undefined)
     revealFileTreeFile(fileIndex)
-    setActivePatchFileIndex(fileIndex)
     setSelectedFileIndex(fileIndex)
   }
 
@@ -248,6 +415,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     if (fileIndex === undefined) return
     setSelectedHunk(undefined)
     scrollToFileIndex(fileIndex)
+    if (singlePatch()) scrollSinglePatchToTop()
   }
 
   const currentPatchFileIndex = () => {
@@ -269,7 +437,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
 
   const jumpRelativePatchFile = (offset: number) => {
     setSelectedHunk(undefined)
-    const next = movePatchFileIndex(patchFileIndexes(), selectedFileIndex() ?? activePatchFileIndex(), offset)
+    const next = movePatchFileIndex(patchFileIndexes(), selectedFileIndex() ?? currentPatchFileIndex(), offset)
     if (singlePatch()) {
       if (next === undefined) return
       selectPatchFile(next)
@@ -284,17 +452,16 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     if (!patchScroll) return
     const hunks = visiblePatchFiles()
       .flatMap((entry) => {
-        const node = diffNodeByFileIndex.get(entry.fileIndex)
-        if (!node || node.isDestroyed) return []
-        const contentY = patchScroll.scrollTop + node.y - patchScroll.viewport.y
-        return node.diff
-          .split("\n")
-          .flatMap((line, row) => (line.startsWith("@@") ? [row] : []))
-          .map((row, hunkIndex) => ({
-            fileIndex: entry.fileIndex,
-            hunkIndex,
-            contentY: contentY + row,
-          }))
+        return (
+          patchDiffByFileIndex
+            .get(entry.fileIndex)
+            ?.hunks()
+            .map((node, hunkIndex) => ({
+              fileIndex: entry.fileIndex,
+              hunkIndex,
+              contentY: patchScroll.scrollTop + node.y - patchScroll.viewport.y - (hunkIndex > 0 ? 1 : 0),
+            })) ?? []
+        )
       })
       .sort((left, right) => left.contentY - right.contentY)
     const selected = selectedHunk()
@@ -302,20 +469,20 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       selected?.scrollTop === patchScroll.scrollTop
         ? hunks.findIndex((hunk) => hunk.fileIndex === selected.fileIndex && hunk.hunkIndex === selected.hunkIndex)
         : -1
+    const contentTop = patchScroll.scrollTop + FILE_HEADER_HEIGHT
     const next =
       selectedIndex !== -1
         ? hunks[selectedIndex + offset]
         : offset === 1
-          ? hunks.find((hunk) => hunk.contentY > patchScroll.scrollTop)
-          : hunks.findLast((hunk) => hunk.contentY < patchScroll.scrollTop)
+          ? hunks.find((hunk) => hunk.contentY > contentTop)
+          : hunks.findLast((hunk) => hunk.contentY < contentTop)
     if (!next) return
     selectPatchFile(next.fileIndex)
-    patchScroll.scrollTo(next.contentY)
+    patchScroll.scrollTo(Math.max(0, next.contentY - FILE_HEADER_HEIGHT))
     setSelectedHunk({ fileIndex: next.fileIndex, hunkIndex: next.hunkIndex, scrollTop: patchScroll.scrollTop })
   }
 
-  const highlightedPatchFileIndex = () => fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
-  const firstPatchFileIndex = () => fileRows().find((row) => row.fileIndex !== undefined)?.fileIndex
+  const firstPatchFileIndex = () => patchFileIndexes()[0]
   const visiblePatchFiles = createMemo(() => {
     if (!singlePatch()) {
       return patchFileIndexes().flatMap((fileIndex) => {
@@ -323,91 +490,46 @@ function DiffViewer(props: { api: TuiPluginApi }) {
         return file ? [{ file, fileIndex }] : []
       })
     }
-    const fileIndex = singlePatchFileIndex(
-      selectedFileIndex(),
-      activePatchFileIndex(),
-      currentPatchFileIndex(),
-      firstPatchFileIndex(),
-    )
+    const fileIndex = singlePatchFileIndex(selectedFileIndex(), currentPatchFileIndex(), firstPatchFileIndex())
     const file = fileIndex === undefined ? undefined : files()[fileIndex]
     return file && fileIndex !== undefined ? [{ file, fileIndex }] : []
   })
 
   const ensureHighlightedPatchFile = () => {
-    const fileIndex = currentPatchFileIndex() ?? activePatchFileIndex() ?? firstPatchFileIndex()
+    const fileIndex = currentPatchFileIndex() ?? selectedFileIndex() ?? firstPatchFileIndex()
     if (fileIndex === undefined) return
     selectPatchFile(fileIndex)
   }
 
-  const scrollToPatchFileIndexAfterRender = (fileIndex: number) => {
+  const scrollToPatchFileIndexAfterRender = (fileIndex: number, offset?: number) => {
     setPendingPatchScrollFileIndex(fileIndex)
-    requestAnimationFrame(() => {
+    renderer.requestAnimationFrame(() => {
+      if (pendingPatchScrollFileIndex() !== fileIndex) return
       const patchNode = patchNodeByFileIndex.get(fileIndex)
-      if (patchNode) scrollPatchNodeToTop(patchNode)
-      requestAnimationFrame(() => {
+      if (patchNode) scrollPatchNodeToTop(patchNode, offset)
+      renderer.requestAnimationFrame(() => {
+        if (pendingPatchScrollFileIndex() !== fileIndex) return
         const patchNode = patchNodeByFileIndex.get(fileIndex)
-        if (patchNode) scrollPatchNodeToTop(patchNode)
+        if (patchNode) scrollPatchNodeToTop(patchNode, offset)
         setPendingPatchScrollFileIndex(undefined)
       })
     })
   }
 
   const scrollSinglePatchToTop = () => {
-    requestAnimationFrame(() => {
+    renderer.requestAnimationFrame(() => {
       scroll?.scrollTo(0)
-      requestAnimationFrame(() => scroll?.scrollTo(0))
-    })
-  }
-
-  const measurePatchFiller = () => {
-    requestAnimationFrame(() => {
-      if (!scroll) return
-      const entries = visiblePatchFiles()
-        .map((entry) => patchNodeByFileIndex.get(entry.fileIndex))
-        .filter((node): node is BoxRenderable => Boolean(node))
-      if (entries.length === 0) {
-        setPatchFillerHeight(0)
-        return
-      }
-      const contentHeight = Math.max(
-        ...entries.map((node) => scroll!.scrollTop + node.y - scroll!.viewport.y + node.height),
-      )
-      setPatchFillerHeight(Math.max(0, scroll.viewport.height - contentHeight))
+      renderer.requestAnimationFrame(() => scroll?.scrollTo(0))
     })
   }
 
   const registerPatchNode = (fileIndex: number, element: BoxRenderable) => {
     patchNodeByFileIndex.set(fileIndex, element)
-    measurePatchFiller()
     if (pendingPatchScrollFileIndex() !== fileIndex) return
-    requestAnimationFrame(() => {
-      scrollPatchNodeToTop(element)
-      requestAnimationFrame(() => {
-        scrollPatchNodeToTop(element)
-        setPendingPatchScrollFileIndex(undefined)
-      })
-    })
-  }
-
-  createEffect(() => {
-    visiblePatchFiles()
-    dimensions()
-    view()
-    measurePatchFiller()
-  })
-
-  const toggleSelectedFileTreeRow = () => {
-    const highlighted = fileRows().find((row) => row.id === highlightedFileNode())
-    if (highlighted?.fileIndex !== undefined) {
-      jumpToFileIndex(highlighted.fileIndex)
-      return
-    }
-    setExpandedFileNodes((expanded) => toggleFileTreeDirectory(fileTree(), expanded, highlightedFileNode()))
+    scrollToPatchFileIndexAfterRender(fileIndex)
   }
 
   const clickFileTreeRow = (row: FileTreeRow) => {
-    setFocus("files")
-    setHighlighted(row.id)
     if (row.fileIndex !== undefined) {
       jumpToFileIndex(row.fileIndex)
       return
@@ -415,663 +537,837 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     setExpandedFileNodes((expanded) => toggleFileTreeDirectory(fileTree(), expanded, row.id))
   }
 
-  const toggleSelectedFileReviewed = () => {
-    const fileIndex =
-      focus() === "files"
-        ? fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
-        : (selectedFileIndex() ?? activePatchFileIndex() ?? currentPatchFileIndex())
-    const file = fileIndex === undefined ? undefined : files()[fileIndex]?.file
+  const toggleFileReviewed = (fileIndex: number | undefined) => {
+    if (fileIndex === undefined) return
+    const file = files()[fileIndex]?.file
     if (!file) return
+    const current = selectedFileIndex() ?? currentPatchFileIndex()
+    const anchor = current === undefined ? undefined : patchNodeByFileIndex.get(current)
+    const offset = anchor && scroll ? scroll.viewport.y - anchor.y : undefined
+    const reviewed = reviewedFileNames().has(file)
     setReviewedFileNames((reviewed) => {
       const next = new Set(reviewed)
       if (next.has(file)) next.delete(file)
       else next.add(file)
       return next
     })
+    // Completing another file from its menu must not navigate away from the current file.
+    if (fileIndex !== current) {
+      if (current !== undefined && offset !== undefined && !singlePatch())
+        scrollToPatchFileIndexAfterRender(current, offset)
+      return
+    }
+    const nextFileIndex =
+      singlePatch() && !reviewed ? (movePatchFileIndex(patchFileIndexes(), fileIndex, 1) ?? fileIndex) : fileIndex
+    selectPatchFile(nextFileIndex)
+    if (singlePatch() && !reviewed && nextFileIndex === fileIndex) setExhaustedFileIndex(fileIndex)
+    setSelectedHunk(undefined)
+    scrollToPatchFileIndexAfterRender(nextFileIndex)
   }
 
-  const commands = [
-    {
-      name: "diff.close",
-      title: "Close diff viewer",
-      category: "VCS",
-      run() {
-        const returnRoute = params()?.returnRoute
-        props.api.ui.dialog.clear()
+  const openFileMenu = (fileIndex: number, event: MouseEvent) => {
+    if (event.button !== MouseButton.RIGHT) return
+    event.preventDefault()
+    event.stopPropagation()
+    props.panel?.focus()
+    setFileMenu({ fileIndex, x: event.x, y: event.y })
+  }
 
-        props.api.route.navigate(
-          returnRoute?.name ?? "home",
-          returnRoute && "params" in returnRoute ? returnRoute.params : undefined,
-        )
+  const close = () => {
+    dialog.clear()
+    props.onClose()
+  }
+
+  const commands: KeymapCommand[] = [
+    {
+      id: "diff.close",
+      title: "Close diff viewer",
+      group: "VCS",
+      run: close,
+    },
+    {
+      id: "diff.down",
+      title: "Move diff viewer down",
+      group: "VCS",
+      run() {
+        clearPatchSelection()
+        scroll?.scrollBy(1)
       },
     },
     {
-      name: "diff.down",
-      title: "Move diff viewer down",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          moveFileSelection(1)
-        },
-        patches() {
-          clearFileTreePatchState()
-          scroll?.scrollBy(1)
-        },
-      }),
-    },
-    {
-      name: "diff.up",
+      id: "diff.up",
       title: "Move diff viewer up",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          moveFileSelection(-1)
-        },
-        patches() {
-          clearFileTreePatchState()
-          scroll?.scrollBy(-1)
-        },
-      }),
+      group: "VCS",
+      run() {
+        clearPatchSelection()
+        scroll?.scrollBy(-1)
+      },
     },
     {
-      name: "diff.page.down",
+      id: "diff.page.down",
       title: "Page diff viewer down",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          moveFileSelection(8)
-        },
-        patches() {
-          clearFileTreePatchState()
-          if (scroll) scroll.scrollBy(scroll.height)
-        },
-      }),
+      group: "VCS",
+      run: () => scrollPage(1, 1),
     },
     {
-      name: "diff.page.up",
+      id: "diff.page.up",
       title: "Page diff viewer up",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          moveFileSelection(-8)
-        },
-        patches() {
-          clearFileTreePatchState()
-          if (scroll) scroll.scrollBy(-scroll.height)
-        },
-      }),
+      group: "VCS",
+      run: () => scrollPage(-1, 1),
     },
     {
-      name: "diff.toggle",
-      title: "Toggle diff viewer item",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          toggleSelectedFileTreeRow()
-        },
-        patches() {},
-      }),
+      id: "diff.half_page.down",
+      title: "Scroll down half a page",
+      group: "VCS",
+      run: () => scrollPage(1, 2),
     },
     {
-      name: "diff.expand",
-      title: "Expand diff viewer item",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          const highlighted = highlightedFileNode()
-          if (highlighted !== undefined && expandedFileNodes().has(highlighted)) {
-            setHighlighted(moveFileTreeSelectionToFirstChild(fileRows(), highlighted))
-            return
-          }
-          setExpandedFileNodes((expanded) =>
-            setFileTreeDirectoryExpanded(fileTree(), expanded, highlightedFileNode(), true),
-          )
-        },
-        patches() {},
-      }),
+      id: "diff.half_page.up",
+      title: "Scroll up half a page",
+      group: "VCS",
+      run: () => scrollPage(-1, 2),
     },
     {
-      name: "diff.expand_all",
-      title: "Expand all diff viewer folders",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          setExpandedFileNodes(allExpandedFileTreeDirectories(fileTree()))
-        },
-        patches() {},
-      }),
+      id: "diff.first",
+      title: "Go to the start of the diff",
+      group: "VCS",
+      run() {
+        clearPatchSelection()
+        scroll?.scrollTo(0)
+      },
     },
     {
-      name: "diff.collapse",
-      title: "Collapse diff viewer item",
-      category: "VCS",
-      run: focusRunner({
-        files() {
-          const highlighted = highlightedFileNode()
-          const node = highlighted === undefined ? undefined : fileTree().nodes[highlighted]
-          if (node?.kind !== "directory" || !expandedFileNodes().has(node.id)) {
-            setHighlighted(moveFileTreeSelectionToParent(fileRows(), highlighted))
-            return
-          }
-          setExpandedFileNodes((expanded) =>
-            setFileTreeDirectoryExpanded(fileTree(), expanded, highlightedFileNode(), false),
-          )
-        },
-        patches() {},
-      }),
+      id: "diff.last",
+      title: "Go to the end of the diff",
+      group: "VCS",
+      run() {
+        clearPatchSelection()
+        if (scroll) scroll.scrollTo(scroll.scrollHeight)
+      },
     },
     {
-      name: "diff.next_hunk",
+      id: "diff.next_hunk",
       title: "Jump to next diff hunk",
-      category: "VCS",
+      group: "VCS",
       run() {
         jumpRelativeHunk(1)
       },
     },
     {
-      name: "diff.previous_hunk",
+      id: "diff.previous_hunk",
       title: "Jump to previous diff hunk",
-      category: "VCS",
+      group: "VCS",
       run() {
         jumpRelativeHunk(-1)
       },
     },
     {
-      name: "diff.next_file",
+      id: "diff.next_file",
       title: "Jump to next diff file",
-      category: "VCS",
+      group: "VCS",
       run() {
         jumpRelativePatchFile(1)
       },
     },
     {
-      name: "diff.previous_file",
+      id: "diff.previous_file",
       title: "Jump to previous diff file",
-      category: "VCS",
+      group: "VCS",
       run() {
         jumpRelativePatchFile(-1)
       },
     },
     {
-      name: "diff.mark_reviewed",
+      id: "diff.mark_reviewed",
       title: "Toggle selected diff file reviewed",
-      category: "VCS",
+      group: "VCS",
       run() {
-        toggleSelectedFileReviewed()
+        const fileIndex = selectedFileIndex() ?? currentPatchFileIndex()
+        if (fileIndex !== undefined && fileIndex === exhaustedFileIndex()) return
+        toggleFileReviewed(fileIndex)
       },
     },
     {
-      name: "diff.switch_focus",
-      title: "Switch diff viewer focus",
-      category: "VCS",
-      run() {
-        if (!showFileTree()) return
-        setFocus((current) => {
-          if (current === "files") return "patches"
-          ensureHighlightedFileNode()
-          return "files"
-        })
-      },
-    },
-    {
-      name: "diff.toggle_file_tree",
+      id: "diff.toggle_file_tree",
       title: "Toggle diff viewer file tree",
-      category: "VCS",
+      group: "VCS",
+      enabled: () => !compact(),
       run() {
+        if (compact()) return
         const next = !fileTreeEnabled()
-        if (!next) setFocus("patches")
         setFileTreeEnabled(next)
-        props.api.kv.set(KV_SHOW_FILE_TREE, next)
+        props.onPreferencesChange?.({ tree: next })
       },
     },
     {
-      name: "diff.single_patch",
+      id: "diff.single_patch",
       title: "Toggle single patch view",
-      category: "VCS",
+      group: "VCS",
       run() {
         setSelectedHunk(undefined)
         if (!singlePatch()) {
           ensureHighlightedPatchFile()
           setSinglePatch(true)
-          props.api.kv.set(KV_SINGLE_PATCH, true)
+          props.onPreferencesChange?.({ single: true })
           scrollSinglePatchToTop()
           return
         }
         const fileIndex =
           visiblePatchFiles()[0]?.fileIndex ??
-          singlePatchFileIndex(
-            selectedFileIndex(),
-            activePatchFileIndex(),
-            currentPatchFileIndex(),
-            firstPatchFileIndex(),
-          )
+          singlePatchFileIndex(selectedFileIndex(), currentPatchFileIndex(), firstPatchFileIndex())
         if (fileIndex !== undefined) selectPatchFile(fileIndex)
         setSinglePatch(false)
-        props.api.kv.set(KV_SINGLE_PATCH, false)
+        props.onPreferencesChange?.({ single: false })
         if (fileIndex !== undefined) scrollToPatchFileIndexAfterRender(fileIndex)
       },
     },
     {
-      name: "diff.switch_source",
+      id: "diff.switch_source",
       title: "Switch diff viewer source",
-      category: "VCS",
+      group: "VCS",
       run() {
         openSwitchDiffDialog()
       },
     },
     {
-      name: "diff.toggle_view",
+      id: "diff.toggle_view",
       title: "Toggle diff viewer split or unified view",
-      category: "VCS",
+      group: "VCS",
       run() {
         if (!splitAvailable()) return
         setSelectedHunk(undefined)
         const next = view() === "split" ? "unified" : "split"
         setViewOverride(next)
-        props.api.kv.set(KV_VIEW, next)
+        props.onPreferencesChange?.({ view: next })
       },
     },
     {
-      name: "diff.help",
+      id: "diff.toggle_fullscreen",
+      title: "Toggle diff viewer full screen",
+      group: "VCS",
+      enabled: () => props.panel !== undefined,
+      run: () => {
+        const panel = props.panel
+        if (!panel) return
+        const before = panel.presentation
+        panel.toggleFullscreen()
+        // A narrow terminal forces full screen and ignores the toggle; only a real toggle is remembered.
+        if (panel.presentation === before) return
+        props.onPreferencesChange?.({ fullscreen: panel.presentation === "fullscreen" })
+      },
+    },
+    {
+      id: "diff.help",
       title: "Show more diff viewer shortcuts",
-      category: "VCS",
+      group: "VCS",
       run() {
         openHelpDialog()
       },
     },
+    // Specific diff bindings take precedence over app.exit's Ctrl+D binding.
+    {
+      id: "app.exit",
+      title: "Close diff viewer",
+      group: "VCS",
+      run: close,
+    },
   ]
 
-  const switchDiffOptions = createMemo(() => {
-    const vcs = props.api.state.vcs
-    return [
-      {
-        title: "Working tree",
-        value: "git" as const,
-        description: "Show current git changes",
-      },
-      ...(vcs?.branch && vcs.default_branch && vcs.branch !== vcs.default_branch
-        ? [
-            {
-              title: "Main branch",
-              value: "branch" as const,
-              description: "Show changes compared to main branch",
-            },
-          ]
-        : []),
-      {
-        title: "Last turn",
-        value: "last-turn" as const,
-        description: "Show changes from the last assistant turn",
-      },
-    ]
-  })
-
   const openSwitchDiffDialog = () => {
-    props.api.ui.dialog.replace(() => (
-      <DialogSelect
-        title="Switch source"
+    dialog.show(() => (
+      <DialogSelect<DiffMode | "base">
+        title="Diff source"
         skipFilter={true}
         renderFilter={false}
         current={mode()}
-        options={switchDiffOptions().map((option) => ({
-          ...option,
-          onSelect(dialog) {
-            dialog.clear()
-            props.api.route.navigate(ROUTE, {
-              mode: option.value,
-              sessionID: params()?.sessionID,
-              messageID: params()?.messageID,
-              returnRoute: params()?.returnRoute,
-            })
-          },
-        }))}
+        options={[
+          ...props.sources.map((source) => ({
+            value: source,
+            title: DIFF_SOURCES[source].label,
+            titleView: DIFF_SOURCES[source].label.padEnd(11),
+            description: DIFF_SOURCES[source].description,
+            onSelect() {
+              dialog.clear()
+              props.onSwitchSource(source)
+            },
+          })),
+          ...(props.onChooseBase
+            ? [
+                {
+                  title: "Base",
+                  titleView: "Base".padEnd(11),
+                  value: "base" as const,
+                  description: props.sourceBase?.name ?? "Choose…",
+                  onSelect: props.onChooseBase,
+                },
+              ]
+            : []),
+        ]}
       />
     ))
   }
 
   const openHelpDialog = () => {
-    props.api.ui.dialog.replace(() => <DiffViewerHelpDialog />)
-    props.api.ui.dialog.setSize("large")
+    dialog.show(() => (
+      <DiffViewerHelpDialog
+        context={props.context}
+        single={singlePatch()}
+        fullscreen={props.panel !== undefined}
+        tree={!compact()}
+      />
+    ))
+    dialog.set({ size: "medium", centered: true })
   }
 
-  useBindings(() => ({
+  const HelpShortcut = (props: { compact?: boolean; label?: string; muted?: boolean }) => (
+    <Show when={helpShortcut()}>
+      {(shortcut) => (
+        <text
+          id="diff-help-shortcut"
+          fg={props.muted ? theme.text.action.primary.disabled : theme.text.base}
+          attributes={props.muted ? TextAttributes.DIM : 0}
+          selectable={false}
+          flexShrink={0}
+          wrapMode="none"
+          onMouseUp={(event) => {
+            if (event.button !== MouseButton.LEFT) return
+            event.stopPropagation()
+            openHelpDialog()
+          }}
+        >
+          {props.compact ? "?" : shortcut()}
+          <Show when={!props.compact}>
+            <span style={props.muted ? {} : { fg: theme.text.muted }}> {props.label ?? "help"}</span>
+          </Show>
+        </text>
+      )}
+    </Show>
+  )
+
+  props.context.keymap.layer(() => ({
     commands,
-    bindings: [
-      { key: "j,down", cmd: "diff.down", desc: "Move diff viewer down" },
-      { key: "k,up", cmd: "diff.up", desc: "Move diff viewer up" },
-      { key: "pagedown,ctrl+f", cmd: "diff.page.down", desc: "Page diff viewer down" },
-      { key: "pageup,ctrl+b", cmd: "diff.page.up", desc: "Page diff viewer up" },
-      { key: "m", cmd: "diff.mark_reviewed", desc: "Mark selected file reviewed" },
-      ...props.api.tuiConfig.keybinds.gather(
-        "diff",
-        commands.map((command) => command.name),
-      ),
-    ],
   }))
 
   return (
-    <box position="absolute" zIndex={2500} left={0} top={0} width={dimensions().width} height={dimensions().height}>
-      <PanelGroup axis="y" width="100%" height="100%">
-        <Panel border="none" flexShrink={0} padding={0} paddingLeft={1}>
-          <text fg={theme().text}>Diff </text>
-          <text fg={theme().textMuted}>{diffSourceLabel(mode())}</text>
-          <box flexGrow={1} />
-          <text fg={theme().textMuted}>
-            {files().length} {files().length === 1 ? "file" : "files"}
+    <box width="100%" height="100%" backgroundColor={surface()}>
+      <Show when={!showFileTree()}>
+        <box
+          id="diff-source-header"
+          paddingLeft={2}
+          // Compact, the header lines up with the card text below it; the card edge row supplies the gap underneath.
+          paddingRight={compact() ? 1 : 2}
+          // Only the docked panel leaves a row above the header; full screen starts at the top edge.
+          paddingTop={docked() ? 1 : 0}
+          height={docked() ? 2 : 1}
+          flexShrink={0}
+          flexDirection="row"
+          gap={1}
+        >
+          <box
+            id="diff-source-switch"
+            flexDirection="row"
+            flexGrow={1}
+            minWidth={0}
+            onMouseUp={(event) => {
+              if (event.button !== MouseButton.LEFT) return
+              event.stopPropagation()
+              openSwitchDiffDialog()
+            }}
+          >
+            <text
+              fg={theme.text.action.secondary.base}
+              attributes={TextAttributes.BOLD}
+              selectable={false}
+              flexShrink={0}
+              wrapMode="none"
+            >
+              {DIFF_SOURCES[mode()].label}
+            </text>
+            <Show when={props.sourceDetail}>
+              <text fg={theme.text.muted} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
+                {` · ${props.sourceDetail}`}
+              </text>
+            </Show>
+          </box>
+          <text id="diff-review-count" fg={theme.text.muted} flexShrink={0} wrapMode="none">
+            {files().filter((file) => reviewedFileNames().has(file.file)).length}/{files().length}
           </text>
-        </Panel>
+        </box>
+      </Show>
+      <box flexGrow={1} minHeight={0}>
+        <Switch>
+          <Match when={props.loading}>
+            <box flexGrow={1} padding={2} paddingTop={compact() ? 1 : 2}>
+              <text fg={theme.text.muted}>Loading diff…</text>
+            </box>
+          </Match>
+          <Match when={!props.loading && props.error}>
+            <box flexGrow={1} padding={2} paddingTop={compact() ? 1 : 2}>
+              <text fg={theme.text.feedback.error.base}>
+                {!props.sourceBase && needsBase(mode())
+                  ? "Could not load diff. Choose a base branch from Diff source, or select Uncommitted."
+                  : "Could not load diff. Reopen the diff viewer to try again."}
+              </text>
+            </box>
+          </Match>
+          <Match when={!props.loading && props.unavailable}>
+            <box flexGrow={1} padding={2} paddingTop={compact() ? 1 : 2}>
+              <text fg={theme.text.muted}>
+                Committed comparison unavailable without base metadata. Choose a base branch from Diff source.
+              </text>
+            </box>
+          </Match>
+          <Match when={!props.loading && files().length === 0}>
+            <box flexGrow={1} padding={2} paddingTop={compact() ? 1 : 2}>
+              <text fg={theme.text.muted}>No changes to show</text>
+            </box>
+          </Match>
+          <Match when={!props.loading}>
+            <box flexDirection="row" flexGrow={1} minHeight={0}>
+              <Show when={showFileTree()}>
+                <DiffViewerFileTree
+                  files={files()}
+                  loading={props.loading ?? false}
+                  error={props.error}
+                  width={fileTreeWidth()}
+                  selectedFileIndex={
+                    selectedFileIndex() ?? (singlePatch() ? visiblePatchFiles()[0]?.fileIndex : undefined)
+                  }
+                  reviewedFileNames={reviewedFileNames()}
+                  expandedNodes={expandedFileNodes()}
+                  onRowClick={clickFileTreeRow}
+                  onFileContextMenu={openFileMenu}
+                  source={DIFF_SOURCES[mode()].label}
+                  sourceDetail={props.sourceDetail}
+                  onSwitchSource={openSwitchDiffDialog}
+                  footer={<HelpShortcut />}
+                />
+              </Show>
 
-        <box flexGrow={1} minHeight={0}>
-          <Switch>
-            <Match when={diff.loading}>
-              <Separator axis="x" />
-              <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>Loading diff…</text>
-              </box>
-            </Match>
-            <Match when={!diff.loading && files().length === 0}>
-              <Separator axis="x" />
-              <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>No diff!</text>
-              </box>
-            </Match>
-            <Match when={!diff.loading && diff.error}>
-              <Separator axis="x" />
-              <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().error}>Failed to load diff</text>
-              </box>
-            </Match>
-            <Match when={!diff.loading}>
-              <PanelGroup axis="x">
-                <Show when={showFileTree()}>
-                  <DiffViewerFileTree
-                    files={files()}
-                    loading={diff.loading}
-                    error={diff.error}
-                    theme={theme()}
-                    focused={focus() === "files"}
-                    width={FILE_TREE_WIDTH}
-                    highlightedNode={highlightedFileNode()}
-                    selectedFileIndex={selectedFileIndex()}
-                    reviewedFileNames={reviewedFileNames()}
-                    expandedNodes={expandedFileNodes()}
-                    onRowClick={clickFileTreeRow}
-                  />
-                </Show>
-
-                <Panel flexGrow={1} minHeight={0} border="none">
-                  <Separator axis="x" start={showFileTree() ? "edge-out" : undefined} />
-                  <scrollbox
-                    ref={(element: ScrollBoxRenderable) => (scroll = element)}
-                    flexGrow={1}
-                    minHeight={0}
-                    scrollAcceleration={patchScrollAcceleration()}
-                    verticalScrollbarOptions={{ visible: false }}
-                    horizontalScrollbarOptions={{ visible: false }}
-                  >
-                    <For each={visiblePatchFiles()}>
-                      {(entry, index) => {
-                        const reviewed = () => reviewedFileNames().has(entry.file.file)
-                        return (
-                          <box ref={(element: BoxRenderable) => registerPatchNode(entry.fileIndex, element)}>
-                            {index() !== 0 ? <Separator axis="x" start={showFileTree() ? "edge" : undefined} /> : null}
+              <box flexGrow={1} minWidth={0} minHeight={0}>
+                <box
+                  id="diff-patch-top-edge"
+                  marginLeft={inset()}
+                  marginRight={inset()}
+                  ref={(edge: BoxRenderable) => {
+                    // The fixed edge belongs to the visible card, not the tree selection.
+                    edge.onLifecyclePass = () => {
+                      if (!scroll) return
+                      const entry = visiblePatchFiles().findLast(
+                        (entry) => (patchNodeByFileIndex.get(entry.fileIndex)?.y ?? Infinity) <= scroll!.viewport.y,
+                      )
+                      edge.backgroundColor =
+                        entry && reviewedFileNames().has(entry.file.file)
+                          ? theme.background.raised.high
+                          : theme.diff.background.context
+                    }
+                    renderer.registerLifecyclePass(edge)
+                    onCleanup(() => renderer.unregisterLifecyclePass(edge))
+                  }}
+                  height={1}
+                  flexShrink={0}
+                  backgroundColor={theme.diff.background.context}
+                />
+                <scrollbox
+                  id="diff-patches"
+                  ref={(element: ScrollBoxRenderable) => (scroll = element)}
+                  flexGrow={1}
+                  minHeight={0}
+                  scrollAcceleration={patchScrollAcceleration()}
+                  onMouseScroll={clearPatchSelection}
+                  verticalScrollbarOptions={{ visible: false }}
+                  horizontalScrollbarOptions={{ visible: false }}
+                >
+                  <For each={visiblePatchFiles()}>
+                    {(entry, index) => {
+                      const reviewed = () => reviewedFileNames().has(entry.file.file)
+                      const background = () =>
+                        reviewed() ? theme.background.raised.high : theme.diff.background.context
+                      const image = () => isDiffImageFile(entry.file.file)
+                      const countsWidth = () =>
+                        (image() ? 6 : String(entry.file.additions).length + String(entry.file.deletions).length + 5) +
+                        (reviewed() ? 2 : 0)
+                      return (
+                        <box ref={(element: BoxRenderable) => registerPatchNode(entry.fileIndex, element)}>
+                          <Show when={index() > 0}>
+                            <CardGap glyph="▄" card={background()} surface={surface()} inset={inset()} />
+                          </Show>
+                          <box backgroundColor={background()} marginLeft={inset()} marginRight={inset()}>
                             <box
+                              id={`diff-file-header-${entry.fileIndex}`}
+                              onMouseDown={(event) => openFileMenu(entry.fileIndex, event)}
+                              ref={(header: BoxRenderable) => {
+                                // Move the original title without changing flow, bounded by its own card.
+                                header.onLifecyclePass = () => {
+                                  if (!scroll || !header.parent) return
+                                  header.translateY = Math.max(
+                                    0,
+                                    Math.min(
+                                      scroll.scrollTop - (header.parent.y - scroll.content.y),
+                                      header.parent.height - header.height,
+                                    ),
+                                  )
+                                }
+                                renderer.registerLifecyclePass(header)
+                                onCleanup(() => renderer.unregisterLifecyclePass(header))
+                              }}
                               flexDirection="row"
                               gap={1}
                               flexShrink={0}
-                              paddingLeft={1}
+                              height={FILE_HEADER_HEIGHT}
+                              zIndex={1}
+                              backgroundColor={background()}
+                              paddingLeft={compact() ? 2 : 1}
                               paddingRight={1}
-                              border={patchLeftBorder()}
-                              borderColor={theme().border}
+                              paddingBottom={1}
                             >
-                              <text fg={reviewed() ? theme().textMuted : theme().text}>{entry.file.file}</text>
-                              <box flexGrow={1} />
-                              <text fg={reviewed() ? theme().textMuted : theme().diffAdded}>
-                                +{entry.file.additions}
-                              </text>
-                              <text fg={reviewed() ? theme().textMuted : theme().diffRemoved}>
-                                -{entry.file.deletions}
-                              </text>
-                            </box>
-                            <Separator axis="x" start={showFileTree() ? "edge" : undefined} />
-                            <Show
-                              when={entry.file.patch}
-                              fallback={<text fg={theme().textMuted}>No patch available for this file.</text>}
-                            >
-                              {(patch) => (
-                                <box border={patchLeftBorder()} borderColor={theme().border}>
-                                  <diff
-                                    ref={(element: DiffRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
-                                    diff={patch()}
-                                    view={view()}
-                                    filetype={reviewed() ? PLAIN_TEXT_FILETYPE : filetype(entry.file.file)}
-                                    syntaxStyle={themeState.syntax()}
-                                    showLineNumbers={true}
-                                    width="100%"
-                                    wrapMode="char"
-                                    fg={reviewed() ? theme().textMuted : theme().text}
-                                    addedBg={reviewed() ? theme().backgroundElement : theme().diffAddedBg}
-                                    removedBg={reviewed() ? theme().backgroundElement : theme().diffRemovedBg}
-                                    addedSignColor={reviewed() ? theme().textMuted : theme().diffHighlightAdded}
-                                    removedSignColor={reviewed() ? theme().textMuted : theme().diffHighlightRemoved}
-                                    lineNumberFg={theme().diffLineNumber}
-                                    addedLineNumberBg={
-                                      reviewed() ? theme().backgroundElement : theme().diffAddedLineNumberBg
-                                    }
-                                    removedLineNumberBg={
-                                      reviewed() ? theme().backgroundElement : theme().diffRemovedLineNumberBg
-                                    }
-                                  />
+                              <box flexGrow={1} minWidth={0}>
+                                <FilePath
+                                  value={entry.file.file}
+                                  maxWidth={Math.max(1, patchPaneWidth() - countsWidth() - 2)}
+                                  fg={theme.text.muted}
+                                  basenameFg={reviewed() ? theme.text.muted : theme.text.base}
+                                />
+                              </box>
+                              <Show when={reviewed()}>
+                                <text fg={theme.text.muted} flexShrink={0}>
+                                  ✓
+                                </text>
+                              </Show>
+                              <Show when={!image()} fallback={<text fg={theme.text.muted}>Image</text>}>
+                                <text flexShrink={0} fg={reviewed() ? theme.text.muted : theme.diff.text.added}>
+                                  +{entry.file.additions}
+                                </text>
+                                <text flexShrink={0} fg={reviewed() ? theme.text.muted : theme.diff.text.removed}>
+                                  -{entry.file.deletions}
+                                </text>
+                              </Show>
+                              <Show when={reviewed()}>
+                                <box position="absolute" left={-inset()} right={-inset()} bottom={0} height={1}>
+                                  <CardGap glyph="▀" card={background()} surface={surface()} inset={inset()} />
                                 </box>
-                              )}
+                              </Show>
+                            </box>
+                            <Show when={!reviewed()}>
+                              <Switch
+                                fallback={
+                                  <box
+                                    width="100%"
+                                    flexShrink={0}
+                                    paddingLeft={compact() ? 2 : 1}
+                                    paddingRight={1}
+                                    paddingBottom={1}
+                                  >
+                                    <text fg={theme.text.muted}>
+                                      {mode() === "committed" && image()
+                                        ? "Committed image preview unavailable. The working-tree image is not shown."
+                                        : entry.file.status === "deleted" && image()
+                                          ? "Deleted image. The previous revision is not available for preview."
+                                          : "No patch available for this file."}
+                                    </text>
+                                  </box>
+                                }
+                              >
+                                <Match
+                                  when={
+                                    mode() !== "committed" &&
+                                    entry.file.status !== "deleted" &&
+                                    image() &&
+                                    props.loadImage
+                                  }
+                                >
+                                  {(load) => <DiffViewerImage file={entry.file.file} load={load()} />}
+                                </Match>
+                                <Match when={!(mode() === "committed" && image()) && entry.file.patch}>
+                                  {(patch) => (
+                                    <PatchDiff
+                                      ref={(component) => {
+                                        patchDiffByFileIndex.set(entry.fileIndex, component)
+                                        onCleanup(() => patchDiffByFileIndex.delete(entry.fileIndex))
+                                      }}
+                                      diff={patch()}
+                                      scroll={() => scroll}
+                                      hunkFg={theme.diff.text.hunkHeader}
+                                      view={entry.file.status === "modified" ? view() : "unified"}
+                                      filetype={filetype(entry.file.file)}
+                                      syntaxStyle={currentSyntax()}
+                                      showLineNumbers={true}
+                                      gutterPadding={compact() ? 1 : 0}
+                                      width="100%"
+                                      wrapMode="char"
+                                      fg={theme.text.base}
+                                      addedBg={theme.diff.background.added}
+                                      removedBg={theme.diff.background.removed}
+                                      contextBg={theme.diff.background.context}
+                                      addedSignColor={theme.diff.highlight.added}
+                                      removedSignColor={theme.diff.highlight.removed}
+                                      lineNumberFg={theme.diff.lineNumber.text}
+                                      lineNumberBg={theme.diff.background.context}
+                                      addedLineNumberBg={theme.diff.lineNumber.background.added}
+                                      removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                                    />
+                                  )}
+                                </Match>
+                              </Switch>
                             </Show>
                           </box>
-                        )
-                      }}
-                    </For>
-                    <Show when={patchFillerHeight() > 0}>
-                      <box height={patchFillerHeight()} border={patchLeftBorder()} borderColor={theme().border} />
-                    </Show>
-                  </scrollbox>
-                  <Separator axis="x" start={showFileTree() ? "edge-in" : undefined} />
-                </Panel>
-              </PanelGroup>
-            </Match>
-          </Switch>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </scrollbox>
+              </box>
+            </box>
+          </Match>
+        </Switch>
+      </box>
+      <Show when={compact()}>
+        {/* Docked, the footer sits on the terminal background, eased in by a half-cell like the prompt. */}
+        <box id="diff-footer" flexShrink={0} backgroundColor={theme.background.base}>
+          <Show when={docked()}>
+            <box
+              height={1}
+              flexShrink={0}
+              border={["bottom"]}
+              borderColor={surface()}
+              backgroundColor={theme.background.base}
+              customBorderChars={{ ...EmptyBorder, horizontal: "▀" }}
+            />
+          </Show>
+          <box height={1} flexShrink={0} flexDirection="row" paddingLeft={2} paddingRight={1}>
+            <text
+              fg={focused() ? theme.background.action.primary.focused : theme.text.action.primary.disabled}
+              attributes={focused() ? 0 : TextAttributes.DIM}
+              flexGrow={1}
+              minWidth={0}
+              wrapMode="none"
+              truncate
+              selectable={false}
+              onMouseUp={(event) => {
+                if (event.button !== MouseButton.LEFT) return
+                if (!docked()) return close()
+                if (!props.panel?.focused) props.panel?.focus()
+              }}
+            >
+              {/* Without a prompt beside the viewer, closing is the way back to the session. */}
+              <span>{props.context.keymap.shortcuts(docked() ? "pane.focus.left" : "diff.close")[0] ?? ""}</span>
+              <span style={focused() ? { fg: theme.text.muted } : {}}>{docked() ? " focus prompt" : " close"}</span>
+            </text>
+            <box flexShrink={0}>
+              <HelpShortcut label="see all" muted={!focused()} />
+            </box>
+          </box>
+          <Show when={docked()}>
+            <box height={1} flexShrink={0} />
+          </Show>
         </box>
-
-        <Panel flexShrink={0} gap={2} paddingLeft={1} border="none">
-          <Show when={switchFocusShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>focus file tree</span>
-              </text>
-            )}
-          </Show>
-          <Show when={nextFileShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>next file</span>
-              </text>
-            )}
-          </Show>
-          <Show when={nextHunkShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>next hunk</span>
-              </text>
-            )}
-          </Show>
-          <Show when={previousHunkShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>previous hunk</span>
-              </text>
-            )}
-          </Show>
-          <Show when={previousFileShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>previous file</span>
-              </text>
-            )}
-          </Show>
-          <Show when={switchSourceShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>switch source</span>
-              </text>
-            )}
-          </Show>
-          <Show when={markReviewedShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>mark reviewed</span>
-              </text>
-            )}
-          </Show>
-          <Show when={helpShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>all</span>
-              </text>
-            )}
-          </Show>
-        </Panel>
-      </PanelGroup>
+      </Show>
+      <Show when={!showFileTree() && !compact()}>
+        <box position="absolute" top={0} right={0} width={1} height={1}>
+          <HelpShortcut compact />
+        </box>
+      </Show>
+      <Show when={fileMenu()} keyed>
+        {(state) => (
+          <DiffFileMenu
+            context={props.context}
+            state={state}
+            reviewed={reviewedFileNames().has(files()[state.fileIndex]?.file ?? "")}
+            onToggle={() => toggleFileReviewed(state.fileIndex)}
+            onClose={() => setFileMenu(undefined)}
+          />
+        )}
+      </Show>
     </box>
   )
 }
 
-function DiffViewerHelpDialog() {
-  const { theme } = useTheme()
-  const rows = [
+/** A half-row of base background between cards: the card's color over its width, the pane surface in the insets. */
+function CardGap(props: { glyph: "▄" | "▀"; card: RGBA; surface: RGBA; inset: number }) {
+  const theme = useTheme()
+  const half = (color: RGBA, width?: number) => (
+    <box
+      height={1}
+      flexShrink={0}
+      {...(width === undefined ? { flexGrow: 1 } : { width })}
+      border={[props.glyph === "▄" ? "top" : "bottom"]}
+      borderColor={color}
+      backgroundColor={theme.background.base}
+      customBorderChars={{ ...EmptyBorder, horizontal: props.glyph }}
+    />
+  )
+  return (
+    <box height={1} flexShrink={0} flexDirection="row">
+      {/* A zero-width inset still claims a cell, which would notch flush cards. */}
+      <Show when={props.inset > 0}>{half(props.surface, props.inset)}</Show>
+      {half(props.card)}
+      <Show when={props.inset > 0}>{half(props.surface, props.inset)}</Show>
+    </box>
+  )
+}
+
+function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean; fullscreen: boolean; tree: boolean }) {
+  const dimensions = useTerminalDimensions()
+  const theme = props.context.theme.surface("dialog")
+  const shortcut =
+    (...ids: string[]) =>
+    () =>
+      ids
+        .map((id) => props.context.keymap.shortcuts(id)[0])
+        .filter(Boolean)
+        .join(" / ")
+  const groups = [
     {
-      shortcut: () => "q",
-      action: "Close viewer",
-      description: "Quit the diff viewer",
+      title: "Review",
+      rows: [
+        { shortcut: () => props.context.keymap.shortcuts("diff.next_file").join(" / "), label: "Next file" },
+        { shortcut: () => props.context.keymap.shortcuts("diff.previous_file").join(" / "), label: "Previous file" },
+        {
+          shortcut: shortcut("diff.mark_reviewed"),
+          label: props.single ? "Review + next / reopen" : "Review + collapse / reopen",
+        },
+        { shortcut: shortcut("diff.next_hunk", "diff.previous_hunk"), label: "Next / previous change" },
+        { shortcut: () => "right-click", label: "File menu (heading or tree)" },
+      ],
     },
     {
-      shortcut: useCommandShortcut("diff.switch_focus"),
-      action: "Focus file tree",
-      description: "Move keyboard focus between the file tree and patch pane",
+      title: "Scroll",
+      rows: [
+        { shortcut: shortcut("diff.down", "diff.up"), label: "Down / up" },
+        { shortcut: shortcut("diff.half_page.down", "diff.half_page.up"), label: "Half page down / up" },
+        { shortcut: shortcut("diff.page.down", "diff.page.up"), label: "Page down / up" },
+        { shortcut: shortcut("diff.first", "diff.last"), label: "First / last" },
+      ],
     },
     {
-      shortcut: useCommandShortcut("diff.next_hunk"),
-      action: "Next hunk",
-      description: "Jump to the next diff hunk",
-    },
-    {
-      shortcut: useCommandShortcut("diff.previous_hunk"),
-      action: "Previous hunk",
-      description: "Jump to the previous diff hunk",
-    },
-    {
-      shortcut: useCommandShortcut("diff.next_file"),
-      action: "Next file",
-      description: "Select the next changed file in file-tree order",
-    },
-    {
-      shortcut: useCommandShortcut("diff.previous_file"),
-      action: "Previous file",
-      description: "Select the previous changed file in file-tree order",
-    },
-    {
-      shortcut: useCommandShortcut("diff.toggle_file_tree"),
-      action: "Toggle file tree",
-      description: "Show or hide the file tree sidebar",
-    },
-    {
-      shortcut: useCommandShortcut("diff.single_patch"),
-      action: "Toggle patches",
-      description: "Switch between one selected patch and all patches",
-    },
-    {
-      shortcut: useCommandShortcut("diff.switch_source"),
-      action: "Switch source",
-      description: "Choose working tree, main branch, or last-turn changes",
-    },
-    {
-      shortcut: useCommandShortcut("diff.toggle_view"),
-      action: "Toggle view",
-      description: "Switch between split and unified diff layout",
-    },
-    {
-      shortcut: useCommandShortcut("diff.expand_all"),
-      action: "Expand all folders",
-      description: "Open every folder in the file tree",
-    },
-    {
-      shortcut: useCommandShortcut("diff.mark_reviewed"),
-      action: "Mark reviewed",
-      description: "Toggle reviewed state for the selected file",
+      title: "View",
+      rows: [
+        { shortcut: shortcut("diff.toggle_view"), label: "Split / unified" },
+        { shortcut: shortcut("diff.single_patch"), label: "All files / single file" },
+        ...(props.tree ? [{ shortcut: shortcut("diff.toggle_file_tree"), label: "Show / hide file tree" }] : []),
+        { shortcut: shortcut("diff.switch_source"), label: "Switch diff source" },
+        ...(props.fullscreen
+          ? [{ shortcut: shortcut("diff.toggle_fullscreen"), label: "Full screen / split view" }]
+          : []),
+        { shortcut: () => props.context.keymap.shortcuts("diff.close").join(" / "), label: "Close diff viewer" },
+      ],
     },
   ]
 
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Diff shortcuts
-        </text>
-        <text fg={theme.textMuted}>esc</text>
-      </box>
-      <box flexDirection="row">
-        <text fg={theme.textMuted} width={5} wrapMode="none">
-          Key
-        </text>
-        <text fg={theme.textMuted} width={22} wrapMode="none">
-          Action
-        </text>
-        <text fg={theme.textMuted}>Description</text>
-      </box>
-      <For each={rows}>
-        {(row) => (
-          <box flexDirection="row">
-            <text fg={theme.text} width={5} wrapMode="none">
-              {row.shortcut() || "-"}
-            </text>
-            <text fg={theme.text} width={22} wrapMode="none">
-              {row.action}
-            </text>
-            <text fg={theme.textMuted}>{row.description}</text>
-          </box>
+    <DialogLayout
+      header={
+        <DialogHeader title="Diff shortcuts" closeLabel="esc close" onClose={() => props.context.ui.dialog.clear()} />
+      }
+    >
+      <scrollbox
+        id="diff-help-scroll"
+        focused
+        height={Math.max(
+          1,
+          Math.min(
+            dimensions().height - 6,
+            groups.reduce((height, group) => height + group.rows.length + 2, -1),
+          ),
         )}
-      </For>
-    </box>
+        horizontalScrollbarOptions={{ visible: false }}
+        verticalScrollbarOptions={{ visible: false }}
+      >
+        <box gap={1}>
+          <For each={groups}>
+            {(group) => (
+              <box flexShrink={0}>
+                <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
+                  {group.title}
+                </text>
+                <For each={group.rows}>
+                  {(row) => (
+                    <box flexDirection="row" gap={2}>
+                      <text fg={theme.text.base} width={17} flexShrink={0}>
+                        {row.shortcut() || "unbound"}
+                      </text>
+                      <text fg={theme.text.muted} flexGrow={1} minWidth={0}>
+                        {row.label}
+                      </text>
+                    </box>
+                  )}
+                </For>
+              </box>
+            )}
+          </For>
+        </box>
+      </scrollbox>
+    </DialogLayout>
   )
 }
 
-const tui: TuiPlugin = async (api) => {
-  api.route.register([
-    {
-      name: ROUTE,
-      render: () => <DiffViewer api={api} />,
-    },
-  ])
-
-  api.keymap.registerLayer({
+function Commands(props: { context: Plugin.Context }) {
+  const config = useConfig()
+  props.context.keymap.layer(() => ({
+    mode: "global",
     commands: [
       {
-        name: "diff.open",
+        id: "diff.open",
         title: "Open diff viewer",
-        slashName: "diff",
-        category: "VCS",
-        namespace: "palette",
+        slash: { name: "diff" },
+        group: "VCS",
+        palette: true,
         run() {
-          api.route.navigate(ROUTE, {
-            mode: "git",
-            sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,
-            returnRoute: api.route.current,
+          const route = props.context.ui.router.current()
+          props.context.ui.dialog.clear()
+          const current = props.context.ui.panel.current()
+          if (route.type === "session" && current?.sessionID === route.sessionID && current.name === ROUTE) {
+            props.context.ui.panel.close()
+            return
+          }
+          // Outside a session there is no panel slot, so /diff falls back to the full-screen route.
+          if (
+            props.context.ui.panel.open(ROUTE, {
+              presentation: config.data.diffs?.fullscreen === true ? "fullscreen" : "panel",
+            })
+          )
+            return
+          const returnRoute: Route =
+            route.type === "home"
+              ? { type: "home" }
+              : route.type === "session"
+                ? { type: "session", sessionID: route.sessionID }
+                : {
+                    type: "plugin",
+                    id: route.id,
+                    name: route.name,
+                    ...(route.data ? { data: { ...route.data } } : {}),
+                  }
+          props.context.ui.router.navigate({
+            type: "plugin",
+            name: ROUTE,
+            data: {
+              sessionID: route.type === "session" ? route.sessionID : undefined,
+              returnRoute,
+            },
           })
-          api.ui.dialog.clear()
         },
       },
     ],
-  })
+  }))
+  return null
 }
 
-export default {
-  id: "diff-viewer",
-  tui,
-}
+export default Plugin.define({
+  id: "opencode.diffs",
+  setup(context) {
+    context.ui.slot({
+      append: "session.panel",
+      render: (panel) => (
+        <Show when={panel.name === ROUTE}>
+          <DiffViewer context={context} sessionID={panel.sessionID} panel={panel} onClose={panel.close} />
+        </Show>
+      ),
+    })
+    context.ui.router.register({
+      name: ROUTE,
+      render: ({ data }) => <DiffRoute context={context} data={data} />,
+    })
+    context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
+  },
+})

@@ -27,6 +27,7 @@ export const getGitHubStars = query(async () => {
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "opencode-stats",
     },
   })
     .then((response) => (response.ok ? response.json() : undefined))

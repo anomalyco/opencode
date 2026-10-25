@@ -1,0 +1,75 @@
+import { describe, expect, test } from "bun:test"
+import { createDesktopFiles } from "./files"
+
+function fileApi(events: string[]): Parameters<typeof createDesktopFiles>[0] {
+  return {
+    openDirectoryPicker: async () => null,
+    openFilePicker: async () => ({
+      token: "selection",
+      files: [
+        { path: "C:\\first.txt", name: "first.txt", size: 5 },
+        { path: "C:\\second.txt", name: "second.txt", size: 6 },
+      ],
+    }),
+    readPickedFile: async (_token: string, path: string) => {
+      events.push(`read:${path}`)
+
+      return new TextEncoder().encode(path).buffer
+    },
+    releasePickedFiles: async (token: string) => {
+      events.push(`release:${token}`)
+    },
+    getPathForFile: () => "fallback",
+    saveFile: async () => false,
+    openExternal: () => {},
+    openBrowser: async () => true,
+    openLocalFile: () => {},
+    resolveAppPath: async () => null,
+    openPath: async () => undefined,
+    revealPath: async () => false,
+    readClipboardImage: async () => null,
+    writeClipboardText: async (text: string) => {
+      events.push(`clipboard:${text}`)
+    },
+  }
+}
+
+describe("desktop attachment files", () => {
+  test("returns the native browser launch result and forwards clipboard text", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles({ ...fileApi(events), openBrowser: async () => false }, "macos")
+
+    expect(await files.openBrowser("https://opencode.ai/console")).toBe(false)
+    await files.writeClipboardText("ses_123")
+    expect(events).toEqual(["clipboard:ses_123"])
+  })
+
+  test("reads selected files sequentially and releases the token", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles(fileApi(events), "windows")
+
+    await files.openAttachmentPickerDialog({}, async (file) => {
+      events.push(`file:${file.name}`)
+    })
+
+    expect(events).toEqual([
+      "read:C:\\first.txt",
+      "file:first.txt",
+      "read:C:\\second.txt",
+      "file:second.txt",
+      "release:selection",
+    ])
+  })
+
+  test("releases the token when a selected file callback fails", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles(fileApi(events), "windows")
+
+    await expect(
+      files.openAttachmentPickerDialog({}, async () => {
+        throw new Error("attachment rejected")
+      }),
+    ).rejects.toThrow("attachment rejected")
+    expect(events.at(-1)).toBe("release:selection")
+  })
+})

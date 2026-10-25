@@ -56,6 +56,7 @@ Or you can set it up manually.
        runs-on: ubuntu-latest
        permissions:
          id-token: write
+         contents: read
        steps:
          - name: Checkout repository
            uses: actions/checkout@v6
@@ -106,11 +107,13 @@ Or you can set it up manually.
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        model: anthropic/claude-sonnet-4-20250514
+        model: anthropic/claude-sonnet-5-5
         use_github_token: true
   ```
 
-  `id-token: write` is not required in this mode because OIDC exchange is skipped. To use a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or another GitHub App token, store it as a secret and pass that secret as `GITHUB_TOKEN` instead.
+  `id-token: write` is not required in this mode because OIDC exchange is skipped. Keep checkout's default `persist-credentials: true` for Git authentication, and configure a Git user name and email if OpenCode will commit changes. OpenCode only configures these in OIDC mode.
+
+  To use a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or another GitHub App token, store it as a secret and pass that secret as both `GITHUB_TOKEN` and checkout's `token` input.
 
 ---
 
@@ -143,9 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -157,7 +158,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review the codebase for any TODO comments and create a summary.
             If you find issues worth addressing, open an issue to track them.
@@ -182,10 +183,9 @@ jobs:
   review:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
       pull-requests: read
-      issues: read
+      issues: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -195,7 +195,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -205,6 +205,8 @@ jobs:
 ```
 
 For `pull_request` events, if no `prompt` is provided, Bolt defaults to reviewing the pull request.
+
+`issues: write` lets OpenCode react to and comment on the PR, since GitHub handles PR comments through the issues API. This example is intended for PRs from branches in the same repository; PRs from forks normally get a read-only `GITHUB_TOKEN` and no secrets.
 
 ---
 
@@ -224,9 +226,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
     steps:
       - name: Check account age
         id: check
@@ -251,7 +251,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review this issue. If there's a clear fix or relevant docs:
             - Provide documentation links
@@ -270,7 +270,7 @@ Override the default prompt to customize Bolt's behavior for your workflow.
 ```yaml title=".github/workflows/bolt.yml"
 - uses: bolt-builder/bolt-cli/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Review this pull request:
       - Check for code quality issues

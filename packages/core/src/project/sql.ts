@@ -1,22 +1,34 @@
+import type { EffectDrizzleSqlite } from "../database/drizzle.js"
+import { isNotNull, isNull, ne, or } from "drizzle-orm"
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
-import * as DatabasePath from "../database/path"
-import { Timestamps } from "../database/schema.sql"
-import { ProjectSchema } from "./schema"
+import { absoluteArrayColumn, absoluteColumn } from "../database/path.js"
+import { Timestamps } from "../database/schema.sql.js"
+import type { AbsolutePath } from "../schema.js"
+import { ProjectSchema } from "./schema.js"
+
+type DatabaseClient = EffectDrizzleSqlite.EffectSQLiteDatabase
+type Transaction = Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0]
 
 export const ProjectTable = sqliteTable("project", {
   id: text().$type<ProjectSchema.ID>().primaryKey(),
-  worktree: DatabasePath.absoluteColumn().notNull(),
-  vcs: text(),
+  worktree: absoluteColumn().notNull(),
+  vcs: text().$type<ProjectSchema.Vcs["type"]>(),
   name: text(),
   icon_url: text(),
   icon_url_override: text(),
   icon_color: text(),
   ...Timestamps,
   time_initialized: integer(),
-  sandboxes: DatabasePath.absoluteArrayColumn().notNull(),
+  time_active: integer()
+    .notNull()
+    .default(0)
+    .$defaultFn(() => Date.now()),
+  time_archived: integer(),
+  sandboxes: absoluteArrayColumn().notNull(),
   commands: text({ mode: "json" }).$type<{ start?: string }>(),
 })
 
+/** @deprecated Use WorktreeTable from worktree/sql instead. */
 export const ProjectDirectoryTable = sqliteTable(
   "project_directory",
   {
@@ -24,7 +36,7 @@ export const ProjectDirectoryTable = sqliteTable(
       .$type<ProjectSchema.ID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
-    directory: DatabasePath.absoluteColumn().notNull(),
+    directory: absoluteColumn().notNull(),
     type: text().$type<"main" | "root" | "git_worktree">(),
     strategy: text(),
     time_created: integer()
@@ -33,3 +45,19 @@ export const ProjectDirectoryTable = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.project_id, table.directory] })],
 )
+
+export function upsertProject(
+  db: DatabaseClient | Transaction,
+  project: { readonly id: ProjectSchema.ID; readonly canonical: AbsolutePath; readonly vcs?: ProjectSchema.Vcs },
+) {
+  const vcs = project.vcs?.type
+  return db
+    .insert(ProjectTable)
+    .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
+    .onConflictDoUpdate({
+      target: ProjectTable.id,
+      set: { vcs: vcs ?? null },
+      setWhere: vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
+    })
+    .run()
+}

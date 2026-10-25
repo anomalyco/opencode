@@ -1,10 +1,13 @@
 import { TextAttributes } from "@opentui/core"
 import { For, type JSX } from "solid-js"
-import { tint, useTheme } from "../context/theme"
-import { logo } from "../logo"
+import { useTerminalDimensions } from "@opentui/solid"
+import { useTheme } from "../context/theme"
+import { tint } from "../theme/color"
+import { go, logo } from "../logo"
 
 export function Logo() {
-  const { theme } = useTheme()
+  const theme = useTheme()
+  const dimensions = useTerminalDimensions()
 
   const leftWidth = logo.left[0]?.length ?? 0
   const totalWidth = leftWidth + 1 + (logo.right[0]?.length ?? 0)

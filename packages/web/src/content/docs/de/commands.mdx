@@ -9,7 +9,7 @@ Mit benutzerdefinierten Befehlen können Sie eine Eingabeaufforderung angeben, d
 /my-command
 ```
 
-Benutzerdefinierte Befehle gibt es zusätzlich zu den integrierten Befehlen wie `/init`, `/undo`, `/redo`, `/share`, `/help`. [Mehr erfahren](/docs/tui#commands).
+Benutzerdefinierte Befehle gibt es zusätzlich zu den integrierten Befehlen wie `/init`, `/undo`, `/redo`, `/help`. [Mehr erfahren](/docs/tui#commands).
 
 ---
 
@@ -23,7 +23,7 @@ Erstellen Sie `.bolt/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ Verwenden Sie die Option `command` in Ihrem Bolt [config](/docs/config):
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ Sie können Befehle auch mithilfe von Markdown-Dateien definieren. Platzieren Si
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -163,7 +163,7 @@ Dies ersetzt:
 
 ### Shell-Ausgabe
 
-Verwenden Sie _!`command`_, um die Ausgabe [bash command](/docs/tui#bash-commands) in Ihre Eingabeaufforderung einzufügen.
+Verwenden Sie _!`command`_, um die Ausgabe [shell command](/docs/tui#shell-commands) in Ihre Eingabeaufforderung einzufügen.
 
 So erstellen Sie beispielsweise einen benutzerdefinierten Befehl, der die Testabdeckung analysiert:
 
@@ -302,7 +302,7 @@ Verwenden Sie die `model`-Konfiguration, um das Standardmodell für diesen Befeh
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

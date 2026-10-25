@@ -3,16 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Yeni anonim model Space Bunny Free sınırlı bir süre için kullanılabilir",
   "go.referral.ended.label": "Uyarı",
   "go.referral.ended":
     "Tavsiye programı sona erdi. Tavsiye bağlantıları artık size veya bağlantıyı paylaşan kişiye kredi kazandırmıyor.",
-  "go.graph.bonus": "{{count}}× kullanım",
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
-  "nav.changelog": "Değişiklik günlüğü",
-  "nav.discord": "Discord",
-  "nav.x": "X",
   "nav.enterprise": "Kurumsal",
   "nav.zen": "Zen",
   "nav.login": "Giriş",
@@ -41,6 +36,7 @@ export const dict = {
   "email.placeholder": "E-posta adresi",
   "email.subscribe": "Abone ol",
   "email.success": "Neredeyse bitti, gelen kutunuzu kontrol edin ve e-postanızı onaylayın",
+  "email.error": "Abonelik başarısız oldu. Lütfen tekrar deneyin.",
 
   "notFound.title": "Bulunamadı | opencode",
   "notFound.heading": "404 - Sayfa bulunamadı",
@@ -51,18 +47,7 @@ export const dict = {
   "notFound.logoLightAlt": "bolt açık logo",
   "notFound.logoDarkAlt": "bolt koyu logo",
 
-  "user.logout": "Çıkış",
-
-  "auth.callback.error.codeMissing": "Yetkilendirme kodu bulunamadı.",
-
-  "workspace.select": "Çalışma alanı seç",
-  "workspace.createNew": "+ Yeni çalışma alanı oluştur",
-  "workspace.modal.title": "Yeni çalışma alanı oluştur",
-  "workspace.modal.placeholder": "Çalışma alanı adını girin",
-
   "common.cancel": "İptal",
-  "common.creating": "Oluşturuluyor...",
-  "common.create": "Oluştur",
   "common.contactUs": "Bize ulaşın",
 
   "common.videoUnsupported": "Tarayıcınız video etiketini desteklemiyor.",
@@ -108,14 +93,6 @@ export const dict = {
   "temp.logoDarkAlt": "bolt koyu logo",
 
   "home.banner.badge": "Yeni",
-  "home.banner.text": "Masaüstü uygulamasında sekmelerle tanışın.",
-  "home.banner.platforms": "macOS, Windows ve Linux'ta kullanılabilir",
-  "home.banner.downloadNow": "Şimdi indir",
-  "home.banner.downloadBetaNow": "Masaüstü betayı şimdi indir",
-  "home.promo.title": "Masaüstü uygulamasında sekmelerle tanışın",
-  "home.promo.body": "Çalışmalarınızı ve etkin oturumlarınızı sekmelerle düzenleyin.",
-  "home.promo.cta": "Başlamak için en son sürümü indirin.",
-  "home.promo.close": "Masaüstü uygulaması duyurusunu kapat",
 
   "home.hero.title": "Açık kaynaklı yapay zeka kodlama ajanı",
   "home.hero.subtitle.a": "Ücretsiz modeller dahil veya herhangi bir sağlayıcıdan herhangi bir modeli bağlayın,",
@@ -130,8 +107,6 @@ export const dict = {
   "home.what.lsp.body": "LLM için doğru LSP'leri otomatik olarak yükler",
   "home.what.multiSession.title": "Çoklu oturum",
   "home.what.multiSession.body": "Aynı projede birden fazla ajanı paralel çalıştırın",
-  "home.what.shareLinks.title": "Paylaşım bağlantıları",
-  "home.what.shareLinks.body": "Referans veya hata ayıklama için herhangi bir oturumu bağlantı olarak paylaşın",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Copilot hesabınızı kullanmak için GitHub ile giriş yapın",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -180,8 +155,7 @@ export const dict = {
   "home.faq.a6":
     "Bolt %100 ücretsizdir. Ayrıca ücretsiz model setiyle gelir. Başka bir sağlayıcı bağlarsanız ek maliyetler olabilir.",
   "home.faq.q7": "Veri ve gizlilik ne olacak?",
-  "home.faq.a7.p1":
-    "Verileriniz yalnızca ücretsiz modellerimizi kullandığınızda veya paylaşılabilir bağlantılar oluşturduğunuzda saklanır.",
+  "home.faq.a7.p1": "Verileriniz yalnızca ücretsiz modellerimizi kullandığınızda saklanır.",
   "home.faq.a7.p2.beforeModels": "Daha fazla bilgi:",
   "home.faq.a7.p2.modelsLink": "modellerimiz",
   "home.faq.a7.p2.and": "ve",
@@ -223,7 +197,7 @@ export const dict = {
     "Maliyetleri karşılamak için Bolt, $20 bakiye yüklemesi başına yalnızca $1.23 tutarında küçük bir ödeme işleme ücreti ekler.",
   "zen.faq.q5": "Veri ve gizlilik ne olacak?",
   "zen.faq.a5.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
+    "Tüm Zen modelleri ABD'de ve AB'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.faq.a5.exceptionsLink": "istisnalarla",
   "zen.faq.q6": "Harcama limitleri ayarlayabilir miyim?",
   "zen.faq.a6": "Evet, hesabınızda aylık harcama limitleri ayarlayabilirsiniz.",
@@ -258,10 +232,10 @@ export const dict = {
   "zen.how.step2.link": "istek başına ödeme",
   "zen.how.step2.afterLink": "sıfır işaretlemeyle",
   "zen.how.step3.title": "Otomatik yükleme",
-  "zen.how.step3.body": "bakiyeniz 5$'a ulaştığında otomatik olarak 20$ ekleyeceğiz",
+  "zen.how.step3.body": "isteğe bağlı otomatik yüklemeyi etkinleştirin, bakiye eşiğini ve yükleme tutarını seçin",
   "zen.privacy.title": "Gizliliğiniz bizim için önemlidir",
   "zen.privacy.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
+    "Tüm Zen modelleri ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "Bolt Go | Herkes için düşük maliyetli kodlama modelleri",
@@ -272,10 +246,7 @@ export const dict = {
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
-  "go.cta.start": "Go'ya abone ol",
-  "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
-  "go.cta.price": "Ayda 10$",
   "go.plans.month": "aylık",
   "go.plans.plus.cta": "Go Plus'a abone ol",
   "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
@@ -288,23 +259,18 @@ export const dict = {
   "go.plans.limits": "Limitler",
   "go.plans.description": "Model başına 5 saatlik tahmini istek ve aylık kullanım limitleri",
   "go.plans.legend": "Planlar",
-  "go.pricing.body": "Herhangi bir ajanla kullanın. Ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
-  "go.graph.free": "Ücretsiz",
-  "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
-  "go.graph.go": "Go",
-  "go.graph.label": "5 saat başına istekler",
   "go.graph.period": "Kullanım",
   "go.graph.model": "Model",
   "go.graph.requests": "Tahmini istek / 5 saat",
   "go.graph.allowance": "Aylık kullanım",
   "go.graph.new": "Yeni",
+  "go.graph.bonus": "{{count}}× kullanım",
   "go.graph.scale": "Doğrusal olmayan istek ölçeği",
   "go.graph.showAll": "{{count}} modelin tümünü göster",
   "go.graph.showLess": "Daha az model göster",
   "go.graph.limitedRegions": "sınırlı bölgeler",
   "go.graph.limitedTime": "sınırlı süre",
   "go.graph.usageLimits": "Kullanım limitleri",
-  "go.graph.aria": "5 saatlik istekler: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
@@ -376,7 +342,6 @@ export const dict = {
   "go.faq.a5.retention0": "0 gün",
   "go.faq.a5.used": "Kullanılır",
   "go.faq.a5.notUsed": "Kullanılmaz",
-  "go.faq.a5.noAgreement": "Anlaşma yok",
   "go.faq.a5.notZdr": "ZDR değil",
   "go.faq.a5.grokRetention":
     "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
@@ -384,13 +349,10 @@ export const dict = {
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
-    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Eylül 2026 tarihine kadar geçerlidir.",
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ekim 2026 tarihine kadar geçerlidir.",
   "go.faq.a5.museRetention":
     "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 
-  "go.faq.a5.beforeExceptions":
-    "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
-  "go.faq.a5.exceptionsLink": "aşağıdaki istisnalar",
   "go.faq.q6": "Kredi yükleyebilir miyim?",
   "go.faq.a6": "Daha fazla kullanıma ihtiyacınız varsa, hesabınıza kredi yükleyebilirsiniz.",
   "go.faq.q7": "İptal edebilir miyim?",
@@ -401,7 +363,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
   "go.faq.q10": "Para iadesi alabilir miyim?",
   "go.faq.a10":
     "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
@@ -787,6 +749,7 @@ export const dict = {
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
   "download.platform.windowsX64": "Windows (x64)",
+  "download.platform.windowsArm64": "Windows (ARM64)",
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
@@ -823,6 +786,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefon numarası",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Şirketinizin mevcut aylık çıkarım (inference) harcaması nedir (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Bir aralık seçin (isteğe bağlı)",
+  "enterprise.form.inferenceSpend.none": "Henüz harcama yok",
+  "enterprise.form.inferenceSpend.under1k": "$1K altı",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K veya daha fazla",
   "enterprise.form.message.label": "Hangi problemi çözmeye çalışıyorsunuz?",
   "enterprise.form.message.placeholder": "Şu konuda yardıma ihtiyacımız var...",
   "enterprise.form.send": "Gönder",
@@ -831,7 +802,9 @@ export const dict = {
   "enterprise.form.success.submitted": "Form başarıyla gönderildi.",
   "enterprise.form.error.allFieldsRequired": "Tüm alanlar gereklidir.",
   "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
+  "enterprise.form.error.invalidInferenceSpend": "Geçerli bir çıkarım harcaması aralığı seçin.",
   "enterprise.form.error.internalServer": "İç sunucu hatası.",
+  "enterprise.form.error.captcha": "Captcha doğrulaması başarısız oldu. Lütfen tekrar deneyin.",
   "enterprise.faq.title": "SSS",
   "enterprise.faq.q1": "Bolt Enterprise nedir?",
   "enterprise.faq.a1":
@@ -858,38 +831,4 @@ export const dict = {
   "changelog.hero.subtitle": "Bolt için yeni güncellemeler ve iyileştirmeler",
   "changelog.empty": "Değişiklik günlüğü kaydı bulunamadı.",
   "changelog.viewJson": "JSON'u görüntüle",
-
-  "bench.list.title": "Benchmark",
-  "bench.list.heading": "Benchmarklar",
-  "bench.list.table.agent": "Ajan",
-  "bench.list.table.model": "Model",
-  "bench.list.table.score": "Puan",
-  "bench.submission.error.allFieldsRequired": "Tüm alanlar gereklidir.",
-
-  "bench.detail.title": "Benchmark - {{task}}",
-  "bench.detail.notFound": "Görev bulunamadı",
-  "bench.detail.na": "N/A",
-  "bench.detail.labels.agent": "Ajan",
-  "bench.detail.labels.model": "Model",
-  "bench.detail.labels.task": "Görev",
-  "bench.detail.labels.repo": "Repo",
-  "bench.detail.labels.from": "Başlangıç",
-  "bench.detail.labels.to": "Bitiş",
-  "bench.detail.labels.prompt": "İstem",
-  "bench.detail.labels.commit": "Commit",
-  "bench.detail.labels.averageDuration": "Ortalama Süre",
-  "bench.detail.labels.averageScore": "Ortalama Puan",
-  "bench.detail.labels.averageCost": "Ortalama Maliyet",
-  "bench.detail.labels.summary": "Özet",
-  "bench.detail.labels.runs": "Çalıştırmalar",
-  "bench.detail.labels.score": "Puan",
-  "bench.detail.labels.base": "Baz",
-  "bench.detail.labels.penalty": "Ceza",
-  "bench.detail.labels.weight": "ağırlık",
-  "bench.detail.table.run": "Çalıştırma",
-  "bench.detail.table.score": "Puan (Baz - Ceza)",
-  "bench.detail.table.cost": "Maliyet",
-  "bench.detail.table.duration": "Süre",
-  "bench.detail.run.title": "Çalıştırma {{n}}",
-  "bench.detail.rawJson": "Ham JSON",
 } satisfies Dict

@@ -1,23 +1,22 @@
-import { execFile, spawn } from "node:child_process"
-import { readFile, rm } from "node:fs/promises"
-import { platform, release, tmpdir } from "node:os"
-import path from "node:path"
-import { promisify } from "node:util"
+import {
+  createClipboard,
+  createHostClipboard,
+  createRendererClipboardAdapter,
+  decodePasteBytes,
+  type ClipboardService as CoreClipboardService,
+  type RendererClipboardBoundary,
+} from "@opentui/core"
+import type { ClipboardContent, ClipboardService } from "./context/clipboard"
 
-const exec = promisify(execFile)
+export type OwnedClipboardService = Required<ClipboardService> & Readonly<{ dispose(): Promise<void> }>
 
-function command(command: string, args: string[] = [], input?: string) {
-  return new Promise<Buffer>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"] })
-    const output: Buffer[] = []
-    child.on("error", reject)
-    child.stdout?.on("data", (chunk: Buffer) => output.push(chunk))
-    child.on("close", (code) => {
-      if (code === 0) return resolve(Buffer.concat(output))
-      reject(new Error(`${command} exited with code ${code}`))
-    })
-    if (input !== undefined) child.stdin?.end(input)
-  })
+export function createTuiClipboard(renderer: RendererClipboardBoundary): OwnedClipboardService {
+  return createClipboardAdapter(
+    createClipboard({
+      host: createHostClipboard(),
+      terminal: createRendererClipboardAdapter(renderer),
+    }),
+  )
 }
 
 function writeOsc52(text: string) {
@@ -105,21 +104,34 @@ function getCopyMethod() {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
         await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
       }
-    }
-    if (native) {
-      return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
-      }
-    }
-    return async (text: string) => {
-      const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
-    }
-  })())
-}
 
-export async function write(text: string) {
-  writeOsc52(text)
-  const method = await getCopyMethod()
-  await method(text)
+      if (result.representation.mimeType === "image/png") {
+        return {
+          data: Buffer.from(result.representation.bytes).toString("base64"),
+          mime: result.representation.mimeType,
+        }
+      }
+      if (result.representation.mimeType === "text/plain") {
+        if (result.representation.bytes.length === 0) return undefined
+        return {
+          data: decodePasteBytes(result.representation.bytes),
+          mime: result.representation.mimeType,
+        }
+      }
+      throw new Error(`Unexpected clipboard MIME type: ${result.representation.mimeType}`)
+    },
+    async write(text) {
+      // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
+      const result = await clipboard.writeText(text.replaceAll("\0", ""), {
+        destination: "all-available",
+        selection: "clipboard",
+      })
+      if (result.host.status === "written" || result.terminal.status === "attempted") return
+      if (result.host.status === "failed") throw result.host.error
+      throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
+    },
+    dispose() {
+      return clipboard.dispose()
+    },
+  }
 }

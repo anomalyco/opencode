@@ -1,4 +1,3 @@
-import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@bolt-ai/app/vite"
 import * as fs from "node:fs/promises"
@@ -12,11 +11,18 @@ const channel = (() => {
   return "dev"
 })()
 
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+  if (raw === "local" || raw === "dev" || raw === "beta" || raw === "prod") return raw
+
+  if (raw === "latest") return "prod"
+
+  return "dev"
+}
+
+const appPlugin = (await import("@opencode/app/vite")).default
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-    ? sentryVitePlugin({
+    ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
         authToken: process.env.SENTRY_AUTH_TOKEN,
         org: process.env.SENTRY_ORG,
         project: process.env.SENTRY_PROJECT,
@@ -49,9 +55,25 @@ const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
 const require = __cjs_mod__.createRequire(import.meta.url);
 `,
+          },
+        },
+        externalizeDeps: {
+          // Bundle the Effect family together.
+          exclude: ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
+          include: [nodePtyPkg],
         },
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      plugins: [
+        {
+          name: "opencode:node-pty-narrower",
+          enforce: "pre",
+          resolveId(s) {
+            if (s === "@lydell/node-pty") return nodePtyPkg
+
+            return undefined
+          },
+        },
+      ],
     },
     plugins: [
       {
@@ -89,18 +111,34 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         },
       },
     },
-  },
-  renderer: {
-    plugins: [appPlugin, sentry],
-    publicDir: "../../../app/public",
-    root: "src/renderer",
-    build: {
-      sourcemap: true,
-      rollupOptions: {
-        input: {
-          main: "src/renderer/index.html",
+    renderer: {
+      experimental: {
+        bundledDev: true,
+      },
+      define: {
+        "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
+        "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+        "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
+          command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
+        ),
+      },
+      plugins: [pickerPlugin(), appPlugin, initialChunk, sentry],
+      publicDir: "../../../app/public",
+      root: "src/renderer",
+      build: {
+        minify: command === "build",
+        sourcemap: true,
+        rolldownOptions: {
+          input: {
+            main: "src/renderer/index.html",
+          },
+          output: {
+            codeSplitting: {
+              groups: [{ name: (id) => (initialGraph.has(id) ? "app" : null), priority: 10 }],
+            },
+          },
         },
       },
     },
-  },
+  }
 })

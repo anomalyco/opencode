@@ -72,7 +72,7 @@ Check out the [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/
 2.  Set up CI/CD
 3.  Get an AI model provider API key
 4.  Create a service account
-5.  Configure CI/CD variables
+5.  Configure CI/CD variables, including `GITLAB_HOST` (for example, `gitlab.com`)
 6.  Create a flow config file, here's an example:
 
         <details>
@@ -126,19 +126,21 @@ Check out the [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/
         You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
         </important>
         "
-      - git checkout --branch $CI_WORKLOAD_REF origin/$CI_WORKLOAD_REF
       - echo "Checking for git changes and pushing if any exist"
       - |
-        if ! git diff --quiet || ! git diff --cached --quiet || [ --not --zero "$(git ls-files --others --exclude-standard)" ]; then
+        if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
           echo "Git changes detected, adding and pushing..."
           git add .
           if git diff --cached --quiet; then
             echo "No staged changes to commit"
           else
-            echo "Committing changes to branch: $CI_WORKLOAD_REF"
-            git commit --message "Codex changes"
-            echo "Pushing changes up to $CI_WORKLOAD_REF"
-            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            BRANCH="opencode/${CI_JOB_ID}"
+            git checkout -b "$BRANCH"
+            echo "Committing changes to branch: $BRANCH"
+            git commit --message "OpenCode changes"
+            echo "Pushing changes up to $BRANCH"
+            git push "https://oauth2:${GITLAB_TOKEN}@${GITLAB_HOST}/${CI_PROJECT_PATH}.git" "HEAD:refs/heads/${BRANCH}"
+            glab mr create --source-branch "$BRANCH" --fill --push=false --yes
             echo "Changes successfully pushed"
           fi
         else

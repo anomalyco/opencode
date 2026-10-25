@@ -1,0 +1,21 @@
+id: no-effect-catch-succeed-tsx
+valid:
+  - const view = <Widget value={effect.pipe(Effect.orElseSucceed(() => fallback))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => Effect.succeed(error)))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((error) => Effect.succeed(fallback)))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((_error) => Effect.succeed(_error)))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((_error) => Effect.succeed({ _error })))} />
+  - "const view = <Widget value={effect.pipe(Effect.catch((_error: Error) => Effect.succeed(use(_error))))} />"
+  - const view = <Widget value={effect.pipe(Effect.catch((_error) => Effect.succeed(values.map((_error) => _error))))} />
+  - const view = <Widget value={effect.pipe(Effect.catch(({ message }) => Effect.succeed(fallback)))} />
+  - const view = <Widget value={Effect.catch(effect, options, () => Effect.succeed(fallback))} />
+  - const view = <Widget value={effect.pipe(Effect.catch(() => { log(); return Effect.succeed(fallback) }))} />
+  - const view = <Widget value={effect.pipe(Effect.catch(function () { return Effect.succeed(new.target) }))} />
+  - const view = <Widget value={effect.pipe(Effect.catch(function () { return Effect.succeed(import.meta) }))} />
+invalid:
+  - const view = <Widget value={effect.pipe(Effect.catch(() => Effect.succeed(fallback)))} />
+  - const view = <Widget value={Effect.catch(effect, () => Effect.succeed(fallback))} />
+  - const view = <Widget value={effect.pipe(Effect.catch((_error) => Effect.succeed(fallback)))} />
+  - const view = <Widget value={effect.pipe(Effect.catch(_error => { return Effect.succeed(fallback) }))} />
+  - "const view = <Widget value={effect.pipe(Effect.catch((_error: Error) => Effect.succeed(fallback)))} />"
+  - const view = <Widget value={effect.pipe(Effect.catch(function (_error) { return Effect.succeed(fallback) }))} />

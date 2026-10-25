@@ -1,183 +1,112 @@
 import { define } from "./internal"
 import type { ModelV2Info } from "@bolt-ai/sdk/v2/types"
 import { Effect, Stream } from "effect"
-import { EventV2 } from "../event"
-import { ModelsDev } from "../models-dev"
-import { ProviderV2 } from "../provider"
+import { Bus } from "../bus.js"
+import { Model } from "../model.js"
+import { ModelsDev } from "../models-dev.js"
 
-function released(date: string) {
-  const time = Date.parse(date)
-  return Number.isFinite(time) ? time : 0
-}
+// These catalog entries require inference profiles on Bedrock Runtime.
+// Opus/Sonnet 4.6 and Opus 5.5 support in-region calls in eu-west-2 and must remain available.
+const BEDROCK_PROFILE_ONLY_IDS = [
+  "amazon.nova-2-lite-v1:0",
+  "anthropic.claude-fable-5",
+  "anthropic.claude-fable-5-1",
+  "anthropic.claude-haiku-4-5-20251001-v1:0",
+  "anthropic.claude-haiku-5-5",
+  "anthropic.claude-opus-4-1-20250805-v1:0",
+  "anthropic.claude-opus-4-5-20251101-v1:0",
+  "anthropic.claude-opus-4-7",
+  "anthropic.claude-opus-4-8",
+  "anthropic.claude-opus-5",
+  "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "anthropic.claude-sonnet-5",
+  "anthropic.claude-sonnet-5-5",
+  "deepseek.r1-v1:0",
+  "meta.llama4-maverick-17b-instruct-v1:0",
+  "meta.llama4-scout-17b-instruct-v1:0",
+  "mistral.pixtral-large-2502-v1:0",
+  "writer.palmyra-x4-v1:0",
+  "writer.palmyra-x5-v1:0",
+]
 
-function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
-  const base = {
-    input: input?.input ?? 0,
-    output: input?.output ?? 0,
-    cache: {
-      read: input?.cache_read ?? 0,
-      write: input?.cache_write ?? 0,
-    },
-  }
-  return [
-    base,
-    ...(input?.tiers?.map((item) => ({
-      tier: item.tier,
-      input: item.input,
-      output: item.output,
-      cache: {
-        read: item.cache_read ?? 0,
-        write: item.cache_write ?? 0,
-      },
-    })) ?? []),
-    ...(input?.context_over_200k
-      ? [
-          {
-            tier: {
-              type: "context" as const,
-              size: 200_000,
-            },
-            input: input.context_over_200k.input,
-            output: input.context_over_200k.output,
-            cache: {
-              read: input.context_over_200k.cache_read ?? 0,
-              write: input.context_over_200k.cache_write ?? 0,
-            },
-          },
-        ]
-      : []),
-  ]
-}
-
-function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] | undefined) {
-  if (!override) return base
-  const next = cost(override)
-  const [baseDefault, ...baseTiers] = base
-  const [nextDefault, ...nextTiers] = next
-  const tierKey = (item: ModelV2Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
-  const merge = (left: ModelV2Info["cost"][number], right: ModelV2Info["cost"][number]) => ({
-    ...left,
-    ...right,
-    tier: right.tier ?? left.tier,
-    cache: { ...left.cache, ...right.cache },
-  })
-  const tiers = new Map(baseTiers.map((item) => [tierKey(item), item]))
-  for (const item of nextTiers) {
-    const current = tiers.get(tierKey(item))
-    tiers.set(tierKey(item), current ? merge(current, item) : item)
-  }
-  return [merge(baseDefault ?? { input: 0, output: 0, cache: { read: 0, write: 0 } }, nextDefault), ...tiers.values()]
-}
-
-function modeName(model: ModelsDev.Model, mode: string) {
-  return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
-}
-
-function applyModel(
-  draft: ModelV2Info,
-  model: ModelsDev.Model,
-  input: {
-    readonly name?: string
-    readonly cost?: ModelV2Info["cost"]
-    readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
-  } = {},
-) {
-  draft.name = input.name ?? model.name
-  draft.family = model.family
-  draft.api = model.provider?.npm
-    ? {
-        id: model.id,
-        type: "aisdk",
-        package: model.provider.npm,
-        url: model.provider.api,
-      }
-    : {
-        id: model.id,
-        type: "native",
-        url: model.provider?.api,
-        settings: {},
-      }
-  draft.capabilities = {
-    tools: model.tool_call,
-    input: [...(model.modalities?.input ?? [])],
-    output: [...(model.modalities?.output ?? [])],
-  }
-  draft.variants = []
-  draft.time.released = released(model.release_date)
-  draft.cost = input.cost ?? cost(model.cost)
-  draft.status = model.status ?? "active"
-  draft.enabled = true
-  draft.limit = {
-    context: model.limit.context,
-    input: model.limit.input,
-    output: model.limit.output,
-  }
-  Object.assign(draft.request.headers, input.request?.headers ?? {})
-  Object.assign(draft.request.body, input.request?.body ?? {})
-}
+// models.dev lists text input and output for these, but realtime models only run live voice sessions, and embedding
+// and reranking models return vectors and scores, so none of them can answer a chat request.
+const NON_CHAT_TYPES: readonly ModelsDev.CatalogModelType[] = ["realtime", "embedding", "reranking"]
 
 export const ModelsDevPlugin = define({
-  id: "models-dev",
+  id: "opencode.models.dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
-    const events = yield* EventV2.Service
-    yield* ctx.integration.transform(
-      Effect.fn(function* (integrations) {
-        const data = yield* modelsDev.get()
-        for (const item of Object.values(data)) {
-          if (item.env.length === 0) continue
-          const integrationID = item.id
-          integrations.update(integrationID, (integration) => (integration.name = item.name))
-          integrations.method.update({
-            integrationID,
-            method: { type: "key" },
-          })
-          integrations.method.update({
-            integrationID,
-            method: { type: "env", names: [...item.env] },
-          })
-        }
-      }),
-    )
-    yield* ctx.catalog.transform(
-      Effect.fn(function* (catalog) {
-        const data = yield* modelsDev.get()
-        for (const item of Object.values(data)) {
-          const providerID = ProviderV2.ID.make(item.id)
-          catalog.provider.update(providerID, (provider) => {
-            provider.name = item.name
-            provider.api = item.npm
-              ? {
-                  type: "aisdk",
-                  package: item.npm,
-                  url: item.api,
-                }
-              : {
-                  type: "native",
-                  url: item.api,
-                  settings: {},
-                }
-          })
-
-          for (const model of Object.values(item.models)) {
-            const baseCost = cost(model.cost)
-            catalog.model.update(providerID, model.id, (draft) => applyModel(draft, model, { cost: baseCost }))
-            for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
-              catalog.model.update(providerID, `${model.id}-${mode}`, (draft) =>
-                applyModel(draft, model, {
-                  name: modeName(model, mode),
-                  cost: mergeCost(baseCost, options.cost),
-                  request: options.provider,
-                }),
-              )
-            }
-          }
-        }
-      }),
-    )
-    yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() => ctx.integration.reload().pipe(Effect.andThen(ctx.catalog.reload()))),
+    const bus = yield* Bus.Service
+    // Filtering and definition indexes are shared across Locations. Only Model materialization
+    // makes mutable copies, after provider configuration and access have been resolved.
+    const loaded = { data: snapshots(yield* modelsDev.get()) }
+    yield* ctx.integration.transform((integrations) => {
+      for (const provider of loaded.data) {
+        if (provider.environment.length === 0) continue
+        const integrationID = provider.info.id
+        integrations.update(integrationID, (integration) => (integration.name = provider.info.name))
+        integrations.method.update({
+          integrationID,
+          method: { type: "key" },
+        })
+        integrations.method.update({
+          integrationID,
+          method: {
+            type: "env",
+            // Every listed variable is treated as a key; plugins override providers that also list setup values.
+            names: [...provider.environment],
+          },
+        })
+      }
+    })
+    yield* ctx.provider.transform((providers) => {
+      for (const provider of loaded.data) {
+        providers.add({
+          info: { ...provider.info, integrationID: Integration.ID.make(provider.info.id) },
+          models: provider.models,
+        })
+      }
+    })
+    const apply = (data: readonly ModelsDev.Snapshot[]) => {
+      loaded.data = snapshots(data)
+      return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
+    }
+    yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
+      Stream.runForEach(() => modelsDev.get().pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )
+    // A refresh that landed between the initial read and the subscription above published
+    // Refreshed to nobody here. On a cold cache that read served the bundled snapshot, so
+    // re-read now instead of waiting for the next TTL refresh.
+    const latest = yield* modelsDev.get()
+    if (snapshots(latest) !== loaded.data) yield* apply(latest)
   }),
 })
+
+const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
+
+function snapshots(data: readonly ModelsDev.Snapshot[]) {
+  const cached = prepared.get(data)
+  if (cached) return cached
+  const result = data
+    .filter(
+      // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
+      (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
+    )
+    .map((provider) => ({
+      ...provider,
+      models: provider.models.filter(
+        (model) =>
+          model.status !== "deprecated" &&
+          Model.supportsText(model) &&
+          !NON_CHAT_TYPES.includes(provider.types?.get(model.id) ?? "chat") &&
+          !(
+            provider.info.id === Provider.ID.amazonBedrock &&
+            BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)
+          ),
+      ),
+    }))
+  prepared.set(data, result)
+  return result
+}

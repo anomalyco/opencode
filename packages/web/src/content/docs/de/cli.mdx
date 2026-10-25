@@ -89,28 +89,6 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### create
-
-Erstellen Sie einen neuen Agenten mit benutzerdefinierter Konfiguration.
-
-```bash
-opencode agent create
-```
-
-Dieser Befehl führt Sie durch die Erstellung eines neuen Agenten mit einer benutzerdefinierten Systemeingabeaufforderung und Toolkonfiguration.
-
----
-
-#### list
-
-Listen Sie alle verfügbaren Agenten auf.
-
-```bash
-opencode agent list
-```
-
----
-
 ### auth
 
 Befehl zum Verwalten von Anmeldeinformationen und Anmelden für Anbieter.
@@ -345,7 +323,6 @@ bolt run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | Setzen Sie die letzte Sitzung fort                                                                  |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Session-ID zum Fortfahren                                                                           |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen verzweigen (mit `--continue` oder `--session` verwenden)                    |
-| <nobr><code>{"--share"}</code></nobr>    |      | Teilen Sie die Sitzung                                                                              |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | Zu verwendendes Modell in der Form provider/model                                                   |
 | <nobr><code>{"--agent"}</code></nobr>    |      | Zu verwendender Agent                                                                               |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | Datei(en) zum Anhängen an die Nachricht                                                             |
@@ -452,7 +429,6 @@ Sie können aus einer lokalen Datei oder einer Bolt-Freigabe-URL importieren.
 
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---

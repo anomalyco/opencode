@@ -1,0 +1,78 @@
+import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "./errors.js"
+import { makeDefaultApi } from "./api.js"
+import type { Api } from "./api.js"
+import type { Context } from "effect"
+import { HttpApiMiddleware } from "effect/http-api"
+import type { EventGroup } from "./groups/event.js"
+
+class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
+  "@opencode/client/LocationMiddleware",
+  { error: [LocationNotFoundError] },
+) {}
+
+class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocationMiddleware>()(
+  "@opencode/client/SessionLocationMiddleware",
+  { error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError] },
+) {}
+
+type ClientApiShape = Api<
+  Context.Service.Identifier<typeof LocationMiddleware>,
+  Context.Service.Shape<typeof LocationMiddleware>,
+  Context.Service.Identifier<typeof SessionLocationMiddleware>,
+  Context.Service.Shape<typeof SessionLocationMiddleware>,
+  Context.Service.Identifier<typeof SessionLocationMiddleware>,
+  Context.Service.Shape<typeof SessionLocationMiddleware>,
+  typeof EventGroup
+>
+
+export const ClientApi: ClientApiShape = makeDefaultApi({
+  locationMiddleware: LocationMiddleware,
+  // The real server uses a form-specific middleware with an undocumented `global` sentinel branch.
+  // The generated client only needs a middleware identity for API typing.
+  formLocationMiddleware: SessionLocationMiddleware,
+  sessionLocationMiddleware: SessionLocationMiddleware,
+})
+
+export const groupNames = {
+  "server.server": "server",
+  "server.debug": "debug",
+  "server.migration": "migration",
+  "server.location": "location",
+  "server.agent": "agent",
+  "server.plugin": "plugin",
+  "server.session": "session",
+  "server.message": "message",
+  "server.model": "model",
+  "server.generate": "generate",
+  "server.voice": "voice",
+  "server.provider": "provider",
+  "server.integration": "integration",
+  "server.websearch": "websearch",
+  "server.usage": "usage",
+  "server.credential": "credential",
+  "server.form": "form",
+  "server.permission": "permission",
+  "server.fs": "file",
+  "server.command": "command",
+  "server.skill": "skill",
+  "server.rpc": "rpc",
+  "server.event": "event",
+  "server.pty": "pty",
+  "server.experimental": "experimental",
+  "server.shell": "shell",
+  "server.mcp": "mcp",
+  "server.reference": "reference",
+  "server.project": "project",
+  "server.worktree": "worktree",
+  "server.vcs": "vcs",
+  "server.config": "config",
+} as const
+
+export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect", "mcp.client"])
+export const effectOmitEndpoints = new Set([
+  "fs.read",
+  "fs.write",
+  "pty.connect",
+  "persistentPty.connect",
+  "mcp.client",
+])

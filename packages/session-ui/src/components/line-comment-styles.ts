@@ -36,11 +36,7 @@ export const lineCommentStyles = `
   border: none;
 }
 
-[data-component="line-comment"][data-variant="add"] [data-slot="line-comment-button"] {
-  background: var(--syntax-diff-add);
-}
-
-[data-component="line-comment"] [data-component="icon"] {
+[data-component="line-comment"] [data-slot="icon-svg"] {
   color: var(--white);
 }
 
@@ -276,11 +272,13 @@ let installed = false
 
 export function installLineCommentStyles() {
   if (installed) return
+
   if (typeof document === "undefined") return
 
   const id = "bolt-line-comment-styles"
   if (document.getElementById(id)) {
     installed = true
+
     return
   }
 

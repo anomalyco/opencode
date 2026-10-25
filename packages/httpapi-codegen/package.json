@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "bun test --timeout 5000 --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "effect": "catalog:",
@@ -17,6 +18,6 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

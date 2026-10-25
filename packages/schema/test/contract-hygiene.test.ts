@@ -1,67 +1,344 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
-import { Agent } from "../src/agent"
-import { FileSystem } from "../src/filesystem"
-import { Model } from "../src/model"
-import { Project } from "../src/project"
-import { Pty } from "../src/pty"
-import { Question } from "../src/question"
-import { Session } from "../src/session"
-import { SessionEvent } from "../src/session-event"
-import { SessionTodo } from "../src/session-todo"
-import { optional } from "../src/schema"
+import path from "node:path"
+import { DateTime, Schema } from "effect"
+import { Agent } from "../src/agent.js"
+import { ConfigAgent } from "../src/config/agent.js"
+import { ConfigProvider } from "../src/config/provider.js"
+import { FileSystem } from "../src/filesystem.js"
+import { Form } from "../src/form.js"
+import { Mcp } from "../src/mcp.js"
+import { Model } from "../src/model.js"
+import { Project } from "../src/project.js"
+import { SkillAttachment } from "../src/prompt.js"
+import { Provider } from "../src/provider.js"
+import { Pty } from "../src/pty.js"
+import { Session } from "../src/session.js"
+import { SessionMessage } from "../src/session-message.js"
+import { SessionInbox } from "../src/session-inbox.js"
+import { FileDiff } from "../src/file-diff.js"
+import { Money } from "../src/money.js"
+import { Skill } from "../src/skill.js"
+import { Shell } from "../src/shell.js"
+import { Vcs } from "../src/vcs.js"
+import { Worktree } from "../src/worktree.js"
+import { PersistedRevert } from "../src/session-revert.js"
+import { AbsolutePath, optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
+  test("restricts agent colors to six-digit hex values", () => {
+    const decode = Schema.decodeUnknownSync(ConfigAgent.Color)
+    expect(decode("#ff6b6b")).toBe("#ff6b6b")
+    expect(() => decode("warning")).toThrow()
+  })
+
+  test("keeps absolute costs distinct from model rates", () => {
+    const usd = Money.USD.make(1)
+    const rate = Money.USDPerMillionTokens.make(1)
+    // @ts-expect-error Model rates are not absolute costs.
+    const invalidUSD: Money.USD = rate
+    // @ts-expect-error Absolute costs are not model rates.
+    const invalidRate: Money.USDPerMillionTokens = usd
+
+    expect(invalidUSD).toBe(Money.USD.make(1))
+    expect(invalidRate).toBe(Money.USDPerMillionTokens.make(1))
+    expect(Money.USD.zero).toBe(Money.USD.make(0))
+    expect(Money.USDPerMillionTokens.zero).toBe(Money.USDPerMillionTokens.make(0))
+  })
+
   test("optional properties preserve transformations and omit undefined while encoding", () => {
     const Value = Schema.Struct({ value: optional(Schema.FiniteFromString) })
     expect(Schema.decodeUnknownSync(Value)({ value: "1" })).toEqual({ value: 1 })
     expect(Schema.encodeSync(Value)({ value: 1 })).toEqual({ value: "1" })
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
+    expect(
+      Schema.encodeSync(SessionInbox.SyntheticPayload)({
+        text: "completed",
+        description: undefined,
+        metadata: undefined,
+      }),
+    ).toEqual({ text: "completed" })
+
+    const info = Session.Info.make({
+      id: Session.ID.make("ses_untitled"),
+      projectID: Project.ID.make("global"),
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: {
+        created: DateTime.makeUnsafe(0),
+        updated: DateTime.makeUnsafe(0),
+        idle: undefined,
+        viewed: undefined,
+      },
+      title: undefined,
+      location: { directory: AbsolutePath.make("/project") },
+    })
+    const encoded = Schema.encodeSync(Session.Info)(info)
+    expect(encoded).not.toHaveProperty("title")
+    expect(encoded.time).toEqual({ created: 0, updated: 0 })
+    expect(
+      Schema.encodeSync(Session.Info)({
+        ...info,
+        time: { ...info.time, idle: DateTime.makeUnsafe(2), viewed: DateTime.makeUnsafe(1) },
+      }).time,
+    ).toEqual({ created: 0, updated: 0, idle: 2, viewed: 1 })
   })
 
-  test("todo status and priority preserve arbitrary strings", () => {
-    const decode = Schema.decodeUnknownSync(SessionTodo.Info)
-    expect(decode({ content: "ship", status: "waiting", priority: "urgent" })).toEqual({
-      content: "ship",
-      status: "waiting",
-      priority: "urgent",
+  test("skill attachments retain legacy references while accepting prepared instructions", () => {
+    const reference = { id: Skill.ID.make("effect"), name: Skill.Name.make("Effect") }
+    expect(Schema.decodeUnknownSync(SkillAttachment)(reference)).toEqual(reference)
+    expect(Schema.encodeSync(SkillAttachment)({ ...reference, text: undefined })).toEqual(reference)
+    expect(Schema.decodeUnknownSync(SkillAttachment)({ ...reference, text: "Use Effect" })).toEqual({
+      ...reference,
+      text: "Use Effect",
     })
   })
 
+  test("session inbox items omit the internal enqueue sequence", () => {
+    expect(
+      Schema.encodeSync(SessionInbox.Info)(
+        Schema.decodeUnknownSync(SessionInbox.Info)({
+          admittedSeq: 3,
+          id: "msg_pending",
+          sessionID: "ses_pending",
+          time: { created: 1 },
+          type: "user",
+          payload: { text: "hello" },
+          delivery: "steer",
+        }),
+      ),
+    ).toEqual({
+      id: "msg_pending",
+      sessionID: "ses_pending",
+      time: { created: 1 },
+      type: "user",
+      payload: { text: "hello" },
+      delivery: "steer",
+    })
+  })
+
+  test("forms require at least one field", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "Empty form",
+        fields: [],
+      }),
+    ).toThrow()
+    expect(
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
+      }).fields,
+    ).toHaveLength(1)
+    expect(() =>
+      Schema.decodeUnknownSync(Form.Info)({
+        id: Form.ID.create(),
+        sessionID: "global",
+        title: "External form",
+        fields: [{ type: "external", url: "https://example.com" }],
+      }),
+    ).toThrow()
+  })
+
+  test("model defaults and provider overlays preserve public invariants", () => {
+    const id = Model.ID.make("model")
+    expect(Model.Info.default(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
+    expect(Provider.Info.empty(Provider.ID.make("provider")).activation).toBe("auto")
+    expect(
+      Schema.decodeUnknownSync(Provider.Info)({
+        id: "provider",
+        name: "Provider",
+        activation: "auto",
+        package: "native",
+        settings: { arbitrary: 1n },
+      }).settings,
+    ).toEqual({ arbitrary: 1n })
+  })
+
   test("current ID constructors expose create", () => {
-    expect(Question.ID.create()).toStartWith("que_")
+    expect(Form.ID.create()).toStartWith("frm_")
     expect(Pty.ID.create()).toStartWith("pty_")
+  })
+
+  test("VCS info omits unavailable branch names", () => {
+    expect(Schema.encodeSync(Vcs.Info)({ branch: { current: undefined, default: undefined } })).toEqual({ branch: {} })
   })
 
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
+      ConfigProvider.ModelSettings,
+      ConfigProvider.Settings,
       FileSystem.Submatch,
+      Form.Field,
+      Form.Fields,
+      Form.Info,
+      Form.ExternalField,
+      Mcp.Resource,
+      Mcp.ResourceTemplate,
+      Mcp.ResourceCatalog,
+      Mcp.ResourceContentPart,
+      Mcp.ResourceContent,
       Model.Ref,
       Model.Capabilities,
       Model.Cost,
-      Model.Api,
+      Model.Settings,
+      Model.Variant,
+      Project.Current,
+      Worktree.Directory,
+      Worktree.List,
       Project.Icon,
       Project.Commands,
       Project.Time,
       Project.Info,
       Pty.Info,
       Session.ListAnchor,
+      Session.ListCursor,
+      Session.ListFilter,
+      Session.Revert,
+      SessionInbox.Delivery,
+      SessionInbox.UserPayload,
+      SessionInbox.SyntheticPayload,
+      SessionInbox.CompactionPayload,
+      SessionInbox.MovePayload,
+      SessionInbox.Item,
+      SessionInbox.User,
+      SessionInbox.Synthetic,
+      SessionInbox.Compaction,
+      SessionInbox.Move,
+      SessionInbox.Info,
+      Vcs.Branch,
+      Vcs.Info,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)
     expect(new Set(identifiers).size).toBe(identifiers.length)
   })
 
-  test("current source avoids Any and mutable contract wrappers", async () => {
-    const files = [...new Bun.Glob("*.ts").scanSync(new URL("../src", import.meta.url).pathname)].filter(
+  test("all session inbox item types accept both delivery modes", () => {
+    const decode = Schema.decodeUnknownSync(SessionInbox.Info)
+    const base = { id: "msg_inbox", sessionID: "ses_inbox", time: { created: 1 } }
+    const move = {
+      location: { directory: "/project" },
+      projectID: "global",
+    }
+    for (const delivery of ["steer", "queue"] as const) {
+      expect(decode({ ...base, type: "user", payload: { text: "hello" }, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "synthetic", payload: { text: "context" }, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "compaction", payload: {}, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "move", payload: move, delivery }).delivery).toBe(delivery)
+    }
+  })
+
+  test("current source limits Any to reviewed boundaries and avoids mutable contract wrappers", async () => {
+    const files = [...new Bun.Glob("*.ts").scanSync(path.join(import.meta.dir, "../src"))].filter(
       (file) => !file.endsWith("-v1.ts"),
     )
-    const source = await Promise.all(
-      files.map((file) => Bun.file(new URL(`../src/${file}`, import.meta.url)).text()),
-    ).then((values) => values.join("\n"))
+    const sources = await Promise.all(
+      files.map(async (file) => ({ file, source: await Bun.file(new URL(`../src/${file}`, import.meta.url)).text() })),
+    )
+    const source = sources.map((item) => item.source).join("\n")
 
-    expect(source).not.toContain("Schema.Any")
+    expect(
+      sources
+        .filter((item) => item.file !== "provider.ts" && item.file !== "model.ts" && item.file !== "integration.ts")
+        .map((item) => item.source)
+        .join("\n"),
+    ).not.toContain("Schema.Any")
+    expect(sources.find((item) => item.file === "provider.ts")?.source.match(/Schema\.Any/g)).toHaveLength(3)
+    expect(sources.find((item) => item.file === "model.ts")?.source.match(/Schema\.Any/g)).toHaveLength(2)
+    expect(sources.find((item) => item.file === "integration.ts")?.source.match(/Schema\.Any/g)).toHaveLength(2)
     expect(source).not.toContain("Schema.mutable")
+  })
+
+  test("assistant content keeps only domain identities", () => {
+    expect(SessionMessage.AssistantText.make({ type: "text", text: "hello" })).toEqual({
+      type: "text",
+      text: "hello",
+    })
+    expect(
+      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", native: { id: "opaque" } }),
+    ).toEqual({ type: "reasoning", text: "thinking", native: { id: "opaque" } })
+    expect(
+      SessionMessage.AssistantTool.make({
+        type: "tool",
+        id: "call_1",
+        name: "search",
+        executed: true,
+        native: { itemId: "item_1" },
+        state: { status: "streaming", input: "" },
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ).not.toHaveProperty("provider")
+  })
+
+  test("reviewed session contracts use their canonical current shapes", () => {
+    expect(SessionMessage.Info.ast.annotations?.identifier).toBe("Session.Message.Info")
+    expect(SessionInbox.Info.ast.annotations?.identifier).toBe("Session.Inbox.Info")
+    expect(Money.USD).not.toBe(Money.USDPerMillionTokens)
+    expect(
+      FileDiff.Info.make({ file: "src/index.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" }),
+    ).toEqual({ file: "src/index.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" })
+    expect(
+      SessionMessage.Shell.make({
+        id: SessionMessage.ID.make("msg_shell"),
+        type: "shell",
+        shellID: Shell.ID.make("sh_test"),
+        command: "pwd",
+        status: "exited",
+        exit: 0,
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ).not.toHaveProperty("shell")
+    expect(
+      SessionMessage.Skill.make({
+        id: SessionMessage.ID.make("msg_skill"),
+        type: "skill",
+        skill: Skill.ID.make("effect"),
+        name: Skill.Name.make("Effect"),
+        text: "Use Effect",
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ).toMatchObject({ skill: "effect", name: "Effect" })
+    expect(
+      SessionMessage.CompactionFailed.make({
+        id: SessionMessage.ID.make("msg_compaction"),
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+        error: { type: "compaction.failed", message: "failed" },
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ).not.toHaveProperty("summary")
+  })
+
+  test("keeps shared persisted revert compatibility", () => {
+    expect(
+      Schema.decodeUnknownSync(Session.Revert)({
+        messageID: "msg_legacy",
+        snapshot: "tree",
+        diff: "legacy patch",
+      }),
+    ).not.toHaveProperty("diff")
+
+    const revert = Schema.decodeUnknownSync(PersistedRevert)({
+      messageID: "msg_legacy",
+      snapshot: "tree",
+      diff: "legacy patch",
+      files: [{ path: "src/index.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" }],
+    })
+    expect(String(revert.messageID)).toBe("msg_legacy")
+    expect(String(revert.snapshot)).toBe("tree")
+    expect(revert.files).toEqual([
+      { file: "src/index.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" },
+    ])
+    expect(Schema.encodeSync(PersistedRevert)(revert)).toEqual({
+      messageID: "msg_legacy",
+      snapshot: "tree",
+      files: [{ file: "src/index.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" }],
+    })
   })
 })

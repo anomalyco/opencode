@@ -1,14 +1,17 @@
-export * as FileSystem from "./filesystem"
+export * as FileSystem from "./filesystem.js"
 
 import { Schema } from "effect"
 import { define, inventory } from "./event"
 import { NonNegativeInt, PositiveInt, RelativePath, optional } from "./schema"
 
-const Edited = define({
-  type: "file.edited",
-  schema: { file: Schema.String },
+const Changed = ephemeral({
+  type: "filesystem.changed",
+  schema: {
+    file: Schema.String,
+    event: Schema.Literals(["add", "change", "unlink"]),
+  },
 })
-export const Event = { Edited, Definitions: inventory(Edited) }
+export const Event = { Changed, Definitions: inventory(Changed) }
 
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}
 export const Entry = Schema.Struct({
@@ -37,3 +40,8 @@ export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   type: Schema.Literals(["file", "directory"]).pipe(optional),
   limit: PositiveInt.pipe(optional),
 }) {}
+
+export interface Write extends Schema.Schema.Type<typeof Write> {}
+export const Write = Schema.Struct({
+  path: AbsolutePath,
+}).annotate({ identifier: "FileSystem.Write" })

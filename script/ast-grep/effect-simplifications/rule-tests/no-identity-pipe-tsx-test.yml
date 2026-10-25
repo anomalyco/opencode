@@ -1,0 +1,17 @@
+id: no-identity-pipe-tsx
+valid:
+  - const view = <Widget value={schema} />
+  - const view = <Widget value={schema.pipe(transform)} />
+  - const view = <Widget value={schema.pipe((value) => transform(value))} />
+  - const view = <Widget value={schema.pipe((value) => other)} />
+  - const view = <Widget value={schema.pipe((value) => { log(value); return value })} />
+  - const view = <Widget value={schema.pipe((value = fallback) => value)} />
+  - const view = <Widget value={schema.pipe(({ value }) => value)} />
+  - const view = <Widget value={schema.pipe((value) => value, transform)} />
+invalid:
+  - const view = <Widget value={schema.pipe((value) => value)} />
+  - const view = <Widget value={schema.pipe(value => value)} />
+  - "const view = <Widget value={schema.pipe((value: Schema) => value)} />"
+  - const view = <Widget value={schema.pipe((value) => { return value })} />
+  - const view = <Widget value={schema.pipe(value => { return value })} />
+  - "const view = <Widget value={schema.pipe((value: Schema) => { return value })} />"

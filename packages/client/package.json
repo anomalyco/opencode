@@ -5,24 +5,37 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
-    ".": "./src/index.ts",
-    "./effect": "./src/effect.ts"
+    ".": "./src/promise/index.ts",
+    "./promise": "./src/promise/index.ts",
+    "./promise/api": "./src/promise/api.ts",
+    "./service": "./src/promise/service.ts",
+    "./solid": "./src/solid/index.ts",
+    "./effect": "./src/effect/index.ts",
+    "./effect/api": "./src/effect/api.ts",
+    "./effect/service": "./src/effect/service.ts",
+    "./mcp": "./src/mcp.ts"
   },
   "scripts": {
+    "build": "bun run script/build-package.ts",
     "generate": "bun run script/build.ts",
-    "check:generated": "bun run generate && git diff --exit-code -- src/generated src/generated-effect",
+    "check:generated": "bun run generate && git diff --exit-code -- src/promise/generated src/effect/generated src/effect/api",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@bolt-ai/schema": "workspace:*",
     "@bolt-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.83"
+    "effect": "catalog:",
+    "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
     "effect": {
+      "optional": true
+    },
+    "solid-js": {
       "optional": true
     }
   },
@@ -33,7 +46,8 @@
     "@bolt-ai/server": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "effect": "catalog:"
+    "@typescript/native": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "catalog:"
   }
 }

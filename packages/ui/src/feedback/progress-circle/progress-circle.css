@@ -1,0 +1,28 @@
+[data-component="progress-circle"] {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+[data-component="progress-circle"][data-appearance="compact"] [data-slot="progress-circle-background"] {
+  stroke: var(--v2-background-bg-layer-04);
+}
+
+[data-component="progress-circle"][data-appearance="compact"] [data-slot="progress-circle-progress"] {
+  stroke: var(--v2-icon-icon-base);
+}
+
+[data-component="progress-circle"][data-appearance="indicator"] [data-slot="progress-circle-background"] {
+  stroke: var(--progress-circle-background, var(--border-weak-base));
+}
+
+[data-component="progress-circle"][data-appearance="indicator"] [data-slot="progress-circle-background-overlay"] {
+  stroke: var(--progress-circle-background-overlay, transparent);
+}
+
+[data-component="progress-circle"][data-appearance="indicator"] [data-slot="progress-circle-progress"] {
+  stroke: var(--progress-circle-progress, var(--border-active));
+}
+
+[data-component="progress-circle"] [data-slot="progress-circle-progress"] {
+  transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+}
