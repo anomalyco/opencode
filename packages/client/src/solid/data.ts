@@ -294,6 +294,9 @@ export function createData(config: CreateDataInput) {
 
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
+    // Local removal is a durable acknowledgement too: delivery, cancellation,
+    // and rollback all mean the server will not enqueue this row again.
+    outbox.delete(inboxID)
     pendingUpdates.get(sessionID)?.set(inboxID, undefined)
     if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
       setStore(
@@ -1523,6 +1526,19 @@ export function createData(config: CreateDataInput) {
         invalidate(sessionID: string) {
           sync.invalidate(`session.pending:${sessionID}`)
         },
+        // A successful cancel consumed the row (a missing one is a no-op), so
+        // drop it locally in case its echo is lost across a stream drop; a
+        // delivered transcript message stays.
+        discard(sessionID: string, inboxID: string) {
+          outbox.delete(inboxID)
+          removePending(sessionID, inboxID)
+        },
+        // A lifecycle conflict leaves it open whether the row was consumed or
+        // is merely already in the requested delivery state: drop the guard so
+        // the next read decides — a consumed row clears, a live one is re-read.
+        release(inboxID: string) {
+          outbox.delete(inboxID)
+        },
       },
       // Optimistic session creation: admit a local record under a
       // client-minted ID so a session view can mount immediately, then create
@@ -1715,6 +1731,16 @@ export function createData(config: CreateDataInput) {
               order: "desc",
             })
             const fetched = response.data.toReversed()
+            // A fetched message proves its input was delivered: the
+            // projection inserts the message in the same transaction that
+            // consumes the inbox row. Drop the local pending guard for that
+            // input — inbox reads alone cannot tell a consumed row from one
+            // whose projection lags, and an echo lost across a stream drop
+            // would otherwise pin the queued card until restart.
+            fetched.forEach((message) => {
+              if (store.session.pending[sessionID]?.some((item) => item.id === message.id))
+                removePending(sessionID, message.id)
+            })
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
             const ids = new Set(fetched.map((item) => item.id))
