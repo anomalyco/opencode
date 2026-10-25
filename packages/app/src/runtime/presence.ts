@@ -22,7 +22,12 @@ export function createPresence(props: { show: Accessor<boolean>; element: Access
     untrack(() => {
       if (previous === show) return
 
-      if (show) return setState("present")
+      if (show) {
+        // Forget the previous exit animation so the next hide runs it again.
+        started = "none"
+
+        return setState("present")
+      }
 
       const current = animationName()
 

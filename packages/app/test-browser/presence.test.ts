@@ -130,6 +130,24 @@ describe("createPresence", () => {
     expect(view.presence.state()).toBe("present")
   })
 
+  test("runs an exit-only animation again on every hide", () => {
+    const view = setup({ show: true })
+
+    const hide = () => {
+      view.element.style.animationName = "exit"
+      view.setShow(false)
+      expect(view.presence.state()).toBe("hiding")
+      view.element.dispatchEvent(new AnimationEvent("animationstart", { animationName: "exit" }))
+      view.element.dispatchEvent(new AnimationEvent("animationend", { animationName: "exit" }))
+      expect(view.presence.state()).toBe("hidden")
+    }
+
+    hide()
+    view.element.style.animationName = "none"
+    view.setShow(true)
+    hide()
+  })
+
   test("stops listening to a replaced element", () => {
     const view = setup({ show: true })
     const previous = view.element
