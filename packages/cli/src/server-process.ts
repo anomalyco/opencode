@@ -175,7 +175,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
               if (server !== undefined) return server
             }
-            const owner = port === undefined ? undefined : yield* PortOwner.describe(port)
+            const owner = port === undefined ? undefined : yield* PortOwner.describe(port, hostname)
             return yield* Effect.fail(
               new Error(
                 `Managed service port ${port} on ${hostname} is already in use by ${owner ?? "another process"}. ` +

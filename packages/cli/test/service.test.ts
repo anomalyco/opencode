@@ -222,10 +222,34 @@ test("saved service environment cannot move the registration's state directory",
 
 test.skipIf(process.platform === "win32" || !Bun.which("lsof"))("port owner names the listening process", async () => {
   using listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })
-  const owner = await Effect.runPromise(
-    PortOwner.describe(listener.port ?? 0).pipe(Effect.provide(LayerNode.compile(AppProcess.node))),
-  )
-  expect(owner).toStartWith(`PID ${process.pid} (`)
+  using wildcard = Bun.serve({ hostname: "0.0.0.0", port: 0, fetch: () => new Response() })
+  const describe = (port: number | undefined, hostname?: string) =>
+    Effect.runPromise(PortOwner.describe(port ?? 0, hostname).pipe(Effect.provide(LayerNode.compile(AppProcess.node))))
+  expect(await describe(listener.port)).toStartWith(`PID ${process.pid} (`)
+  expect(await describe(listener.port, "127.0.0.1")).toStartWith(`PID ${process.pid} (`)
+  expect(await describe(listener.port, "localhost")).toStartWith(`PID ${process.pid} (`)
+  expect(await describe(listener.port, "127.0.0.2")).toBeUndefined()
+  expect(await describe(wildcard.port, "127.0.0.2")).toStartWith(`PID ${process.pid} (`)
+})
+
+test.skipIf(process.platform === "win32")("port owner gives up on a lookup that ignores SIGTERM", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-port-owner-stuck-"))
+  const PATH = process.env.PATH
+  try {
+    await Bun.write(path.join(root, "lsof"), "#!/bin/sh\ntrap '' TERM\nsleep 10\n")
+    await fs.chmod(path.join(root, "lsof"), 0o755)
+    process.env.PATH = `${root}${path.delimiter}${PATH}`
+    const started = Date.now()
+    const owner = await Promise.race([
+      Effect.runPromise(PortOwner.describe(1).pipe(Effect.provide(LayerNode.compile(AppProcess.node)))),
+      Bun.sleep(4_000).then(() => "hung"),
+    ])
+    expect(owner).toBeUndefined()
+    expect(Date.now() - started).toBeLessThan(3_000)
+  } finally {
+    process.env.PATH = PATH
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test.skipIf(process.platform === "win32")("port owner is unknown for a free port", async () => {
@@ -593,7 +617,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(
     path.join(root, "config", "opencode", "service-local.json"),
-    JSON.stringify({ port: listener.port }),
+    JSON.stringify({ port: listener.port, env: { XDG_STATE_HOME: path.join(root, "elsewhere") } }),
   )
   const stale = {
     id: "stale",
@@ -603,8 +627,17 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     password: "stale",
   }
   await fs.writeFile(registration, JSON.stringify(stale))
+  // The port lookup is a child of the service, so it shows the state directory tools would inherit.
+  const lsof = process.platform === "win32" ? null : Bun.which("lsof")
+  if (lsof) {
+    await Bun.write(
+      path.join(root, "bin", "lsof"),
+      `#!/bin/sh\nprintf %s "$XDG_STATE_HOME" > "${path.join(root, "inherited-state")}"\nexec "${lsof}" "$@"\n`,
+    )
+    await fs.chmod(path.join(root, "bin", "lsof"), 0o755)
+  }
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: serviceEnv(root),
+    env: { ...serviceEnv(root), PATH: `${path.join(root, "bin")}${path.delimiter}${process.env.PATH}` },
     stderr: "pipe",
     stdout: "pipe",
   })
@@ -616,9 +649,10 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     const output = (await new Response(contender.stdout).text()) + (await new Response(contender.stderr).text())
     expect(output).toContain(
       `Managed service port ${listener.port} on 127.0.0.1 is already in use by ${
-        process.platform !== "win32" && Bun.which("lsof") ? `PID ${process.pid} (` : "another process"
+        lsof ? `PID ${process.pid} (` : "another process"
       }`,
     )
+    if (lsof) expect(await Bun.file(path.join(root, "inherited-state")).text()).toBe(path.join(root, "state"))
     expect(await Bun.file(registration).json()).toEqual(stale)
   } finally {
     contender.kill("SIGTERM")
