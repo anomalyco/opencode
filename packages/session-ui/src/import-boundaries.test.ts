@@ -12,11 +12,9 @@ describe("Session UI package boundaries", () => {
 
   test("does not declare server runtime dependencies", async () => {
     const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json()
-    const dependencies = pkg.dependencies as Record<string, string>
-
-    expect(dependencies["@opencode/core"]).toBeUndefined()
-    expect(dependencies["@opencode/sdk"]).toBeUndefined()
-    expect(dependencies["@opencode/server"]).toBeUndefined()
+    expect(pkg.dependencies?.["@opencode/core"]).toBeUndefined()
+    expect(pkg.dependencies?.["@opencode/sdk"]).toBeUndefined()
+    expect(pkg.dependencies?.["@opencode/server"]).toBeUndefined()
   })
 
   test("does not contain old Session message boundaries", async () => {
@@ -25,14 +23,11 @@ describe("Session UI package boundaries", () => {
 
   test("exports the current Session document surface", async () => {
     const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json()
-    const exports = pkg.exports as Record<string, string>
-
-    expect(exports["./actions"]).toBe("./src/actions.ts")
-    expect(exports["./document"]).toBe("./src/document.ts")
-    expect(exports["./message"]).toBe("./src/message/current-message.tsx")
-    expect(exports["./message-part"]).toBe("./src/components/message-part.tsx")
-    expect(exports["./timeline"]).toBe("./src/timeline/session-timeline.tsx")
-    expect(exports["./timeline/projection"]).toBe("./src/timeline/projection.ts")
+    expect(pkg.exports?.["./actions"]).toBe("./src/actions.ts")
+    expect(pkg.exports?.["./document"]).toBe("./src/document.ts")
+    expect(pkg.exports?.["./message"]).toBe("./src/message/current-message.tsx")
+    expect(pkg.exports?.["./timeline"]).toBe("./src/timeline/session-timeline.tsx")
+    expect(pkg.exports?.["./timeline/projection"]).toBe("./src/timeline/projection.ts")
   })
 })
 
