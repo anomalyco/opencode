@@ -7,7 +7,6 @@ import type { Session } from "@opencode/schema/session"
 import type { AbsolutePath } from "@opencode/schema/schema"
 import type { Project } from "@opencode/schema/project"
 import type { RelativePath } from "@opencode/schema/schema"
-import type { SessionsCursor } from "@opencode/protocol/groups/session"
 import type { Money } from "@opencode/schema/money"
 import type { Model } from "@opencode/schema/model"
 import type { DateTime } from "effect"
@@ -26,21 +25,22 @@ import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
-import type { Provider } from "@opencode/schema/provider"
 import type { Form } from "@opencode/schema/form"
+import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
+import type { PtyTicket } from "@opencode/schema/pty-ticket"
 import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
-import type { PtyTicket } from "@opencode/schema/pty-ticket"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
 import type { Vcs } from "@opencode/schema/vcs"
 import type { WebSearch } from "@opencode/schema/websearch"
+import type { UsageLimits } from "@opencode/schema/usage-limits"
 import type { Config } from "@opencode/schema/config"
 
 export type ServerInfoOutput = {
@@ -122,14 +122,18 @@ export type SessionListInput = {
   readonly order?: "asc" | "desc" | undefined
   readonly search?: string | undefined
   readonly parentID?: Session.ID | null | undefined
+  readonly archived?: boolean | undefined
   readonly directory?: AbsolutePath | undefined
   readonly project?: Project.ID | undefined
   readonly subpath?: RelativePath | undefined
-  readonly cursor?: SessionsCursor | undefined
+  readonly cursor?: Session.ListCursor | undefined
 }
 export type SessionListOutput = {
   readonly data: ReadonlyArray<Session.Info>
-  readonly cursor: { readonly previous?: SessionsCursor | undefined; readonly next?: SessionsCursor | undefined }
+  readonly cursor: {
+    readonly previous?: Session.ListCursor | undefined
+    readonly next?: Session.ListCursor | undefined
+  }
 }
 export type SessionListOperation<E = never> = (input?: SessionListInput) => Effect.Effect<SessionListOutput, E>
 
@@ -255,6 +259,7 @@ export type SessionUpdateInput = {
   readonly title?: string | undefined
   readonly metadata?: Session.Metadata | undefined
   readonly permissions?: Permission.Ruleset | undefined
+  readonly archived?: boolean | undefined
 }
 export type SessionUpdateOutput = void
 export type SessionUpdateOperation<E = never> = (input: SessionUpdateInput) => Effect.Effect<SessionUpdateOutput, E>
@@ -545,6 +550,28 @@ export type SessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.archived"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.unarchived"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.deleted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
@@ -659,6 +686,7 @@ export type SessionLogOutput =
               readonly message: string
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
+              readonly retryAfterMs?: number | undefined
             }
           }
         }
@@ -797,7 +825,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
             readonly rawFinish?: string | undefined
-            readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
             readonly cost: Money.USD
             readonly tokens: {
               readonly input: number
@@ -826,10 +854,11 @@ export type SessionLogOutput =
               readonly message: string
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
+              readonly retryAfterMs?: number | undefined
             }
             readonly finish?: "content-filter" | undefined
             readonly rawFinish?: string | undefined
-            readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
             readonly cost?: Money.USD | undefined
             readonly tokens?:
               | {
@@ -872,7 +901,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
             readonly text: string
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
           }
         }
       | {
@@ -888,7 +917,7 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
           }
         }
       | {
@@ -905,7 +934,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
             readonly text: string
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
           }
         }
       | {
@@ -955,7 +984,7 @@ export type SessionLogOutput =
             readonly id: string
             readonly input: { readonly [x: string]: unknown }
             readonly executed: boolean
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
           }
         }
       | {
@@ -993,7 +1022,7 @@ export type SessionLogOutput =
             ]
             readonly metadata?: { readonly [x: string]: Schema.Json } | undefined
             readonly executed: boolean
-            readonly resultState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
           }
         }
       | {
@@ -1014,6 +1043,7 @@ export type SessionLogOutput =
               readonly message: string
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
+              readonly retryAfterMs?: number | undefined
             }
             readonly content?:
               | readonly [
@@ -1039,7 +1069,7 @@ export type SessionLogOutput =
               | undefined
             readonly metadata?: { readonly [x: string]: Schema.Json } | undefined
             readonly executed: boolean
-            readonly resultState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.Native | undefined
           }
         }
       | {
@@ -1061,6 +1091,7 @@ export type SessionLogOutput =
               readonly message: string
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
+              readonly retryAfterMs?: number | undefined
             }
           }
         }
@@ -1076,7 +1107,6 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
-            readonly recent: string
             readonly inputID?: SessionMessage.ID | undefined
           }
         }
@@ -1093,23 +1123,8 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
             readonly model?: Model.Ref | undefined
-            readonly providerState?: SessionMessage.ProviderState | undefined
-            readonly providerContext?:
-              | {
-                  readonly version: 1
-                  readonly provenance: {
-                    readonly providerID: Provider.ID
-                    readonly provider: string
-                    readonly modelID: string
-                    readonly route: string
-                    readonly protocol: string
-                    readonly endpoint: string
-                  }
-                  readonly messages: Schema.Json
-                }
-              | undefined
+            readonly native?: SessionMessage.Native | undefined
             readonly text: string
-            readonly recent: string
             readonly cost?: Money.USD | undefined
             readonly tokens?:
               | {
@@ -1138,6 +1153,7 @@ export type SessionLogOutput =
               readonly message: string
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
+              readonly retryAfterMs?: number | undefined
             }
             readonly inputID?: SessionMessage.ID | undefined
             readonly cost?: Money.USD | undefined
@@ -1369,6 +1385,7 @@ export type MessageListInput = {
     | "shell"
     | "assistant"
     | "compaction"
+    | "idle"
     | undefined
 }
 export type MessageListOutput = {
@@ -1400,6 +1417,36 @@ export type GenerateTextOperation<E = never> = (input: GenerateTextInput) => Eff
 
 export interface GenerateApi<E = never> {
   readonly text: GenerateTextOperation<E>
+}
+
+export type VoiceModelsOutput = {
+  readonly models: ReadonlyArray<{
+    readonly model: string
+    readonly provider: string
+    readonly transports: ReadonlyArray<"webrtc" | "websocket">
+    readonly available: boolean
+  }>
+  readonly default?: string | undefined
+}
+export type VoiceModelsOperation<E = never> = () => Effect.Effect<VoiceModelsOutput, E>
+
+export type VoiceSessionInput = {
+  readonly model: string
+  readonly session?: { readonly [x: string]: unknown } | undefined
+  readonly transport:
+    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
+    | { readonly type: "websocket" }
+}
+export type VoiceSessionOutput = {
+  readonly transport:
+    | { readonly type: "webrtc"; readonly sdp: string }
+    | { readonly type: "websocket"; readonly url: string; readonly token: string; readonly expiresAt: number }
+}
+export type VoiceSessionOperation<E = never> = (input: VoiceSessionInput) => Effect.Effect<VoiceSessionOutput, E>
+
+export interface VoiceApi<E = never> {
+  readonly models: VoiceModelsOperation<E>
+  readonly session: VoiceSessionOperation<E>
 }
 
 export type ProviderListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -1613,6 +1660,14 @@ export type McpResourceCatalogOperation<E = never> = (
   input?: McpResourceCatalogInput,
 ) => Effect.Effect<McpResourceCatalogOutput, E>
 
+export type McpClientTokenInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly name: string
+  readonly "x-opencode-ticket"?: string | undefined
+}
+export type McpClientTokenOutput = { readonly location: Location.PublicRef; readonly data: PtyTicket.ConnectToken }
+export type McpClientTokenOperation<E = never> = (input: McpClientTokenInput) => Effect.Effect<McpClientTokenOutput, E>
+
 export interface McpApi<E = never> {
   readonly list: McpListOperation<E>
   readonly add: McpAddOperation<E>
@@ -1620,6 +1675,7 @@ export interface McpApi<E = never> {
   readonly connect: McpConnectOperation<E>
   readonly disconnect: McpDisconnectOperation<E>
   readonly resource: { readonly catalog: McpResourceCatalogOperation<E> }
+  readonly client: { readonly token: McpClientTokenOperation<E> }
 }
 
 export type CredentialListOutput = ReadonlyArray<Credential.Entry>
@@ -1663,8 +1719,9 @@ export interface CredentialApi<E = never> {
   readonly remove: CredentialRemoveOperation<E>
 }
 
+export type ProjectListInput = { readonly archived?: boolean | undefined }
 export type ProjectListOutput = ReadonlyArray<Project.Info>
-export type ProjectListOperation<E = never> = () => Effect.Effect<ProjectListOutput, E>
+export type ProjectListOperation<E = never> = (input?: ProjectListInput) => Effect.Effect<ProjectListOutput, E>
 
 export type ProjectUpdateInput = {
   readonly projectID: Project.ID
@@ -1703,6 +1760,16 @@ export type PermissionSavedListOutput = ReadonlyArray<PermissionSaved.Info>
 export type PermissionSavedListOperation<E = never> = (
   input?: PermissionSavedListInput,
 ) => Effect.Effect<PermissionSavedListOutput, E>
+
+export type PermissionSavedUpdateInput = {
+  readonly id: PermissionSaved.ID
+  readonly action?: string | undefined
+  readonly resource?: string | undefined
+}
+export type PermissionSavedUpdateOutput = PermissionSaved.Info
+export type PermissionSavedUpdateOperation<E = never> = (
+  input: PermissionSavedUpdateInput,
+) => Effect.Effect<PermissionSavedUpdateOutput, E>
 
 export type PermissionSavedRemoveInput = { readonly id: PermissionSaved.ID }
 export type PermissionSavedRemoveOutput = void
@@ -1746,7 +1813,11 @@ export type PermissionReplyOperation<E = never> = (
 
 export interface PermissionApi<E = never> {
   readonly request: { readonly list: PermissionRequestListOperation<E> }
-  readonly saved: { readonly list: PermissionSavedListOperation<E>; readonly remove: PermissionSavedRemoveOperation<E> }
+  readonly saved: {
+    readonly list: PermissionSavedListOperation<E>
+    readonly update: PermissionSavedUpdateOperation<E>
+    readonly remove: PermissionSavedRemoveOperation<E>
+  }
   readonly create: PermissionCreateOperation<E>
   readonly list: PermissionListOperation<E>
   readonly get: PermissionGetOperation<E>
@@ -2189,6 +2260,20 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
+export type DebugHeapDumpInput = { readonly directory?: string | undefined }
+export type DebugHeapDumpOutput = {
+  readonly path: string
+  readonly pid: number
+  readonly memory: {
+    readonly rss: number
+    readonly heapTotal: number
+    readonly heapUsed: number
+    readonly external: number
+    readonly arrayBuffers: number
+  }
+}
+export type DebugHeapDumpOperation<E = never> = (input?: DebugHeapDumpInput) => Effect.Effect<DebugHeapDumpOutput, E>
+
 export type DebugLocationListOutput = ReadonlyArray<Location.PublicRef>
 export type DebugLocationListOperation<E = never> = () => Effect.Effect<DebugLocationListOutput, E>
 
@@ -2199,6 +2284,7 @@ export type DebugLocationEvictOperation<E = never> = (
 ) => Effect.Effect<DebugLocationEvictOutput, E>
 
 export interface DebugApi<E = never> {
+  readonly heapDump: DebugHeapDumpOperation<E>
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
@@ -2241,6 +2327,14 @@ export interface WebsearchApi<E = never> {
   readonly query: WebsearchQueryOperation<E>
 }
 
+export type UsageLimitsInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type UsageLimitsOutput = { readonly location: Location.PublicRef; readonly data: UsageLimits.Info | null }
+export type UsageLimitsOperation<E = never> = (input?: UsageLimitsInput) => Effect.Effect<UsageLimitsOutput, E>
+
+export interface UsageApi<E = never> {
+  readonly limits: UsageLimitsOperation<E>
+}
+
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type ConfigGetOutput = ReadonlyArray<Config.Entry>
 export type ConfigGetOperation<E = never> = (input?: ConfigGetInput) => Effect.Effect<ConfigGetOutput, E>
@@ -2271,6 +2365,7 @@ export interface AppApi<E = never> {
   readonly message: MessageApi<E>
   readonly model: ModelApi<E>
   readonly generate: GenerateApi<E>
+  readonly voice: VoiceApi<E>
   readonly provider: ProviderApi<E>
   readonly integration: IntegrationApi<E>
   readonly mcp: McpApi<E>
@@ -2292,5 +2387,6 @@ export interface AppApi<E = never> {
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
+  readonly usage: UsageApi<E>
   readonly config: ConfigApi<E>
 }

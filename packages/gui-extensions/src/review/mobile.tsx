@@ -44,17 +44,6 @@ function SessionReviewTab(props: {
   const review = props.review
   const state: ScrollState = { userInteracted: false }
 
-  const readFile = async (path: string) => {
-    return props.session.server.client.file
-      .read({ path, location: { directory: props.review.screen.file.root } })
-      .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
-      .catch((error) => {
-        console.debug("[session-review] failed to read file", { path, error })
-
-        return undefined
-      })
-  }
-
   const handleInteraction = () => {
     state.userInteracted = true
 
@@ -165,7 +154,7 @@ function SessionReviewTab(props: {
       disableLineNumbers={false}
       onViewFile={props.onViewFile}
       focusedFile={review.activeFile()}
-      readFile={readFile}
+      readFile={review.readFile}
       onLineComment={review.comments.add}
       onLineCommentUpdate={review.comments.update}
       onLineCommentDelete={review.comments.remove}

@@ -32,27 +32,6 @@ OpenCode er open source og gemmer ingen af ​​din kode eller kontekstdata, s�
 Det betyder, at så længe du bruger en udbyder, du stoler på, eller en intern
 AI-gateway, du kan bruge OpenCode sikkert.
 
-Den eneste advarsel her er den valgfrie `/share`-funktion.
-
----
-
-#### Deling af samtaler
-
-Hvis en bruger aktiverer funktionen `/share`, sender samtalen og de data, der er knyttet til den, til den tjeneste, vi bruger til at hoste disse delesider på opencode.ai.
-
-Dataene serveres i øjeblikket gennem vores CDN's edge-netværk og cachelagres på kanten nær dine brugere.
-
-Vi anbefaler, at du deaktiverer dette for din prøveperiode.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "disabled"
-}
-```
-
-[Learn more about sharing](/docs/share).
-
 ---
 
 ### Kodeejerskab

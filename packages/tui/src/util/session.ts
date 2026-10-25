@@ -1,4 +1,5 @@
-import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
+import type { ModelInfo, SessionMessageInfo } from "@opencode/client"
+import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { Locale } from "./locale"
 
 type SessionNode = {
@@ -40,19 +41,6 @@ export function sessionFamily<T extends SessionNode>(sessions: readonly T[], ses
   }
 
   return walk(root(current).id, [])
-}
-
-export function lastAssistantWithUsage(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string) {
-  const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
-  if (boundary && boundaryIndex === -1) return undefined
-  const end = boundaryIndex === -1 ? messages.length : boundaryIndex
-  const compactionIndex = messages.findLastIndex(
-    (message, index) => message.type === "compaction" && message.status === "completed" && index < end,
-  )
-  return messages.findLast(
-    (message, index): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } =>
-      message.type === "assistant" && message.tokens !== undefined && index > compactionIndex && index < end,
-  )
 }
 
 export function contextUsage(

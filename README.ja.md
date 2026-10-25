@@ -10,7 +10,7 @@
 <p align="center">オープンソースのAIコーディングエージェント。</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
   <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
@@ -47,18 +47,16 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/v2/install | bash
 
 # パッケージマネージャー
-npm i -g opencode-ai@latest        # bun/pnpm/yarn でもOK
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS と Linux（推奨。常に最新）
+npm i -g @opencode/cli@latest      # bun/pnpm/yarn でもOK
+brew install anomalyco/tap/opencode-v2 # macOS と Linux（推奨。常に最新）
 brew install opencode              # macOS と Linux（公式 brew formula。更新頻度は低め）
 sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+paru -S opencode-beta              # Arch Linux (Latest from AUR)
 mise use -g opencode               # どのOSでも
-nix run nixpkgs#opencode           # または github:anomalyco/opencode で最新 dev ブランチ
+nix run github:anomalyco/opencode  # Nix
 ```
 
 > [!TIP]
@@ -66,36 +64,23 @@ nix run nixpkgs#opencode           # または github:anomalyco/opencode で最�
 
 ### デスクトップアプリ (BETA)
 
-OpenCode はデスクトップアプリとしても利用できます。[releases page](https://github.com/anomalyco/opencode/releases) から直接ダウンロードするか、[opencode.ai/download](https://opencode.ai/download) を利用してください。
+OpenCode はデスクトップアプリとしても利用できます。[opencode.ai/download](https://opencode.ai/download) からダウンロードしてください。
 
 | プラットフォーム      | ダウンロード                       |
 | --------------------- | ---------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
+| Windows               | `opencode-desktop-win-x64.exe`     |
 | Linux                 | `.deb`、`.rpm`、または AppImage    |
 
 ```bash
 # macOS (Homebrew)
 brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
 #### インストールディレクトリ
 
-インストールスクリプトは、インストール先パスを次の優先順位で決定します。
-
-1. `$OPENCODE_INSTALL_DIR` - カスタムのインストールディレクトリ
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification に準拠したパス
-3. `$HOME/bin` - 標準のユーザー用バイナリディレクトリ（存在する場合、または作成できる場合）
-4. `$HOME/.opencode/bin` - デフォルトのフォールバック
-
-```bash
-# 例
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+インストールスクリプトは、OpenCode を `$HOME/.opencode/bin` にインストールします。
 
 ### Agents
 
@@ -110,11 +95,11 @@ OpenCode には組み込みの Agent が2つあり、`Tab` キーで切り替え
 また、複雑な検索やマルチステップのタスク向けに **general** サブ Agent も含まれています。
 内部的に使用されており、メッセージで `@general` と入力して呼び出せます。
 
-[agents](https://opencode.ai/docs/agents) の詳細はこちら。
+[agents](https://opencode.ai/v2/docs/agents) の詳細はこちら。
 
 ### ドキュメント
 
-OpenCode の設定については [**ドキュメント**](https://opencode.ai/docs) を参照してください。
+OpenCode の設定については [**ドキュメント**](https://opencode.ai/v2/docs) を参照してください。
 
 ### コントリビュート
 

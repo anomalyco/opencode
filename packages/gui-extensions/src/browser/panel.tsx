@@ -384,6 +384,11 @@ export default function SessionBrowserPane(props: {
 
         if (tab) command({ type: "reload", tabID: tab.id })
       },
+      close: () => {
+        const tab = state()
+
+        if (tab) props.model.closeTab(props.session, tab.id)
+      },
       inspectable,
       inspect: toggleInspect,
       focusAddress,

@@ -62,6 +62,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused command.transform"),
       reload: () => Effect.die("unused command.reload"),
     },
+    credential: overrides.credential ?? {
+      activate: () => Effect.die("unused credential.activate"),
+    },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
@@ -109,6 +112,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       list: () => Effect.die("unused permission.list"),
       get: () => Effect.die("unused permission.get"),
       reply: () => Effect.die("unused permission.reply"),
+      assert: () => Effect.die("unused permission.assert"),
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
@@ -165,6 +169,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     session: {
       hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
+      list: overrides.session?.list ?? (() => Effect.die("unused session.list")),
       create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
       get: overrides.session?.get ?? (() => Effect.die("unused session.get")),
       remove: overrides.session?.remove ?? (() => Effect.die("unused session.remove")),

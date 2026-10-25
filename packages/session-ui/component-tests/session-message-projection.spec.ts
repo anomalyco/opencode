@@ -6,6 +6,7 @@ story("keeps a manually collapsed tool collapsed when later assistant content st
   const tool = timeline.locator('[data-timeline-part-id="tool_edit_status"]')
   const trigger = tool.locator('[data-scope="apply-patch"] button')
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
+  // SAFETY: the locator targets a rendered DOM element, which is always an HTMLElement in the story.
   await tool.evaluate((element) => ((element as HTMLElement).dataset.regressionMarker = "before-stream"))
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
@@ -39,13 +40,31 @@ story("renders aliased and long custom model notices", async ({ mount, page }) =
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "models" } })
   const shortName = "GPT-5.4 nano"
   const longName = "Company Gateway Extra Long Context Model for Narrow Timeline Layouts"
-  const short = timeline.locator('[data-slot="session-timeline-notice"]').filter({ hasText: shortName })
+
+  const short = timeline
+    .locator('[data-slot="session-timeline-notice"]')
+    .filter({ hasText: shortName })
+    .filter({ hasText: "xhigh" })
+
   const long = timeline.locator('[data-slot="session-timeline-notice"]').filter({ hasText: longName })
   await expect(short).toBeVisible()
   await expect(short.getByText(`Switched to ${shortName}`, { exact: true })).toBeVisible()
   await expect(short.locator('[data-slot="session-timeline-notice-variant"]')).toHaveText("xhigh")
   await expect(timeline.getByText("fast-nano", { exact: true })).toHaveCount(0)
   await expect(short.locator('[data-component="provider-icon"]')).toBeVisible()
+
+  const variantDefault = timeline
+    .locator('[data-slot="session-timeline-notice"]')
+    .filter({ hasText: "Switched variant to Default" })
+
+  const variantHigh = timeline
+    .locator('[data-slot="session-timeline-notice"]')
+    .filter({ hasText: "Switched variant to high" })
+
+  await expect(variantDefault.getByText("Switched variant to Default", { exact: true })).toBeVisible()
+  await expect(variantHigh.getByText("Switched variant to high", { exact: true })).toBeVisible()
+  await expect(variantDefault.locator('[data-slot="session-timeline-notice-variant"]')).toHaveCount(0)
+  await expect(variantHigh.locator('[data-slot="session-timeline-notice-variant"]')).toHaveCount(0)
   await expect(long).toBeVisible()
   await expect(long.locator('[data-component="provider-icon"]')).toBeVisible()
   await expect(long.locator('[data-slot="session-timeline-notice-variant"]')).toHaveCount(0)
@@ -60,4 +79,11 @@ story("renders user image, file attachment, file reference, and agent reference"
   await expect(timeline.getByText("tsconfig.json")).toBeVisible()
   await expect(timeline.getByText("@src/a.ts", { exact: true })).toBeVisible()
   await expect(timeline.getByText("@explore", { exact: true })).toBeVisible()
+
+  const attachments = timeline.locator('[data-slot="user-message-attachments"]')
+  const body = timeline.locator('[data-slot="user-message-body"]')
+  const [attachmentsBox, bodyBox] = await Promise.all([attachments.boundingBox(), body.boundingBox()])
+  expect(attachmentsBox).not.toBeNull()
+  expect(bodyBox).not.toBeNull()
+  expect(bodyBox!.y - (attachmentsBox!.y + attachmentsBox!.height)).toBe(8)
 })

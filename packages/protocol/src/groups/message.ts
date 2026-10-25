@@ -5,6 +5,21 @@ import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors.js"
 
+// Keyed by message type so a new message type cannot be left out of the filter.
+const MessageTypes = {
+  "agent-switched": true,
+  "model-switched": true,
+  "location-switched": true,
+  user: true,
+  synthetic: true,
+  system: true,
+  skill: true,
+  shell: true,
+  assistant: true,
+  compaction: true,
+  idle: true,
+} satisfies Record<SessionMessage.Type, true>
+
 export const SessionMessagesQuery = Schema.Struct({
   limit: Schema.optional(
     Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
@@ -20,20 +35,7 @@ export const SessionMessagesQuery = Schema.Struct({
         "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
     }),
   ),
-  type: Schema.optional(
-    Schema.Literals([
-      "agent-switched",
-      "model-switched",
-      "location-switched",
-      "user",
-      "synthetic",
-      "system",
-      "skill",
-      "shell",
-      "assistant",
-      "compaction",
-    ] satisfies ReadonlyArray<SessionMessage.Type>),
-  ).annotate({
+  type: Schema.optional(Schema.Literals(Object.keys(MessageTypes) as ReadonlyArray<SessionMessage.Type>)).annotate({
     description:
       "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors.",
   }),

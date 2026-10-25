@@ -3,8 +3,6 @@ export * as ConfigCommandPlugin from "./command.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Info, type Entry } from "@opencode/schema/config"
 import { ConfigCommand } from "@opencode/schema/config/command"
-import { Model } from "@opencode/schema/model"
-import { Provider } from "@opencode/schema/provider"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
 import { Effect, Option, PubSub, Schema, Stream } from "effect"
@@ -84,11 +82,9 @@ export const Plugin = define({
                   command.model === undefined
                     ? commandAgent?.model
                     : {
-                        id: Model.ID.make(command.model.model),
-                        providerID: Provider.ID.make(command.model.providerID),
-                        ...(command.model.variant === undefined
-                          ? {}
-                          : { variant: Model.VariantID.make(command.model.variant) }),
+                        id: command.model.model,
+                        providerID: command.model.providerID,
+                        ...(command.model.variant === undefined ? {} : { variant: command.model.variant }),
                       }
                 const text = yield* evaluateTemplate(command.template, input.prompt.text, {
                   location,

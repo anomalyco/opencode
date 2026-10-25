@@ -101,6 +101,35 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const still = root.locator("#browser-panel img")
+  const native = root.getByTestId("native-Alpha")
+  const toggle = root.getByRole("button", { name: "Toggle dialog", exact: true })
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+
+  // Read in the same task as the click: the page must not hide before its still exists.
+  const visible = await toggle.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+    return document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+  })
+
+  expect(visible).toBe("true")
+  await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Release capture", exact: true }).click()
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(still).toBeVisible()
+
+  await toggle.click()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+  await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+})
+
 story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Read and update Console account identity on Leads and Contacts.</description>
+    <fieldPermissions><editable>true</editable><field>Lead.Has_Console_Account__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Lead.Console_Account_ID__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Lead.Console_Signup_Date__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Contact.Has_Console_Account__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Contact.Console_Account_ID__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Contact.Console_Signup_Date__c</field><readable>true</readable></fieldPermissions>
+    <label>Console Account Sync</label>
+</PermissionSet>

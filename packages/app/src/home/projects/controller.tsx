@@ -15,7 +15,6 @@ import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
-import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { useRevealProject } from "./reveal"
 
 export const HomeServersSchema = Schema.Struct({
@@ -121,15 +120,15 @@ export function createHomeProjectsController(home: HomeController) {
               extensions: ["json"],
             },
             async (file) => {
-              const data = await Schema.decodeUnknownPromise(Schema.fromJsonString(SessionTransfer.Data))(
-                await file.text(),
-              )
+              const data = await Schema.decodeUnknownPromise(
+                Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+              )(await file.text())
 
               const api = home.server.context(conn).sdk.api.session
 
-              // SAFETY: the payload is SessionTransfer.Data's own encoding, which the import endpoint decodes and validates.
+              // SAFETY: the import endpoint validates the transcript, including exports written by earlier releases.
               const imported = await api.import({
-                ...Schema.encodeSync(SessionTransfer.Data)(data),
+                ...data,
                 location: { directory: project.worktree },
               } as Parameters<typeof api.import>[0])
 
@@ -149,16 +148,14 @@ export function createHomeProjectsController(home: HomeController) {
           project: project.worktree,
         })
       },
-      unseenCount: (conn: ServerConnection.Any, project: LocalProject) => {
+      hasUnread: (conn: ServerConnection.Any, project: LocalProject) => {
         const notification = global.ensureServerCtx(conn).notification
 
-        return directories(project).reduce((total, directory) => total + notification.project.unseenCount(directory), 0)
+        return directories(project).some((directory) => notification.project.hasUnread(directory))
       },
       clearNotifications: (conn: ServerConnection.Any, project: LocalProject) => {
         const notification = global.ensureServerCtx(conn).notification
-        directories(project)
-          .filter((directory) => notification.project.unseenCount(directory) > 0)
-          .forEach((directory) => notification.project.markViewed(directory))
+        directories(project).forEach((directory) => notification.project.markViewed(directory))
       },
       choose: (conn: ServerConnection.Any) => {
         if (authenticate(conn, (next) => choose(next))) return

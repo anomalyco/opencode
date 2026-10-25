@@ -1,60 +1,20 @@
 import "./index.css"
 import { Meta, Title } from "@solidjs/meta"
 import { A } from "@solidjs/router"
-import { createSignal, type JSX, onMount, Show } from "solid-js"
 import { Faq } from "~/component/faq"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { IconCheck, IconCopy } from "~/component/icon"
 import { Legal } from "~/component/legal"
 import { LocaleLinks } from "~/component/locale-links"
+import { SocialMeta } from "~/component/social-meta"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import desktopTabsVideo from "../../asset/lander/desktop-tabs-landscape.mp4"
 import type { DownloadPlatform } from "./types"
-
-type OS = "macOS" | "Windows" | "Linux" | null
-
-function detectOS(): OS {
-  if (typeof navigator === "undefined") return null
-  const platform = navigator.platform.toLowerCase()
-  const userAgent = navigator.userAgent.toLowerCase()
-
-  if (platform.includes("mac") || userAgent.includes("mac")) return "macOS"
-  if (platform.includes("win") || userAgent.includes("win")) return "Windows"
-  if (platform.includes("linux") || userAgent.includes("linux")) return "Linux"
-  return null
-}
-
-function getDownloadPlatform(os: OS): DownloadPlatform {
-  switch (os) {
-    case "macOS":
-      return "darwin-aarch64-dmg"
-    case "Windows":
-      return "windows-x64-nsis"
-    case "Linux":
-      return "linux-x64-deb"
-    default:
-      return "darwin-aarch64-dmg"
-  }
-}
 
 function getDownloadHref(platform: DownloadPlatform, channel: "stable" | "beta" = "stable") {
   return `/download/${channel}/${platform}`
-}
-
-function IconDownload(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-      <path
-        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="square"
-      />
-    </svg>
-  )
 }
 
 function CopyStatus() {
@@ -69,12 +29,6 @@ function CopyStatus() {
 export default function Download() {
   const i18n = useI18n()
   const language = useLanguage()
-  const [detectedOS, setDetectedOS] = createSignal<OS>(null)
-
-  onMount(() => {
-    setDetectedOS(detectOS())
-  })
-
   const handleCopyClick = (command: string) => (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     void navigator.clipboard.writeText(command)
@@ -88,31 +42,11 @@ export default function Download() {
       <Title>{i18n.t("download.title")}</Title>
       <LocaleLinks path="/download" />
       <Meta name="description" content={i18n.t("download.meta.description")} />
+      <SocialMeta title={i18n.t("download.title")} description={i18n.t("download.meta.description")} path="/download" />
       <div data-component="container">
         <Header hideGetStarted />
 
         <div data-component="content">
-          <section data-component="download-hero">
-            <div data-component="hero-video">
-              <video src={desktopTabsVideo} autoplay playsinline loop muted preload="metadata" aria-hidden="true" />
-            </div>
-            <div data-component="hero-text">
-              <h1>{i18n.t("download.hero.title")}</h1>
-              <p>
-                {i18n.t("home.promo.body")} {i18n.t("home.promo.cta")}
-              </p>
-              <Show when={detectedOS()}>
-                <a
-                  href={language.route(getDownloadHref(getDownloadPlatform(detectedOS())))}
-                  data-component="download-button"
-                >
-                  <IconDownload />
-                  {i18n.t("download.hero.button", { os: detectedOS()! })}
-                </a>
-              </Show>
-            </div>
-          </section>
-
           <section data-component="download-section">
             <div data-component="section-label">
               <span>[1]</span> {i18n.t("download.section.terminal")}
@@ -120,34 +54,40 @@ export default function Download() {
             <div data-component="section-content">
               <button
                 data-component="cli-row"
-                onClick={handleCopyClick("curl -fsSL https://opencode.ai/install | bash")}
+                onClick={handleCopyClick("curl -fsSL https://opencode.ai/v2/install | bash")}
               >
                 <code>
-                  curl -fsSL https://<strong>opencode.ai/install</strong> | bash
+                  curl -fsSL https://<strong>opencode.ai/v2/install</strong> | bash
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("npm i -g opencode-ai")}>
+              <button data-component="cli-row" onClick={handleCopyClick("npm install -g @opencode/cli")}>
                 <code>
-                  npm i -g <strong>opencode-ai</strong>
+                  npm install -g <strong>@opencode/cli</strong>
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("bun add -g opencode-ai")}>
+              <button data-component="cli-row" onClick={handleCopyClick("bun install -g --trust @opencode/cli")}>
                 <code>
-                  bun add -g <strong>opencode-ai</strong>
+                  bun install -g --trust <strong>@opencode/cli</strong>
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("brew install anomalyco/tap/opencode")}>
+              <button data-component="cli-row" onClick={handleCopyClick("brew install anomalyco/tap/opencode-v2")}>
                 <code>
-                  brew install <strong>anomalyco/tap/opencode</strong>
+                  brew install <strong>anomalyco/tap/opencode-v2</strong>
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("paru -S opencode")}>
+              <button data-component="cli-row" onClick={handleCopyClick("paru -S opencode-beta")}>
                 <code>
-                  paru -S <strong>opencode</strong>
+                  paru -S <strong>opencode-beta</strong>
+                </code>
+                <CopyStatus />
+              </button>
+              <button data-component="cli-row" onClick={handleCopyClick("yay -S opencode-beta")}>
+                <code>
+                  yay -S <strong>opencode-beta</strong>
                 </code>
                 <CopyStatus />
               </button>
@@ -217,6 +157,29 @@ export default function Download() {
                   <span>{i18n.t("download.platform.windowsX64")}</span>
                 </div>
                 <a href={language.route(getDownloadHref("windows-x64-nsis"))} data-component="action-button">
+                  {i18n.t("download.action.download")}
+                </a>
+              </div>
+              <div data-component="download-row">
+                <div data-component="download-info">
+                  <span data-slot="icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <g clip-path="url(#clip0_windows_arm64)">
+                        <path
+                          d="M2 2H11.481V11.4769H2V2ZM12.519 2H22V11.4769H12.519V2ZM2 12.519H11.481V22H2V12.519ZM12.519 12.519H22V22H12.519"
+                          fill="currentColor"
+                        />
+                      </g>
+                      <defs>
+                        <clipPath id="clip0_windows_arm64">
+                          <rect width="20" height="20" fill="white" transform="translate(2 2)" />
+                        </clipPath>
+                      </defs>
+                    </svg>
+                  </span>
+                  <span>{i18n.t("download.platform.windowsArm64")}</span>
+                </div>
+                <a href={language.route(getDownloadHref("windows-aarch64-nsis"))} data-component="action-button">
                   {i18n.t("download.action.download")}
                 </a>
               </div>
@@ -460,8 +423,8 @@ export default function Download() {
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q7")}>
-                {i18n.t("download.faq.a6.p1")} {i18n.t("download.faq.a6.p2.beforeShare")}{" "}
-                <a href={language.route("/docs/share/#privacy")}>{i18n.t("download.faq.a6.shareLink")}</a>.
+                {i18n.t("home.faq.a7.p1")} {i18n.t("home.faq.a7.p2.beforeModels")}{" "}
+                <a href="/v2/docs/console/models/#privacy">{i18n.t("home.faq.a7.p2.modelsLink")}</a>.
               </Faq>
             </li>
             <li>

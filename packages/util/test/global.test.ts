@@ -19,7 +19,9 @@ describe("global", () => {
         XDG_CACHE_HOME: directories[1],
         XDG_CONFIG_HOME: directories[2],
         XDG_STATE_HOME: directories[3],
+        // os.tmpdir() reads TMPDIR on POSIX and TEMP on Windows.
         TMPDIR: directories[4],
+        TEMP: directories[4],
       },
       stderr: "pipe",
     })
@@ -70,14 +72,18 @@ describe("global", () => {
         XDG_CACHE_HOME: directories[1],
         XDG_CONFIG_HOME: directories[2],
         XDG_STATE_HOME: directories[3],
+        // os.tmpdir() reads TMPDIR on POSIX and TEMP on Windows.
         TMPDIR: directories[4],
+        TEMP: directories[4],
       },
       stdout: "pipe",
       stderr: "pipe",
     })
 
     expect(result.exitCode, result.stderr.toString()).toBe(0)
-    expect(result.stdout.toString()).toBe(fs.realpathSync(path.join(directories[4], "opencode")))
+    // The layer canonicalizes through the native realpath, which on Windows also expands 8.3 short
+    // names such as RUNNER~1 that the JavaScript realpathSync leaves in place.
+    expect(result.stdout.toString()).toBe(fs.realpathSync.native(path.join(directories[4], "opencode")))
     const created = [
       path.join(directories[0], "opencode"),
       path.join(directories[1], "opencode", "bin"),

@@ -45,7 +45,7 @@ describe("Skill", () => {
         new Document({
           type: "document",
           info: {
-            experimental: { policies: [{ action: "integration.use", resource: "skill:*", effect: "allow" }] },
+            policies: [{ action: "integration.use", resource: "skill:*", effect: "allow" }],
           },
         }),
       ])
@@ -82,12 +82,12 @@ describe("Skill", () => {
       yield* config.setEntries([
         new Document({
           type: "document",
-          info: { experimental: { policies: [{ action: "integration.use", resource: "skill:*", effect: "deny" }] } },
+          info: { policies: [{ action: "integration.use", resource: "skill:*", effect: "deny" }] },
         }),
         new Document({
           type: "document",
           info: {
-            experimental: { policies: [{ action: "integration.use", resource: "skill:review", effect: "allow" }] },
+            policies: [{ action: "integration.use", resource: "skill:review", effect: "allow" }],
           },
         }),
       ])

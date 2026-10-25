@@ -19,6 +19,7 @@ import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode/core/schema"
+import { initRepo } from "../fixture/git"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -267,12 +268,7 @@ function withTmp<A, E, R>(
         return { tmp, vcs: { type: "hg" as const, store: AbsolutePath.make(path.join(tmp.path, ".hg")) } }
       }
       if (options?.vcs !== "git") return { tmp, vcs: undefined }
-      await $`git init`.cwd(tmp.path).quiet()
-      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
-      await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
-      await $`git config user.email test@opencode.test`.cwd(tmp.path).quiet()
-      await $`git config user.name Test`.cwd(tmp.path).quiet()
-      await $`git commit --allow-empty -m root`.cwd(tmp.path).quiet()
+      await initRepo(tmp.path)
       await options.init?.(tmp.path)
       return { tmp, vcs: { type: "git" as const, store: AbsolutePath.make(path.join(tmp.path, ".git")) } }
     }),

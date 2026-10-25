@@ -1,17 +1,16 @@
-import { PairingHost, pairingClient, pairingServer } from "../../../storybook/.storybook/mocks/gui-extensions/pairing"
+import { PairingHost, pairingRemote } from "../../../storybook/.storybook/mocks/gui-extensions/pairing"
 import PairingPage from "./page"
 
-const story = (urls: readonly string[], links?: { custom?: string; selected?: string }, main = true) => ({
+const story = (remote: { enabled: boolean; fails?: boolean }, main = true) => ({
   render: () => {
-    const server = pairingServer(urls)
-    const client = pairingClient()
+    const mock = pairingRemote(remote)
 
     return (
-      <PairingHost links={links}>
+      <PairingHost>
         <PairingPage
-          server={() => server}
+          server={() => mock.server}
           pairing={() =>
-            main ? { status: "active", value: client, generation: 1 } : { status: "inactive", reason: "disabled" }
+            main ? { status: "active", value: mock.client, generation: 1 } : { status: "inactive", reason: "disabled" }
           }
         />
       </PairingHost>
@@ -25,26 +24,20 @@ export default {
   parameters: {
     docs: {
       description: {
-        component: "Settings → Pairing on desktop: the addresses a pairing link can use, and its QR code.",
+        component: "Settings → Pairing on desktop: pair a device from anywhere through remote access, and its QR code.",
       },
     },
   },
 }
 
-/** The server listens on the local network and on a VPN address. */
-export const NetworkAddresses = story([
-  "http://127.0.0.1:49374",
-  "http://192.168.10.248:49374",
-  "http://100.87.251.43:49374",
-])
+/** Remote access is on, so Pair device shows the QR code at once. */
+export const RemoteOn = story({ enabled: true })
 
-/** A saved custom address, such as a VPN, tunnel or reverse proxy URL, is offered first. */
-export const CustomAddress = story(["http://127.0.0.1:49374", "http://192.168.10.248:49374"], {
-  custom: "https://opencode.example.com",
-})
+/** The first pairing turns remote access on, then shows the QR code once the tunnel connects. */
+export const FirstPairing = story({ enabled: false })
 
-/** The default service only listens on this computer, so the page explains how to let other devices in. */
-export const OnlyThisComputer = story(["http://127.0.0.1:49374"])
+/** Remote access cannot be turned on, so the dialog offers to try again. */
+export const SetupFails = story({ enabled: false, fails: true })
 
-/** Pairing's main side is not running: the link still works from the server, and only the display setting is gone. */
-export const WithoutMainProcess = story(["http://127.0.0.1:49374", "http://192.168.10.248:49374"], undefined, false)
+/** Pairing's main side is not running, so remote access cannot be turned on and pairing is unavailable. */
+export const WithoutMainProcess = story({ enabled: false }, false)

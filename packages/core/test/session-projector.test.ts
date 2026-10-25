@@ -23,9 +23,12 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { fromRow } from "@opencode/core/session/info"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionStore } from "@opencode/core/session/store"
+import { SessionStored } from "@opencode/core/session/stored"
+import { SessionHistory } from "@opencode/core/session/history"
 import { Shell } from "@opencode/schema/shell"
 import {
   InstructionStateTable,
+  BlobTable,
   SessionInboxTable,
   SessionMessageTable,
   SessionTable,
@@ -202,8 +205,8 @@ describe("SessionProjector", () => {
         tokens_cache_read: 3,
         tokens_cache_write: 1,
       })
-      // A committed revert resets the fold cache so the next boundary establishes a new epoch.
-      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toBeUndefined()
+      // No instruction update followed the boundary, so the fold survives.
+      expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toMatchObject({ through_seq: 0 })
     }),
   )
 
@@ -336,7 +339,7 @@ describe("SessionProjector", () => {
 
   it.effect("projects durable context messages supported by the updater", () =>
     Effect.gen(function* () {
-      const db = yield* seedSession({ agent: "plan", model: previousModel })
+      const db = yield* seedSession({ agent: Agent.ID.make("plan"), model: previousModel })
       const bus = yield* Bus.Service
 
       yield* bus.publish(SessionEvent.AgentSelected, {
@@ -391,7 +394,6 @@ describe("SessionProjector", () => {
       yield* bus.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
-        recent: "recent context",
       })
       yield* bus.publish(SessionEvent.Compaction.Delta, {
         sessionID,
@@ -412,12 +414,11 @@ describe("SessionProjector", () => {
           .where(eq(SessionMessageTable.type, "compaction"))
           .all()
           .pipe(Effect.orDie),
-      ).toEqual([{ data: expect.objectContaining({ status: "running", summary: "", recent: "recent context" }) }])
+      ).toEqual([{ data: expect.objectContaining({ status: "running", summary: "" }) }])
       yield* bus.publish(SessionEvent.Compaction.Ended, {
         sessionID,
         reason: "manual",
         text: "summary",
-        recent: "recent context",
       })
 
       const rows = yield* db
@@ -455,10 +456,8 @@ describe("SessionProjector", () => {
         output: { output: "/project", truncated: false },
         time: { completed: DateTime.makeUnsafe(0) },
       })
-      expect(messages.find((message) => message.type === "compaction")).toMatchObject({
-        summary: "summary",
-        recent: "recent context",
-      })
+      expect(messages.find((message) => message.type === "compaction")).toMatchObject({ summary: "summary" })
+      expect(rows.find((row) => row.type === "compaction")?.data).not.toHaveProperty("recent")
       expect(
         yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie),
       ).toMatchObject({
@@ -639,6 +638,200 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("reads and replays native data stored under its pre-v2.1 names", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
+      const assistantID = SessionMessage.ID.make("msg_legacy_assistant")
+      const {
+        id: _,
+        type: __,
+        ...assistant
+      } = encodeMessage(
+        SessionMessage.Assistant.make({
+          id: assistantID,
+          type: "assistant",
+          agent: build,
+          model,
+          content: [],
+          time: { created },
+        }),
+      )
+      const legacyAssistant = {
+        ...assistant,
+        providerState: { step: "kept" },
+        content: [
+          { type: "text", text: "hi", state: { signature: "text" } },
+          { type: "reasoning", text: "thinking", state: { signature: "reasoning" } },
+          {
+            type: "tool",
+            id: "call",
+            name: "search",
+            executed: true,
+            providerState: { call: "kept" },
+            providerResultState: { result: "kept" },
+            state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }] },
+            time: { created: 0, ran: 0, completed: 0 },
+          },
+        ],
+      }
+      const legacyCompaction = {
+        status: "completed",
+        reason: "manual",
+        summary: "summary",
+        providerState: { compaction: "kept" },
+        time: { created: 0 },
+      }
+      yield* db.run(sql`
+        INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
+          (${assistantID}, ${sessionID}, 'assistant', 0, 0, 0, ${JSON.stringify(legacyAssistant)}),
+          ('msg_legacy_compaction', ${sessionID}, 'compaction', 1, 0, 0, ${JSON.stringify(legacyCompaction)})
+      `)
+      const stored = [
+        {
+          id: Event.ID.make("evt_legacy_0"),
+          type: "session.tool.called.1",
+          data: { id: "call", input: {}, executed: true, state: { call: "kept" } },
+        },
+        {
+          id: Event.ID.make("evt_legacy_1"),
+          type: "session.tool.success.2",
+          data: {
+            id: "call",
+            content: [{ type: "text", text: "done" }],
+            executed: true,
+            resultState: { result: "kept" },
+          },
+        },
+      ].map((event, seq) => ({
+        ...event,
+        seq,
+        created: 0,
+        aggregateID: sessionID,
+        data: { sessionID, assistantMessageID: assistantID, ...event.data },
+      }))
+      yield* db.run(sql`INSERT OR IGNORE INTO event_sequence (aggregate_id, seq) VALUES (${sessionID}, 1)`)
+      for (const event of stored)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, created, type, data) VALUES (${event.id}, ${sessionID}, ${event.seq}, 0, ${event.type}, ${JSON.stringify(event.data)})`,
+        )
+
+      const [readAssistant, readCompaction] = yield* store.messages({ sessionID, order: "asc" })
+      expect(readAssistant).toMatchObject({
+        native: { step: "kept" },
+        content: [
+          { type: "text", native: { signature: "text" } },
+          { type: "reasoning", native: { signature: "reasoning" } },
+          { type: "tool", native: { call: "kept", result: "kept" } },
+        ],
+      })
+      expect(readCompaction).toMatchObject({ native: { compaction: "kept" } })
+
+      expect(
+        (yield* Stream.runCollect(bus.log({ aggregateID: sessionID }))).filter((item) => !Bus.isSynced(item)),
+      ).toMatchObject([
+        { type: "session.tool.called", data: { native: { call: "kept" } } },
+        { type: "session.tool.success", data: { native: { result: "kept" } } },
+      ])
+
+      // Re-delivering an event that is already stored in its legacy shape stays idempotent.
+      yield* Effect.forEach(stored, (event) => bus.replay(event), { discard: true })
+
+      // A legacy-shaped event replayed from elsewhere is projected and stored in the current shape.
+      yield* bus.replay({
+        id: Event.ID.make("evt_legacy_2"),
+        type: "session.step.ended.1",
+        seq: 2,
+        created: 0,
+        aggregateID: sessionID,
+        data: {
+          sessionID,
+          assistantMessageID: assistantID,
+          finish: "stop",
+          providerState: { step: "replayed" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        },
+      })
+      const replayed = yield* db.get<{ data: string }>(sql`SELECT data FROM event WHERE id = 'evt_legacy_2'`)
+      expect(JSON.parse(replayed?.data ?? "{}")).toMatchObject({ native: { step: "replayed" } })
+      expect(JSON.parse(replayed?.data ?? "{}")).not.toHaveProperty("providerState")
+
+      // Projecting onto the legacy row wrote it back in the current shape.
+      const rewritten = JSON.parse(
+        (yield* db.get<{ data: string }>(sql`SELECT data FROM session_message WHERE id = ${assistantID}`))?.data ??
+          "{}",
+      )
+      expect(rewritten).not.toHaveProperty("providerState")
+      expect(rewritten).toMatchObject({
+        native: { step: "replayed" },
+        content: [
+          { type: "text", native: { signature: "text" } },
+          { type: "reasoning", native: { signature: "reasoning" } },
+          { type: "tool", native: { call: "kept", result: "kept" } },
+        ],
+      })
+      expect(rewritten.content.map((part: Record<string, unknown>) => Object.keys(part).toSorted())).toEqual([
+        ["native", "text", "type"],
+        ["native", "text", "type"],
+        ["executed", "id", "name", "native", "state", "time", "type"],
+      ])
+    }),
+  )
+
+  it.effect("merges tool result native data into the call's native data", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const assistantMessageID = SessionMessage.ID.make("msg_tools")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+
+      const service = yield* Bus.Service
+      const call = (id: string) =>
+        Effect.gen(function* () {
+          yield* service.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id, name: id })
+          yield* service.publish(SessionEvent.Tool.Called, {
+            sessionID,
+            assistantMessageID,
+            id,
+            input: {},
+            executed: true,
+            native: { call: id },
+          })
+        })
+      yield* call("succeeded")
+      yield* service.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "succeeded",
+        content: [{ type: "text", text: "done" }],
+        executed: true,
+        native: { result: "succeeded" },
+      })
+      yield* call("failed")
+      yield* service.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID,
+        id: "failed",
+        error: { type: "tool.execution", message: "failed" },
+        executed: true,
+      })
+
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.data).toMatchObject({
+        content: [
+          { id: "succeeded", native: { call: "succeeded", result: "succeeded" }, state: { status: "completed" } },
+          { id: "failed", native: { call: "failed" }, state: { status: "error" } },
+        ],
+      })
+    }),
+  )
+
   it.effect("projects ended and failed step terminal state", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -660,7 +853,7 @@ describe("SessionProjector", () => {
         assistantMessageID: endedID,
         finish: "stop",
         rawFinish: "stop_sequence",
-        providerState: { response: "ended" },
+        native: { response: "ended" },
         cost: Money.USD.make(1),
         tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } },
         snapshot: Snapshot.ID.make("snap_ended"),
@@ -671,7 +864,7 @@ describe("SessionProjector", () => {
         assistantMessageID: failedID,
         finish: "content-filter",
         rawFinish: "blocked",
-        providerState: { response: "failed" },
+        native: { response: "failed" },
         error: { type: "provider.invalid-request", message: "Failed" },
         snapshot: Snapshot.ID.make("snap_failed"),
         files: [RelativePath.make("src/failed.ts")],
@@ -691,7 +884,7 @@ describe("SessionProjector", () => {
         type: "assistant",
         finish: "stop",
         rawFinish: "stop_sequence",
-        providerState: { response: "ended" },
+        native: { response: "ended" },
         cost: Money.USD.make(1),
         tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } },
         snapshot: { end: "snap_ended", files: ["src/ended.ts"] },
@@ -701,7 +894,7 @@ describe("SessionProjector", () => {
         type: "assistant",
         finish: "content-filter",
         rawFinish: "blocked",
-        providerState: { response: "failed" },
+        native: { response: "failed" },
         error: { type: "provider.invalid-request", message: "Failed" },
         snapshot: { end: "snap_failed", files: ["src/failed.ts"] },
         time: { completed: created },
@@ -806,6 +999,308 @@ describe("SessionProjector", () => {
         error: { type: "provider.invalid-request", message: "Failed" },
       })
       expect(yield* updated()).toEqual({ time_updated: 15 })
+    }),
+  )
+
+  it.effect("hydrates media:<hash> refs on message and inbox reads", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const store = yield* SessionStore.Service
+
+      const rawBytes = Buffer.from("externalized-media-payload")
+      const base64 = rawBytes.toString("base64")
+      const hash = "a".repeat(64)
+      const uri = `media:${hash}`
+      // Only media:<hash> is a ref; a plain path that looks like a media URL is left alone.
+      const pathUri = `/api/media/${hash}`
+
+      yield* db
+        .insert(BlobTable)
+        .values({
+          hash,
+          mime: "application/pdf",
+          bytes: rawBytes.byteLength,
+          width: null,
+          height: null,
+          data: rawBytes,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const userID = SessionMessage.ID.make("msg_read_user")
+      const assistantID = SessionMessage.ID.make("msg_read_assistant")
+      const inboxID = SessionMessage.ID.make("msg_read_inbox")
+
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: userID,
+            session_id: sessionID,
+            type: "user",
+            seq: 1,
+            time_created: 1,
+            data: {
+              text: "user attachment",
+              files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "spec.pdf" })],
+              time: { created: 1 },
+            },
+          },
+          {
+            id: assistantID,
+            session_id: sessionID,
+            type: "assistant",
+            seq: 2,
+            time_created: 2,
+            data: {
+              agent: build,
+              model,
+              content: [
+                {
+                  type: "tool",
+                  id: "call_1",
+                  name: "read",
+                  executed: true,
+                  state: {
+                    status: "completed",
+                    input: { path: "spec.pdf" },
+                    content: [
+                      SessionStored.ToolFileRef.make({ type: "file", uri, mime: "application/pdf", name: "spec.pdf" }),
+                      { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
+                    ],
+                  },
+                  time: { created: 2, ran: 2, completed: 2 },
+                },
+              ],
+              time: { created: 2, completed: 2 },
+            },
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* db
+        .insert(SessionInboxTable)
+        .values({
+          id: inboxID,
+          session_id: sessionID,
+          type: "user",
+          payload: {
+            text: "queued attachment",
+            files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" })],
+          },
+          delivery: "queue",
+          enqueued_seq: 3,
+          time_created: 3,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const messages = yield* store.messages({ sessionID, order: "asc" })
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        id: userID,
+        type: "user",
+        files: [{ data: base64, mime: "application/pdf", source: { type: "inline" }, name: "spec.pdf" }],
+      })
+      expect(messages[1]).toMatchObject({
+        id: assistantID,
+        type: "assistant",
+        content: [
+          {
+            type: "tool",
+            state: {
+              status: "completed",
+              content: [
+                { type: "file", uri: `data:application/pdf;base64,${base64}`, mime: "application/pdf", name: "spec.pdf" },
+                { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
+              ],
+            },
+          },
+        ],
+      })
+
+      expect((yield* store.message(userID))?.message).toEqual(messages[0]!)
+      expect(yield* store.context(sessionID)).toEqual(messages)
+
+      const listedInbox = yield* inbox.list(sessionID)
+      expect(listedInbox).toHaveLength(1)
+      expect(listedInbox[0]).toMatchObject({
+        id: inboxID,
+        type: "user",
+        payload: {
+          text: "queued attachment",
+          files: [{ data: base64, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" }],
+        },
+      })
+
+      expect(yield* SessionHistory.firstUserMessage(db, sessionID)).toEqual({ id: userID, text: "user attachment" })
+      expect(yield* SessionInbox.nextPromotable(db, sessionID, "input")).toEqual({
+        id: inboxID,
+        type: "user",
+        delivery: "queue",
+      })
+
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })
+      expect((yield* store.message(inboxID))?.message).toMatchObject({
+        id: inboxID,
+        type: "user",
+        files: [{ data: base64, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" }],
+      })
+      // Delivery keeps the ref in the stored row instead of writing the bytes back inline.
+      const delivered = yield* db
+        .select({ data: SessionMessageTable.data })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, inboxID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(delivered?.data).toMatchObject({
+        text: "queued attachment",
+        files: [{ uri, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" }],
+      })
+      expect(JSON.stringify(delivered?.data)).not.toContain(base64)
+    }),
+  )
+
+  it.effect("replaces refs to missing blobs with an unavailable placeholder on read", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const inbox = yield* SessionInbox.Service
+      const store = yield* SessionStore.Service
+      const hash = "b".repeat(64)
+      const userID = SessionMessage.ID.make("msg_missing_user")
+      const assistantID = SessionMessage.ID.make("msg_missing_assistant")
+      const inboxID = SessionMessage.ID.make("msg_missing_inbox")
+      const placeholder = Buffer.from("[media unavailable: shot.png (image/png)]").toString("base64")
+      const ref = SessionStored.FileRef.make({
+        uri: `media:${hash}`,
+        mime: "image/png",
+        source: { type: "inline" },
+        name: "shot.png",
+      })
+
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: userID,
+            session_id: sessionID,
+            type: "user",
+            seq: 1,
+            time_created: 1,
+            data: {
+              text: "gone",
+              files: [ref],
+              time: { created: 1 },
+            },
+          },
+          {
+            id: assistantID,
+            session_id: sessionID,
+            type: "assistant",
+            seq: 2,
+            time_created: 2,
+            data: {
+              agent: build,
+              model,
+              content: [
+                {
+                  type: "tool",
+                  id: "call_1",
+                  name: "read",
+                  executed: true,
+                  state: {
+                    status: "completed",
+                    input: { path: "shot.png" },
+                    content: [SessionStored.ToolFileRef.make({ type: "file", uri: ref.uri, mime: "image/png" })],
+                  },
+                  time: { created: 2, ran: 2, completed: 2 },
+                },
+              ],
+              time: { created: 2, completed: 2 },
+            },
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionInboxTable)
+        .values({
+          id: inboxID,
+          session_id: sessionID,
+          type: "user",
+          payload: { text: "queued", files: [ref] },
+          delivery: "queue",
+          enqueued_seq: 3,
+          time_created: 3,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const messages = yield* store.messages({ sessionID, order: "asc" })
+      expect(messages[0]).toMatchObject({
+        files: [{ data: placeholder, mime: "text/plain", source: { type: "inline" }, name: "shot.png" }],
+      })
+      expect(messages[1]).toMatchObject({
+        content: [{ state: { content: [{ type: "text", text: "[media unavailable: image/png]" }] } }],
+      })
+      expect(yield* store.context(sessionID)).toEqual(messages)
+      const listed = yield* inbox.list(sessionID)
+      expect(listed[0]).toMatchObject({ payload: { files: [{ data: placeholder, mime: "text/plain" }] } })
+      expect(JSON.stringify([messages, listed])).not.toContain(hash)
+    }),
+  )
+
+  it.effect("names ref attachments in kept text without reading their blobs", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const store = yield* SessionStore.Service
+      const userID = SessionMessage.ID.make("msg_kept_user")
+      const compactionID = SessionMessage.ID.make("msg_kept_compaction")
+      const { id: _, type: __, ...compaction } = encodeMessage(
+        SessionMessage.CompactionCompleted.make({
+          id: compactionID,
+          type: "compaction",
+          status: "completed",
+          reason: "manual",
+          summary: "summary",
+          metadata: { keepID: userID },
+          time: { created },
+        }),
+      )
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: userID,
+            session_id: sessionID,
+            type: "user",
+            seq: 1,
+            time_created: 1,
+            data: {
+              text: "look",
+              files: [
+                SessionStored.FileRef.make({
+                  uri: `media:${"c".repeat(64)}`,
+                  mime: "image/png",
+                  source: { type: "inline" },
+                  name: "shot.png",
+                }),
+              ],
+              time: { created: 1 },
+            },
+          },
+          { id: compactionID, session_id: sessionID, type: "compaction", seq: 2, time_created: 2, data: compaction },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      // The blob is missing, so a hydrated read would name a text/plain placeholder instead.
+      expect(yield* store.context(sessionID)).toMatchObject([
+        { id: compactionID, metadata: { recent: "[User]: look\n[Attached image/png: shot.png]" } },
+      ])
     }),
   )
 })

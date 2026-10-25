@@ -196,7 +196,7 @@ export default function SessionFileList(props: {
                         </Show>
                         <span class="text-12-medium text-text-base shrink-0">{filename()}</span>
                       </span>
-                      <Show when={kind()}>
+                      <Show when={kind()} fallback={<span data-slot="file-tree-v2-end" />}>
                         {(value) => (
                           <span data-slot="file-tree-v2-change" data-change={kindChange(value())}>
                             {kindLabel(value())}

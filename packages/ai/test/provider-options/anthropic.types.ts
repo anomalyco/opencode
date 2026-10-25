@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { Anthropic } from "../../src/providers.js"
 
 const model = Anthropic.provider.model("claude-sonnet-4-5")

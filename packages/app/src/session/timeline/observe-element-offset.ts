@@ -6,14 +6,18 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
   onReconnect?: () => void,
 ) {
   let active = true
+  const element = instance.scrollElement
 
+  // TanStack resets isScrolling on a timer that reports the offset of the last scroll event. A virtualizer
+  // write since then (prepend anchoring, size compensation) may not have dispatched its scroll event yet, and
+  // compensating from that stale offset would undo the write, so a settled scroll reads the live scrollTop
+  // (vertical only, like the reconnect check below).
   const deliver = (offset: number, isScrolling: boolean) => {
     if (!active) return
-    callback(offset, isScrolling)
+    callback(isScrolling || !element?.isConnected ? offset : element.scrollTop, isScrolling)
   }
 
   const cleanupOffset = observeElementOffset(instance, deliver)
-  const element = instance.scrollElement
   const targetWindow = instance.targetWindow
   const root = element?.closest("main") ?? element?.ownerDocument.body
 

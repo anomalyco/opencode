@@ -3,6 +3,7 @@ import mdx from "@astrojs/mdx"
 import { unified } from "@astrojs/markdown-remark"
 import { defineConfig } from "astro/config"
 import remarkDocsLinks from "./src/docs/remark-links"
+import rehypeTableScroll from "./src/docs/rehype-table-scroll"
 
 const base = "/v2/"
 
@@ -13,7 +14,7 @@ export default defineConfig({
   adapter: cloudflare({ imageService: "passthrough" }),
   integrations: [mdx()],
   markdown: {
-    processor: unified({ remarkPlugins: [[remarkDocsLinks, { base }]] }),
+    processor: unified({ remarkPlugins: [[remarkDocsLinks, { base }]], rehypePlugins: [rehypeTableScroll] }),
     shikiConfig: {
       themes: {
         light: "github-light",

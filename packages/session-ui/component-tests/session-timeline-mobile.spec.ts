@@ -18,18 +18,24 @@ story.describe("touch timeline", () => {
       await expect(actions.getByRole("button", { name: action.name, exact: true })).toBeVisible()
     }
 
-    await expect(timeline.locator('[data-slot="user-message-meta"]')).toContainText("Build")
+    // Agent and model are omitted on mobile, leaving only the time and duration.
+    await expect(timeline.locator('[data-slot="user-message-meta"]')).toHaveCount(0)
     await expect(timeline.locator('[data-slot="user-message-meta-tail"]')).not.toBeEmpty()
-    await expect(timeline.locator('[data-slot="text-part-meta"]')).toContainText("Build")
-    await expect(timeline.locator('[data-slot="text-part-meta"]')).toContainText("Sonnet")
+    const responseMeta = timeline.locator('[data-slot="text-part-meta"]')
+    await expect(responseMeta).not.toBeEmpty()
+    await expect(responseMeta).not.toContainText("Build")
+    await expect(responseMeta).not.toContainText("Sonnet")
   })
 
   story("keeps shell copy visible without hover", async ({ mount }) => {
     const timeline = await mount("current-session-terminal-work--expanded-shell")
     const copy = timeline.locator('[data-slot="bash-copy"]')
-    await expect(copy).toHaveCount(1)
-    await expect(copy).toHaveCSS("opacity", "1")
-    await expect(copy).toHaveCSS("pointer-events", "auto")
+    await expect(copy).toHaveCount(2)
+
+    for (const button of await copy.all()) {
+      await expect(button).toHaveCSS("opacity", "1")
+      await expect(button).toHaveCSS("pointer-events", "auto")
+    }
   })
 
   story("keeps error copy visible without hover", async ({ mount, page }) => {

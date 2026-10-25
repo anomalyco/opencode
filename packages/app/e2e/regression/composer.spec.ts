@@ -1,8 +1,263 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, T0, provider } from "../utils/app"
+import { NO_PROVIDER, T0, expectPath, provider, sessionHref } from "../utils/app"
 import { openDraft, openSession } from "../utils/workspace"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
+test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
+  page,
+  context,
+}) => {
+  await page.clock.setFixedTime(T0)
+  await context.route("https://**", (route) => route.fulfill({ body: "Sign in" }))
+  const sessionID = "ses_free_limit"
+  const model = { id: "big-pickle", providerID: "opencode" }
+  const state = { authorized: false }
+
+  const view = await openSession(page, {
+    name: "FreeLimit",
+    sessions: [{ id: sessionID, agent: "build", model }],
+    onFileWrite: () => undefined,
+    provider: () => ({
+      all: [
+        {
+          id: "opencode",
+          name: "OpenCode",
+          models: {
+            "big-pickle": { id: "big-pickle", name: "Big Pickle", cost: { input: 0, output: 0 }, limit: { context: 200_000 } },
+          },
+        },
+        ...(state.authorized
+          ? [
+              {
+                id: "opencode-go",
+                integrationID: "opencode-go",
+                name: "OpenCode Go",
+                models: {
+                  "glm-5-go": { id: "glm-5-go", name: "GLM-5 Go", cost: { input: 1, output: 1 }, limit: { context: 200_000 } },
+                },
+              },
+            ]
+          : []),
+      ],
+      connected: state.authorized ? ["opencode", "opencode-go"] : ["opencode"],
+      default: { build: "opencode/big-pickle" },
+    }),
+    integrations: () => [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }] : [],
+      },
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Anomaly", method: "oauth" }] : [],
+      },
+    ],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
+    onIntegrationOAuthStatus: () => {
+      state.authorized = true
+
+      return "complete"
+    },
+    pageMessages: () => ({
+      items: [
+        { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+        { id: "msg_free_assistant", type: "assistant", agent: "build", model, content: [], time: { created: T0 + 1 } },
+      ],
+    }),
+  })
+
+  await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+
+  const error = {
+    type: "provider.free-limit",
+    message: "Free usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+
+  const durable = (seq: number) => ({ aggregateID: sessionID, seq, version: 1 as const })
+  const location = { directory: view.directory }
+
+  await view.push([
+    {
+      id: "evt_free_limit_1",
+      created: T0 + 2,
+      type: "session.step.failed",
+      location,
+      durable: durable(1),
+      data: { sessionID, assistantMessageID: "msg_free_assistant", error },
+    },
+  ])
+
+  const upsell = page.getByRole("dialog", { name: "Free limit reached" })
+  await expect(upsell).toContainText("Your free messages reset at")
+  await expect(page.getByText(/^You've used today's free messages\. They reset at /)).toBeVisible()
+  await expect(view.editor).toHaveText("Refactor the parser")
+  await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
+
+  // Subscribe -> Go sign-in -> Continue switches the model in the current session without opening a new draft tab.
+  await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
+  const connect = page.getByRole("dialog")
+  await connect.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+  const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
+  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
+  await connected.getByRole("button", { name: "Continue", exact: true }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expectPath(page, sessionHref(sessionID))
+  await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)
+  await expect(page.locator('[data-action="composer-model"]')).toContainText("GLM-5 Go")
+  await expect(view.editor).toHaveText("Refactor the parser")
+
+  // After the 24-hour window, "Don't show again" permanently suppresses the dialog across reloads, and an attachment-only draft survives.
+  const day2 = T0 + 2 * 86_400_000
+  await page.clock.setFixedTime(day2)
+
+  await view.push([
+    {
+      id: "evt_free_limit_2",
+      created: day2 + 1,
+      type: "session.step.started",
+      location,
+      durable: durable(2),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_2", agent: "build", model, started: day2 + 1 },
+    },
+    {
+      id: "evt_free_limit_3",
+      created: day2 + 2,
+      type: "session.step.failed",
+      location,
+      durable: durable(3),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_2", error },
+    },
+  ])
+
+  await upsell.getByRole("button", { name: "Don't show again", exact: true }).click()
+  await expect(upsell).toHaveCount(0)
+
+  const later = T0 + 4 * 86_400_000
+  await page.clock.setFixedTime(later)
+  await page.reload()
+  await expect(view.editor).toBeVisible()
+  await view.editor.fill("")
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "diagram.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("png-bytes"),
+  })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("diagram.png")
+
+  await view.push([
+    {
+      id: "evt_free_limit_4",
+      created: later + 3,
+      type: "session.step.started",
+      location,
+      durable: durable(4),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_3", agent: "build", model, started: later + 3 },
+    },
+    {
+      id: "evt_free_limit_5",
+      created: later + 4,
+      type: "session.step.failed",
+      location,
+      durable: durable(5),
+      data: { sessionID, assistantMessageID: "msg_free_assistant_3", error },
+    },
+  ])
+
+  await expect(page.getByRole("status").filter({ hasText: "You've used today's free messages." })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("diagram.png")
+  await expect(view.editor).toHaveText("")
+})
+
+test("a catalog refresh cannot replace an existing session's model", async ({ page }) => {
+  const alpha = { id: "alpha", name: "Alpha", variants: { high: {} } }
+  const beta = { id: "beta", name: "Beta" }
+  const catalog = { current: provider(alpha, beta) }
+  const switches: unknown[] = []
+  const prompts: unknown[] = []
+  const sessionID = "ses_catalog_selection"
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/model`)
+      switches.push(request.postDataJSON())
+  })
+
+  const view = await openSession(page, {
+    name: "CatalogSelection",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode", variant: "high" } }],
+    provider: () => catalog.current,
+    onPrompt: (input) => void prompts.push(input.body),
+    seed: { storage: { "opencode.global.dat:model": { recent: [{ providerID: "opencode", modelID: "beta" }] } } },
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await expect(control).toHaveText("Alpha")
+  await view.editor.fill("Keep my selected model")
+
+  catalog.current = provider(beta)
+  await view.push([
+    {
+      id: "evt_catalog_missing",
+      created: T0 + 1,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("Select model")
+  await view.editor.press("Enter")
+  await expect(page.getByText("Select an agent and model", { exact: true })).toBeVisible()
+  await expect(view.editor).toHaveText("Keep my selected model")
+  expect(switches).toEqual([])
+  expect(prompts).toEqual([])
+
+  catalog.current = provider(alpha, beta)
+  await view.push([
+    {
+      id: "evt_catalog_restored",
+      created: T0 + 2,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("Alpha")
+  await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(switches).toEqual([{ model: { id: "alpha", providerID: "opencode", variant: "high" } }])
+
+  catalog.current = provider(beta)
+  await view.push([
+    {
+      id: "evt_catalog_removed",
+      created: T0 + 3,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("Select model")
+  await control.click()
+  await page
+    .getByRole("dialog", { name: "Select model" })
+    .getByRole("button", { name: "Beta Free", exact: true })
+    .click()
+  await expect(control).toHaveText("Beta")
+  await view.editor.fill("Use the replacement I chose")
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(2)
+  expect(switches).toEqual([
+    { model: { id: "alpha", providerID: "opencode", variant: "high" } },
+    { model: { id: "beta", providerID: "opencode" } },
+  ])
+})
 
 async function draft(page: Page) {
   const { editor } = await openDraft(page, { name: "ComposerDraft", provider: NO_PROVIDER })
@@ -227,6 +482,35 @@ test("keeps a narrow session composer contained when invoking a built-in", async
   await expect(editor).toBeEmpty()
 })
 
+test("keeps focus in a dialog that replaces the model dialog and returns it to the composer caret", async ({
+  page,
+}) => {
+  const { editor } = await openSession(page, { name: "ComposerDialogFocus", provider: NO_PROVIDER })
+  await editor.fill("keep me")
+  await editor.press("End")
+  await editor.press("ArrowLeft")
+  await editor.press("ArrowLeft")
+  await editor.press("ArrowLeft")
+  await editor.press("ControlOrMeta+'")
+
+  const models = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(models.getByRole("searchbox", { name: "Search models", exact: true })).toBeFocused()
+  await models.getByRole("button", { name: "Manage models", exact: true }).click()
+  await expect(models).toBeHidden()
+
+  const manage = page.getByRole("dialog", { name: "Manage models", exact: true })
+  const search = manage.getByRole("searchbox", { name: "Search models", exact: true })
+  await expect(search).toBeFocused()
+  // Code behind the dialog that focuses the composer must not pull focus out of the open dialog.
+  await editor.evaluate((element) => element.focus())
+  await expect(search).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(manage).toBeHidden()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("keep, me")
+})
+
 test("lists slash commands in their built-in order", async ({ page }) => {
   const { editor } = await openSession(page, {
     name: "ComposerSlash",
@@ -291,6 +575,57 @@ for (const row of [
     await expect(scroll).toHaveText("Enter shell command… git status")
   })
 }
+
+test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
+  const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
+
+  const managed = (id: string, canonical: string, name: string, models: ReturnType<typeof model>) => ({
+    id,
+    canonical,
+    integrationID: "opencode",
+    name: `Anomaly / ${name}`,
+    models,
+  })
+
+  await openSession(page, {
+    name: "ComposerConsoleProviders",
+    provider: {
+      all: [
+        managed("opencode", "opencode", "OpenCode", model("console-model", "Console Model")),
+        managed("console-google", "google", "Google", model("managed-gemini", "Managed Gemini")),
+        managed("console-openai", "openai", "OpenAI", model("managed-gpt", "Managed GPT")),
+        { id: "google", canonical: "google", name: "Google", models: model("direct-gemini", "Direct Gemini") },
+      ],
+      connected: ["opencode", "console-google", "console-openai", "google"],
+      default: { providerID: "opencode", modelID: "console-model" },
+    },
+    seed: {
+      storage: {
+        "opencode.global.dat:model": {
+          user: [
+            ["opencode", "console-model"],
+            ["console-google", "managed-gemini"],
+            ["console-openai", "managed-gpt"],
+            ["google", "direct-gemini"],
+          ].map(([providerID, modelID]) => ({ providerID, modelID, visibility: "show" })),
+          recent: [],
+          variant: {},
+        },
+      },
+    },
+  })
+
+  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitemradio", { name: "Direct Gemini", exact: true })).toBeVisible()
+  const headings = menu.locator('[data-slot="menu-v2-group-label"]')
+  await expect(headings).toHaveCount(4)
+  await expect(headings.filter({ hasText: /^GoogleAnomaly$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^Google$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^OpenAI$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^OpenCode$/ })).toHaveCount(1)
+  await expect(menu.getByText(/Anomaly \//)).toHaveCount(0)
+})
 
 test("shows thinking on hover or a non-default selection while preserving keyboard access", async ({ page }) => {
   const { editor: input } = await openSession(page, {

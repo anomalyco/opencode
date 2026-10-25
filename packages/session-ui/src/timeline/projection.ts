@@ -33,6 +33,7 @@ type Entry =
   | { type: "assistant"; message: SessionMessageAssistant }
   | { type: "notice"; message: Notice }
   | { type: "idle"; message: FailedIdle }
+  | { type: "diff"; message: SessionMessageIdle; from: string; files: string[] }
 
 type Content = SessionMessageAssistant["content"][number]
 
@@ -79,6 +80,7 @@ export type TimelineProjectionInput = {
   timelineDetail?: TimelineDetail
   pendingInputIDs?: ReadonlySet<string>
   queuedCompactionIDs?: readonly string[]
+  turnDiffs?: boolean
   previousRows?: TimelineRow.TimelineRow[]
 }
 
@@ -95,6 +97,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     undefined,
     input.timelineDetail,
     input.queuedCompactionIDs,
+    input.turnDiffs,
   )
 
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
@@ -133,6 +136,8 @@ export function createReactiveTimelineProjection(input: {
   timelineDetail?: Accessor<TimelineDetail>
   pendingInputIDs?: Accessor<ReadonlySet<string>>
   queuedCompactionIDs?: Accessor<readonly string[]>
+  /** Summarize each finished turn's changed files after it. */
+  turnDiffs?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -170,6 +175,7 @@ export function createReactiveTimelineProjection(input: {
             textVisible().get(content)!(),
       input.timelineDetail?.(),
       input.queuedCompactionIDs?.(),
+      input.turnDiffs?.(),
     ),
   )
 
@@ -232,6 +238,7 @@ export namespace Timeline {
     isRenderable = renderable,
     detail?: TimelineDetail,
     queuedCompactionIDs: readonly string[] = [],
+    turnDiffs = false,
   ) {
     type Turn = {
       id: string
@@ -245,6 +252,8 @@ export namespace Timeline {
     const turnByUserID = new Map<string, Turn>()
     const leading: Notice[] = []
     let current: Turn | undefined
+    // Everything since the last idle marker is one turn, including prompts steered in meanwhile.
+    let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
     messages.forEach((message) => {
       if (isNotice(message)) {
@@ -270,38 +279,32 @@ export namespace Timeline {
         turnByUserID.set(message.id, turn)
         current = turn
 
+        // Undelivered input has not joined the turn yet.
+        if (!pendingInputIDs?.has(message.id))
+          execution = { opener: execution?.opener ?? message.id, turn, files: execution?.files ?? new Set() }
+
         return
       }
 
-      if (isFailedIdle(message)) {
-        const last = current?.entries.at(-1)
+      if (message.type === "idle") {
+        appendIdle(message)
 
-        if (
-          last?.type === "notice" &&
-          last.message.type === "compaction" &&
-          last.message.status === "failed" &&
-          !isInterrupted(last.message.error)
-        )
-          return
-
-        const lastStep = current?.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
-
-        if (lastStep?.type === "assistant" && lastStep.message.error && !isInterrupted(lastStep.message.error)) return
-
-        if (current && !current.shell) {
-          current.entries.push({ type: "idle", message })
-
-          return
-        }
-
-        const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "idle", message }] }
-        turns.push(turn)
-        current = turn
+        // The summary follows the turn's last prompt, after any failure the marker reports.
+        // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
+        if (turnDiffs && execution?.files.size)
+          execution.turn.entries.push({
+            type: "diff",
+            message,
+            from: execution.opener,
+            files: [...execution.files].sort(),
+          })
+        execution = undefined
 
         return
       }
 
       if (message.type !== "assistant") return
+      message.snapshot?.files?.forEach((file) => execution?.files.add(file))
       const existing = current?.user ? current : undefined
 
       if (existing?.user) {
@@ -322,6 +325,33 @@ export namespace Timeline {
       current = turn
     })
 
+    function appendIdle(message: SessionMessageIdle) {
+      if (!isFailedIdle(message)) return
+      const last = current?.entries.at(-1)
+
+      if (
+        last?.type === "notice" &&
+        last.message.type === "compaction" &&
+        last.message.status === "failed" &&
+        !isInterrupted(last.message.error)
+      )
+        return
+
+      const lastStep = current?.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
+
+      if (lastStep?.type === "assistant" && lastStep.message.error && !isInterrupted(lastStep.message.error)) return
+
+      if (current && !current.shell) {
+        current.entries.push({ type: "idle", message })
+
+        return
+      }
+
+      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "idle", message }] }
+      turns.push(turn)
+      current = turn
+    }
+
     const activeMessageID =
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
@@ -339,6 +369,7 @@ export namespace Timeline {
             entry.type === "notice"
               ? visibleNotice(entry.message)
               : entry.type === "idle" ||
+                entry.type === "diff" ||
                 !!entry.message.error ||
                 !!entry.message.retry ||
                 entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
@@ -393,6 +424,10 @@ export namespace Timeline {
     rows.splice(
       pendingAt < 0 ? rows.length : pendingAt,
       0,
+      // Live status ends the work the model has seen, so it stays above everything still waiting for delivery.
+      ...(status.type !== "idle" && activeMessageID && (pendingAt >= 0 || queuedCompactionIDs.length > 0)
+        ? [new TimelineRow.Activity({ userMessageID: activeMessageID })]
+        : []),
       ...queuedCompactionIDs.map(
         (inboxID) => new TimelineRow.CompactionQueued({ userMessageID: activeMessageID ?? inboxID, inboxID }),
       ),
@@ -529,7 +564,11 @@ export namespace Timeline {
       if (isActive && lastAssistant?.retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
       else if (lastAssistant?.error && !isInterrupted(lastAssistant.error))
         rows.push(
-          new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(lastAssistant.error.message) }),
+          new TimelineRow.Error({
+            userMessageID: turnID,
+            text: unwrapErrorMessage(lastAssistant.error.message),
+            ...freeLimit(lastAssistant),
+          }),
         )
     }
 
@@ -549,8 +588,22 @@ export namespace Timeline {
               new TimelineRow.Error({
                 userMessageID: turnID,
                 text: unwrapErrorMessage(entry.message.error.message),
+                ...freeLimit(entry.message),
               }),
             )
+
+          return
+        case "diff":
+          appendAssistantSegment(assistantSegment)
+          assistantSegment = []
+          rows.push(
+            new TimelineRow.TurnDiff({
+              userMessageID: turnID,
+              messageID: entry.message.id,
+              from: entry.from,
+              files: entry.files,
+            }),
+          )
 
           return
         case "notice":
@@ -586,6 +639,31 @@ export namespace Timeline {
   }
 }
 
+const MAX_RETRY_AFTER_MS = 7 * 86_400_000
+
+function freeLimit(
+  message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },
+) {
+  if (message.error?.type !== "provider.free-limit") return {}
+  const delay = message.error.retryAfterMs
+  const base = message.time.completed ?? message.time.created
+
+  if (
+    delay === undefined ||
+    !Number.isFinite(delay) ||
+    delay < 0 ||
+    delay > MAX_RETRY_AFTER_MS ||
+    !Number.isFinite(base) ||
+    Number.isNaN(new Date(base + delay).getTime())
+  )
+    return { kind: "free-limit" as const }
+
+  return {
+    kind: "free-limit" as const,
+    resetAt: base + delay,
+  }
+}
+
 function isInterrupted(error: SessionMessageAssistant["error"]) {
   return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
 }
@@ -603,6 +681,8 @@ function shellFailed(message: SessionMessageShell) {
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
   return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
     const previous = result.at(-1)
+    // Live status renders nothing while other feedback shows, so a group below it spaces from the content above it.
+    const above = Predicate.isTagged(previous, "Activity") ? result.at(-2) : previous
 
     const current =
       ((Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped") ||
@@ -610,11 +690,9 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
       !separate.has(row.messageID)
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
-            previousAssistantPart: Predicate.isTagged(previous, "AssistantPart"),
+            previousAssistantPart: Predicate.isTagged(above, "AssistantPart"),
             spacing:
-              Predicate.isTagged(previous, "AssistantPart") || Predicate.isTagged(previous, "Error")
-                ? "tool"
-                : undefined,
+              Predicate.isTagged(above, "AssistantPart") || Predicate.isTagged(above, "Error") ? "tool" : undefined,
             group: {
               type: "context",
               key: `message:${row.messageID}`,

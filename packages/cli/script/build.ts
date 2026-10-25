@@ -4,6 +4,7 @@ import { $ } from "bun"
 import { mkdir, rm } from "fs/promises"
 import path from "path"
 import { Script } from "@opencode/script"
+import { embed } from "@opencode/script/highlights"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import pkg from "../package.json"
@@ -11,6 +12,7 @@ import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@openc
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
+import { NativeArch } from "../../../script/native-arch"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode"
@@ -29,6 +31,7 @@ const requestedTarget = process.argv.find((arg) => arg.startsWith("--target="))?
 const skipInstall = process.argv.includes("--skip-install")
 const skipWebUi = process.argv.includes("--skip-web-ui")
 const solidPlugin = createSolidTransformPlugin()
+const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
 const releaseAssets = new Map<string, Promise<Map<string, string>>>()
 
 const allTargets: {
@@ -63,8 +66,9 @@ const targets =
       : allTargets
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
+// Bun 1.4.4 skips native packages for the other libc by default, but the musl targets need them.
 if (!skipInstall)
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode-ai/pty@${pkg.dependencies["@opencode-ai/pty"]}`
+  await $`bun install --os="*" --cpu="*" --libc="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode-ai/pty@${pkg.dependencies["@opencode-ai/pty"]}`
 const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
 await Bun.write(appArchive, await buildAppArchive(Script.channel, { skipBuild: skipWebUi }))
 const appAssetsPlugin: BunPlugin = {
@@ -189,6 +193,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       OPENCODE_CLI_NAME: "'opencode'",
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_ARTIFACT: `'cli'`,
+      ...(highlights ? { OPENCODE_RELEASE_HIGHLIGHTS: JSON.stringify(highlights) } : {}),
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
       // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".
       FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",
@@ -201,6 +206,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
     process.exit(1)
   }
   verifySimulationGraph(simulationInputs)
+  await NativeArch.verify(path.join(outdir, name, "bin", item.os === "win32" ? `${binary}.exe` : binary), item.arch)
 
   await Bun.write(
     path.join(outdir, name, "package.json"),

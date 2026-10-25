@@ -94,6 +94,43 @@
   background: var(--v2-state-fg-warning);
 }
 
+.project-settings-folder-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-base);
+}
+
+.project-settings-folder-missing-icon {
+  flex-shrink: 0;
+  color: var(--v2-state-fg-warning);
+}
+
+.project-settings-folder-missing-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-settings-folder-missing-title {
+  color: var(--v2-text-text-base);
+  font-weight: 530;
+}
+
+.project-settings-folder-missing-path {
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .project-settings-shared {
   display: flex;
   flex-direction: column;

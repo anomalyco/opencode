@@ -1,4 +1,4 @@
-import type { FileContent } from "@/runtime/server/types"
+import type { FileContent } from "@opencode/gui-extensions/sdk"
 
 const MAX_FILE_CONTENT_ENTRIES = 40
 
@@ -15,7 +15,7 @@ export function approxBytes(content: FileContent) {
     }, 0) ?? 0
 
   // V8 keeps an ASCII string such as base64 at one byte per character; other text may take two.
-  const body = content.content.length * (content.encoding === "base64" ? 1 : 2)
+  const body = content.bytes?.byteLength ?? content.content.length * (content.encoding === "base64" ? 1 : 2)
 
   return body + ((content.diff?.length ?? 0) + patchBytes) * 2
 }

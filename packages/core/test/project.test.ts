@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -12,6 +12,8 @@ import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Hash } from "@opencode/util/hash"
+import { initGit } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -144,6 +146,175 @@ describe("Project.activate", () => {
   )
 })
 
+describe("Project archiving", () => {
+  it.effect("lists archived projects only when requested", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      yield* db
+        .insert(ProjectTable)
+        .values([
+          { id: Project.ID.make("active"), worktree: abs("/active"), sandboxes: [], time_active: 2 },
+          {
+            id: Project.ID.make("archived"),
+            worktree: abs("/archived"),
+            sandboxes: [],
+            time_active: 1,
+            time_archived: 5,
+          },
+        ])
+        .run()
+
+      expect((yield* project.list()).map((item) => item.id)).toEqual([Project.ID.make("active")])
+      const all = yield* project.list({ archived: true })
+      expect(all.map((item) => item.id)).toEqual([Project.ID.make("active"), Project.ID.make("archived")])
+      expect(all[1]?.time.archived).toBe(5)
+    }),
+  )
+
+  it.live("archives projects whose directories are gone and unarchives them on resolve", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const kept = path.join(tmp.path, "kept")
+      const removed = path.join(tmp.path, "removed")
+      yield* Effect.promise(() => Promise.all([fs.mkdir(kept), fs.mkdir(removed)]))
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const keptProject = yield* project.resolve(abs(kept))
+      const removedProject = yield* project.resolve(abs(removed))
+      yield* project.update({ projectID: removedProject.id, name: "Removed" })
+      yield* idle()
+      const updated = (yield* project.list()).find((item) => item.id === removedProject.id)?.time.updated
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* Effect.promise(() => fs.rm(removed, { recursive: true }))
+      yield* project.sweep()
+      yield* project.sweep()
+      yield* Effect.yieldNow
+
+      expect((yield* project.list()).map((item) => item.id)).toEqual([keptProject.id])
+      const archived = (yield* project.list({ archived: true })).find((item) => item.id === removedProject.id)
+      expect(archived?.time.archived).toBeNumber()
+      expect(archived?.time.updated).toBe(updated)
+      expect(updates).toEqual([archived!])
+
+      yield* Effect.promise(() => fs.mkdir(removed))
+      yield* project.resolve(abs(removed))
+      yield* project.resolve(abs(removed))
+      yield* Effect.yieldNow
+
+      const restored = (yield* project.list()).find((item) => item.id === removedProject.id)
+      expect(restored).toMatchObject({ name: "Removed", time: { updated } })
+      expect(restored?.time.archived).toBeUndefined()
+      expect(updates).toEqual([archived!, restored!])
+    }),
+  )
+
+  it.live("moves the canonical directory to a surviving clone instead of archiving", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const main = path.join(tmp.path, "repo")
+      const clone = path.join(tmp.path, "clone")
+      const linked = path.join(tmp.path, "linked")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main, { commit: true, remote: "git@github.com:owner/repo.git" })
+        await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+        await $`git remote set-url origin git@github.com:owner/repo.git`.cwd(clone).quiet()
+        await $`git worktree add ${linked} -b linked`.cwd(main).quiet()
+      })
+      const project = yield* Project.Service
+      const initial = yield* project.resolve(abs(main))
+      yield* project.resolve(abs(linked))
+      yield* project.resolve(abs(clone))
+      yield* idle()
+
+      yield* Effect.promise(() => fs.rm(main, { recursive: true }))
+      yield* project.sweep()
+
+      const info = (yield* project.list()).find((item) => item.id === initial.id)
+      expect(info?.canonical).toBe(yield* real(clone))
+      expect(info?.time.archived).toBeUndefined()
+    }),
+  )
+
+  it.live("skips projects updated or active within the last sweep interval", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const old = Date.now() - 2 * 60 * 60 * 1000
+      yield* db
+        .insert(ProjectTable)
+        .values([
+          {
+            id: Project.ID.make("updated"),
+            worktree: abs("/opencode-missing-updated"),
+            sandboxes: [],
+            time_active: old,
+          },
+          {
+            id: Project.ID.make("active"),
+            worktree: abs("/opencode-missing-active"),
+            sandboxes: [],
+            time_updated: old,
+          },
+          {
+            id: Project.ID.make("idle"),
+            worktree: abs("/opencode-missing-idle"),
+            sandboxes: [],
+            time_updated: old,
+            time_active: old,
+          },
+        ])
+        .run()
+
+      yield* project.sweep()
+
+      expect((yield* project.list()).map((item) => item.id).toSorted()).toEqual([
+        Project.ID.make("active"),
+        Project.ID.make("updated"),
+      ])
+    }),
+  )
+
+  it.effect("never archives the global project", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: Project.ID.global,
+          worktree: abs("/opencode-missing-global"),
+          sandboxes: [],
+          time_updated: 1,
+          time_active: 1,
+        })
+        .run()
+
+      yield* project.sweep()
+
+      expect((yield* project.list()).map((item) => item.id)).toEqual([Project.ID.global])
+    }),
+  )
+})
+
+// Backdates every Project past the sweep's recent-activity window.
+const idle = Effect.fn(function* () {
+  const db = (yield* Database.Service).db
+  yield* db.update(ProjectTable).set({ time_updated: 1, time_active: 1 }).run()
+})
+
 function remoteID(remote: string) {
   return Project.ID.make(Hash.fast(`git-remote:${remote}`))
 }
@@ -157,11 +328,7 @@ function real(value: string) {
 }
 
 async function initRepo(dir: string, opts?: { commit?: boolean; remote?: string }) {
-  await $`git init`.cwd(dir).quiet()
-  await $`git config core.fsmonitor false`.cwd(dir).quiet()
-  await $`git config commit.gpgsign false`.cwd(dir).quiet()
-  await $`git config user.email test@opencode.test`.cwd(dir).quiet()
-  await $`git config user.name Test`.cwd(dir).quiet()
+  await initGit(dir)
   if (opts?.commit) await $`git commit --allow-empty -m root`.cwd(dir).quiet()
   if (opts?.remote) await $`git remote add origin ${opts.remote}`.cwd(dir).quiet()
 }
@@ -579,6 +746,93 @@ describe("Project.resolve", () => {
         sandboxes: [abs("/preserved-sandbox")],
         time: { created: 1 },
       })
+    }),
+  )
+
+  const counted = (fail?: (args: readonly string[]) => boolean) => {
+    const counter = countingSpawner(fail)
+    return {
+      spawns: counter.spawns,
+      layer: AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node]), [counter.node]),
+    }
+  }
+
+  testEffect(Layer.empty).live("reuses git discovery until git metadata changes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "packages", "app")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(nested, { recursive: true })
+      })
+      const rootSha = Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path)))
+      const { layer, spawns } = counted()
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        expect(spawns()).toBeGreaterThan(0)
+
+        const before = spawns()
+        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(rootSha)
+        expect(spawns()).toBe(before)
+
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(tmp.path).quiet())
+        expect((yield* project.resolve(abs(nested))).id).toBe(remoteID("github.com/owner/repo"))
+        expect(spawns()).toBeGreaterThan(before)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  testEffect(Layer.empty).live("does not cache a transient git failure", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      let failRemote = true
+      const { layer } = counted((args) => {
+        if (!failRemote || !args.includes("remote")) return false
+        failRemote = false
+        return true
+      })
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        // Falls back like dev: the remote spawn failed, so identity comes from the root commit.
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(
+          Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
+        )
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(remoteID("github.com/owner/repo"))
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  testEffect(Layer.empty).live("sees the first commit in a reftable repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const supported = yield* Effect.promise(
+        async () => (await $`git init -q --ref-format=reftable ${tmp.path}`.nothrow().quiet()).exitCode === 0,
+      )
+      if (!supported) return
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(Project.ID.global)
+        yield* Effect.promise(() =>
+          $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+            .cwd(tmp.path)
+            .quiet(),
+        )
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(
+          Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
+        )
+      }).pipe(Effect.provide(counted().layer))
     }),
   )
 })

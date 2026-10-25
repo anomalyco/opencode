@@ -57,7 +57,7 @@ You can hide specific models from the `/models` picker for a provider using the 
   "$schema": "https://opencode.ai/config.json",
   "provider": {
     "anthropic": {
-      "blacklist": ["claude-opus-4-20250514"]
+      "blacklist": ["claude-opus-5-5"]
     }
   }
 }
@@ -70,7 +70,7 @@ The inverse `whitelist` option hides every model except the ones listed.
   "$schema": "https://opencode.ai/config.json",
   "provider": {
     "anthropic": {
-      "whitelist": ["claude-sonnet-4-20250514"]
+      "whitelist": ["claude-sonnet-5-5"]
     }
   }
 }
@@ -87,7 +87,7 @@ Both options take an array of model IDs — the same IDs shown in the `/models` 
 ## OpenCode Zen
 
 OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](/docs/zen).
+tested and verified to work well with OpenCode. [Learn more](https://opencode.ai/v2/docs/console/).
 
 :::tip
 If you are new, we recommend starting with OpenCode Zen.
@@ -337,14 +337,13 @@ For custom inference profiles, use the model and provider name in the key and se
    /connect
    ```
 
-2. Here you can select the **Claude Pro/Max** option and it'll open your browser
-   and ask you to authenticate.
+2. Create an API key in the [Anthropic Console](https://console.anthropic.com/settings/keys) and enter it when prompted.
 
    ```txt
-   ┌ Select auth method
+   ┌ API key
    │
-   │ Manually enter API Key
-   └
+   │
+   └ enter
    ```
 
 3. Now all the Anthropic models should be available when you use the `/models` command.
@@ -456,6 +455,37 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    ```txt
    /models
    ```
+
+#### Microsoft Entra ID (Azure CLI)
+
+You can use your Azure CLI session instead of an API key. [Install the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), run `az login`, then run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. Enter the Azure Resource name when prompted. Use `az login --tenant TENANT_ID` if the Resource belongs to a different tenant.
+
+Find the Resource name by opening your Azure OpenAI or Foundry Resource in the [Azure portal](https://portal.azure.com/) or [Microsoft Foundry](https://ai.azure.com/). It is also the first part of the endpoint: `my-models` in `https://my-models.openai.azure.com/` or `https://my-models.services.ai.azure.com/`. If your identity can list Resources, you can also find their names and Resource groups with:
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+OpenCode does not query Azure management APIs or discover deployments. Select a model whose catalog name matches your deployment, or configure its deployment name explicitly:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "azure": {
+      "models": {
+        "gpt-6-luna": {
+          "id": "gpt-production"
+        }
+      }
+    }
+  }
+}
+```
+
+Assign your identity the inference role required by the deployment: **Cognitive Services OpenAI User** for Azure OpenAI models or **Cognitive Services User** for other Foundry models. OpenCode refreshes access tokens through the Azure CLI, including versions earlier than 2.54.0, so you only need to sign in again when the CLI session expires.
 
 ---
 
@@ -613,8 +643,8 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
-           "anthropic/claude-sonnet-4": {}
+           "openai/gpt-6.1-sol": {},
+           "anthropic/claude-sonnet-5.5": {}
          }
        }
      }
@@ -759,7 +789,7 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ### DigitalOcean
 
-DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
 OpenCode supports two authentication methods:
 
@@ -840,6 +870,54 @@ export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
 Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` in the model picker.
 
 Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
+
+---
+
+### Eden AI
+
+[Eden AI](https://www.edenai.co/) is an EU-based gateway that serves models from many vendors over a single OpenAI-compatible API, with a separate EU endpoint for teams that need inference to stay in the EU.
+
+1. Head over to the [Eden AI platform](https://app.edenai.run/user/register) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **Eden AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Eden AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Mistral Large 3_ or _Claude Sonnet 5.5_.
+
+   ```txt
+   /models
+   ```
+
+   Eden AI model ids are themselves in `vendor/model` form, so a full reference has three segments, for example `edenai/anthropic/claude-sonnet-5-5`.
+
+5. To keep requests on Eden AI's EU gateway, set its base URL.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "edenai": {
+         "options": {
+           "baseURL": "https://api.eu.edenai.run/v3"
+         }
+       }
+     }
+   }
+   ```
+
+   The default is `https://api.edenai.run/v3`, so this swaps the global endpoint for the EU one. The EU endpoint serves the subset of the catalog that is available in the EU, so a model chosen in step 4 may not be reachable through it.
 
 ---
 
@@ -963,13 +1041,12 @@ to store token in opencode auth storage.
 OpenCode uses a small model for some AI tasks like generating the session title.
 It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
 to only use your own GitLab-hosted instance, add the following to your
-`opencode.json` file. It is also recommended to disable session sharing.
+`opencode.json` file.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1286,8 +1363,8 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
           // Model ID (from Helicone's model directory page)
           "name": "GPT-4o", // Your own custom name for the model
         },
-        "claude-sonnet-4-20250514": {
-          "name": "Claude Sonnet 4",
+        "claude-sonnet-4-5-20250929": {
+          "name": "Claude Sonnet 4.5",
         },
       },
     },
@@ -1719,6 +1796,10 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
    /models
    ```
 
+##### Compute residency
+
+For ChatGPT OAuth, OpenCode automatically applies a regional inference residency requirement when one is advertised by your workspace credentials. It forwards the compute residency value from the credential instead of maintaining a fixed list of regions. Data residency at rest does not imply regional inference.
+
 ##### Using API keys
 
 If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
@@ -1727,7 +1808,7 @@ If you already have an API key, you can select **Manually enter API Key** and pa
 
 ### OpenCode Zen
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
+OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](https://opencode.ai/v2/docs/console/).
 
 1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
 
@@ -1869,14 +1950,14 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
            "glm-4.7": {
              "name": "GLM 4.7"
            },
-           "gpt-5.2": {
-             "name": "GPT-5.2"
+           "gpt-6.1-sol": {
+             "name": "GPT-6.1 Sol"
            },
-           "gemini-2.5-pro": {
-             "name": "Gemini 2.5 Pro"
+           "gemini-4-argon": {
+             "name": "Gemini 4 Argon"
            },
-           "claude-3-5-sonnet-20241022": {
-             "name": "Claude 3.5 Sonnet"
+           "claude-sonnet-5-5": {
+             "name": "Claude Sonnet 5.5"
            }
          }
        }
@@ -2094,6 +2175,35 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
+### SCX.ai
+
+[SCX.ai](https://scx.ai) is an Australian sovereign AI platform serving open models over an OpenAI-compatible API, hosted on renewable-powered infrastructure in Australia.
+
+1. Head over to the [SCX.ai platform](https://platform.scx.ai) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **SCX.ai**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your SCX.ai API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _MiniMax-M2.7_ or _GLM-5.2_.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Snowflake Cortex
 
 [Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api) gives you access to frontier models (Claude, OpenAI GPT-5, and more) via an OpenAI-compatible API. All inference runs within the Snowflake perimeter and is billed in Snowflake credits. For per-model rates, see the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf).
@@ -2190,7 +2300,7 @@ The model catalog is provided automatically. A minimal `opencode.json` is all th
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "snowflake-cortex/claude-sonnet-4-6",
+  "model": "snowflake-cortex/claude-sonnet-5",
   "small_model": "snowflake-cortex/claude-haiku-4-5"
 }
 ```
@@ -2286,7 +2396,7 @@ You can also customize models through your opencode config. Here's an example of
   "provider": {
     "vercel": {
       "models": {
-        "anthropic/claude-sonnet-4": {
+        "anthropic/claude-sonnet-5.5": {
           "options": {
             "order": ["anthropic", "vertex"]
           }
@@ -2488,7 +2598,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
+         "name": "My AI Provider Display Name",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
@@ -2526,7 +2636,7 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI ProviderDisplay Name",
+      "name": "My AI Provider Display Name",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",

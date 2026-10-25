@@ -65,11 +65,13 @@ export type FileContent = {
   /**
    * How to read `content`.
    * - `text`: `content` is the text.
-   * - `binary`: `content` is base64 when `encoding` says so, or empty when only `size` is known.
+   * - `binary`: `bytes` holds the raw bytes, `content` is base64 when `encoding` says so, or empty when only `size` is known.
    */
   type: "text" | "binary"
   /** The text, or the base64 bytes of a binary file. */
   content: string
+  /** The raw bytes of a binary file, when kept without base64 encoding. */
+  bytes?: Uint8Array
   /** A unified diff of the file's uncommitted change, when there is one. */
   diff?: string
   /** The same change, parsed. */
@@ -199,6 +201,8 @@ export interface Files {
     options?: {
       /** Reloads even when the content has loaded. Defaults to false. */
       readonly force?: boolean
+      /** Suppresses the error toast when the load fails. Defaults to false. */
+      readonly silent?: boolean
     },
   ): Promise<void>
   /**

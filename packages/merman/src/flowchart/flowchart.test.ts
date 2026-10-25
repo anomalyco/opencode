@@ -1410,6 +1410,25 @@ flowchart TD
     expect(diagram.edges).toEqual([{ from: "X", to: "Y", label: "x & y" }])
   })
 
+  test("treats apostrophes in labels as text rather than string delimiters", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  CS[Console's own schema copy] -. validates .-> CFG
+  A[Bob's] & B[Al's] --> C[it's done; ship]`)
+
+    expect(diagram.nodes).toEqual([
+      { id: "CS", label: "Console's own schema copy", shape: "box" },
+      { id: "CFG", label: "CFG", shape: "box" },
+      { id: "A", label: "Bob's", shape: "box" },
+      { id: "B", label: "Al's", shape: "box" },
+      { id: "C", label: "it's done; ship", shape: "box" },
+    ])
+    expect(diagram.edges).toEqual([
+      { from: "CS", to: "CFG", label: "validates", style: "dashed" },
+      { from: "A", to: "C", label: "" },
+      { from: "B", to: "C", label: "" },
+    ])
+  })
+
   test("rejects empty & group members", () => {
     for (const statement of ["A & --> B", "& A --> B", "A --> B &", "A &"]) {
       expect(() => parseMermaidFlowchartDiagram(`flowchart LR\n  ${statement}`)).toThrow(

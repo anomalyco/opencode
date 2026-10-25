@@ -20,6 +20,7 @@ const ListInputBase = {
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
   parentID: Schema.NullOr(Session.ID).pipe(Schema.optional),
+  archived: Schema.Boolean.pipe(Schema.optional),
   anchor: Session.ListAnchor.pipe(Schema.optional),
 }
 
@@ -111,6 +112,8 @@ const layer = Layer.effect(
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
           )
+        if (input.archived !== undefined)
+          conditions.push(input.archived ? isNotNull(SessionTable.time_archived) : isNull(SessionTable.time_archived))
         if (input.anchor) {
           conditions.push(
             order === "asc"
@@ -171,10 +174,7 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(
-          direction === "previous" ? rows.toReversed() : rows,
-          SessionHistory.decodeMessageRow,
-        )
+        return yield* SessionHistory.decodeMessageRows(db, direction === "previous" ? rows.toReversed() : rows)
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
@@ -184,12 +184,9 @@ const layer = Layer.effect(
           .where(eq(SessionMessageTable.id, messageID))
           .get()
           .pipe(Effect.orDie)
-        return row
-          ? {
-              sessionID: Session.ID.make(row.session_id),
-              message: yield* SessionHistory.decodeMessageRow(row).pipe(Effect.orDie),
-            }
-          : undefined
+        if (!row) return undefined
+        const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
+        return message && { sessionID: row.session_id, message }
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db

@@ -53,6 +53,7 @@ type ReviewPanelProps = {
   diffsReady: boolean
   diffVersion?: number
   loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
+  readFile: ReviewModel["readFile"]
   activeFile?: string
   onSelectFile: (path: string) => void
   diffStyle: SessionReviewDiffStyle
@@ -89,6 +90,7 @@ export default function ReviewPanelContent(props: {
       diffsReady={props.review.ready()}
       diffVersion={props.review.diffVersion()}
       loadDiff={props.review.loadDiff}
+      readFile={props.review.readFile}
       activeFile={props.review.activeFile()}
       onSelectFile={props.review.focusFile}
       diffStyle={props.diffStyle}
@@ -119,16 +121,6 @@ function ReviewPanel(props: ReviewPanelProps) {
 
     return live.status === "active" ? live.value : undefined
   }
-
-  const readFile = async (path: string) =>
-    props.session.server.client.file
-      .read({ path, location: { directory: props.screen.file.root } })
-      .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
-      .catch((error) => {
-        console.debug("[session-review-v2] failed to read file", { path, error })
-
-        return undefined
-      })
 
   const diffs = () => props.diffs
 
@@ -242,7 +234,7 @@ function ReviewPanel(props: ReviewPanelProps) {
                   diff={diff()}
                   diffStyle={props.diffStyle}
                   expandMode={props.state.expandMode()}
-                  readFile={readFile}
+                  readFile={props.readFile}
                   onLineComment={props.onLineComment}
                   onLineCommentUpdate={props.onLineCommentUpdate}
                   onLineCommentDelete={props.onLineCommentDelete}

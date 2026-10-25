@@ -1,5 +1,5 @@
 import type { Stream } from "effect"
-import { Speech, SpeechModel, type SpeechEvent, type SpeechOptions } from "../src/index.js"
+import { Speech, SpeechModel, type SpeechEvent, type SpeechOptions } from "../src/effect.js"
 import { ElevenLabs, OpenAI, Runway } from "../src/providers.js"
 
 type StreamItem<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? A : never

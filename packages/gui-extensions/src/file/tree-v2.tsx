@@ -109,7 +109,7 @@ const FileTreeNodeV2 = (
       {(() => {
         const value = kind()
 
-        if (!value || local.node.type !== "file") return null
+        if (!value || local.node.type !== "file") return <span data-slot="file-tree-v2-end" />
 
         return (
           <span data-slot="file-tree-v2-change" data-change={kindChange(value)}>

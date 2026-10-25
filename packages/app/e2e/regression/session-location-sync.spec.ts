@@ -116,6 +116,7 @@ test("replaces the composer when the location is not found and recovers by movin
 
   await transport.waitForConnection()
   await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Worktree", exact: true }).click()
   await page.getByRole("menuitem", { name: "existing-worktree", exact: true }).click()
   await expect.poll(() => moves).toEqual([{ directory: destination }])
 

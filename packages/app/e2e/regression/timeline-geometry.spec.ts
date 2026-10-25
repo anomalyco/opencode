@@ -3,6 +3,7 @@ import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import {
   assistantMessage,
+  historyMessages,
   partUpdated,
   renderedPartID,
   sessionID,
@@ -12,6 +13,7 @@ import {
   toolPart,
   userMessage,
   userText,
+  validateTimelineMessages,
   waitForVisualSettle,
 } from "../utils/timeline"
 import {
@@ -459,12 +461,22 @@ for (const outline of [
 for (const failed of [false, true]) {
   test(`keeps a submitted prompt in place until Working shows${failed ? " after an error" : ""}`, async ({ page }) => {
     await setupTimeline(page, {
-      seedHistory: true,
-      messages: [
-        userMessage(),
-        ...(failed
-          ? [{ ...assistantMessage([]), error: { type: "provider.error", message: "Previous request failed" } }]
-          : []),
+      sessionMessages: [
+        ...validateTimelineMessages([
+          ...historyMessages(18),
+          userMessage(),
+          ...(failed
+            ? [{ ...assistantMessage([]), error: { type: "provider.error", message: "Previous request failed" } }]
+            : []),
+        ]),
+        // The previous execution ended at an idle marker, so the submitted prompt starts a turn instead of
+        // waiting as a steer behind that one.
+        {
+          id: "msg_1002_timeline_idle",
+          type: "idle",
+          outcome: failed ? "failed" : "succeeded",
+          time: { created: 1700000003000 },
+        },
       ],
     })
     const working = page.locator('[data-component="session-working"]')
@@ -494,7 +506,7 @@ for (const failed of [false, true]) {
 
     // Records the prompt row in every frame from submission until Working has shown.
     const observation = await page.evaluateHandle((text) => {
-      const frames: { prompt?: number; working: boolean }[] = []
+      const frames: { prompt: number | undefined; working: boolean }[] = []
       let frame = 0
 
       const sample = () => {
@@ -503,7 +515,7 @@ for (const failed of [false, true]) {
         )
 
         frames.push({
-          ...(prompt ? { prompt: prompt.getBoundingClientRect().y } : {}),
+          prompt: prompt?.getBoundingClientRect().y,
           working: !!document.querySelector('[data-component="session-working"]'),
         })
         frame = requestAnimationFrame(sample)

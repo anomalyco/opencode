@@ -51,7 +51,6 @@ export const docsSections: DocsSection[] = [
           { title: "Permissions", slug: "permissions" },
           { title: "Policies", slug: "policies" },
           { title: "Instructions", slug: "instructions" },
-          { title: "Sharing", slug: "sharing" },
           { title: "Warming", slug: "warming" },
         ],
       },
@@ -159,15 +158,28 @@ export const docsSections: DocsSection[] = [
           { title: "Overview", slug: "console/api" },
           { title: "Inference", slug: "console/api/inference" },
           { title: "Providers", slug: "console/api/providers" },
-          { title: "Budgets", slug: "console/api/budgets" },
+        ],
+      },
+      {
+        title: "Harnesses",
+        items: [
+          { title: "Overview", slug: "console/harnesses" },
+          { title: "Claude Code", slug: "console/harnesses/claude-code" },
+          { title: "Codex", slug: "console/harnesses/codex" },
+          { title: "Hermes", slug: "console/harnesses/hermes" },
+          { title: "Pi", slug: "console/harnesses/pi" },
+          { title: "Raycast", slug: "console/harnesses/raycast" },
         ],
       },
     ],
   },
 ]
 
+// Prerendered pages are served as static assets, which redirect the trailing-slash form.
+const assetSlugs = new Set(["api"])
+
 export function docsHref(slug: string, anchor?: string) {
-  const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}/`
+  const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}${assetSlugs.has(slug) ? "" : "/"}`
   return `${import.meta.env.BASE_URL}docs/${path}${anchor ? `#${anchor}` : ""}`
 }
 

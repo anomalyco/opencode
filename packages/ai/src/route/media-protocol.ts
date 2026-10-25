@@ -3,11 +3,12 @@ import { HttpClientResponse } from "effect/http"
 import type { Snapshot, Status } from "../generation.js"
 import { Media } from "../media.js"
 import type { AuthInput } from "./auth.js"
+import { RequestExecutor } from "./executor.js"
 import {
   AIError,
   AuthenticationError,
   ContentPolicyError,
-  HttpContext,
+  type HttpContext,
   InvalidProviderOutputError,
   InvalidRequestError,
   ProviderID,
@@ -200,14 +201,20 @@ const FAILURES = {
 
 export type Failure = keyof typeof FAILURES
 
-const context = (response: HttpClientResponse.HttpClientResponse) =>
-  new HttpContext({ url: response.request.url, status: response.status, headers: response.headers })
-
 /** One protocol's route id, display name, and provider, with the decoders and errors that carry them. */
 export const identity = (input: { readonly id: string; readonly name: string; readonly provider: string }) => {
   const provider = ProviderID.make(input.provider)
   const frameError = (message: string, body?: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, cause }) })
+  const readError = (http: HttpContext) => (cause: unknown) =>
+    new AIError({
+      reason: new InvalidProviderOutputError({
+        route: input.id,
+        message: `Failed to read the ${input.name} response`,
+        http,
+        cause,
+      }),
+    })
 
   /**
    * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
@@ -217,20 +224,8 @@ export const identity = (input: { readonly id: string; readonly name: string; re
    * `contentPolicy` is a moderated result.
    */
   const text = Effect.fn("MediaProtocol.text")(function* (response: HttpClientResponse.HttpClientResponse) {
-    const http = context(response)
-    const body = yield* response.text.pipe(
-      Effect.mapError(
-        (cause) =>
-          new AIError({
-            reason: new InvalidProviderOutputError({
-              route: input.id,
-              message: `Failed to read the ${input.name} response`,
-              http,
-              cause,
-            }),
-          }),
-      ),
-    )
+    const http = RequestExecutor.responseHttp(response)
+    const body = yield* response.text.pipe(Effect.mapError(readError(http)))
     return {
       body,
       http,
@@ -271,11 +266,19 @@ export const identity = (input: { readonly id: string; readonly name: string; re
     })
   }
 
+  /** Read a raw binary body, for providers that answer with the media bytes themselves. */
+  const bytes = (response: HttpClientResponse.HttpClientResponse) =>
+    response.arrayBuffer.pipe(
+      Effect.map((buffer) => new Uint8Array(buffer)),
+      Effect.mapError(readError(RequestExecutor.responseHttp(response))),
+    )
+
   return {
     id: input.id,
     name: input.name,
     provider,
     text,
+    bytes,
     decodeJson,
     /** Decode a submission response into the token and first snapshot. */
     decodeStarted: <A, Token>(schema: Schema.Codec<A, unknown>, started: (value: A) => Started<Token>) => {

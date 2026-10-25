@@ -1,6 +1,18 @@
-import { createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import {
+  createMemo,
+  createSignal,
+  ErrorBoundary,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
@@ -36,8 +48,6 @@ type ViewerState = {
   /** Why the file shows as binary, when a viewer said. */
   readonly reason?: string
 }
-
-type ImageZoom = { readonly url: string; readonly zoom: "fit" | "actual"; readonly overflow: boolean }
 
 type MediaProps = {
   path: string
@@ -294,31 +304,92 @@ function createBlobUrl(content: () => FileContent) {
   })
 }
 
-/** Images and SVG previews: fit the pane, click to inspect at 1:1 when the image is larger. */
+/** Images and SVG previews: each decoded image owns its viewport. */
 function ArtifactImage(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
-  const [size, setSize] = createStore({ width: 0, height: 0 })
-  // Zoom belongs to one image: a new one starts fitted.
-  const fitted = (): ImageZoom => ({ url: url(), zoom: "fit", overflow: false })
-  const [saved, setSaved] = createSignal(fitted())
 
-  const state = () => {
-    const value = saved()
+  return (
+    <Show when={url()} keyed>
+      {(src) => <ImageStage {...props} src={src} />}
+    </Show>
+  )
+}
 
-    return value.url === url() ? value : fitted()
+function ImageStage(props: MediaProps & { src: string }) {
+  const ctx = useExtension()
+
+  const [view, setView] = createStore({
+    width: 0,
+    height: 0,
+    imageWidth: 0,
+    imageHeight: 0,
+    zoom: 1,
+    x: 0,
+    y: 0,
+    dragging: false,
+  })
+
+  const fit = () =>
+    Math.min(
+      1,
+      Math.max(1, view.width - 48) / (view.imageWidth || 1),
+      Math.max(1, view.height - 48) / (view.imageHeight || 1),
+    )
+
+  const bound = (offset: number, image: number, zoom: number) => {
+    // Keep the fitted footprint covered, including its letterboxing. Clamping to
+    // the stage edges instead would move the anchor during small pinch increments.
+    const limit = (image * fit() * (zoom - 1)) / 2
+
+    return Math.max(-limit, Math.min(limit, offset))
   }
 
-  let stage: HTMLDivElement | undefined
+  const x = () => bound(view.x, view.imageWidth, view.zoom)
+  const y = () => bound(view.y, view.imageHeight, view.zoom)
+  const reset = () => setView({ zoom: 1, x: 0, y: 0 })
 
-  const measure = () => {
+  const pan = (left: number, top: number) =>
+    setView({ x: bound(left, view.imageWidth, view.zoom), y: bound(top, view.imageHeight, view.zoom) })
+
+  let stage: HTMLDivElement | undefined
+  let drag: { id: number; clientX: number; clientY: number; x: number; y: number } | undefined
+  let dragged = false
+
+  const cursor = () => {
+    if (view.zoom === 1) return undefined
+
+    return view.dragging ? "grabbing" : "grab"
+  }
+
+  const endDrag = (event: PointerEvent) => {
+    if (event.pointerId !== drag?.id) return
+
+    drag = undefined
+    setView("dragging", false)
+  }
+
+  const zoomAt = (zoom: number, clientX: number, clientY: number) => {
     if (!stage) return
 
-    setSaved({ ...state(), overflow: size.width > stage.clientWidth - 48 || size.height > stage.clientHeight - 48 })
+    const rect = stage.getBoundingClientRect()
+    const next = Math.max(1, Math.min(Math.max(8, 1 / fit()), zoom))
+    const ratio = next / view.zoom
+    const anchor = { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 }
+    setView({
+      zoom: next,
+      x: bound(anchor.x - (anchor.x - x()) * ratio, view.imageWidth, next),
+      y: bound(anchor.y - (anchor.y - y()) * ratio, view.imageHeight, next),
+    })
   }
 
   createResizeObserver(
     () => stage,
-    () => measure(),
+    () => {
+      if (!stage) return
+
+      setView({ width: stage.clientWidth, height: stage.clientHeight })
+      setView({ x: x(), y: y() })
+    },
   )
 
   return (
@@ -326,49 +397,208 @@ function ArtifactImage(props: MediaProps) {
       ref={stage}
       data-slot="artifact-stage"
       data-checker
-      data-zoom={state().zoom}
-      data-overflow={state().overflow || undefined}
-      class="relative min-h-0 flex-1 overflow-auto"
+      data-zoom={view.zoom === 1 ? "fit" : "actual"}
+      data-overflow={fit() < 1 || undefined}
+      class="relative min-h-0 flex-1 overflow-hidden"
+      on:wheel={(event) => {
+        if (!view.imageWidth || (!event.ctrlKey && view.zoom === 1)) return
+
+        // Chromium delivers trackpad pinch as Ctrl-wheel. Consume it here before
+        // Desktop's window-level zoom handler; ordinary fitted scrolling stays native.
+        event.preventDefault()
+        event.stopPropagation()
+        const unit = [1, 16, view.height][event.deltaMode] ?? 1
+
+        if (event.ctrlKey) {
+          zoomAt(view.zoom * Math.exp((-event.deltaY * unit) / 100), event.clientX, event.clientY)
+
+          return
+        }
+
+        // Use the OS's trackpad momentum directly, with no second animation loop.
+        pan(x() - event.deltaX * unit, y() - event.deltaY * unit)
+      }}
     >
-      <div
-        classList={{
-          "absolute inset-0 flex items-center justify-center p-6": state().zoom === "fit",
-          "flex min-h-full min-w-full w-max items-center justify-center p-6": state().zoom === "actual",
+      <img
+        data-slot="artifact-media"
+        src={props.src}
+        alt={getFilename(props.path)}
+        draggable={false}
+        class="absolute left-1/2 top-1/2 select-none"
+        style={{
+          width: view.imageWidth ? `${view.imageWidth * fit()}px` : undefined,
+          height: view.imageHeight ? `${view.imageHeight * fit()}px` : undefined,
+          "max-width": "none",
+          "max-height": "none",
+          transform: `translate(-50%, -50%) translate(${x()}px, ${y()}px) scale(${view.zoom})`,
+          "touch-action": view.zoom > 1 ? "none" : "auto",
+          cursor: cursor(),
         }}
-      >
-        <img
-          data-slot="artifact-media"
-          src={url()}
-          alt={getFilename(props.path)}
-          draggable={false}
-          onError={() => props.onError()}
-          onLoad={(event) => {
-            const image = event.currentTarget
+        onPointerDown={(event) => {
+          if (!event.isPrimary || event.button !== 0) return
 
-            setSize({ width: image.naturalWidth, height: image.naturalHeight })
-            props.onInfo({ width: image.naturalWidth, height: image.naturalHeight })
-            measure()
-          }}
-          onClick={() => {
-            const value = state()
+          dragged = false
 
-            if (!value.overflow && value.zoom === "fit") return
+          if (view.zoom === 1) return
 
-            setSaved({ ...value, zoom: value.zoom === "fit" ? "actual" : "fit" })
-          }}
-        />
+          drag = { id: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: x(), y: y() }
+          event.currentTarget.setPointerCapture(event.pointerId)
+          setView("dragging", true)
+        }}
+        onPointerMove={(event) => {
+          if (!drag || drag.id !== event.pointerId) return
+
+          const dx = event.clientX - drag.clientX
+          const dy = event.clientY - drag.clientY
+
+          if (!dragged && Math.hypot(dx, dy) < 3) return
+
+          dragged = true
+          pan(drag.x + dx, drag.y + dy)
+        }}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
+        onError={() => props.onError()}
+        onLoad={(event) => {
+          const image = event.currentTarget
+          const width = image.naturalWidth || image.width || image.clientWidth || 300
+          const height = image.naturalHeight || image.height || image.clientHeight || 150
+
+          setView({
+            imageWidth: width,
+            imageHeight: height,
+            width: stage?.clientWidth ?? 0,
+            height: stage?.clientHeight ?? 0,
+          })
+          props.onInfo({ width, height })
+        }}
+        onClick={(event) => {
+          if (dragged) {
+            dragged = false
+
+            return
+          }
+
+          if (view.zoom > 1) return reset()
+
+          zoomAt(1 / fit(), event.clientX, event.clientY)
+        }}
+      />
+      <div class="absolute end-3 top-3">
+        <Button size="small" variant="neutral" disabled={view.zoom === 1} onClick={reset}>
+          {ctx.t("view.fit")}
+        </Button>
       </div>
     </div>
   )
 }
 
 function ArtifactVideo(props: MediaProps) {
+  const ctx = useExtension()
   const url = createBlobUrl(() => props.content)
+  // Fullscreen belongs to one video: a new file starts fitted in the pane.
+  const [expandedUrl, setExpandedUrl] = createSignal<string>()
+  const [paused, setPaused] = createSignal(true)
+  const [active, setActive] = createSignal(false)
+  const [box, setBox] = createStore({ left: 0, top: 0, ready: false })
+  const expanded = () => expandedUrl() === url()
+
+  let stage: HTMLDivElement | undefined
+  let video: HTMLVideoElement | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  const clearIdle = () => {
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
+    idleTimer = undefined
+  }
+
+  const wake = () => {
+    setActive(true)
+    clearIdle()
+    idleTimer = setTimeout(() => setActive(false), 2500)
+  }
+
+  onCleanup(clearIdle)
+
+  const close = () => setExpandedUrl(undefined)
+  const toggle = () => setExpandedUrl(expanded() ? undefined : url())
+
+  const measure = () => {
+    if (!video || video.offsetWidth === 0 || video.offsetHeight === 0) return
+
+    // Chromium's media controls place the 48x48 fullscreen slot 48px from the right edge (beside the
+    // 48px overflow button) and 24px above the bottom edge (above the 24px timeline scrubber).
+    setBox({
+      left: video.offsetLeft + video.offsetWidth - 96,
+      top: video.offsetTop + video.offsetHeight - 72,
+      ready: true,
+    })
+  }
+
+  createResizeObserver(
+    () => [stage, video],
+    () => measure(),
+  )
+
+  // Top-layer promotion escapes the side panel's stacking context and <main>'s content containment
+  // while keeping the same <video> element mounted so playback never resets.
+  createKeyed(expanded, (open) => {
+    const el = stage
+
+    if (!el || !open) return
+
+    el.setAttribute("popover", "manual")
+    el.showPopover?.()
+    measure()
+
+    makeEventListener(
+      window,
+      "keydown",
+      (event: KeyboardEvent) => {
+        if (event.key !== "Escape") return
+
+        event.preventDefault()
+        event.stopPropagation()
+        close()
+      },
+      { capture: true },
+    )
+
+    onCleanup(() => {
+      if (el.isConnected) el.hidePopover?.()
+      el.removeAttribute("popover")
+      measure()
+    })
+  })
+
+  const label = () => ctx.t(expanded() ? "view.exitFullscreen" : "view.fullscreen")
+  const controlsVisible = () => paused() || active()
 
   return (
-    <div data-slot="artifact-stage" data-zoom="fit" class="relative min-h-0 flex-1 overflow-hidden">
-      <div class="absolute inset-0 flex items-center justify-center p-6">
+    <div
+      ref={stage}
+      data-slot="artifact-stage"
+      data-zoom="fit"
+      data-expanded={expanded() ? "" : undefined}
+      class="relative min-h-0 flex-1 overflow-hidden"
+      onPointerMove={wake}
+      onPointerLeave={() => {
+        clearIdle()
+        setActive(false)
+      }}
+    >
+      <div
+        classList={{
+          "absolute inset-0 flex items-center justify-center p-6": !expanded(),
+          "absolute inset-0 flex items-center justify-center px-8 pt-12 pb-8": expanded(),
+        }}
+        onClick={(event) => {
+          if (expanded() && event.target === event.currentTarget) close()
+        }}
+      >
         <video
+          ref={video}
           data-slot="artifact-media"
           class="w-full bg-black"
           controls
@@ -376,11 +606,70 @@ function ArtifactVideo(props: MediaProps) {
           playsinline
           onError={() => props.onError()}
           src={url()}
+          onClick={(event) => {
+            // Chromium's controls answer the second click of a double click with a native fullscreen request, which
+            // covers the theatre the double click opens. Opting out with controlslist="nofullscreen" would also end
+            // their click-to-play. The fullscreen element ready check refuses an open popover, so the video is one
+            // while its controls handle this click, and is released before the next frame renders.
+            const el = event.currentTarget
+
+            // In native fullscreen, the controls' own exit must run; showPopover would throw there.
+            if (event.detail < 2 || document.fullscreenElement === el) return
+            el.setAttribute("popover", "manual")
+            el.showPopover?.()
+            requestAnimationFrame(() => el.removeAttribute("popover"))
+          }}
+          onDblClick={toggle}
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onEnded={() => setPaused(true)}
           onLoadedMetadata={(event) => {
-            const video = event.currentTarget
-            props.onInfo({ width: video.videoWidth, height: video.videoHeight, duration: video.duration })
+            const el = event.currentTarget
+            setPaused(el.paused)
+            props.onInfo({ width: el.videoWidth, height: el.videoHeight, duration: el.duration })
+            measure()
           }}
         />
+        <button
+          type="button"
+          data-slot="artifact-video-fullscreen"
+          aria-label={label()}
+          aria-pressed={expanded()}
+          title={label()}
+          onClick={toggle}
+          style={box.ready ? { left: `${box.left}px`, top: `${box.top}px` } : { right: "72px", bottom: "48px" }}
+          classList={{
+            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none":
+              true,
+            "opacity-100": controlsVisible(),
+            "pointer-events-none opacity-0": !controlsVisible(),
+          }}
+        >
+          <span class="flex size-9 items-center justify-center rounded-full transition-colors">
+            <Show
+              when={expanded()}
+              fallback={
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M3 6V3H6M10 3H13V6M13 10V13H10M6 13H3V10"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="square"
+                  />
+                </svg>
+              }
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M3 5.5H5.5V3M13 5.5H10.5V3M10.5 13V10.5H13M5.5 13V10.5H3"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </Show>
+          </span>
+        </button>
       </div>
     </div>
   )

@@ -33,7 +33,7 @@ story("renders small completed Markdown immediately without skipping sanitizatio
   await harness.getByLabel("Markdown text").fill("```ts\nconst value = 42\n```")
   await expect(harness.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
   await expect(harness.locator("pre code")).toHaveText("const value = 42")
-  await expect(harness.locator("pre.shiki")).toBeVisible()
+  await expect(harness.locator("pre.highlights")).toBeVisible()
 })
 
 story("keeps Markdown text selectable inside a container that disables selection", async ({ page }) => {
@@ -84,7 +84,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
     for (const source of [
       "flowchart LR\n A[Start] --> B[End]",
       "sequenceDiagram\n Alice->>Bob: Hello",
-      '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n A["<a href=\'https://example.com\' target=\'_blank\'>External</a>"] --> B[End]',
+      '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n A["<a href=\'https://example.com\' target=\'_blank\'>External</a>"] --> B[End]\n click A "https://example.com" _blank',
     ]) {
       const svg = await renderMermaidSvg(source)
       const document = new DOMParser().parseFromString(svg, "image/svg+xml")
@@ -119,7 +119,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
       root: "svg",
       text: expect.stringContaining("External"),
       unsafe: 0,
-      links: [{ href: "https://example.com", target: "_blank", rel: "noopener" }],
+      links: [{ href: "https://example.com/", target: "_blank", rel: "noopener noreferrer" }],
       markdown: result.before,
     },
   ])
@@ -464,15 +464,15 @@ story("renders cached Mermaid blocks and falls back to code for invalid diagrams
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
-  await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
+  await expect(markdown.locator('[data-component="markdown-mermaid"] > svg.pele')).toBeVisible()
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
-  await harness.getByLabel("Markdown text").fill("```mermaid\nnot a diagram\n```")
+  await harness.getByLabel("Markdown text").fill("```mermaid\nflowchart LR; A[broken\n```")
   await expect(markdown.locator('[data-component="markdown-mermaid"]')).toHaveCount(0)
   await expect(markdown.locator("pre code")).toBeVisible()
-  await expect(markdown.locator("pre code")).toHaveText("not a diagram")
+  await expect(markdown.locator("pre code")).toHaveText("flowchart LR; A[broken")
   await expect(markdown.getByRole("button", { name: "Copy", exact: true })).toBeVisible()
 })
 
@@ -640,7 +640,7 @@ for (const theme of ["light", "dark"]) {
     await expect(diagrams.nth(0)).toContainText("swim()")
     await expect(diagrams.nth(1)).toBeVisible()
     await expect(diagrams.nth(1)).toContainText("Display")
-    await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
+    await expect(diagrams.nth(1).locator(".pele-edge")).toHaveCount(3)
     await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
     await harness.getByLabel("Streaming").uncheck()
     await expect(diagrams).toHaveCount(2)

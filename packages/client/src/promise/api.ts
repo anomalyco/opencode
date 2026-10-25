@@ -7,6 +7,7 @@ export type { RpcApi, RpcCallOptions, RpcClient, RpcEventPayload } from "./rpc.j
 export type AgentApi = Client["agent"]
 export type CommandApi = Client["command"]
 export type ConfigApi = Client["config"]
+export type CredentialApi = Client["credential"]
 export type EventApi = Client["event"]
 export type GenerateApi = Client["generate"]
 export type IntegrationApi = Client["integration"]

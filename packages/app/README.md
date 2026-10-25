@@ -39,7 +39,7 @@ bun run test:e2e:local
 bun run test:e2e:local -- --grep "settings"
 ```
 
-CI builds the app once and runs the same suite against Vite preview, serving production assets from `dist`. Managed built runs never reuse an existing server, so a running dev server cannot silently replace the production build. To run this mode locally:
+CI builds the app once and runs the same suite against a static Bun server (`e2e/utils/serve.ts`) that serves the production assets in `dist` with Vite preview's SPA fallback rules. Managed built runs never reuse an existing server, so a running dev server cannot silently replace the production build. To run this mode locally:
 
 ```bash
 bun run test:e2e:built
@@ -64,24 +64,23 @@ Compiled CLI startup and service lifecycle coverage runs separately in CI via `p
 
 Environment options:
 
-- `PLAYWRIGHT_BUILD=1` (build and preview locally; always enabled when `CI` is set)
+- `PLAYWRIGHT_BUILD=1` (build and serve `dist` locally; always enabled when `CI` is set)
 - `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (dev fixture API address, default: `127.0.0.1:4096`; built runs use the app's origin, matching production)
-- `PLAYWRIGHT_PORT` (managed dev or preview server port, default: `3000`)
+- `PLAYWRIGHT_PORT` (managed dev or static server port, default: `3000`)
 - `PLAYWRIGHT_BASE_URL` (use an externally managed app instead of starting a server; otherwise defaults to `http://127.0.0.1:<PLAYWRIGHT_PORT>`)
 
 ## Deployment
 
-The `deploy` GitHub Actions workflow uses SST to deploy the web app from these branches in `anomalyco/opencode`:
+The `deploy` GitHub Actions workflow uses SST to deploy the web app to `beta.opencode.ai` on every push to the
+`beta` branch in `anomalyco/opencode`. The `dev` and `production` stages do not deploy the web app.
 
-| Branch       | Site                  |
-| ------------ | --------------------- |
-| `dev`        | `app.dev.opencode.ai` |
-| `production` | `app.opencode.ai`     |
-| `beta`       | `beta.opencode.ai`    |
+`beta` is the team's dogfooding branch: `dev` merged in by hand, plus commits pushed directly to it. Do not rebase or
+force-push it. Each push also runs the `publish` workflow, which ships the same commit as the OpenCode Beta desktop app
+(see `packages/desktop/README.md`).
 
-Changes merged into `v2` reach the beta site when they are promoted to `beta`. The beta SST stage deploys
-only the web app, using the same `WebApp` StaticSite definition as production. It sets the build channel
-and Sentry environment to `beta` without deploying the API, console, database, or billing infrastructure.
+The beta SST stage deploys only the web app, using the `WebApp` StaticSite definition in `infra/webapp.ts`. It sets
+the build channel and Sentry environment to `beta` without deploying the API, console, database, or billing
+infrastructure.
 
 `VITE_OPENCODE_SERVER_MODE` controls which server the web build provides at startup:
 

@@ -1,18 +1,14 @@
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { Icon } from "@opencode/ui/icon"
-import { RadioGroup, RadioItem } from "@opencode/ui/radio"
+import { Spinner } from "@opencode/ui/spinner"
 import { Switch } from "@opencode/ui/switch"
-import { TextInput } from "@opencode/ui/text-input"
-import { Tooltip } from "@opencode/ui/tooltip"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { renderSVG } from "uqr"
 import { useExtension, type Live, type IpcClient } from "../sdk"
 import type { Pairing } from "./contract"
 import type definition from "./index"
-import { customAddress, pairingRoutes, type PairingRoute, type RouteKind } from "./routes"
+import { remoteAddress } from "./remote"
 
 type Client = IpcClient<typeof Pairing.spec>
 
@@ -29,8 +25,8 @@ export type PairingServer = {
   }
 }
 
-/** The command that lets the local server accept connections from other devices. */
-const LISTEN_COMMAND = "opencode service set hostname 0.0.0.0"
+/** Where remote access stands for a pairing: turning on, on, or failed to turn on. */
+type Setup = "pending" | "ready" | "failed"
 
 export default function PairingPage(props: {
   server: Accessor<PairingServer | undefined>
@@ -39,35 +35,63 @@ export default function PairingPage(props: {
   const ctx = useExtension<typeof definition>()
   // The extension's dialogs close with it, so disabling pairing also stops the dialog's code polling.
   const dialogs = ctx.dialogs
-  const system = ctx.system
-  const links = ctx.stores.links
   const queryClient = useQueryClient()
-  const [custom, setCustom] = createStore({ draft: links.value.custom, invalid: false })
 
-  const local = useQuery(() => ({
-    queryKey: [ctx.id, "local"],
+  // Remote access and the display setting need pairing's main side; codes come from the server, so they never wait.
+  const main = () => {
+    const live = props.pairing()
+
+    return live.status === "active" ? live : undefined
+  }
+
+  const remoteKey = () => [ctx.id, "remote", main()?.generation]
+
+  const remote = useQuery(() => ({
+    queryKey: remoteKey(),
     queryFn: (input) => {
-      const server = props.server()
+      const live = main()
 
-      if (!server) throw new Error("The local server is not listed")
+      if (!live) throw new Error("Pairing's main side is not active")
 
-      return server.client.server.info({ signal: input.signal })
+      return live.value.remote({ signal: input.signal })
     },
-    enabled: !!props.server(),
-    // Asks again each time the page opens: the guidance below tells the user to change the hostname and reopen Pairing.
+    enabled: !!main(),
     gcTime: 0,
   }))
 
-  // Reading pending query data would suspend the entire settings surface.
-  const localInfo = () => (local.isSuccess ? local.data : undefined)
+  // Main restarts the background service on every change, so a setting that already matches is left alone unless
+  // `restart` asks for it, as a tunnel that never connected needs.
+  const change = useMutation(() => ({
+    mutationFn: async (input: { enabled: boolean; restart?: boolean }) => {
+      const live = main()
 
-  // The custom address field starts with the saved address, so a valid address being typed counts at once and a cleared
-  // or invalid one does not; it is saved on Enter, when the field loses focus, and when the dialog opens.
-  const routes = createMemo(() => pairingRoutes(localInfo()?.urls ?? [], customAddress(custom.draft.trim()) ?? ""))
+      if (!live) throw new Error("Pairing's main side is not active")
 
-  // Whether the server itself listens only on this computer. Not derived from the routes above, so typing a custom
-  // address does not remove the notice above the field while the user types.
-  const listensLocally = () => local.isSuccess && pairingRoutes(local.data.urls, "").length === 0
+      if (input.restart || (await live.value.remote()) !== input.enabled) await live.value.setRemote(input.enabled)
+    },
+    onSuccess: (_, input) => queryClient.setQueryData(remoteKey(), input.enabled),
+  }))
+
+  const setup = (): Setup => {
+    if (change.isPending) return "pending"
+
+    if (change.isError && change.variables?.enabled) return "failed"
+
+    if (remote.data === true) return "ready"
+
+    return remote.isError ? "failed" : "pending"
+  }
+
+  const tunnel = async (signal: AbortSignal) => {
+    const server = props.server()
+
+    if (!server) throw new Error("The local server is not listed")
+    const address = remoteAddress((await server.client.server.info({ signal })).urls)
+
+    if (!address) throw new Error("The remote access tunnel is not connected yet")
+
+    return address
+  }
 
   const code = async (signal: AbortSignal) => {
     const server = props.server()
@@ -78,64 +102,42 @@ export default function PairingPage(props: {
     return { code: pairing.code, expiresIn: pairing.expires_in }
   }
 
-  // Only the display setting needs pairing's main side; the link and QR code come from the server, so they never wait.
-  const display = () => {
-    const live = props.pairing()
-
-    return live.status === "active" ? live : undefined
+  // Every pairing goes through remote access, so pairing turns it on first.
+  const pair = () => {
+    if (remote.data !== true && !change.isPending) change.mutate({ enabled: true })
+    dialogs.open(() => (
+      <DialogPairing
+        setup={setup}
+        onRetry={(restart) => change.mutate({ enabled: true, restart })}
+        tunnel={tunnel}
+        code={code}
+      />
+    ))
   }
 
   const screenActive = useQuery(() => ({
-    queryKey: [ctx.id, "screen-active", display()?.generation],
+    queryKey: [ctx.id, "screen-active", main()?.generation],
     queryFn: (input) => {
-      const live = display()
+      const live = main()
 
       if (!live) throw new Error("Pairing's main side is not active")
 
       return live.value.screenActive({ signal: input.signal })
     },
-    enabled: !!display(),
+    enabled: !!main(),
     gcTime: 0,
   }))
 
   const screenActivity = useMutation(() => ({
     mutationFn: (enabled: boolean) => {
-      const live = display()
+      const live = main()
 
       if (!live) throw new Error("Pairing's main side is not active")
 
       return live.value.setScreenActive(enabled)
     },
-    onSuccess: (_, enabled) => queryClient.setQueryData([ctx.id, "screen-active", display()?.generation], enabled),
+    onSuccess: (_, enabled) => queryClient.setQueryData([ctx.id, "screen-active", main()?.generation], enabled),
   }))
-
-  // "Copied" shows for two seconds after each copy.
-  const commandCopied: CopiedTimer = {}
-  onCleanup(() => clearTimeout(commandCopied.timeout))
-
-  const copyCommand = useMutation(() => ({
-    mutationFn: () => system.copy(LISTEN_COMMAND),
-    onMutate: () => clearTimeout(commandCopied.timeout),
-    onSuccess: () => {
-      commandCopied.timeout = setTimeout(() => copyCommand.reset(), 2000)
-    },
-  }))
-
-  const saveCustom = () => {
-    const draft = custom.draft.trim()
-    const address = draft ? customAddress(draft) : ""
-
-    if (address === undefined) return void setCustom("invalid", true)
-    setCustom({ draft: address, invalid: false })
-
-    if (address === links.value.custom) return
-    links.update((value) => {
-      value.custom = address
-
-      // A new address is what the user wants to share next.
-      if (address) value.selected = address
-    })
-  }
 
   return (
     <>
@@ -149,99 +151,30 @@ export default function PairingPage(props: {
       </div>
 
       <div class="settings-tab-body settings-tab-body--sectioned">
-        <section class="settings-section" aria-label={ctx.t("connection")}>
+        <section class="settings-section" aria-label={ctx.t("title")}>
           <div data-component="settings-list">
-            <Row title={ctx.t("connection")} description={ctx.t("local.description")}>
-              <Show when={routes().length > 0}>
-                <Button
-                  variant="neutral"
-                  onClick={() => {
-                    saveCustom()
-                    dialogs.open(() => (
-                      <DialogPairing
-                        title={ctx.t("connection")}
-                        routes={routes}
-                        selected={() => links.value.selected}
-                        onSelect={(url) =>
-                          links.update((value) => {
-                            value.selected = url
-                          })
-                        }
-                        code={code}
-                      />
-                    ))
-                  }}
-                >
-                  {ctx.t("local.open")}
-                </Button>
-              </Show>
+            <Row title={ctx.t("pair.title")} description={ctx.t("pair.description")}>
+              <Button
+                variant="neutral"
+                disabled={!main() || !props.server() || (change.isPending && change.variables?.enabled === false)}
+                onClick={pair}
+              >
+                {ctx.t("pair.open")}
+              </Button>
             </Row>
-            <Show when={listensLocally()}>
-              <div class="flex flex-col gap-2 py-4" role="status">
-                <div class="flex items-center gap-2 text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                  <Icon name="lock" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-                  {ctx.t("unreachable.title")}
-                </div>
-                <p class="text-[13px] leading-[var(--line-height-base)] text-v2-text-text-muted">
-                  {ctx.t("unreachable.description")}
-                </p>
-                <div class="flex min-w-0 items-center gap-2">
-                  <code
-                    dir="ltr"
-                    class="min-w-0 truncate rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 px-2 py-1 text-12-mono text-v2-text-text-base"
+            <Show when={main()}>
+              <div data-action="settings-remote-access">
+                <Row title={ctx.t("remote.title")} description={ctx.t("remote.description")}>
+                  <Switch
+                    hideLabel
+                    checked={change.isPending ? change.variables?.enabled === true : remote.data === true}
+                    disabled={!remote.isSuccess || change.isPending}
+                    onChange={(enabled) => change.mutate({ enabled })}
                   >
-                    {LISTEN_COMMAND}
-                  </code>
-                  <Tooltip
-                    value={ctx.t(copyCommand.isSuccess ? "common.copied" : "unreachable.copy")}
-                    placement="top"
-                    forceOpen={copyCommand.isSuccess ? true : undefined}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="small"
-                      aria-label={ctx.t("unreachable.copy")}
-                      onClick={() => copyCommand.mutate()}
-                    >
-                      <Icon name={copyCommand.isSuccess ? "check" : "copy"} size="small" />
-                    </Button>
-                  </Tooltip>
-                </div>
+                    {ctx.t("remote.title")}
+                  </Switch>
+                </Row>
               </div>
-            </Show>
-            {/* The address field spans the row so the description keeps its width. */}
-            <div data-component="settings-row">
-              <div data-slot="settings-row-copy">
-                <div data-slot="settings-row-title">{ctx.t("custom.title")}</div>
-                <div data-slot="settings-row-description">{ctx.t("custom.description")}</div>
-                <TextInput
-                  type="url"
-                  dir="ltr"
-                  spellcheck={false}
-                  autocapitalize="off"
-                  aria-label={ctx.t("custom.title")}
-                  placeholder={ctx.t("custom.placeholder")}
-                  value={custom.draft}
-                  invalid={custom.invalid}
-                  aria-describedby={custom.invalid ? "pairing-custom-error" : undefined}
-                  onInput={(event) => setCustom({ draft: event.currentTarget.value, invalid: false })}
-                  onChange={saveCustom}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") saveCustom()
-                  }}
-                />
-                <Show when={custom.invalid}>
-                  <span
-                    id="pairing-custom-error"
-                    class="text-11-regular leading-[var(--line-height-compact)] text-v2-state-fg-danger"
-                    role="alert"
-                  >
-                    {ctx.t("custom.invalid")}
-                  </span>
-                </Show>
-              </div>
-            </div>
-            <Show when={display()}>
               <div data-action="settings-keep-screen-active">
                 <Row title={ctx.t("screenActive.title")} description={ctx.t("screenActive.description")}>
                   <Switch
@@ -256,14 +189,20 @@ export default function PairingPage(props: {
               </div>
             </Show>
           </div>
-          <Show when={display() && (screenActive.error || screenActivity.error)}>
+          <Show when={main() && (remote.error || change.error)}>
+            <p class="text-text-danger-base" role="alert">
+              {ctx.t("remote.error")}
+            </p>
+          </Show>
+          <Show when={main() && (screenActive.error || screenActivity.error)}>
             <p class="text-text-danger-base" role="alert">
               {ctx.t("screenActive.error")}
             </p>
           </Show>
-          <Show when={local.error || !props.server()}>
+          {/* Pending main is still starting; anything else that leaves it inactive keeps pairing from turning on. */}
+          <Show when={props.pairing().status === "inactive" || !props.server()}>
             <p class="text-text-danger-base" role="alert">
-              {ctx.t("error")}
+              {ctx.t("pair.unavailable")}
             </p>
           </Show>
         </section>
@@ -275,34 +214,33 @@ export default function PairingPage(props: {
 /** The pending return from "Copied" to the copy label. */
 type CopiedTimer = { timeout?: ReturnType<typeof setTimeout> }
 
-const routeLabel: Record<RouteKind, string> = {
-  custom: "route.custom",
-  local: "route.local",
-  vpn: "route.vpn",
-  other: "route.other",
-}
-
-const routeDescription: Record<RouteKind, string> = {
-  custom: "route.custom.description",
-  local: "route.local.description",
-  vpn: "route.vpn.description",
-  other: "route.other.description",
-}
-
 function DialogPairing(props: {
-  title: string
-  routes: Accessor<readonly PairingRoute[]>
-  selected: Accessor<string>
-  onSelect: (url: string) => void
+  setup: Accessor<Setup>
+  /** Turns remote access on again; `restart` restarts the service even when it is already on. */
+  onRetry: (restart: boolean) => void
+  tunnel: (signal: AbortSignal) => Promise<string>
   code: (signal: AbortSignal) => Promise<{ readonly code: string; readonly expiresIn: number }>
 }) {
   const ctx = useExtension()
   const system = ctx.system
 
+  // The service attaches the tunnel in the background after it starts, so ask until the server advertises it, for
+  // about three minutes, as `opencode pair --remote` waits.
+  const tunnel = useQuery(() => ({
+    queryKey: [ctx.id, "tunnel"],
+    queryFn: (input) => props.tunnel(input.signal),
+    enabled: props.setup() === "ready",
+    gcTime: 0,
+    staleTime: Infinity,
+    retry: 180,
+    retryDelay: 1000,
+  }))
+
   // Codes are single-use, so replace the link as soon as the server forgets the current code.
   const code = useQuery(() => ({
-    queryKey: [ctx.id, "code"],
+    queryKey: [ctx.id, "code", tunnel.data],
     queryFn: (input) => props.code(input.signal),
+    enabled: tunnel.isSuccess,
     gcTime: 0,
     refetchInterval: (query) => (query.state.data?.expiresIn ?? 60) * 1000,
     // A minimized window must not come back to a code that expired while it was hidden.
@@ -321,15 +259,14 @@ function DialogPairing(props: {
     return Math.max(0, code.data.expiresIn - Math.floor(Math.max(0, now() - code.dataUpdatedAt) / 1000))
   }
 
-  const route = createMemo(() => props.routes().find((item) => item.url === props.selected()) ?? props.routes()[0])
-
   const url = createMemo(() => {
-    const target = route()
+    if (!code.isSuccess || !tunnel.isSuccess) return
 
-    if (!code.isSuccess || !target) return
-
-    return new URL(`/auth/connect/${code.data.code}`, target.url).href
+    return new URL(`/auth/connect/${code.data.code}`, tunnel.data).href
   })
+
+  // A tunnel error from before a retry stays on the disabled query, so it counts only once setup is ready again.
+  const failed = () => props.setup() === "failed" || (props.setup() === "ready" && tunnel.isError)
 
   // "Copied" shows for two seconds after each copy.
   const copied: CopiedTimer = {}
@@ -348,19 +285,14 @@ function DialogPairing(props: {
     },
   }))
 
-  // "Copied" describes the link on screen, so it ends when the user switches to another link.
-  const forgetCopy = () => {
-    clearTimeout(copied.timeout)
-    copy.reset()
-  }
-
   const refresh = () => (
     <button
       type="button"
       class="rounded-[4px] px-1 text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted underline-offset-2 hover:text-v2-text-text-base hover:underline focus-visible:underline focus-visible:outline-none disabled:opacity-50"
       disabled={code.isFetching}
       onClick={() => {
-        forgetCopy()
+        clearTimeout(copied.timeout)
+        copy.reset()
         void code.refetch()
       }}
     >
@@ -368,98 +300,43 @@ function DialogPairing(props: {
     </button>
   )
 
-  // The QR code carries every address as `opencode pair` prints it, {"code","urls"} JSON, so the app's scanner can
-  // reach this machine over whichever network it shares; the chosen address goes first.
+  // The QR code carries the remote address as `opencode pair --remote` prints it, {"code","urls"} JSON, which the
+  // app's scanner reads.
   const qr = createMemo(() => {
-    const target = route()
+    if (!code.isSuccess || !tunnel.isSuccess) return
 
-    if (!code.isSuccess || !target) return
-    const urls = [target.url, ...props.routes().flatMap((item) => (item.url === target.url ? [] : [item.url]))]
-
-    return renderSVG(JSON.stringify({ code: code.data.code, urls }), {
+    return renderSVG(JSON.stringify({ code: code.data.code, urls: [tunnel.data] }), {
       border: 4,
       blackColor: "currentColor",
       whiteColor: "transparent",
     })
   })
 
+  // The QR code's frame, which also holds the setup progress and its failure, so the dialog keeps its size.
+  const frame = "mx-auto aspect-square w-full max-w-[min(320px,calc(100dvh-360px))] shrink-0 rounded-[6px]"
+
   return (
     <Dialog fit containerClass="max-w-[min(400px,calc(100vw-32px))]">
       <DialogHeader>
-        <DialogTitleGroup title={props.title} description={ctx.t("description")} />
+        <DialogTitleGroup title={ctx.t("pair.title")} description={ctx.t("dialog.description")} />
       </DialogHeader>
       <DialogBody class="flex flex-col gap-4 px-4 pb-4">
-        <Show
-          when={props.routes().length > 1}
-          fallback={
-            <Show when={route()}>
-              {(item) => (
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                    {ctx.t(routeLabel[item().kind])}
-                  </span>
-                  <span class="text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                    {ctx.t(routeDescription[item().kind])}
-                  </span>
-                </div>
-              )}
-            </Show>
-          }
-        >
-          <RadioGroup
-            hideLabel
-            label={ctx.t("routes")}
-            value={route()?.url}
-            onChange={(url) => {
-              forgetCopy()
-              props.onSelect(url)
-            }}
-          >
-            <For each={props.routes()}>
-              {(item) => (
-                <RadioItem
-                  value={item.url}
-                  label={ctx.t(routeLabel[item.kind])}
-                  description={
-                    <>
-                      {ctx.t(routeDescription[item.kind])}
-                      {" · "}
-                      <bdi dir="ltr">{new URL(item.url).host}</bdi>
-                    </>
-                  }
-                />
-              )}
-            </For>
-          </RadioGroup>
-        </Show>
         <Show when={url()}>
           <div
-            class="mx-auto aspect-square w-full max-w-[min(320px,calc(100dvh-360px))] shrink-0 rounded-[6px] bg-v2-background-bg-base p-6 text-v2-text-text-base [&>svg]:size-full"
+            class={`${frame} bg-v2-background-bg-base p-6 text-v2-text-text-base [&>svg]:size-full`}
             role="img"
             aria-label={ctx.t("qr")}
             innerHTML={qr()}
           />
-          <div class="flex min-w-0 flex-col items-center gap-1 pb-2">
-            <Tooltip
-              class="min-w-0 max-w-full"
-              value={ctx.t(copy.isSuccess ? "common.copied" : "copyLink")}
-              placement="top"
-              forceOpen={copy.isSuccess ? true : undefined}
+          <div class="flex flex-col items-center gap-1 pb-2">
+            <Button
+              variant="neutral"
+              icon={copy.isSuccess ? "check" : "copy"}
+              disabled={copy.isPending}
+              onClick={() => copy.mutate()}
             >
-              <button
-                type="button"
-                class="inline-flex min-h-8 max-w-full select-none items-center justify-center gap-2 rounded-[6px] px-2 py-1 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted transition-colors hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base focus-visible:bg-v2-background-bg-layer-02 focus-visible:outline-none disabled:opacity-50"
-                disabled={copy.isPending}
-                aria-label={ctx.t("copyLink")}
-                onClick={() => copy.mutate()}
-              >
-                <Icon name={copy.isSuccess ? "check" : "copy"} size="small" class="shrink-0" />
-                {/* The whole link, code included, so it can be read out or typed on a device without a camera. */}
-                <bdi dir="ltr" class="min-w-0 break-all text-start text-12-mono">
-                  {url()}
-                </bdi>
-              </button>
-            </Tooltip>
+              {ctx.t(copy.isSuccess ? "common.copied" : "copyLink")}
+            </Button>
             <div class="flex items-center gap-2 text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted">
               <span role="timer" aria-live="off">
                 {ctx.t("expires", { time: countdown(remaining()) })}
@@ -469,8 +346,37 @@ function DialogPairing(props: {
             </div>
           </div>
         </Show>
-        {/* A failed fetch hides the link, so the way to try again stays next to the error. */}
-        <Show when={!url() && code.error}>
+        <Show when={!url() && !failed() && !code.error}>
+          <div
+            class={`${frame} flex flex-col items-center justify-center gap-2 bg-v2-background-bg-layer-01 p-6 text-center`}
+            role="status"
+          >
+            <Spinner class="size-5 text-v2-icon-icon-muted" />
+            <Show when={!tunnel.isSuccess}>
+              <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                {ctx.t("setup.title")}
+              </span>
+              <span class="text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                {ctx.t("setup.description")}
+              </span>
+            </Show>
+          </div>
+        </Show>
+        <Show when={failed()}>
+          <div
+            class={`${frame} flex flex-col items-center justify-center gap-3 bg-v2-background-bg-layer-01 p-6 text-center`}
+          >
+            <p class="text-text-danger-base" role="alert">
+              {ctx.t("setup.error")}
+            </p>
+            {/* A tunnel that never connected comes back when the service starts it again. */}
+            <Button variant="neutral" onClick={() => props.onRetry(tunnel.isError)}>
+              {ctx.t("retry")}
+            </Button>
+          </div>
+        </Show>
+        {/* A failed code fetch hides the link, so the way to try again stays next to the error. */}
+        <Show when={!url() && !failed() && code.error}>
           <div class="flex flex-col items-center gap-1">
             <p class="text-text-danger-base" role="alert">
               {ctx.t("error")}

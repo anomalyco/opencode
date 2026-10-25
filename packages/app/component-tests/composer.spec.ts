@@ -22,6 +22,8 @@ for (const direction of ["ltr", "rtl"]) {
       await expect(component.locator('[data-action="composer-alternate-delivery"]')).toHaveCount(
         alternate === "none" ? 0 : 1,
       )
+      // A late Inter swap resizes the delivery keybind and shifts the toolbar; measure after fonts settle.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
       for (const width of [1024, 360]) {
         await page.setViewportSize({ width, height: 720 })
@@ -110,6 +112,7 @@ for (const direction of ["ltr", "rtl"]) {
         await add.click()
         await expect(page.getByRole("menuitem", { name: "Images and files" })).toBeVisible()
         await page.keyboard.press("Escape")
+        await expect(add).toBeFocused()
         expect(await add.boundingBox()).toEqual(fixedAdd)
       }
 
@@ -367,4 +370,60 @@ story("keeps default thinking accessible by keyboard without composer hover", as
   await page.keyboard.press("Tab")
   await expect(control).not.toBeFocused()
   await expect(control).toHaveCSS("opacity", "0")
+})
+
+story.describe("mobile variant drawer", () => {
+  story.use({ viewport: { width: 360, height: 720 } })
+
+  // Guards patches/@corvu%2Fdrawer@0.2.4.patch. The drawer starts its opening transition two frames after it opens.
+  // Dismissing it before then used to slide it open anyway, and dismissing it in that frame left it closing off screen
+  // for good, holding focus and disabling pointer input on the page. Playwright input cannot target those frames, so
+  // the page dismisses it.
+  for (const moment of ["before", "as"] as const) {
+    story(`closes and restores focus when dismissed ${moment} it starts opening`, async ({ mount, page }) => {
+      const component = await mount("opencode-composer-flow--model-and-variant")
+      const variant = component.getByRole("button", { name: "Choose model variant" })
+      const drawer = page.getByRole("dialog", { name: "Choose model variant", exact: true })
+      const high = drawer.getByRole("button", { name: "high", exact: true })
+
+      // Load the lazy drawer first so the dismissal below races only the drawer's own transition.
+      await variant.click()
+      await expect(high).toBeInViewport()
+      const content = await drawer.elementHandle()
+
+      if (!content) throw new Error("Missing variant drawer")
+      await page.keyboard.press("Escape")
+      await expect(drawer).toBeHidden()
+      await expect(variant).toBeFocused()
+
+      await variant.evaluate(
+        (trigger: HTMLElement, race) =>
+          new Promise<void>((resolve) => {
+            const dismiss = () => {
+              document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+              resolve()
+            }
+
+            // Mutation records arrive before the browser renders the opening transition's first frame.
+            const observer = new MutationObserver(() => {
+              if (!race.content.hasAttribute("data-opening")) return
+              observer.disconnect()
+              dismiss()
+            })
+
+            if (race.moment === "as") observer.observe(race.content, { attributeFilter: ["data-opening"] })
+            trigger.click()
+
+            if (race.moment === "before") dismiss()
+          }),
+        { content, moment },
+      )
+      await expect(drawer).toBeHidden()
+      await expect(variant).toBeFocused()
+      await expect(page.locator("body")).not.toHaveCSS("pointer-events", "none")
+
+      await variant.click()
+      await expect(high).toBeInViewport()
+    })
+  }
 })

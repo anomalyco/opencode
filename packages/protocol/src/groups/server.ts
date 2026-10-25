@@ -30,11 +30,12 @@ export const PairingSession = Schema.Struct({
 }).annotate({ identifier: "PairingSession" })
 export type PairingSession = typeof PairingSession.Type
 
-const PAIRING_CONNECT_PATH = /^\/auth\/connect\/[^/]+$/
+export const PAIRING_CONNECT_PATH = "/auth/connect/:code"
 
-// Authorization middleware skips credential checks for pairing links; the connect handler consumes the code instead.
+const PAIRING_CONNECT_URL = /^\/auth\/connect\/[^/]+$/
+
 export function isPairingConnectURL(url: URL) {
-  return PAIRING_CONNECT_PATH.test(url.pathname)
+  return PAIRING_CONNECT_URL.test(url.pathname)
 }
 
 export const ServerGroup = HttpApiGroup.make("server.server")
@@ -61,7 +62,7 @@ export const ServerGroup = HttpApiGroup.make("server.server")
     ),
   )
   .add(
-    HttpApiEndpoint.get("server.connect", "/auth/connect/:code", {
+    HttpApiEndpoint.get("server.connect", PAIRING_CONNECT_PATH, {
       params: { code: Schema.String },
       success: PairingSession,
       error: UnauthorizedError,

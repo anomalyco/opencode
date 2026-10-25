@@ -52,8 +52,18 @@ export const mergeProviderOptions = (
 export const HttpTimeout = Schema.Union([Schema.Number.check(Schema.isGreaterThan(0)), Schema.Literal(false)])
 export type HttpTimeout = Schema.Schema.Type<typeof HttpTimeout>
 
-/** Applied to `headerTimeout` and `chunkTimeout` when a request leaves them unset. */
+/** Applied to `headerTimeout` when a request leaves it unset. */
 export const DEFAULT_HTTP_TIMEOUT_MS = 300_000
+
+/**
+ * Applied to `chunkTimeout` when a request leaves it unset. Some providers, such as DeepSeek, have specifically asked
+ * clients to allow at least 15 minutes, because their models can stream nothing for minutes while they reason.
+ */
+export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
+
+/** `Content-Encoding` for JSON request bodies; `none` sends plain JSON. */
+export const RequestEncoding = Schema.Literals(["zstd", "gzip", "none"])
+export type RequestEncoding = Schema.Schema.Type<typeof RequestEncoding>
 
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
@@ -65,6 +75,8 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   headerTimeout: Schema.optional(HttpTimeout),
   /** Time allowed between streamed response chunks once headers have arrived. */
   chunkTimeout: Schema.optional(HttpTimeout),
+  /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
+  encoding: Schema.optional(RequestEncoding),
 }) {}
 
 export namespace HttpOptions {
@@ -86,9 +98,18 @@ export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined
   const timeout = items.findLast((item) => item?.timeout !== undefined)?.timeout
   const headerTimeout = items.findLast((item) => item?.headerTimeout !== undefined)?.headerTimeout
   const chunkTimeout = items.findLast((item) => item?.chunkTimeout !== undefined)?.chunkTimeout
-  if (!body && !headers && !query && timeout === undefined && headerTimeout === undefined && chunkTimeout === undefined)
+  const encoding = items.findLast((item) => item?.encoding !== undefined)?.encoding
+  if (
+    !body &&
+    !headers &&
+    !query &&
+    timeout === undefined &&
+    headerTimeout === undefined &&
+    chunkTimeout === undefined &&
+    encoding === undefined
+  )
     return undefined
-  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout })
+  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout, encoding })
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
@@ -186,6 +207,9 @@ export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
   typeof LanguageModelMaxTokensFieldCompatibility
 >
 
+export const LanguageModelCacheFormatCompatibility = Schema.Literals(["anthropic", "alibaba"])
+export type LanguageModelCacheFormatCompatibility = Schema.Schema.Type<typeof LanguageModelCacheFormatCompatibility>
+
 export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(
   "LLM.LanguageModelCompatibility",
 )({
@@ -197,11 +221,15 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   requireFinishReason: Schema.optional(Schema.Boolean),
   requireAssistantAfterTool: Schema.optional(Schema.Boolean),
   supportsStore: Schema.optional(Schema.Boolean),
-  supportsUsageInStreaming: Schema.optional(Schema.Boolean),
+  /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
+  streamUsage: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
-  // Accepts `prompt_cache_key` in the Chat Completions body. Chat omits the
-  // key unless this is set; session-affinity headers still flow regardless.
+  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
+  // this is true; other protocols omit it only when this is false.
+  // Session-affinity headers still flow regardless.
   supportsPromptCacheKey: Schema.optional(Schema.Boolean),
+  /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
+  cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */

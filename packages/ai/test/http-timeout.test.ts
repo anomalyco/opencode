@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { HttpOptions, LLM, mergeHttpOptions } from "../src/index.js"
+import { HttpOptions, LLM, mergeHttpOptions } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
 import { configure } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -69,7 +69,7 @@ describe("HTTP transport timeouts", () => {
     }),
   )
 
-  it.effect("fails when the response body stalls for five minutes", () =>
+  it.effect("fails when the response body stalls for fifteen minutes", () =>
     Effect.gen(function* () {
       const server = yield* stalledServer
       const fiber = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" })).pipe(
@@ -79,7 +79,7 @@ describe("HTTP transport timeouts", () => {
       )
       yield* Deferred.await(server.stalled)
       yield* Effect.yieldNow
-      yield* TestClock.adjust("5 minutes")
+      yield* TestClock.adjust("15 minutes")
       const error = yield* Fiber.join(fiber)
 
       expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read", code: "Timeout" })

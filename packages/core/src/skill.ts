@@ -1,7 +1,7 @@
 export * as Skill from "./skill.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import type { FSUtil } from "@opencode/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
@@ -56,7 +56,13 @@ export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interfac
   const directory = path.dirname(skill.path)
   const files =
     path.basename(skill.path) === "SKILL.md"
-      ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+      ? (yield* fs.scan("**/*", {
+          cwd: directory,
+          absolute: true,
+          include: "file",
+          dot: true,
+          ignore: FSUtil.ignoreGlobs,
+        }))
           .filter((file) => path.basename(file) !== "SKILL.md")
           .toSorted()
           .slice(0, 10)
@@ -98,13 +104,14 @@ const layer = Layer.effect(
         list: () => Array.from(editor.skills.values()),
         get: (id) => editor.skills.get(ID.make(id)),
         add: (skill) => {
-          editor.skills.set(skill.id, { ...skill } as Types.DeepMutable<Info>)
+          editor.skills.set(skill.id, { ...skill })
         },
         update: (id, update) => {
-          const current = editor.skills.get(ID.make(id))
+          const key = ID.make(id)
+          const current = editor.skills.get(key)
           if (!current) return
           update(current)
-          current.id = ID.make(id)
+          current.id = key
         },
         remove: (id) => {
           editor.skills.delete(ID.make(id))

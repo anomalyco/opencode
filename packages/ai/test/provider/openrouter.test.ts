@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../../src/index.js"
+import { CacheHint, LanguageModel, LLM, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenRouter from "../../src/providers/openrouter.js"
@@ -124,6 +124,26 @@ describe("OpenRouter", () => {
         tool_call_id: "call_1",
         content: [{ type: "text", text: '"Done"', cache_control: { type: "ephemeral" } }],
       })
+    }),
+  )
+
+  it.effect("places breakpoints for any upstream when compatibility declares the cache format", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("vendor/claude-proxy")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { cacheFormat: "anthropic" } }),
+          system: "Base agent",
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ text: "Base agent", cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
     }),
   )
 
@@ -472,6 +492,7 @@ describe("OpenRouter", () => {
           model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
           cache: "none",
           messages: [
+            Message.assistant(""),
             Message.assistant([
               {
                 type: "reasoning",

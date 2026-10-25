@@ -260,7 +260,7 @@ const layer = Layer.effect(
 // `plugin` is the requested definition; `activation` is its last activation, which may have
 // failed or be an older fallback while the requested revision keeps failing setup.
 type Slot = {
-  readonly plugin: Generation
+  readonly plugin: Generation & { readonly id: Plugin.ID }
   readonly activation?: Activation
   readonly error?: string
 }
@@ -285,7 +285,7 @@ type PendingFailure = {
 function slotInfo(slot: Slot): Plugin.Info {
   const failure = slot.activation?.failure ?? (slot.error === undefined ? undefined : { error: slot.error })
   return {
-    id: Plugin.ID.make(slot.plugin.id),
+    id: slot.plugin.id,
     source: slot.plugin.source ?? { type: "builtin" },
     state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
     features: { server: true, ...slot.plugin.features },

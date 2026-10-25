@@ -182,6 +182,36 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("converts schemas at registration and reuses them in every snapshot", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let builds = 0
+      const portable = {
+        "~standard": {
+          version: 1,
+          vendor: "test",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => {
+              builds++
+              return { type: "object", properties: { text: { type: "string" } } }
+            },
+            output: () => ({ type: "string" }),
+          },
+        },
+      } as const
+      yield* transform(service, { portable: { ...make(), input: portable } }, { codemode: false })
+      const registered = builds
+
+      const first = yield* service.snapshot()
+      const second = yield* service.snapshot()
+
+      expect(builds).toBe(registered)
+      expect(second.definitions).toHaveLength(2)
+      second.definitions.forEach((item, index) => expect(item).toBe(first.definitions[index]))
+    }),
+  )
+
   it.effect("skips invalid updates without dropping the existing definition", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

@@ -1,3 +1,4 @@
+import { cancel, confirm, isCancel, log } from "@clack/prompts"
 import { EOL } from "os"
 import { Effect, Option, Schedule } from "effect"
 import { Service } from "@opencode/client/effect/service"
@@ -18,8 +19,11 @@ export default Runtime.handler(
       )
     if (input.remote && Option.isSome(input.url))
       return yield* Effect.fail(new Error("--remote cannot be combined with --url"))
-    // Changing the setting restarts the service, and the ensure below starts it again with the tunnel.
-    if (input.remote && config.remote === undefined) yield* ServiceConfig.set("remote", "true")
+    if (input.remote && config.remote === undefined) {
+      if (!(yield* remoteConsent(config, input))) return
+      // Changing the setting restarts the service, and the ensure below starts it again with the tunnel.
+      yield* ServiceConfig.set("remote", "true")
+    }
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const urls = yield* pairingURLs(client, input)
@@ -65,6 +69,52 @@ export default Runtime.handler(
   }),
 )
 
+export const remoteWarning = [
+  "This will expose your OpenCode server to the internet.",
+  "Traffic is end-to-end encrypted, and access requires your server password.",
+  "To pair locally instead, run `opencode pair` without the --remote flag.",
+].join(EOL)
+
+export interface RemoteConsentPrompt {
+  readonly interactive: () => boolean
+  readonly confirm: () => Promise<boolean | symbol>
+}
+
+const terminalPrompt: RemoteConsentPrompt = {
+  interactive: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  confirm: () => confirm({ message: "Expose your server to the internet?", initialValue: true }),
+}
+
+// Remote access is only explained and accepted the first time it is turned on; once accepted, pairing goes straight
+// through. Returns whether remote access may be enabled.
+export const remoteConsent = Effect.fn("cli.pair.remote-consent")(function* (
+  config: ServiceConfig.Info,
+  input: { readonly yes: boolean },
+  terminal: RemoteConsentPrompt = terminalPrompt,
+) {
+  if (config.remote !== undefined || config.remoteAccepted === true) return true
+  if (!input.yes && !terminal.interactive()) {
+    process.stderr.write([remoteWarning, "Run interactively or pass --yes to continue."].join(EOL) + EOL)
+    process.exitCode = 1
+    return false
+  }
+  log.warn(remoteWarning)
+  if (!input.yes) {
+    const accepted = yield* Effect.promise(terminal.confirm)
+    if (isCancel(accepted)) {
+      cancel("Remote access was not enabled. To pair locally, run `opencode pair`.")
+      process.exitCode = 130
+      return false
+    }
+    if (accepted !== true) {
+      log.info("Remote access was not enabled. To pair locally, run `opencode pair`.")
+      return false
+    }
+  }
+  yield* ServiceConfig.acceptRemote()
+  return true
+})
+
 const pairingURLs = Effect.fnUntraced(function* (
   client: ReturnType<typeof OpenCode.make>,
   input: Runtime.Input<typeof Commands.commands.pair>,
@@ -89,7 +139,15 @@ const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCod
     Effect.timeoutOrElse({
       duration: "3 minutes",
       orElse: () =>
-        Effect.fail(new Error("Timed out waiting for the remote tunnel; run `opencode pair --remote` again to retry")),
+        Effect.fail(
+          new Error(
+            [
+              "Timed out waiting for the remote tunnel; run `opencode pair --remote` again to retry.",
+              // The service may not inherit the shell's environment, and Bun ignores the Windows system (WinINET) proxy.
+              "Behind an HTTP proxy, give the background service its address with `opencode service set env HTTPS_PROXY <url>` (and `NO_PROXY` for hosts to reach directly).",
+            ].join(EOL),
+          ),
+        ),
     }),
   )
 })

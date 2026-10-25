@@ -7,12 +7,14 @@ import os from "node:os"
 import path from "node:path"
 import { build } from "vite"
 import { Script } from "@opencode/script"
+import { embed } from "@opencode/script/highlights"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
 import { appArchiveAsset, mainConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
+import { NativeArch } from "../../../script/native-arch"
 
 const NODE_VERSION = "26.4.0"
 const dir = path.resolve(import.meta.dirname, "..")
@@ -28,6 +30,7 @@ const bundleOnly = process.argv.includes("--bundle-only")
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
 const appArchiveOnly = process.argv.includes("--app-archive-only")
+const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
 const requestedArchive = process.argv.find((arg) => arg.startsWith("--app-archive="))?.slice("--app-archive=".length)
 const archivePath = requestedArchive ? path.resolve(dir, requestedArchive) : undefined
 const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
@@ -93,6 +96,7 @@ for (const target of targets) {
   const input = {
     version: Script.version,
     channel: Script.channel,
+    highlights,
     assetHash,
     target,
   }
@@ -130,6 +134,7 @@ for (const target of targets) {
   await writeFile("dist-node/sea.json", `${JSON.stringify(config, null, 2)}\n`)
   run(builder, ["--build-sea", "dist-node/sea.json"])
   if (target.platform !== "win32") await chmod(output, 0o755)
+  await NativeArch.verify(output, target.arch)
   if (target.platform === "darwin" && process.platform === "darwin") run("codesign", ["--sign", "-", output])
   if (target.platform === "darwin" && process.platform !== "darwin") {
     console.warn(`${output} must be signed on macOS before it can run`)

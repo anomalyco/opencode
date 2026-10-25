@@ -872,6 +872,22 @@
             "required": false
           },
           {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
             "name": "directory",
             "in": "query",
             "schema": {
@@ -1317,7 +1333,7 @@
             }
           }
         },
-        "description": "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
+        "description": "Import a projected session transcript at the requested location. Accepts transcripts exported by earlier releases. If parentID is supplied, the parent session must already exist; import parents before children.",
         "summary": "Import session",
         "requestBody": {
           "content": {
@@ -1329,10 +1345,7 @@
                     "$ref": "#/components/schemas/Session.Info"
                   },
                   "messages": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Session.Message.Info"
-                    }
+                    "type": "array"
                   },
                   "location": {
                     "anyOf": [
@@ -1715,6 +1728,17 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "archived": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Archive the session with true or restore it with false. Repeating the current state is a no-op."
                   }
                 },
                 "additionalProperties": false
@@ -1779,7 +1803,7 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | MessageNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError | MessageNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -1789,9 +1813,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/MessageNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
                     }
                   ]
                 }
@@ -1866,18 +1887,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -1944,18 +1958,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -2820,18 +2827,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -3096,18 +3096,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -3623,18 +3616,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -3692,18 +3678,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -3784,18 +3763,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -4136,18 +4108,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -4197,18 +4162,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -4976,7 +4934,8 @@
                     "skill",
                     "shell",
                     "assistant",
-                    "compaction"
+                    "compaction",
+                    "idle"
                   ]
                 },
                 {
@@ -5349,6 +5308,160 @@
                   }
                 },
                 "required": ["prompt"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/voice/models": {
+      "get": {
+        "tags": ["voice"],
+        "operationId": "experimental.voice.models",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "VoiceModelsResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceModelsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List supported voice models, their transports, and whether the server has a usable API key for each provider.",
+        "summary": "List voice models"
+      }
+    },
+    "/api/experimental/voice/session": {
+      "post": {
+        "tags": ["voice"],
+        "operationId": "experimental.voice.session",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "VoiceSessionResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a server-brokered voice session using the server's configured provider credentials and return the WebRTC SDP answer or WebSocket ephemeral token.",
+        "summary": "Create voice session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "session": {
+                    "anyOf": [
+                      {
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "transport": {
+                    "$ref": "#/components/schemas/VoiceTransportInput"
+                  }
+                },
+                "required": ["model", "transport"],
                 "additionalProperties": false
               }
             }
@@ -7521,6 +7634,247 @@
         "summary": "List MCP resources"
       }
     },
+    "/api/experimental/client-mcp/token": {
+      "post": {
+        "tags": ["mcp"],
+        "operationId": "experimental.mcp.client.token",
+        "parameters": [
+          {
+            "name": "x-opencode-ticket",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PtyTicket.ConnectToken"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a short-lived single-use ticket for opening a client MCP WebSocket connection from a browser.",
+        "summary": "Create client MCP WebSocket token"
+      }
+    },
+    "/api/experimental/client-mcp": {
+      "get": {
+        "tags": ["mcp"],
+        "operationId": "experimental.mcp.client",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "ticket",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
+        "summary": "Attach client MCP server",
+        "x-websocket": true
+      }
+    },
     "/api/credential": {
       "get": {
         "tags": ["credential"],
@@ -7791,7 +8145,24 @@
       "get": {
         "tags": ["project"],
         "operationId": "project.list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -7826,19 +8197,9 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "LocationNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "List known projects.",
+        "description": "List known projects. Archived projects are excluded unless archived=true.",
         "summary": "List projects"
       }
     },
@@ -7889,18 +8250,11 @@
             }
           },
           "404": {
-            "description": "ProjectNotFoundError | LocationNotFoundError",
+            "description": "ProjectNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
                 }
               }
             }
@@ -8206,6 +8560,115 @@
       }
     },
     "/api/permission/saved/{id}": {
+      "patch": {
+        "tags": ["permission"],
+        "operationId": "permission.saved.update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/PermissionSaved.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PermissionSaved.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PermissionSavedNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionSavedNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change the action or resource of a saved permission. Fails with a conflict when the project already has a saved permission with the same action and resource.",
+        "summary": "Update saved permission",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resource": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
       "delete": {
         "tags": ["permission"],
         "operationId": "permission.saved.remove",
@@ -8240,16 +8703,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "LocationNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
                 }
               }
             }
@@ -12782,6 +13235,148 @@
         "summary": "VCS diff"
       }
     },
+    "/api/debug/heap-dump": {
+      "post": {
+        "tags": ["debug"],
+        "operationId": "debug.heapDump",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Absolute server-local directory to write the snapshot into, created when missing. Defaults to the server's log directory."
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "pid": {
+                      "type": "integer"
+                    },
+                    "memory": {
+                      "type": "object",
+                      "properties": {
+                        "rss": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "heapTotal": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "heapUsed": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "external": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        },
+                        "arrayBuffers": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["Infinity", "-Infinity", "NaN"]
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["rss", "heapTotal", "heapUsed", "external", "arrayBuffers"],
+                      "additionalProperties": false,
+                      "description": "The server process's memory in bytes, read just before the snapshot (Node's process.memoryUsage()). rss covers native memory the snapshot cannot show."
+                    }
+                  },
+                  "required": ["path", "pid", "memory"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write a JavaScript heap snapshot of the server process into its log directory, or the requested directory, and return the server-local path once the file is complete. Pauses the server while the heap serializes and can temporarily increase its memory use. The snapshot can contain credentials, prompts, and file contents.",
+        "summary": "Write a heap snapshot"
+      }
+    },
     "/api/debug/location": {
       "get": {
         "tags": ["debug"],
@@ -13229,6 +13824,116 @@
           },
           "required": true
         }
+      }
+    },
+    "/api/experimental/usage/limits": {
+      "get": {
+        "tags": ["usage"],
+        "operationId": "experimental.usage.limits",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageLimits.Info"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the OpenCode Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to, or null when it isn't signed in.",
+        "summary": "Get usage limits"
       }
     },
     "/api/config": {
@@ -13800,6 +14505,27 @@
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
           },
+          "policies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": ["provider.use", "tool.use", "integration.use"]
+                },
+                "resource": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": ["allow", "deny"]
+                }
+              },
+              "required": ["action", "resource", "effect"],
+              "additionalProperties": false
+            }
+          },
           "agents": {
             "type": "object",
             "additionalProperties": {
@@ -14046,9 +14772,26 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "todo": {
+                "type": "boolean"
+              },
+              "background_compaction": {
+                "type": "boolean"
+              },
               "subagent_depth": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "location_idle_timeout": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  }
+                ]
               },
               "policies": {
                 "type": "array",
@@ -14125,6 +14868,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "temperature": {
+            "type": "boolean"
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/Config.Model.Reasoning"
           }
         },
         "additionalProperties": false
@@ -14168,11 +14917,61 @@
         "required": ["input", "output"],
         "additionalProperties": false
       },
+      "Config.Model.Reasoning": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "supported": {
+                "type": "boolean",
+                "enum": [false]
+              }
+            },
+            "required": ["supported"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "supported": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "toggle": {
+                "type": "boolean"
+              },
+              "effort": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "budget": {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "integer"
+                  },
+                  "max": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["supported"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "Config.Model.Settings": {
         "type": "object",
         "properties": {
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "encoding": {
+            "$ref": "#/components/schemas/Provider.Encoding"
           }
         },
         "allOf": [
@@ -14200,6 +14999,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "releaseDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}(-\\d{2})?$",
+            "description": "Release date as YYYY-MM-DD or YYYY-MM"
           },
           "compatibility": {
             "$ref": "#/components/schemas/Model.Compatibility"
@@ -14352,6 +15156,9 @@
           },
           "transport": {
             "$ref": "#/components/schemas/Provider.Transport"
+          },
+          "encoding": {
+            "$ref": "#/components/schemas/Provider.Encoding"
           }
         },
         "allOf": [
@@ -14385,6 +15192,9 @@
           },
           "package": {
             "type": "string"
+          },
+          "compatibility": {
+            "$ref": "#/components/schemas/Provider.Compatibility"
           },
           "settings": {
             "$ref": "#/components/schemas/Config.Provider.Settings"
@@ -14674,9 +15484,6 @@
           },
           "metadata": {
             "type": "object"
-          },
-          "configuration": {
-            "$ref": "#/components/schemas/Form.Answer_1"
           }
         },
         "required": ["type", "key"],
@@ -14806,12 +15613,6 @@
         "additionalProperties": false
       },
       "Form.Answer": {
-        "type": "object",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/Form.Value"
-        }
-      },
-      "Form.Answer_1": {
         "type": "object",
         "additionalProperties": {
           "$ref": "#/components/schemas/Form.Value"
@@ -16475,6 +17276,9 @@
               }
             ]
           },
+          "title": {
+            "type": "string"
+          },
           "integrationID": {
             "$ref": "#/components/schemas/Integration.ID"
           }
@@ -16580,6 +17384,10 @@
         "required": ["_tag", "sessionID", "messageID", "message"],
         "additionalProperties": false
       },
+      "Model.CacheFormat": {
+        "type": "string",
+        "enum": ["anthropic", "alibaba"]
+      },
       "Model.Capabilities": {
         "type": "object",
         "properties": {
@@ -16597,6 +17405,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "temperature": {
+            "type": "boolean"
           }
         },
         "required": ["tools", "input", "output"],
@@ -16622,6 +17433,12 @@
           },
           "supportsPromptCacheKey": {
             "type": "boolean"
+          },
+          "streamUsage": {
+            "type": "boolean"
+          },
+          "cacheFormat": {
+            "$ref": "#/components/schemas/Model.CacheFormat"
           },
           "supportsThinkingBlockBinding": {
             "type": "boolean"
@@ -16811,6 +17628,9 @@
         "properties": {
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "encoding": {
+            "$ref": "#/components/schemas/Provider.Encoding"
           }
         },
         "allOf": [
@@ -17013,6 +17833,23 @@
           }
         },
         "required": ["id", "projectID", "action", "resource", "time"],
+        "additionalProperties": false
+      },
+      "PermissionSavedNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PermissionSavedNotFoundError"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "id", "message"],
         "additionalProperties": false
       },
       "PersistentPty.CreateInput": {
@@ -17507,6 +18344,10 @@
           "active": {
             "type": "integer",
             "minimum": 0
+          },
+          "archived": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["created", "updated", "active"],
@@ -17697,6 +18538,40 @@
           }
         ]
       },
+      "Provider.Compatibility": {
+        "type": "object",
+        "properties": {
+          "reasoningField": {
+            "$ref": "#/components/schemas/Model.ReasoningField"
+          },
+          "requireReasoning": {
+            "type": "boolean"
+          },
+          "maxTokensField": {
+            "$ref": "#/components/schemas/Model.MaxTokensField"
+          },
+          "requireFinishReason": {
+            "type": "boolean"
+          },
+          "requireAssistantAfterTool": {
+            "type": "boolean"
+          },
+          "supportsPromptCacheKey": {
+            "type": "boolean"
+          },
+          "streamUsage": {
+            "type": "boolean"
+          },
+          "cacheFormat": {
+            "$ref": "#/components/schemas/Model.CacheFormat"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Provider.Encoding": {
+        "type": "string",
+        "enum": ["zstd", "gzip", "none"]
+      },
       "Provider.ID": {
         "type": "string"
       },
@@ -17721,6 +18596,9 @@
           },
           "package": {
             "type": "string"
+          },
+          "compatibility": {
+            "$ref": "#/components/schemas/Provider.Compatibility"
           },
           "settings": {
             "$ref": "#/components/schemas/Provider.Settings"
@@ -17798,6 +18676,9 @@
           },
           "transport": {
             "$ref": "#/components/schemas/Provider.Transport"
+          },
+          "encoding": {
+            "$ref": "#/components/schemas/Provider.Encoding"
           }
         },
         "allOf": [
@@ -18558,8 +19439,8 @@
           "rawFinish": {
             "type": "string"
           },
-          "providerState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_4"
+          "native": {
+            "$ref": "#/components/schemas/Session.Message.Native_3"
           },
           "cost": {
             "$ref": "#/components/schemas/Money.USD"
@@ -18587,8 +19468,8 @@
           "text": {
             "type": "string"
           },
-          "state": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_1"
+          "native": {
+            "$ref": "#/components/schemas/Session.Message.Native_1"
           },
           "time": {
             "type": "object",
@@ -18634,8 +19515,8 @@
           "text": {
             "type": "string"
           },
-          "state": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState"
+          "native": {
+            "$ref": "#/components/schemas/Session.Message.Native"
           }
         },
         "required": ["type", "text"],
@@ -18657,11 +19538,8 @@
           "executed": {
             "type": "boolean"
           },
-          "providerState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_2"
-          },
-          "providerResultState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_3"
+          "native": {
+            "$ref": "#/components/schemas/Session.Message.Native_2"
           },
           "state": {
             "anyOf": [
@@ -18746,17 +19624,11 @@
           "model": {
             "$ref": "#/components/schemas/Model.Ref"
           },
-          "providerState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
+          "native": {
+            "$ref": "#/components/schemas/Session.Message.Native_4"
           },
           "summary": {
             "type": "string"
-          },
-          "recent": {
-            "type": "string"
-          },
-          "providerContext": {
-            "$ref": "#/components/schemas/Session.ProviderContext"
           },
           "cost": {
             "$ref": "#/components/schemas/Money.USD"
@@ -18765,7 +19637,7 @@
             "$ref": "#/components/schemas/TokenUsage.Info"
           }
         },
-        "required": ["type", "id", "time", "status", "reason", "summary", "recent"],
+        "required": ["type", "id", "time", "status", "reason", "summary"],
         "additionalProperties": false
       },
       "Session.Message.Compaction.Failed": {
@@ -18845,12 +19717,9 @@
           },
           "summary": {
             "type": "string"
-          },
-          "recent": {
-            "type": "string"
           }
         },
-        "required": ["type", "id", "time", "status", "reason", "summary", "recent"],
+        "required": ["type", "id", "time", "status", "reason", "summary"],
         "additionalProperties": false
       },
       "Session.Message.ID": {
@@ -19020,22 +19889,19 @@
         "required": ["id", "time", "type", "model"],
         "additionalProperties": false
       },
-      "Session.Message.ProviderState": {
+      "Session.Message.Native": {
         "type": "object"
       },
-      "Session.Message.ProviderState_1": {
+      "Session.Message.Native_1": {
         "type": "object"
       },
-      "Session.Message.ProviderState_2": {
+      "Session.Message.Native_2": {
         "type": "object"
       },
-      "Session.Message.ProviderState_3": {
+      "Session.Message.Native_3": {
         "type": "object"
       },
-      "Session.Message.ProviderState_4": {
-        "type": "object"
-      },
-      "Session.Message.ProviderState_5": {
+      "Session.Message.Native_4": {
         "type": "object"
       },
       "Session.Message.Shell": {
@@ -19355,46 +20221,6 @@
       "Session.Metadata": {
         "type": "object"
       },
-      "Session.ProviderContext": {
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "number",
-            "enum": [1]
-          },
-          "provenance": {
-            "$ref": "#/components/schemas/Session.ProviderContext.Provenance"
-          },
-          "messages": {}
-        },
-        "required": ["version", "provenance", "messages"],
-        "additionalProperties": false
-      },
-      "Session.ProviderContext.Provenance": {
-        "type": "object",
-        "properties": {
-          "providerID": {
-            "$ref": "#/components/schemas/Provider.ID"
-          },
-          "provider": {
-            "type": "string"
-          },
-          "modelID": {
-            "type": "string"
-          },
-          "route": {
-            "type": "string"
-          },
-          "protocol": {
-            "type": "string"
-          },
-          "endpoint": {
-            "type": "string"
-          }
-        },
-        "required": ["providerID", "provider", "modelID", "route", "protocol", "endpoint"],
-        "additionalProperties": false
-      },
       "Session.Revert": {
         "type": "object",
         "properties": {
@@ -19440,6 +20266,10 @@
             },
             "required": ["body"],
             "additionalProperties": false
+          },
+          "retryAfterMs": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["type", "message"],
@@ -20076,6 +20906,157 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "UsageLimits.Budget": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "limit": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "spent": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["each", "combined"]
+          },
+          "per": {
+            "type": "string",
+            "enum": ["set", "model"]
+          },
+          "coverage": {
+            "type": "string",
+            "enum": ["all", "models"]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimits.BudgetModel"
+            }
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputPriceAtLeast": {
+            "$ref": "#/components/schemas/Money.USDPerMillionTokens"
+          },
+          "picked": {
+            "type": "boolean"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "type": "number",
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": [
+          "id",
+          "limit",
+          "spent",
+          "scope",
+          "per",
+          "coverage",
+          "models",
+          "vendors",
+          "picked",
+          "shared",
+          "resetsAt"
+        ],
+        "additionalProperties": false
+      },
+      "UsageLimits.BudgetModel": {
+        "type": "object",
+        "properties": {
+          "providerID": {
+            "$ref": "#/components/schemas/Provider.ID"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spent": {
+            "$ref": "#/components/schemas/Money.USD"
+          }
+        },
+        "required": ["providerID", "modelID", "name"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Go": {
+        "type": "object",
+        "properties": {
+          "rolling": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          },
+          "monthly": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          }
+        },
+        "required": ["rolling", "weekly", "monthly"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Info": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "usageURL": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "usageURL"],
+            "additionalProperties": false
+          },
+          "go": {
+            "$ref": "#/components/schemas/UsageLimits.Go"
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimits.Budget"
+            }
+          }
+        },
+        "required": ["workspace", "budgets"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Meter": {
+        "type": "object",
+        "properties": {
+          "percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "limited": {
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "type": "number",
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["percent", "limited", "resetsAt"],
+        "additionalProperties": false
+      },
       "V2EventEncoded": {
         "type": "string",
         "contentMediaType": "application/json"
@@ -20169,6 +21150,184 @@
           }
         },
         "required": ["_tag", "providerID", "message"],
+        "additionalProperties": false
+      },
+      "VoiceModel": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "transports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoiceTransportType"
+            }
+          },
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "required": ["model", "provider", "transports", "available"],
+        "additionalProperties": false
+      },
+      "VoiceModelsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "models": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/VoiceModel"
+                }
+              },
+              "default": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["models"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "VoiceSessionResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "transport": {
+                "$ref": "#/components/schemas/VoiceTransport"
+              }
+            },
+            "required": ["transport"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "VoiceTransport": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/VoiceWebRTCTransport"
+          },
+          {
+            "$ref": "#/components/schemas/VoiceWebSocketTransport"
+          }
+        ]
+      },
+      "VoiceTransportInput": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/VoiceWebRTCTransportInput"
+          },
+          {
+            "$ref": "#/components/schemas/VoiceWebSocketTransportInput"
+          }
+        ]
+      },
+      "VoiceTransportType": {
+        "type": "string",
+        "enum": ["webrtc", "websocket"]
+      },
+      "VoiceWebRTCTransport": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["webrtc"]
+          },
+          "sdp": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "sdp"],
+        "additionalProperties": false
+      },
+      "VoiceWebRTCTransportInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["webrtc"]
+          },
+          "sdp": {
+            "type": "string"
+          },
+          "dcid": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["type", "sdp"],
+        "additionalProperties": false
+      },
+      "VoiceWebSocketTransport": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["websocket"]
+          },
+          "url": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["type", "url", "token", "expiresAt"],
+        "additionalProperties": false
+      },
+      "VoiceWebSocketTransportInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["websocket"]
+          }
+        },
+        "required": ["type"],
         "additionalProperties": false
       },
       "WebSearch.ID": {
@@ -20365,6 +21524,10 @@
       "description": "Experimental one-shot generation routes."
     },
     {
+      "name": "voice",
+      "description": "Experimental server-brokered voice session routes."
+    },
+    {
       "name": "provider",
       "description": "Experimental provider routes."
     },
@@ -20444,6 +21607,10 @@
     {
       "name": "websearch",
       "description": "Location-scoped web search routes."
+    },
+    {
+      "name": "usage",
+      "description": "Experimental usage limit routes."
     },
     {
       "name": "config",

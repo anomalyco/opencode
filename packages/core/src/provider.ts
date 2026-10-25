@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai"
+import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/ai/utils/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
@@ -46,6 +46,10 @@ export type ProviderPackage = ProviderPackageDefinition
 
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
+  ["@opencode/ai/providers/alibaba", () => import("@opencode/ai/providers/alibaba")],
+  ["@opencode/ai/providers/alibaba/chat", () => import("@opencode/ai/providers/alibaba/chat")],
+  ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
+  ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
   ["@opencode/ai/providers/amazon-bedrock", () => import("@opencode/ai/providers/amazon-bedrock")],
   ["@opencode/ai/providers/amazon-bedrock/mantle", () => import("@opencode/ai/providers/amazon-bedrock/mantle")],
   [
@@ -53,12 +57,14 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode/ai/providers/amazon-bedrock/mantle/chat"),
   ],
   [
+    "@opencode/ai/providers/amazon-bedrock/mantle/messages",
+    () => import("@opencode/ai/providers/amazon-bedrock/mantle/messages"),
+  ],
+  [
     "@opencode/ai/providers/amazon-bedrock/mantle/responses",
     () => import("@opencode/ai/providers/amazon-bedrock/mantle/responses"),
   ],
-  ["@opencode/ai/providers/alibaba/chat", () => import("@opencode/ai/providers/alibaba/chat")],
-  ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
-  ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
+  ["@opencode/ai/providers/amazon-bedrock-mantle", () => import("@opencode/ai/providers/amazon-bedrock-mantle")],
   ["@opencode/ai/providers/anthropic", () => import("@opencode/ai/providers/anthropic")],
   ["@opencode/ai/providers/anthropic-compatible", () => import("@opencode/ai/providers/anthropic-compatible")],
   ["@opencode/ai/providers/azure", () => import("@opencode/ai/providers/azure")],
@@ -77,23 +83,34 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
+  ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
   ["@opencode/ai/providers/google-vertex/gemini", () => import("@opencode/ai/providers/google-vertex/gemini")],
   [
     "@opencode/ai/providers/google-vertex/interactions",
     () => import("@opencode/ai/providers/google-vertex/interactions"),
   ],
-  ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
-  ["@opencode/ai/providers/google-vertex/responses", () => import("@opencode/ai/providers/google-vertex/responses")],
   ["@opencode/ai/providers/google-vertex/messages", () => import("@opencode/ai/providers/google-vertex/messages")],
   ["@opencode/ai/providers/google-vertex/mistral", () => import("@opencode/ai/providers/google-vertex/mistral")],
+  ["@opencode/ai/providers/google-vertex/responses", () => import("@opencode/ai/providers/google-vertex/responses")],
+  ["@opencode/ai/providers/google-vertex-chat", () => import("@opencode/ai/providers/google-vertex-chat")],
+  [
+    "@opencode/ai/providers/google-vertex-interactions",
+    () => import("@opencode/ai/providers/google-vertex-interactions"),
+  ],
+  ["@opencode/ai/providers/google-vertex-messages", () => import("@opencode/ai/providers/google-vertex-messages")],
+  ["@opencode/ai/providers/google-vertex-mistral", () => import("@opencode/ai/providers/google-vertex-mistral")],
+  ["@opencode/ai/providers/google-vertex-responses", () => import("@opencode/ai/providers/google-vertex-responses")],
   ["@opencode/ai/providers/groq", () => import("@opencode/ai/providers/groq")],
+  ["@opencode/ai/providers/meta", () => import("@opencode/ai/providers/meta")],
   ["@opencode/ai/providers/meta/chat", () => import("@opencode/ai/providers/meta/chat")],
   ["@opencode/ai/providers/meta/messages", () => import("@opencode/ai/providers/meta/messages")],
   ["@opencode/ai/providers/meta/responses", () => import("@opencode/ai/providers/meta/responses")],
+  ["@opencode/ai/providers/minimax", () => import("@opencode/ai/providers/minimax")],
   ["@opencode/ai/providers/minimax/chat", () => import("@opencode/ai/providers/minimax/chat")],
   ["@opencode/ai/providers/minimax/messages", () => import("@opencode/ai/providers/minimax/messages")],
   ["@opencode/ai/providers/minimax/responses", () => import("@opencode/ai/providers/minimax/responses")],
   ["@opencode/ai/providers/mistral", () => import("@opencode/ai/providers/mistral")],
+  ["@opencode/ai/providers/moonshot", () => import("@opencode/ai/providers/moonshot")],
   ["@opencode/ai/providers/moonshot/chat", () => import("@opencode/ai/providers/moonshot/chat")],
   ["@opencode/ai/providers/moonshot/messages", () => import("@opencode/ai/providers/moonshot/messages")],
   ["@opencode/ai/providers/moonshot/responses", () => import("@opencode/ai/providers/moonshot/responses")],
@@ -113,8 +130,19 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/togetherai", () => import("@opencode/ai/providers/togetherai")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],
   ["@opencode/ai/providers/vercel-ai-gateway", () => import("@opencode/ai/providers/vercel-ai-gateway")],
+  ["@opencode/ai/providers/vercel-ai-gateway/chat", () => import("@opencode/ai/providers/vercel-ai-gateway/chat")],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/messages",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/messages"),
+  ],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/responses",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/responses"),
+  ],
   ["@opencode/ai/providers/xai", () => import("@opencode/ai/providers/xai")],
+  ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
   ["@opencode/ai/providers/zai/chat", () => import("@opencode/ai/providers/zai/chat")],
+  ["@opencode/ai/providers/zai-coding-plan", () => import("@opencode/ai/providers/zai-coding-plan")],
   ["@opencode/ai/providers/zai-coding-plan/chat", () => import("@opencode/ai/providers/zai-coding-plan/chat")],
   ["@opencode/ai/providers/zai-coding-plan/messages", () => import("@opencode/ai/providers/zai-coding-plan/messages")],
   [
@@ -122,6 +150,9 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode/ai/providers/zai-coding-plan/responses"),
   ],
 ])
+
+/** Native `@opencode/ai/providers/*` entrypoints bundled with Core and loadable by name from config. */
+export const builtinPackages: ReadonlySet<string> = new Set(builtins.keys())
 
 export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: string, npm?: Npm.Interface) {
   const specifier = packageName(input)
@@ -153,7 +184,7 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
 })
 
 /** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "headerTimeout", "timeout", "transport"] as const
+const CORE_KEYS = ["chunkTimeout", "compaction", "encoding", "fetch", "headerTimeout", "timeout", "transport"] as const
 const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {
@@ -166,8 +197,15 @@ export function modelSettings(settings: Settings | undefined) {
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
 
-/** Applied to `headerTimeout` and `chunkTimeout` when provider settings leave them unset or invalid. */
+/** Applied to `headerTimeout` when provider settings leave it unset or invalid. */
 export const DEFAULT_TIMEOUT_MS = 300_000
+
+/**
+ * Applied to `chunkTimeout` when provider settings leave it unset or invalid. Some providers, such as DeepSeek, have
+ * specifically asked clients to allow at least 15 minutes, because their models can stream nothing for minutes while
+ * they reason.
+ */
+export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
 
 /** One timeout setting without a default; invalid values are dropped. */
 export function timeout(value: unknown) {
@@ -179,8 +217,15 @@ export function timeouts(settings: Readonly<Record<string, unknown>>) {
   return {
     timeout: timeout(settings.timeout),
     headerTimeout: timeout(settings.headerTimeout) ?? DEFAULT_TIMEOUT_MS,
-    chunkTimeout: timeout(settings.chunkTimeout) ?? DEFAULT_TIMEOUT_MS,
+    chunkTimeout: timeout(settings.chunkTimeout) ?? DEFAULT_CHUNK_TIMEOUT_MS,
   }
+}
+
+const decodeEncoding = Schema.decodeUnknownOption(Provider.Encoding)
+
+/** Request body encoding from provider or model settings; invalid values are dropped. */
+export function encoding(settings: Readonly<Record<string, unknown>>) {
+  return Option.getOrUndefined(decodeEncoding(settings.encoding))
 }
 
 export function mergeOverlay(
@@ -189,16 +234,21 @@ export function mergeOverlay(
 ): Record<string, Json> | undefined {
   if (base === undefined) return overlay && decodeJsonRecord({ ...overlay })
   if (overlay === undefined) return decodeJsonRecord({ ...base })
-  return decodeJsonRecord(
-    Object.fromEntries(
-      new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
-        const left = base[key]
-        const right = overlay[key]
-        if (right === undefined) return [key, left]
-        if (isRecord(left) && isRecord(right)) return [key, mergeOverlay(left, right) ?? {}]
-        return [key, right]
-      }),
-    ),
+  return decodeJsonRecord(mergeRecord(base, overlay))
+}
+
+function mergeRecord(
+  base: Readonly<Record<string, unknown>>,
+  overlay: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
+      const left = base[key]
+      const right = overlay[key]
+      if (right === undefined) return [key, left]
+      if (isRecord(left) && isRecord(right)) return [key, mergeRecord(left, right)]
+      return [key, right]
+    }),
   )
 }
 

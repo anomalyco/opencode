@@ -106,16 +106,17 @@ body {
   display: none !important;
 }
 
+/* Hidden text sits inside styled lists whose descendant rules are more specific, so it must win outright. */
 [data-page="stats"] [data-slot="visually-hidden"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 [data-page="stats"][data-layout="compare-detail"] {
@@ -1232,7 +1233,10 @@ body {
   --top-models-bar-inset: calc((100% - 6px) / 6);
 }
 
-/* Three dot columns aligned to the bar's left edge, center, and right edge, so they read as rising out of the bar. The SVG has no viewBox, so the 2px dot keeps its size while the cell stretches. */
+[data-page="stats"] [data-slot="top-models-bar"][data-active="true"] {
+  z-index: 2;
+}
+
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
   inset: 0 var(--top-models-bar-inset);
@@ -1561,6 +1565,25 @@ body {
   background: var(--stats-layer-2);
 }
 
+[data-page="stats"] [data-slot="leaderboard-period"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  color: var(--stats-muted);
+  font-size: 13px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] [data-component="usage-filter"] button {
+  width: auto;
+  padding: 0 8px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] + [data-component="leaderboard"] {
+  margin-top: 12px;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] {
   position: absolute;
   right: auto;
@@ -1569,7 +1592,7 @@ body {
   gap: 8px;
   min-width: 220px;
   padding: 16px;
-  background: #fffffff2;
+  background: #ffffff;
   border: 1px solid var(--stats-line-strong);
   box-shadow:
     0 8px 16px #0000000a,
@@ -1606,6 +1629,13 @@ body {
   white-space: nowrap;
 }
 
+[data-page="stats"] [data-component="chart-tooltip"] [data-slot="tooltip-name"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] [data-slot="tooltip-divider"] {
   height: 1px;
   margin: 4px -16px 2px;
@@ -1630,7 +1660,7 @@ body {
   width: 192px;
   min-width: 192px;
   padding: 0;
-  background: #fffffff2;
+  background: #ffffff;
   border: 0;
   box-shadow:
     0 0 0 0.5px #00000024,
@@ -1693,7 +1723,7 @@ body {
 
 [data-page="stats"] :is([data-section="top-models"], [data-section="unique-users"]) [data-component="chart-tooltip"] p {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
+  gap: 1ch;
   height: 16px;
   margin: 4px 0 0;
   padding: 0 8px;
@@ -1746,8 +1776,10 @@ body {
   :is(
     [data-section="leaderboard"],
     [data-section="unique-users"],
+    [data-section="retention"],
     [data-section="market-share"],
     [data-section="geo-breakdown"],
+    [data-section="methodology"],
     [data-section="token-cost"],
     [data-section="cache-ratio"],
     [data-section="session-cost"]
@@ -1781,6 +1813,175 @@ body {
   text-decoration: none;
   transform: translate(-50%, -50%);
   white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="retention-chart"] {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 40px;
+}
+
+/* Zero specificity: clears browser table-cell defaults without overriding the cell styles below. */
+:where([data-page="stats"] [data-component="retention-chart"]) :where(th, td) {
+  padding: 0;
+  font: inherit;
+  text-align: inherit;
+}
+
+[data-page="stats"] [data-component="retention-chart"] > thead {
+  display: block;
+}
+
+[data-page="stats"] [data-component="retention-chart"] > tbody {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="retention-heading"],
+[data-page="stats"] [data-slot="retention-row"] {
+  display: grid;
+  grid-template-columns: 40px minmax(160px, 260px) minmax(180px, 1fr) 64px 84px;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="retention-heading"] {
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 12px;
+  color: var(--stats-faint);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-slot="retention-heading"] > :is([data-column="rate"], [data-column="eligible"]) {
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="retention-row"] {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--stats-line);
+  color: var(--stats-text);
+  background: var(--stats-layer);
+}
+
+[data-page="stats"] [data-slot="retention-row"]:hover,
+[data-page="stats"] [data-slot="retention-row"]:has(a:focus-visible),
+[data-page="stats"] [data-slot="retention-row"][data-active="true"] {
+  border-color: var(--stats-line-strong);
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="retention-row"] a {
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+}
+
+/* The row's only link covers the whole row, so every cell stays clickable. */
+[data-page="stats"] [data-slot="retention-row"] a::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+}
+
+[data-page="stats"] [data-slot="retention-row"] > [data-column="rank"] {
+  color: var(--stats-faint);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+[data-page="stats"] [data-slot="retention-row"] > [data-column="model"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+[data-page="stats"] [data-slot="retention-row"] > :is([data-column="rate"], [data-column="eligible"]) {
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="retention-row"] > [data-column="eligible"] {
+  color: var(--stats-muted);
+}
+
+/* Methodology rows share the retention table's row style. */
+[data-page="stats"] [data-component="methodology-list"] {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+}
+
+[data-page="stats"] [data-component="methodology-list"] > div {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 14px 12px;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+[data-page="stats"] [data-component="methodology-list"] dt {
+  color: var(--stats-text);
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-component="methodology-list"] dd {
+  margin: 0;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-component="retention-marker"] {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  height: 16px;
+  background: linear-gradient(var(--stats-line-strong), var(--stats-line-strong)) center / 100% 1px no-repeat;
+}
+
+[data-page="stats"] [data-component="retention-marker"] > span {
+  justify-self: end;
+  width: 1px;
+  height: 8px;
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-component="retention-marker"] > em {
+  position: absolute;
+  top: 50%;
+  left: var(--retention-position);
+  width: 7px;
+  height: 16px;
+  background: var(--stats-muted);
+  transform: translate(-50%, -50%);
+}
+
+[data-page="stats"] [data-component="retention-marker"][data-active="true"] > em {
+  background: var(--stats-accent);
 }
 
 [data-page="stats"] [data-component="section-bridge"]:hover {
@@ -2082,6 +2283,7 @@ body {
 
 [data-page="stats"] [data-component="market-share"] {
   --market-gap: 12px;
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
@@ -2186,6 +2388,7 @@ body {
   font: inherit;
   font-size: 11px;
   line-height: 1;
+  text-align: left;
   cursor: pointer;
   outline: none;
   text-decoration: none;
@@ -2246,6 +2449,106 @@ body {
   font-weight: 500;
 }
 
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] {
+  top: 52px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 228px;
+  min-width: 228px;
+  padding: 0;
+  border: 0;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px #00000024,
+    0 8px 16px #0000000f,
+    0 4px 8px #00000014;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"][data-placement="right"] {
+  right: auto;
+  left: calc(var(--market-tooltip-left) + 8px);
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"][data-placement="left"] {
+  right: calc(var(--market-tooltip-right) + 8px);
+  left: auto;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] strong,
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] > span {
+  display: block;
+  font-size: 11px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] strong {
+  padding: 8px 8px 0;
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] > span {
+  padding: 4px 8px 8px;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] [data-slot="tooltip-divider"] {
+  height: 0.5px;
+  margin: 0;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] p {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  height: 16px;
+  margin: 4px 0 0;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 12px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] p[data-muted="true"] {
+  opacity: 0.46;
+}
+
+[data-page="stats"]
+  [data-component="market-share"]
+  > [data-component="chart-tooltip"]
+  [data-slot="tooltip-divider"]
+  + p {
+  margin-top: 8px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] p:last-child {
+  margin-bottom: 8px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] [data-slot="tooltip-label"] {
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 4px;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] i {
+  width: 6px;
+  height: 6px;
+  justify-self: center;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] em,
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] b {
+  font-style: normal;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] em {
+  color: var(--stats-muted);
+}
+
 [data-page="stats"] [data-slot="market-footer"] {
   display: flex;
   align-items: center;
@@ -2270,121 +2573,6 @@ body {
   display: grid;
   gap: 16px;
   align-items: start;
-}
-
-[data-page="stats"] [data-slot="geo-map-panel"] {
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--stats-layer);
-  border: 1px solid var(--stats-line);
-}
-
-[data-page="stats"] [data-component="geo-world-map"] {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-[data-page="stats"] [data-slot="geo-countries"] path {
-  fill: var(--stats-layer-2);
-  stroke: var(--stats-bg);
-  stroke-width: 0.45px;
-  transition:
-    fill 140ms ease,
-    opacity 140ms ease;
-}
-
-[data-page="stats"] [data-slot="geo-countries"] path[data-has-data="true"] {
-  fill: var(--stats-accent);
-  opacity: var(--geo-country-opacity);
-  cursor: pointer;
-}
-
-[data-page="stats"] [data-slot="geo-countries"] path[data-active="true"] {
-  fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
-  opacity: var(--geo-country-opacity);
-}
-
-[data-page="stats"] [data-slot="geo-country-markers"] circle {
-  fill: var(--stats-accent);
-  stroke: var(--stats-bg);
-  stroke-width: 1.1px;
-  opacity: var(--geo-country-opacity);
-  cursor: pointer;
-  transition:
-    fill 140ms ease,
-    opacity 140ms ease,
-    r 140ms ease;
-}
-
-[data-page="stats"] [data-slot="geo-country-markers"] circle[data-active="true"] {
-  fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
-  opacity: var(--geo-country-opacity);
-}
-
-[data-page="stats"] [data-slot="geo-borders"] {
-  fill: none;
-  stroke: var(--stats-line-strong);
-  stroke-linejoin: round;
-  stroke-width: 0.6px;
-  pointer-events: none;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  display: grid;
-  gap: 8px;
-  min-width: 168px;
-  max-width: calc(100% - 32px);
-  box-sizing: border-box;
-  padding: 12px;
-  background: color-mix(in srgb, var(--stats-bg) 92%, transparent);
-  box-shadow:
-    0 0 0 0.5px var(--stats-line-strong),
-    0 6px 16px #0000000d,
-    0 2px 6px #0000000f;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] span,
-[data-page="stats"] [data-slot="geo-active-country"] em {
-  color: var(--stats-faint);
-  font-style: normal;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] span {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--stats-text);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] p {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--stats-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-[data-page="stats"] [data-slot="geo-active-country"] b {
-  color: var(--stats-accent-text);
-  font-weight: 600;
 }
 
 [data-page="stats"] [data-component="geo-country-list"] {
@@ -3644,7 +3832,7 @@ body {
 
 [data-page="stats"] [data-slot="model-momentum-metrics"] {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
 }
@@ -4130,6 +4318,17 @@ body {
     linear-gradient(var(--stats-line), var(--stats-line)) 1040px 0 / 1px 100% no-repeat;
 }
 
+[data-page="stats"] [data-slot="lab-model-table-track"] > :is(thead, tbody) {
+  display: grid;
+}
+
+/* Zero specificity: clears browser table-cell defaults without overriding the cell styles below. */
+:where([data-page="stats"] [data-slot="lab-model-table-track"]) :where(th, td) {
+  padding: 0;
+  font: inherit;
+  text-align: inherit;
+}
+
 [data-page="stats"] [data-slot="lab-model-table-head"],
 [data-page="stats"] [data-component="lab-model-row"] {
   position: relative;
@@ -4149,12 +4348,12 @@ body {
   text-transform: uppercase;
 }
 
-[data-page="stats"] [data-slot="lab-model-table-head"] span,
+[data-page="stats"] [data-slot="lab-model-table-head"] th,
 [data-page="stats"] [data-slot="lab-model-cell"] {
   min-width: 0;
 }
 
-[data-page="stats"] [data-slot="lab-model-table-head"] span:not([data-column="model"]) {
+[data-page="stats"] [data-slot="lab-model-table-head"] th:not([data-column="model"]) {
   padding-left: 40px;
 }
 
@@ -4166,33 +4365,33 @@ body {
   isolation: isolate;
 }
 
+/* Painted under the cells inside the row's stacking context, so cells stay unpositioned and the link
+   overlay below can span the whole row. */
 [data-page="stats"] [data-component="lab-model-row"]::before {
   position: absolute;
   top: 8px;
   right: calc(var(--lab-model-row-bleed) * -1);
   bottom: 8px;
   left: calc(var(--lab-model-row-bleed) * -1);
-  z-index: 0;
+  z-index: -1;
   content: "";
   background: transparent;
   pointer-events: none;
 }
 
 [data-page="stats"] [data-component="lab-model-row"]:hover,
-[data-page="stats"] [data-component="lab-model-row"]:focus-visible {
+[data-page="stats"] [data-component="lab-model-row"]:has([data-slot="lab-model-link"]:focus-visible) {
   color: var(--stats-text);
   outline: none;
   text-decoration: none;
 }
 
 [data-page="stats"] [data-component="lab-model-row"]:hover::before,
-[data-page="stats"] [data-component="lab-model-row"]:focus-visible::before {
+[data-page="stats"] [data-component="lab-model-row"]:has([data-slot="lab-model-link"]:focus-visible)::before {
   background: var(--stats-layer);
 }
 
 [data-page="stats"] [data-slot="lab-model-cell"] {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   height: 24px;
@@ -4234,14 +4433,33 @@ body {
   height: 15px;
 }
 
-[data-page="stats"] [data-slot="lab-model-cell"] strong {
+[data-page="stats"] [data-slot="lab-model-link"] {
   min-width: 0;
   overflow: hidden;
   color: var(--stats-text);
   font-size: inherit;
   font-weight: 500;
   line-height: inherit;
+  text-decoration: none;
   text-overflow: ellipsis;
+  outline: none;
+}
+
+/* The row's only link covers the whole row, so every cell stays clickable. */
+[data-page="stats"] [data-slot="lab-model-link"]::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+}
+
+/* Rows show keyboard focus through :has(); without it, outline the link itself. */
+@supports not selector(:has(*)) {
+  [data-page="stats"] [data-slot="retention-row"] a:focus-visible,
+  [data-page="stats"] [data-slot="lab-model-link"]:focus-visible {
+    outline: 1px solid var(--stats-accent);
+    outline-offset: 2px;
+  }
 }
 
 [data-page="stats"] [data-component="lab-model-tooltip"] {
@@ -4735,7 +4953,7 @@ body {
 
 [data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] p {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
+  gap: 1ch;
   height: 20px;
   margin: 8px 0;
   padding: 0 8px;
@@ -5215,6 +5433,10 @@ body {
   background: var(--stats-layer);
   color: var(--stats-text);
   text-decoration: none;
+}
+
+[data-page="stats"] [data-component="model-peer-list"] a[data-providerless="true"] {
+  grid-template-columns: 32px minmax(0, 1fr) minmax(64px, auto);
 }
 
 [data-page="stats"] [data-component="model-peer-list"] a:hover,
@@ -6124,6 +6346,7 @@ body {
   grid-template-columns: 6px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+  align-self: stretch;
   min-width: 0;
 }
 
@@ -6143,7 +6366,8 @@ body {
 [data-page="stats"] [data-slot="compare-radar-legend"] small {
   font-size: 13px;
   line-height: 18px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 [data-page="stats"] [data-slot="compare-radar-legend"] strong {
@@ -6182,8 +6406,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-[data-page="stats"] [data-slot="compare-radar-area"],
-[data-page="stats"] [data-slot="compare-radar-line"] {
+[data-page="stats"] [data-slot="compare-radar-area"] {
   stroke: currentColor;
   stroke-width: 1.5px;
   stroke-linejoin: round;
@@ -6195,15 +6418,15 @@ body {
   fill-opacity: 0.09;
 }
 
-[data-page="stats"] [data-slot="compare-radar-line"] {
-  fill: none;
-}
-
 [data-page="stats"] [data-slot="compare-radar-point"] {
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point"][data-fallback="true"] {
+  fill: var(--stats-bg);
 }
 
 [data-page="stats"] [data-slot="compare-radar-point-hit"] {
@@ -6791,6 +7014,74 @@ body {
   }
 }
 
+@media (max-width: 74rem) {
+  [data-page="stats"] [data-slot="retention-heading"],
+  [data-page="stats"] [data-slot="retention-row"] {
+    grid-template-columns: 40px minmax(140px, 220px) minmax(140px, 1fr) 60px 76px;
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-component="methodology-list"] > div {
+    grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  [data-page="stats"] [data-component="retention-chart"] {
+    margin-top: 28px;
+  }
+
+  /* Hidden visually but kept for screen readers; absolute positioning keeps it out of the grid gap. */
+  [data-page="stats"] [data-component="retention-chart"] > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  [data-page="stats"] [data-slot="retention-row"] {
+    grid-template-columns: 28px minmax(0, 1fr) 58px 62px;
+    grid-template-rows: auto 16px;
+    gap: 8px 10px;
+    min-height: 68px;
+    padding: 10px;
+  }
+
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="rank"] {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="model"] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="marker"] {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="rate"] {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="eligible"] {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  [data-page="stats"] [data-component="methodology-list"] > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 10px;
+  }
+}
+
 [data-page="stats"] [data-component="compare-model-modal-scrim"] {
   position: fixed;
   inset: 0;
@@ -7147,7 +7438,7 @@ body {
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-  background: #242424f2;
+  background: #242424;
 }
 
 [data-page="stats"][data-theme="dark"]
@@ -7155,9 +7446,14 @@ body {
   [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
+  [data-component="market-share"]
+  > [data-component="chart-tooltip"],
+[data-page="stats"][data-theme="dark"] [data-component="market-share"] > [data-component="chart-tooltip"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"] {
-  background: #242424f2;
+  background: #242424;
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 8px 16px #0000003d,
@@ -7320,14 +7616,14 @@ body {
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-    background: #242424f2;
+    background: #242424;
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-section="top-models"]
     [data-component="chart-tooltip"] {
-    background: #242424f2;
+    background: #242424;
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 8px 16px #0000003d,
@@ -7488,8 +7784,10 @@ body {
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="unique-users"],
+  [data-page="stats"] [data-section="retention"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="geo-breakdown"],
+  [data-page="stats"] [data-section="methodology"],
   [data-page="stats"] [data-section="token-cost"],
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"],
@@ -7649,6 +7947,10 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  [data-page="stats"] [data-component="model-momentum-metric"]:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
   [data-page="stats"] [data-component="model-metric-grid"],
   [data-page="stats"] [data-component="model-metric-grid"][data-variant="dense"],
   [data-page="stats"] [data-component="model-efficiency-grid"],
@@ -7794,8 +8096,10 @@ body {
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="unique-users"],
+  [data-page="stats"] [data-section="retention"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="geo-breakdown"],
+  [data-page="stats"] [data-section="methodology"],
   [data-page="stats"] [data-section="token-cost"],
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"],
@@ -8323,6 +8627,10 @@ body {
     gap: 12px;
   }
 
+  [data-page="stats"] [data-component="model-peer-list"] a[data-providerless="true"] {
+    grid-template-columns: 28px minmax(0, 1fr) minmax(56px, auto);
+  }
+
   [data-page="stats"] [data-slot="model-peer-rank"] {
     width: 28px;
   }
@@ -8396,13 +8704,6 @@ body {
   [data-page="stats"] [data-component="market-share"] {
     grid-template-rows: 40px minmax(0, 1fr);
     height: 400px;
-  }
-
-  [data-page="stats"] [data-slot="geo-active-country"] {
-    position: static;
-    min-width: 0;
-    max-width: none;
-    margin: 0 12px 12px;
   }
 
   [data-page="stats"] [data-component="geo-country-list"] button {
@@ -8511,6 +8812,25 @@ body {
     max-height: min(320px, 48vh);
     overflow: auto;
     transform: none;
+  }
+
+  [data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    z-index: 40;
+    width: auto;
+    min-width: 0;
+    max-height: min(320px, 48vh);
+    overflow: auto;
+    transform: none;
+  }
+
+  [data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"][data-placement] {
+    right: 12px;
+    left: 12px;
   }
 
   [data-page="stats"]

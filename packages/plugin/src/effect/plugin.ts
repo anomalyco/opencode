@@ -1,4 +1,4 @@
-import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode/client/effect/api"
+import type { CredentialApi, ExperimentalApi, GenerateApi, PluginApi } from "@opencode/client/effect/api"
 import type { Location } from "@opencode/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
@@ -30,6 +30,7 @@ export interface Context {
   readonly agent: AgentDomain
   readonly aisdk: AISDKDomain
   readonly command: CommandDomain
+  readonly credential: Pick<CredentialApi<unknown>, "activate">
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">

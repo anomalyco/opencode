@@ -3,6 +3,7 @@ export * as Model from "./model.js"
 import { Schema } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
+import { Compatibility, MaxTokensField, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
 import { ephemeral, inventory } from "./event.js"
 
@@ -42,23 +43,15 @@ export const Ref = Schema.Struct({
   )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
+export { Compatibility, MaxTokensField, ReasoningField }
+
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
-
-export type ReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
-export const ReasoningField: Schema.Codec<ReasoningField> = Schema.Union([
-  Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
-  Schema.String,
-]).annotate({ identifier: "Model.ReasoningField" })
-
-export const MaxTokensField = Schema.Literals(["max_completion_tokens", "max_tokens"]).annotate({
-  identifier: "Model.MaxTokensField",
-})
-export type MaxTokensField = typeof MaxTokensField.Type
 
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     compaction: Provider.Compaction.pipe(optional),
+    encoding: Provider.Encoding.pipe(optional),
   }),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
   [Schema.Record(Schema.String, Schema.Any)],
@@ -71,26 +64,13 @@ export const Overlays = {
   body: Schema.Record(Schema.String, Schema.Any).pipe(optional),
 }
 
-export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
-export const Compatibility = Schema.Struct({
-  reasoningField: ReasoningField.pipe(optional),
-  /** Require every assistant message to include its reasoning field, even when empty. */
-  requireReasoning: Schema.Boolean.pipe(optional),
-  maxTokensField: MaxTokensField.pipe(optional),
-  requireFinishReason: Schema.Boolean.pipe(optional),
-  requireAssistantAfterTool: Schema.Boolean.pipe(optional),
-  supportsPromptCacheKey: Schema.Boolean.pipe(optional),
-  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
-  supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
-  /** Supports per-message effort updates. Overrides model-ID detection. */
-  supportsEffortUpdates: Schema.Boolean.pipe(optional),
-}).annotate({ identifier: "Model.Compatibility" })
-
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
+  /** Whether the model accepts a sampling temperature. Unknown when unset. */
+  temperature: Schema.Boolean.pipe(optional),
 })
   .annotate({ identifier: "Model.Capabilities" })
   .pipe(

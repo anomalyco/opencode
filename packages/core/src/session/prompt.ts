@@ -1,6 +1,6 @@
 export * as SessionPrompt from "./prompt.js"
 
-import { Base64, FileAttachment, Prompt } from "@opencode/schema/prompt"
+import { Base64, FileAttachment } from "@opencode/schema/prompt"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import type { Session } from "@opencode/schema/session"
@@ -77,15 +77,13 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
     return {
       type: "user",
       payload: SessionInbox.UserPayload.make({
-        ...Prompt.make({
-          text: input.text,
-          agents: input.agents,
-          files,
-          skills: selected?.length ? selected : undefined,
-        }),
+        text: input.text,
+        agents: input.agents,
+        files,
+        skills: selected?.length ? selected : undefined,
         metadata: event.metadata,
       }),
-      delivery: SessionInbox.Delivery.make(event.delivery),
+      delivery: event.delivery,
     } satisfies SessionInbox.Item
   }).pipe(instances.provide(request.session))
 })

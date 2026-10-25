@@ -1,4 +1,4 @@
-const editableSelector = "input, textarea, select, [contenteditable=''], [contenteditable='true']"
+const editableSelector = "input, textarea, select, [contenteditable=''], [contenteditable='true'], [contenteditable='plaintext-only']"
 
 export function handleDocumentSearchKeydown(
   input: HTMLInputElement | undefined,

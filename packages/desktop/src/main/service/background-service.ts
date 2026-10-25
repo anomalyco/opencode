@@ -44,8 +44,12 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const ensure = () =>
     client.Service.ensure({
       file:
-        isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-          ? path.join(app.getPath("userData"), "opencode", "service-local.json")
+        process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+          ? path.join(
+              process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+              "opencode",
+              "service-local.json",
+            )
           : undefined,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two

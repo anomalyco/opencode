@@ -1,5 +1,6 @@
 export * as Variant from "./variant.js"
 
+import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 
@@ -7,6 +8,18 @@ export type Support =
   | { readonly type: "effort"; readonly values?: readonly string[] }
   | { readonly type: "toggle" }
   | { readonly type: "budget_tokens"; readonly min?: number; readonly max?: number }
+
+/** Reasoning controls in models.dev v2's shape, where `default` is the provider default rather than a variant. */
+export function supports(reasoning: ConfigProvider.Reasoning): readonly Support[] {
+  if (!reasoning.supported) return []
+  return [
+    ...(reasoning.toggle ? [{ type: "toggle" as const }] : []),
+    ...(reasoning.effort
+      ? [{ type: "effort" as const, values: reasoning.effort.filter((value) => value !== "default") }]
+      : []),
+    ...(reasoning.budget ? [{ type: "budget_tokens" as const, ...reasoning.budget }] : []),
+  ]
+}
 
 type Variants = Model.Info["variants"]
 type Overlay = Omit<Variants[number], "id">
@@ -99,9 +112,16 @@ const responsesEffort = (effort: string): Overlay => ({
   settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ENCRYPTED_REASONING },
 })
 
-const xaiResponses: Protocol = (_, support) => {
+const openResponses: Protocol = (_, support) => {
   if (support.type !== "effort") return []
   return efforts(support.values ?? EFFORTS, responsesEffort)
+}
+
+const googleInteractions: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, (effort) => ({
+    settings: { thinkingLevel: effort, thinkingSummaries: "auto" },
+  }))
 }
 
 const cloudflareAIGateway: Protocol = (model, support) => {
@@ -466,8 +486,17 @@ const cohere: Protocol = (model, support) => {
 const vercelGateway: Protocol = (model, support) => {
   const id = modelID(model)
   if (id.startsWith("openai/gpt-")) return openaiResponses(model, support)
-  if (id.startsWith("spacexai/grok-")) return xaiResponses(model, support)
-  if (id.startsWith("anthropic/")) return anthropicMessages(model, support)
+  if (id.startsWith("spacexai/grok-")) return openResponses(model, support)
+  return vercelMessages(model, support)
+}
+
+const vercelResponses: Protocol = (model, support) =>
+  modelID(model).startsWith("openai/gpt-") ? openaiResponses(model, support) : openResponses(model, support)
+
+const vercelMessages: Protocol = (model, support) =>
+  modelID(model).startsWith("anthropic/") ? anthropicMessages(model, support) : vercelChat(model, support)
+
+const vercelChat: Protocol = (model, support) => {
   switch (support.type) {
     case "effort":
       return openaiChat(model, support)
@@ -478,7 +507,7 @@ const vercelGateway: Protocol = (model, support) => {
         model,
         support,
         (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
-        id.startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
+        modelID(model).startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
       )
   }
 }
@@ -576,18 +605,32 @@ const gitlab: Protocol = (model, support) => {
 
 const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai": openaiResponses,
+  "@opencode/ai/providers/openai/responses": openaiResponses,
+  "@opencode/ai/providers/azure": openaiResponses,
   "@opencode/ai/providers/azure/responses": openaiResponses,
-  "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiResponses,
+  "@opencode/ai/providers/amazon-bedrock/mantle": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/responses": openaiResponses,
+  "@opencode/ai/providers/amazon-bedrock-mantle": openaiResponses,
   "@opencode/ai/providers/alibaba/responses": openaiResponses,
+  "@opencode/ai/providers/meta": openaiResponses,
   "@opencode/ai/providers/meta/responses": openaiResponses,
   "@opencode/ai/providers/minimax/responses": openaiResponses,
   "@opencode/ai/providers/moonshot/responses": openaiResponses,
   "@opencode/ai/providers/zai-coding-plan/responses": openaiResponses,
 
+  "@opencode/ai/providers/openai-compatible/responses": openResponses,
+  "@opencode/ai/providers/openai-compatible-responses": openResponses,
+  "@opencode/ai/providers/google-vertex/responses": openResponses,
+  "@opencode/ai/providers/google-vertex-responses": openResponses,
+  "@opencode/ai/providers/xai": openResponses,
+
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
+  "@opencode/ai/providers/openai/chat": openaiChat,
   "@opencode/ai/providers/azure/chat": openaiChat,
+  "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiChat,
   "@opencode/ai/providers/google-vertex/chat": vertexChat,
+  "@opencode/ai/providers/google-vertex-chat": vertexChat,
+  "@opencode/ai/providers/alibaba": alibabaChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
@@ -601,24 +644,35 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/meta/chat": openaiChat,
   "@opencode/ai/providers/minimax/chat": openaiChat,
   "@opencode/ai/providers/mistral": openaiChat,
+  "@opencode/ai/providers/google-vertex/mistral": openaiChat,
+  "@opencode/ai/providers/google-vertex-mistral": openaiChat,
+  "@opencode/ai/providers/moonshot": moonshotChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
   "@opencode/ai/providers/venice": veniceChat,
-  "@opencode/ai/providers/xai": xaiResponses,
+  "@opencode/ai/providers/zai": zaiChat,
   "@opencode/ai/providers/zai/chat": zaiChat,
+  "@opencode/ai/providers/zai-coding-plan": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
+  "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
+  "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
-  "@opencode/ai/providers/google-vertex/mistral": openaiChat,
+  "@opencode/ai/providers/google-vertex-messages": anthropicMessages,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,
   "@opencode/ai/providers/meta/messages": anthropicMessages,
+  "@opencode/ai/providers/minimax": minimaxMessages,
   "@opencode/ai/providers/minimax/messages": minimaxMessages,
   "@opencode/ai/providers/moonshot/messages": moonshotMessages,
   "@opencode/ai/providers/zai-coding-plan/messages": zaiMessages,
 
   "@opencode/ai/providers/google": gemini,
   "@opencode/ai/providers/google-vertex": gemini,
+  "@opencode/ai/providers/google-vertex/gemini": gemini,
+  "@opencode/ai/providers/google/interactions": googleInteractions,
+  "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
+  "@opencode/ai/providers/google-vertex-interactions": googleInteractions,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
   "@opencode/ai/providers/cohere": cohere,
@@ -627,6 +681,9 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   [Provider.aisdk("venice-ai-sdk-provider")]: veniceChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
   "@opencode/ai/providers/vercel-ai-gateway": vercelGateway,
+  "@opencode/ai/providers/vercel-ai-gateway/chat": vercelChat,
+  "@opencode/ai/providers/vercel-ai-gateway/messages": vercelMessages,
+  "@opencode/ai/providers/vercel-ai-gateway/responses": vercelResponses,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
   [Provider.aisdk("gitlab-ai-provider")]: gitlab,

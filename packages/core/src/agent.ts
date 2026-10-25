@@ -30,8 +30,8 @@ type Data = {
 }
 
 export type Editor = {
-  list: () => readonly Info[]
-  get: (id: ID) => Info | undefined
+  list: () => readonly Types.DeepMutable<Info>[]
+  get: (id: ID) => Types.DeepMutable<Info> | undefined
   default: (id: ID | undefined) => void
   update: (id: ID, fn: (agent: Types.DeepMutable<Info>) => void) => void
   remove: (id: ID) => void
@@ -40,7 +40,7 @@ export type Editor = {
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
-  readonly select: (id?: ID | string) => Effect.Effect<Selection>
+  readonly select: (id?: ID) => Effect.Effect<Selection>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -54,7 +54,7 @@ const layer = Layer.effect(
       name: "agent",
       initial: () => ({ agents: new Map() }),
       editor: (editor) => ({
-        list: () => Array.fromIterable(editor.agents.values()) as Info[],
+        list: () => Array.fromIterable(editor.agents.values()),
         get: (id) => editor.agents.get(id),
         default: (id) => {
           editor.default = id
@@ -77,7 +77,7 @@ const layer = Layer.effect(
       const data = state.get()
       const configured = data.default ? selectable(data.agents.get(data.default)) : undefined
       if (configured) return configured
-      const build = selectable(data.agents.get(ID.make("build")))
+      const build = selectable(data.agents.get(defaultID))
       if (build) return build
       for (const agent of data.agents.values()) {
         const fallback = selectable(agent)
@@ -96,10 +96,7 @@ const layer = Layer.effect(
         return selectedDefault()
       }),
       select: Effect.fn("Agent.select")(function* (id) {
-        if (id !== undefined) {
-          const selected = ID.make(id)
-          return { id: selected, info: state.get().agents.get(selected) }
-        }
+        if (id !== undefined) return { id, info: state.get().agents.get(id) }
         const info = selectedDefault()
         return { id: info?.id ?? defaultID, info }
       }),

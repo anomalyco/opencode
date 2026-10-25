@@ -1,14 +1,16 @@
-import { $ } from "bun"
 import { chmod, copyFile, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { Option, Schema } from "effect"
 
 const CLI_VERSION = "dev"
+
+const Manifest = Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString }))
 
 export type Channel = "dev" | "beta" | "prod"
 
 export function resolveChannel(): Channel {
-  const raw = Bun.env.OPENCODE_CHANNEL
+  const raw = process.env.OPENCODE_CHANNEL
 
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
 
@@ -56,7 +58,7 @@ export const CLI_BINARIES: Array<{ target: string; package: string; os: string; 
   },
 ]
 
-export const CLI_TARGET = Bun.env.OPENCODE_CLI_TARGET
+export const CLI_TARGET = process.env.OPENCODE_CLI_TARGET
 
 function nativeTarget() {
   const { platform, arch } = process
@@ -69,7 +71,7 @@ function nativeTarget() {
   throw new Error(`Unsupported platform: ${platform}/${arch}`)
 }
 
-export function getCurrentCli(target = CLI_TARGET ?? nativeTarget()) {
+export function getCurrentCli(target = process.env.OPENCODE_CLI_TARGET ?? nativeTarget()) {
   const binaryConfig = CLI_BINARIES.find((item) => item.target === target)
 
   if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
@@ -77,7 +79,14 @@ export function getCurrentCli(target = CLI_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
+export function nodePtyPackage(target?: string) {
+  const cli = getCurrentCli(target)
+
+  return `@lydell/node-pty-${cli.os}-${cli.cpu}`
+}
+
 export async function downloadCliToResources(version = CLI_VERSION, dest = windowsify("resources/opencode-cli")) {
+  const { $ } = await import("bun")
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
 
@@ -104,9 +113,12 @@ async function copyCliToResources(pkg: string, dest: string) {
   const cli = getCurrentCli()
   await copyFile(join(pkg, "bin", cli.os === "win32" ? "opencode.exe" : "opencode"), dest)
   await prepareCli(dest)
-  const manifest = (await Bun.file(join(pkg, "package.json")).json()) as { version?: string }
 
-  if (!manifest.version) throw new Error(`Bundled CLI package has no version: ${pkg}`)
+  const manifest = Option.getOrUndefined(
+    Schema.decodeUnknownOption(Manifest)(await Bun.file(join(pkg, "package.json")).text()),
+  )
+
+  if (!manifest) throw new Error(`Bundled CLI package has no version: ${pkg}`)
   await Bun.write(versionFile(dest), manifest.version)
 }
 
@@ -115,6 +127,8 @@ export function versionFile(cli: string) {
 }
 
 async function prepareCli(dest: string) {
+  const { $ } = await import("bun")
+
   if (process.platform !== "win32") await chmod(dest, 0o755)
 
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {

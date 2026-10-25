@@ -18,6 +18,11 @@ for (const custom of [false, true]) {
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
     await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
     await expect(trigger).toBeEnabled()
+    // The trigger scrolls with the timeline under its sticky header, and Kobalte closes a tooltip whenever its
+    // trigger scrolls. A cold timeline keeps scrolling to its bottom until it reveals its rows, so hover after that.
+    await expect(
+      page.locator(`[data-timeline-row="UserMessage"][data-message-id="${fixture.expected.sourceMessageIDs.at(-1)}"]`),
+    ).toBeVisible()
     await trigger.hover()
     const tooltip = page.getByRole("tooltip")
     await expect(tooltip).toContainText("Summary")

@@ -18,8 +18,7 @@ import { PluginTestLayer } from "../plugin/fixture"
 const it = testEffect(PluginTestLayer)
 const decode = Schema.decodeUnknownSync(Info)
 
-const document = (...policies: ConfigPolicy.Info[]) =>
-  new Document({ type: "document", info: decode({ experimental: { policies } }) })
+const document = (...policies: ConfigPolicy.Info[]) => new Document({ type: "document", info: decode({ policies }) })
 const provider = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy.Info => ({
   action: "provider.use",
   resource,

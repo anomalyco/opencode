@@ -10,7 +10,7 @@ plugins and their `node_modules` dependencies. Install them as peer/dev dependen
 rather than bundling them into your plugin.
 
 ```sh
-bun add --peer @opencode/plugin effect
+bun add --peer @opencode/plugin effect@4.0.1
 ```
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
@@ -325,7 +325,7 @@ effect: (ctx) =>
       editor.update("anthropic", (provider) => {
         provider.headers = { ...provider.headers, "x-company": "engineering" }
       })
-      editor.models.update("anthropic", "claude-sonnet-4-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.update("anthropic", "claude-sonnet-5-5", (model) => (model.name = "Team Sonnet"))
       editor.models.remove("anthropic", "legacy-model")
       editor.remove("legacy-provider")
     })
@@ -348,14 +348,14 @@ effect: (ctx) =>
 For account-specific discovery, pass the connection used to load the inventory as `sourceConnection`. OpenCode excludes
 that provider while another connection is selected, until your plugin publishes its refreshed inventory.
 
+{/* prettier-ignore */}
 ```ts
-const connection = yield * ctx.integration.connection.active("acme")
+const connection = yield* ctx.integration.connection.active("acme")
 if (!connection) return
-const inventory = yield * loadInventory(connection)
-yield *
-  ctx.provider.transform((editor) => {
-    editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
-  })
+const inventory = yield* loadInventory(connection)
+yield* ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
 ```
 
 Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info).
@@ -412,7 +412,7 @@ effect: (ctx) =>
           draft.enabled = draft.capabilities.tools
         })
       })
-      editor.default.set("anthropic", "claude-sonnet-4-5")
+      editor.default.set("anthropic", "claude-sonnet-5-5")
       editor.remove("anthropic", "legacy-model")
     })
   }),
@@ -427,7 +427,7 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const model = ctx.model
     yield* model.transform((editor) => {
-      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-4-5")
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
       if (!source) return
       editor.update("anthropic", source.id, (draft) => {
         draft.limit.context = Math.min(draft.limit.context, source.limit.context)
@@ -721,7 +721,7 @@ effect: (ctx) =>
     const plugin = ctx.plugin
     const active = yield* plugin.list().pipe(
       Effect.orDie,
-      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+      Effect.map((result) => result.data.filter((item) => item.state.status === "active")),
     )
     yield* Effect.logInfo("active plugin count", { count: active.length })
   }),
@@ -800,7 +800,7 @@ effect: (ctx) =>
     yield* session
       .switchModel({
         sessionID: current.id,
-        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") },
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-5-5") },
       })
       .pipe(Effect.orDie)
   }),
@@ -817,10 +817,23 @@ effect: (ctx) =>
     const summary = yield* session
       .generate({ sessionID: created.id, prompt: "Summarize this project" })
       .pipe(Effect.orDie)
-    yield* session.command({ sessionID: created.id, command: "review", arguments: "--staged" }).pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, name: "review", text: "--staged" }).pipe(Effect.orDie)
     yield* session
       .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
       .pipe(Effect.orDie)
+  }),
+```
+
+List sessions a page at a time. To get the next page, pass `cursor.next` back as `cursor`. The cursor remembers your
+filters, so you don't need to repeat them.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const page = yield* ctx.session.list({ directory: ctx.location.directory, limit: 20 }).pipe(Effect.orDie)
+    const next = page.cursor.next
+      ? yield* ctx.session.list({ cursor: page.cursor.next, limit: 20 }).pipe(Effect.orDie)
+      : undefined
   }),
 ```
 
@@ -852,6 +865,7 @@ Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-M
 ```ts
 type SessionDomain = Pick<
   SessionApi<unknown>,
+  | "list"
   | "create"
   | "get"
   | "remove"
@@ -878,7 +892,7 @@ Read skills at the current location.
 effect: (ctx) =>
   Effect.gen(function* () {
     const skill = ctx.skill
-    const skills = yield* skill.list()
+    const skills = yield* skill.list().pipe(Effect.orDie)
     yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
   }),
 ```
@@ -895,7 +909,7 @@ effect: (ctx) =>
         id: Skill.ID.make("review"),
         name: Skill.Name.make("Review"),
         description: "Review the current changes",
-        path: "/workspace/.opencode/skills/review/SKILL.md",
+        path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
         content: "Review the current changes for correctness and missing tests.",
       }))
       const review = editor.get("review")
@@ -1006,14 +1020,14 @@ namespaces and unsupported characters in tool names become `_`. Missing names ar
 `add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
 them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
 
+{/* prettier-ignore */}
 ```ts
-yield *
-  ctx.tool.transform((editor) => {
-    editor.update("acme_greeting", (tool) => {
-      tool.description = "Greet the user by name"
-    })
-    editor.remove("acme_obsolete")
+yield* ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
   })
+  editor.remove("acme_obsolete")
+})
 ```
 
 Updates and removals replay in order with additions, including after MCP catalog refreshes.
@@ -1057,7 +1071,7 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const vcs = ctx.vcs
     const info = yield* vcs.get().pipe(Effect.orDie)
-    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const branches = yield* vcs.branch.list({ search: "feature", limit: 10 }).pipe(Effect.orDie)
     const changes = yield* vcs.status().pipe(Effect.orDie)
     const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
     yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
@@ -1503,7 +1517,8 @@ type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Regi
 ## Publish
 
 A package plugin uses the same default export as a local Effect plugin. Export the Effect implementation from the main
-entrypoint and declare `effect` as a `peerDependency`.
+entrypoint and declare `effect` as a `peerDependency`. Under `devDependencies`, pin the version `@opencode/plugin` uses
+so development installs only one copy.
 
 ```json title="package.json"
 {
@@ -1517,7 +1532,10 @@ entrypoint and declare `effect` as a `peerDependency`.
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "effect": "^4.0.0"
+    "effect": "^4.0.1"
+  },
+  "devDependencies": {
+    "effect": "4.0.1"
   }
 }
 ```

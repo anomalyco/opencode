@@ -20,7 +20,7 @@ export function HomeProjects(props: {
       projectsForServer={props.projects.server.projects}
       collapsed={props.projects.server.collapsed}
       canRevealProject={props.projects.project.canReveal}
-      unseenCount={props.projects.project.unseenCount}
+      hasUnread={props.projects.project.hasUnread}
       onWheel={props.scroll.viewport.containWheel}
       onChooseProject={props.projects.project.choose}
       onFocusServer={props.projects.server.focus}

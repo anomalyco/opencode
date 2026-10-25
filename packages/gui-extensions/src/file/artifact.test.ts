@@ -1,5 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { parseDelimited, resolveArtifactPath } from "./artifact"
+import { bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+
+describe("binary content helpers", () => {
+  test("reads size and independent byte copies from raw bytes", () => {
+    const bytes = new Uint8Array([0, 1, 2, 3])
+    const content = { type: "binary" as const, content: "", bytes, mimeType: "video/mp4" }
+
+    expect(contentBytes(content)).toBe(4)
+
+    const copy = bytesFromContent(content)
+    expect(copy).toEqual(bytes)
+    copy[0] = 9
+    expect(content.bytes[0]).toBe(0)
+  })
+})
 
 describe("parseDelimited", () => {
   test("handles quotes, embedded delimiters, newlines, and CRLF", () => {

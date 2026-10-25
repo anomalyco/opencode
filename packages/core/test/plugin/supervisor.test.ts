@@ -258,4 +258,44 @@ describe("PluginSupervisor", () => {
       expect(source.activations).toBe(2)
     }),
   )
+
+  it.effect("reloads all booted locations when sdk.register is called inside a location context", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      const sdk = yield* SdkPlugins.Service
+      const dirA = yield* tmpdirScoped()
+      const dirB = yield* tmpdirScoped()
+      const refA = Location.Ref.make({ directory: AbsolutePath.make(dirA.path) })
+      const refB = Location.Ref.make({ directory: AbsolutePath.make(dirB.path) })
+      const locations = yield* LocationServiceMap.Service
+
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+      }).pipe(Effect.provide(locations.get(refA)))
+
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+      }).pipe(Effect.provide(locations.get(refB)))
+
+      expect(source.activations).toBe(2)
+
+      yield* sdk
+        .register(greeter("greet-cross-location", "cross-location"))
+        .pipe(Effect.provide(locations.get(refA)))
+
+      yield* advance(() => source.activations === 4)
+
+      for (const ref of [refA, refB]) {
+        const command = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          const commands = yield* Command.Service
+          yield* plugins.awaitActivation
+          return yield* commands.get("greet-cross-location")
+        }).pipe(Effect.provide(locations.get(ref)))
+        expect(command).toBeDefined()
+      }
+    }),
+  )
 })

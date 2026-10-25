@@ -53,7 +53,7 @@ export type HomeProjectsViewProps = {
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
   canRevealProject: (server: ServerConnection.Any) => boolean
-  unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
+  hasUnread: (server: ServerConnection.Any, project: LocalProject) => boolean
   onWheel: (event: WheelEvent) => void
   onChooseProject: (server: ServerConnection.Any) => void
   onFocusServer: (server: ServerConnection.Any) => void
@@ -571,7 +571,7 @@ function HomeProjectSlot(
       selected={
         props.selection.server === ServerConnection.key(props.server) && props.selection.directory === props.worktree
       }
-      unseen={props.unseenCount(props.server, project())}
+      unread={props.hasUnread(props.server, project())}
     />
   )
 }
@@ -649,7 +649,7 @@ function HomeProjectRow(
       index: number
       serverSelected: boolean
       selected: boolean
-      unseen: number
+      unread: boolean
     },
 ) {
   const platform = usePlatform()
@@ -782,7 +782,7 @@ function HomeProjectRow(
                 </Menu.Item>
               </Show>
               <Menu.Item
-                disabled={props.unseen === 0}
+                disabled={!props.unread}
                 onSelect={() => props.onClearNotifications(props.server, props.project)}
               >
                 {props.language.t("sidebar.project.clearNotifications")}

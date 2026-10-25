@@ -27,7 +27,7 @@ test.each([
   expect(config.webServer.url).toBe(config.use.baseURL)
   expect(config.webServer.command).toBe(
     built
-      ? "bun run build && bun run serve -- --host 127.0.0.1 --port 4321 --strictPort"
+      ? "bun run build && bun e2e/utils/serve.ts --host 127.0.0.1 --port 4321"
       : "bun run dev -- --host 127.0.0.1 --port 4321 --strictPort",
   )
   expect(config.webServer.reuseExistingServer).toBe(!built)

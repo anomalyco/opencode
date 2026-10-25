@@ -20,7 +20,7 @@ import {
   TransportError,
   UnknownProviderError,
   isContextOverflowFailure,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/route/client"
 import { expect } from "bun:test"
@@ -204,7 +204,9 @@ it.effect("uses only the provider timeout signal when the request signal is null
     let wrappedFetch: typeof fetch | undefined
     let requestSignal: AbortSignal | null | undefined
     yield* aisdk.hook.sdk((event) => {
-      wrappedFetch = event.options.fetch
+      if (typeof event.options.fetch === "function") {
+        wrappedFetch = event.options.fetch as typeof fetch
+      }
       event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
     })
 

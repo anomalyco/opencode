@@ -271,7 +271,6 @@
 
   #terminal-panel &[data-variant="normal"][data-orientation="horizontal"] {
     [data-slot="tabs-list"] {
-      height: 52px;
       padding-inline-end: 12px;
       gap: 8px;
     }

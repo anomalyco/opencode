@@ -1,4 +1,4 @@
-import { Message } from "@opencode/ai"
+import { Message } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
@@ -192,6 +192,8 @@ it.live("manual PAT uses its account and native compatibility rather than an SDK
       const body = yield* Effect.promise(() => request.json())
       expect(body).toMatchObject({ model: modelID, max_completion_tokens: 1024 })
       expect(body).not.toHaveProperty("max_tokens")
+      // Cortex caches Claude only through explicit Anthropic-style breakpoints.
+      expect(JSON.stringify(body)).toContain('"cache_control":{"type":"ephemeral"}')
     }),
   ),
 )

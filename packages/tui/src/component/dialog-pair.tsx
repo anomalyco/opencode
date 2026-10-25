@@ -4,7 +4,7 @@ import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { renderUnicodeCompact } from "uqr"
 import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { Link } from "../ui/link"
 import { errorMessage } from "../util/error"
 
@@ -87,15 +87,7 @@ export function DialogPair() {
   }
 
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-          Pair
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
+    <DialogLayout header={<DialogHeader title="Pair" />}>
       <Show
         when={loadError()}
         fallback={
@@ -126,6 +118,6 @@ export function DialogPair() {
           </box>
         )}
       </Show>
-    </box>
+    </DialogLayout>
   )
 }

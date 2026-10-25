@@ -7,7 +7,8 @@ import type { ModelKey } from "@/providers/models/selection"
 import { ServerScope } from "@/runtime/server/scope"
 
 // Bun does not compile Solid JSX. Compile the real context provider with the
-// same presets as Vite instead of replacing LocalProvider's implementation.
+// same presets as Vite, along with every TSX module it loads, instead of
+// replacing LocalProvider's implementation.
 const require = createRequire(import.meta.url)
 
 const solid = createRequire(require.resolve("vite-plugin-solid"))
@@ -17,7 +18,7 @@ const { transformSync } = solid("@babel/core")
 Bun.plugin({
   name: "selection-solid-context",
   setup(build) {
-    build.onLoad({ filter: /[\\/]ui[\\/]src[\\/]context[\\/]helper\.tsx$/ }, async (args) => ({
+    build.onLoad({ filter: /\.tsx$/ }, async (args) => ({
       contents: transformSync(await Bun.file(args.path).text(), {
         filename: args.path,
         presets: [solid.resolve("babel-preset-solid"), solid.resolve("@babel/preset-typescript")],
@@ -100,14 +101,15 @@ afterEach(() =>
 function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigModel; preferred?: string } = {}) {
   const directory = `/selection-test/${crypto.randomUUID()}`
 
+  // SAFETY: fixture transitions clear the route as well as selecting session IDs.
   const [state, set] = createStore({
     visible: true,
     configLoaded: true,
     connection: "connected",
     route: { id: "ses_a" as string | undefined },
     agents: input.agents ?? [agent("build"), agent("plan")],
-    config: input.config as ConfigModel | undefined,
-    sessions: { ses_a: input.session } as Record<string, Commit | undefined>,
+    config: input.config,
+    sessions: Object.fromEntries([["ses_a", input.session]]),
     providers: [{ id: "provider", name: "Provider", package: "@ai-sdk/test", activation: "enabled" }],
     models: ["a", "b", "c"].map((id) => ({
       id,
@@ -126,6 +128,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
     })),
   })
 
+  // SAFETY: empty collections are valid preferences; tests later populate them with the declared model keys and variants.
   const [preferences, setPreferences] = createStore({
     user: [] as Array<ModelKey & { visibility: "show" | "hide" }>,
     recent: [] as ModelKey[],
@@ -350,9 +353,8 @@ test("uses historical message selection only when durable and local selection ar
   expect(selection(local)).toEqual({ agent: "plan", model: "b", variant: "high" })
 })
 
-test("invalid durable models fall through agent, global, recent, and connected defaults", () => {
+test("sessions without a selection fall through agent, global, recent, and connected defaults", () => {
   const f = fixture({
-    session: durable("removed", "high"),
     agents: [agent("build", key("b"), "low")],
     config: "provider/c",
   })

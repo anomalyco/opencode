@@ -266,7 +266,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
         }}
       >
         <div class="flex flex-col h-full">
-          <div class="h-[52px] shrink-0 flex border-b border-border-weaker-base">
+          <div class="h-[49px] shrink-0 flex border-b border-border-weaker-base">
             <Tabs
               variant="panel"
               value={terminal().active()}

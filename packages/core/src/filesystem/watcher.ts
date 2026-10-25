@@ -3,17 +3,15 @@ export * as Watcher from "./watcher.js"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper.js"
 import type ParcelWatcher from "@parcel/watcher"
-import { FileSystem } from "@opencode/schema/filesystem"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
-export const Event = { Updated: FileSystem.Event.Changed }
 
 const watcher = lazy((): typeof ParcelWatcher | undefined => {
   try {
@@ -37,7 +35,7 @@ export type WatchInput =
   | { readonly path: string; readonly type: "entries"; readonly names: readonly string[] }
   | { readonly path: string; readonly type: "directory"; readonly ignore?: readonly string[] }
 
-export type Subscription = {
+type Subscription = {
   readonly unsubscribe: () => Promise<void>
   /** Backend name for logging, e.g. "node" or "fs-events". */
   readonly backend?: string
@@ -65,14 +63,13 @@ export interface Interface {
   readonly subscribe: (input: WatchInput, onReady?: Effect.Effect<void>) => Effect.Effect<Stream.Stream<Update>>
 }
 
-export const Options = Schema.Struct({
-  enabled: Schema.optional(Schema.Boolean),
-})
-export type Options = typeof Options.Type
+export interface Options {
+  readonly enabled?: boolean
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Watcher") {}
 
-export interface TestInterface extends Interface {
+interface TestInterface extends Interface {
   /** Delivers one update to every active watch whose target covers `update.path`. */
   readonly emit: (update: Update) => Effect.Effect<void>
   /** Returns every subscribe call observed so far, in order. */
@@ -226,7 +223,7 @@ export const nativeLayer = Layer.succeed(
   }),
 )
 
-export const nativeNode = makeGlobalNode({ service: Native, layer: nativeLayer, deps: [] })
+const nativeNode = makeGlobalNode({ service: Native, layer: nativeLayer, deps: [] })
 
 export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [nativeNode] })

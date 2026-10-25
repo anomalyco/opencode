@@ -142,6 +142,82 @@ export const QuestionRequest = {
   ),
 }
 
+export const QuestionAnswerCounts = {
+  render: () => (
+    <SessionPreview
+      title="Choose supporting surfaces"
+      description={description}
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          fields: [
+            activeQuestionRequest.fields[0],
+            {
+              ...activeQuestionRequest.fields[1],
+              options: [...activeQuestionRequest.fields[1].options, { value: "diagnostics", label: "Diagnostics" }],
+            },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
+export const McpElicitationRequest = {
+  render: () => (
+    <SessionPreview
+      title="Publish the release"
+      description={description}
+      document={questionPendingDocument}
+      request={{
+        type: "elicitation",
+        value: {
+          id: "frm_elicitation_preview",
+          sessionID: "global",
+          title: "release is requesting input",
+          metadata: { kind: "mcp-elicitation", server: "release", message: "Publish v2.4.0 to the selected channel?" },
+          fields: [
+            { key: "approve", type: "boolean", title: "Approve publish", required: true },
+            {
+              key: "channel",
+              type: "string",
+              title: "Channel",
+              options: [
+                { value: "beta", label: "Beta" },
+                { value: "latest", label: "Latest" },
+              ],
+            },
+            { key: "notes", type: "string", title: "Release notes", placeholder: "Optional summary" },
+            { key: "retries", type: "integer", title: "Retries", minimum: 0, default: 2 },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
+export const McpUrlElicitationRequest = {
+  render: () => (
+    <SessionPreview
+      title="Authorize the deployment"
+      description={description}
+      document={questionPendingDocument}
+      request={{
+        type: "elicitation",
+        value: {
+          id: "frm_url_elicitation_preview",
+          sessionID: "global",
+          title: "deploy is requesting input",
+          metadata: { kind: "mcp-elicitation", server: "deploy", message: "Authorize access to your account" },
+          fields: [{ key: "elicitation", type: "external", url: "https://example.com/authorize" }],
+        },
+      }}
+    />
+  ),
+}
+
 export const WebSearchRequest = {
   render: () => (
     <SessionPreview

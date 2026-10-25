@@ -136,7 +136,9 @@ const layer = Layer.effect(
               yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
 
               const existing = yield* git.repo.discover(AbsolutePath.make(localPath))
-              const origin = existing ? yield* git.remote.get(existing) : undefined
+              const origin = existing
+                ? yield* git.remote.get(existing).pipe(Effect.orElseSucceed(() => undefined))
+                : undefined
               const originReference = origin ? Repository.parse(origin) : undefined
               // Discovery walks upward, so an enclosing repository with a
               // matching origin could masquerade as the cache entry; reuse

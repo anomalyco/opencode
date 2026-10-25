@@ -192,6 +192,7 @@ export function normalize(input: unknown): Result {
   normalizeSkills(input, encoded, diagnostics)
   normalizeMcp(input, encoded, diagnostics)
   normalizeCompaction(input, encoded, diagnostics)
+  normalizePolicies(input, encoded, diagnostics)
   normalizeExperimental(input, encoded, diagnostics)
   normalizeWatcher(input, encoded, diagnostics)
   normalizeFormatter(input, encoded, diagnostics)
@@ -256,6 +257,7 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
       ["experimental", "mcp_timeout"],
       diagnostics,
     )
+    // V1 never applied this to connecting, unlike a per-server timeout.
     if (value !== undefined) {
       timeout.catalog = value
       timeout.execution = value
@@ -271,13 +273,18 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           return
         }
         if (name === "servers" && !isDirectLegacyMcp(value)) {
-          Object.entries(decodeMap(value, ConfigMCP.Server, path, diagnostics, decodeEncoded)).forEach(
-            ([key, server]) => setOwn(nativeServers, key, server),
-          )
+          Object.entries(
+            decodeMap(expandServerTimeouts(value), ConfigMCP.Server, path, diagnostics, decodeEncoded),
+          ).forEach(([key, server]) => setOwn(nativeServers, key, server))
           return
         }
         if (name === "timeout" && !isDirectLegacyMcp(value)) {
-          normalizeMcpTimeout(value, timeout, path, diagnostics)
+          normalizeMcpTimeout(
+            typeof value === "number" ? ConfigMigrateV1.migrateMcpTimeout(value) : value,
+            timeout,
+            path,
+            diagnostics,
+          )
           return
         }
         const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
@@ -295,6 +302,19 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
     ...(Object.keys(timeout).length ? { timeout } : {}),
     ...(Object.keys(servers).length ? { servers } : {}),
   }
+}
+
+// Native servers accept the V1 bare-number timeout so one V1-shaped field does not drop the whole server.
+function expandServerTimeouts(value: unknown) {
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([name, server]) => [
+      name,
+      isRecord(server) && typeof server.timeout === "number"
+        ? { ...server, timeout: ConfigMigrateV1.migrateMcpTimeout(server.timeout) }
+        : server,
+    ]),
+  )
 }
 
 function normalizeMcpTimeout(
@@ -378,12 +398,13 @@ function normalizeCompaction(
   if (Object.keys(result).length || !Object.keys(input.compaction).length) encoded.compaction = result
 }
 
-function normalizeExperimental(
+// V1 provider lists and `experimental.policies` stay supported and merge into
+// top-level `policies`; within a document, later sources win ties.
+function normalizePolicies(
   input: Record<string, unknown>,
   encoded: Record<string, unknown>,
   diagnostics: Diagnostic[],
 ) {
-  const result: Record<string, unknown> = {}
   const generated: unknown[] = []
   const enabled = decodeProviderList(input, "enabled_providers", diagnostics)
   if (enabled.present && (!enabled.nonEmpty || enabled.values.length)) {
@@ -404,7 +425,32 @@ function normalizeExperimental(
       effect: "deny",
     })),
   )
-  const native: unknown[] = []
+  const experimental = isRecord(input.experimental)
+    ? decodeList(
+        input.experimental.policies,
+        ConfigPolicy.Info,
+        ["experimental", "policies"],
+        diagnostics,
+        decodeEncoded,
+      )
+    : []
+  const native = decodeList(input.policies, ConfigPolicy.Info, ["policies"], diagnostics, decodeEncoded)
+  if (
+    generated.length ||
+    experimental.length ||
+    native.length ||
+    Array.isArray(input.policies) ||
+    (isRecord(input.experimental) && Array.isArray(input.experimental.policies))
+  )
+    encoded.policies = [...generated, ...experimental, ...native]
+}
+
+function normalizeExperimental(
+  input: Record<string, unknown>,
+  encoded: Record<string, unknown>,
+  diagnostics: Diagnostic[],
+) {
+  const result: Record<string, unknown> = {}
   if (own(input, "experimental")) {
     if (!isRecord(input.experimental)) invalid(["experimental"], diagnostics)
     if (isRecord(input.experimental)) {
@@ -421,6 +467,24 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.portable_shell_scanner = value
       }
+      if (own(experimental, "todo")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.todo,
+          experimental.todo,
+          ["experimental", "todo"],
+          diagnostics,
+        )
+        if (value !== undefined) result.todo = value
+      }
+      if (own(experimental, "background_compaction")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.background_compaction,
+          experimental.background_compaction,
+          ["experimental", "background_compaction"],
+          diagnostics,
+        )
+        if (value !== undefined) result.background_compaction = value
+      }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.subagent_depth,
@@ -430,19 +494,17 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
-      native.push(
-        ...decodeList(
-          experimental.policies,
-          ConfigPolicy.Info,
-          ["experimental", "policies"],
+      if (own(experimental, "location_idle_timeout")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.location_idle_timeout,
+          experimental.location_idle_timeout,
+          ["experimental", "location_idle_timeout"],
           diagnostics,
-          decodeEncoded,
-        ),
-      )
+        )
+        if (value !== undefined) result.location_idle_timeout = value
+      }
     }
   }
-  if (generated.length || native.length || (isRecord(input.experimental) && Array.isArray(input.experimental.policies)))
-    result.policies = [...generated, ...native]
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))
     encoded.experimental = result
 }

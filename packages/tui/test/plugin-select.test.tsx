@@ -264,7 +264,7 @@ test.each([
   [false, true],
   [0, 1],
   ["", "other"],
-])("actions deliver the selected value %p from keyboard, footer click, and footer focus", async (value, other) => {
+])("actions deliver the selected value %p from keyboard and footer click, not tab", async (value, other) => {
   await using tmp = await tmpdir()
   const select = await mount(tmp.path)
   const triggered: unknown[] = []
@@ -286,14 +286,18 @@ test.each([
     const frame = select.app.captureCharFrame().split("\n")
     const row = frame.findIndex((line) => line.includes("Inspect ctrl+o"))
     await select.app.mockMouse.click(frame[row]!.indexOf("Inspect") + 1, row)
-    select.app.mockInput.pressTab()
-    select.app.mockInput.pressEnter()
-    await select.app.waitFor(() => triggered.length === 3)
+    await select.app.waitFor(() => triggered.length === 2)
     await Bun.sleep(10)
 
-    expect(triggered).toEqual([value, value, value])
+    expect(triggered).toEqual([value, value])
     expect(settled).toBe(false)
     expect(select.app.captureCharFrame()).toContain("Values")
+
+    select.app.mockInput.pressTab()
+    select.app.mockInput.pressEnter()
+
+    expect(await chosen).toBe(value)
+    expect(triggered).toEqual([value, value])
   } finally {
     select.app.renderer.destroy()
   }

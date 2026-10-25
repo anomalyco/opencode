@@ -309,7 +309,9 @@ describe("config plugin reloads", () => {
             (yield* integrations.get(Integration.ID.make("second"))) !== undefined &&
             (yield* references.list()).some((reference) => reference.name === "second") &&
             (yield* providers.get(Provider.ID.make("first"))) === undefined &&
-            (yield* providers.get(Provider.ID.make("second"))) !== undefined
+            (yield* providers.get(Provider.ID.make("second"))) !== undefined &&
+            (yield* skills.list()).every((skill) => skill.id !== "first") &&
+            (yield* skills.list()).some((skill) => skill.id === "second")
           )
         }),
       )

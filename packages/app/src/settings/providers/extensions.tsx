@@ -29,9 +29,14 @@ export const SettingsExtensions: Component<{
   const serverSdk = useServerSDK()
   const data = useData()
 
+  // Reading `.latest` rethrows a failed fetch, so these lists fall back to empty instead of crashing the page.
   const [mcpList, { refetch: refetchMcp }] = createResource(
     () => serverSdk.connection.status() === "connected",
-    () => serverSdk.api.mcp.list().then((result) => result.data),
+    () =>
+      serverSdk.api.mcp
+        .list()
+        .then((result) => result.data)
+        .catch(() => []),
     { initialValue: [] },
   )
 
@@ -51,7 +56,11 @@ export const SettingsExtensions: Component<{
 
   const [pluginList] = createResource(
     () => serverSdk.connection.status() === "connected",
-    () => serverSdk.api.plugin.list().then((result) => result.data),
+    () =>
+      serverSdk.api.plugin
+        .list()
+        .then((result) => result.data)
+        .catch(() => []),
     { initialValue: [] },
   )
 
@@ -148,7 +157,7 @@ export const SettingsExtensions: Component<{
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/docs/skills/">
+                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/v2/docs/skills">
                   {language.t("settings.extensions.addSkills")}
                 </ExternalLink>
               </div>

@@ -27,12 +27,12 @@ const AutoApprovePermissionsSetting: Component = () => {
   return (
     <SettingsRow
       title={language.t("command.permissions.autoaccept.enable")}
-      description={language.t("toast.permissions.autoaccept.on.description")}
+      description={language.t("settings.permissions.autoAccept.default.description")}
     >
       <div data-action="settings-auto-accept-permissions">
         <Switch
-          checked={settings.permissions.autoApprove()}
-          onChange={(checked) => settings.permissions.setAutoApprove(checked)}
+          checked={settings.permissions.autoApproveDefault()}
+          onChange={(checked) => settings.permissions.setAutoApproveDefault(checked)}
         />
       </div>
     </SettingsRow>
@@ -317,6 +317,17 @@ export const SettingsGeneral: Component = () => {
                 onChange={settings.general.setTimelineDetail}
               />
             </div>
+            <SettingsRow
+              title={language.t("settings.timeline.row.turnDiffs.title")}
+              description={language.t("settings.timeline.row.turnDiffs.description")}
+            >
+              <div data-action="settings-show-turn-diffs">
+                <Switch
+                  checked={settings.general.showTurnDiffs()}
+                  onChange={(checked) => settings.general.setShowTurnDiffs(checked)}
+                />
+              </div>
+            </SettingsRow>
           </SettingsList>
         </section>
 

@@ -22,7 +22,7 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
 
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Sign in required"))
-    expect(fixture.app.captureCharFrame()).not.toContain("enter to view error")
+    expect(fixture.app.captureCharFrame()).not.toContain("view error")
     if (key === "enter") fixture.app.mockInput.pressEnter()
     else fixture.app.mockInput.pressKey(" ")
     await fixture.app.waitForFrame((frame) => frame.includes("Waiting for authorization"))
@@ -40,8 +40,9 @@ test("opens an investigation draft for a failed MCP server at its originating lo
 
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Failed !"))
+    expect(fixture.app.captureCharFrame()).toContain("view error enter")
     fixture.app.mockInput.pressEnter()
-    await fixture.app.waitForFrame((frame) => frame.includes("i investigate"))
+    await fixture.app.waitForFrame((frame) => frame.includes("investigate i"))
     fixture.app.mockInput.pressKey("i")
     await fixture.app.waitForFrame((frame) => !frame.includes("MCP server: linear"))
 

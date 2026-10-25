@@ -107,8 +107,13 @@ const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, bud
 const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
   messages.findLastIndex((m) => m.role === role)
 
+type CacheablePart = Exclude<ContentPart, { readonly type: "compaction" | "effort" }>
+
+const isCacheablePart = (part: ContentPart): part is CacheablePart =>
+  part.type !== "compaction" && part.type !== "effort"
+
 // Mark the last text part of `messages[index]`. If no text part exists, mark
-// the last content part regardless of type — that's the breakpoint position
+// the last cacheable content part — that's the breakpoint position
 // in tool-result-only messages too.
 const markMessageAt = (
   messages: ReadonlyArray<Message>,
@@ -120,11 +125,11 @@ const markMessageAt = (
   const target = messages[index]!
   if (target.content.length === 0) return messages
   const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
-  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.length - 1
-  const existing = target.content[markAt]!
-  if (("cache" in existing && existing.cache) || budget.remaining === 0) return messages
+  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.findLastIndex(isCacheablePart)
+  const existing = target.content[markAt]
+  if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const nextContent = target.content.map((part, i) => (i === markAt ? ({ ...part, cache: hint } as ContentPart) : part))
+  const nextContent = target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part))
   const next = new Message({ ...target, content: nextContent })
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
@@ -164,24 +169,14 @@ const countHints = (request: LLMRequest) =>
     (count, message) =>
       count +
       message.content.reduce(
-        (contentCount, part) => contentCount + ("cache" in part && part.cache !== undefined ? 1 : 0),
+        (contentCount, part) => contentCount + (isCacheablePart(part) && part.cache !== undefined ? 1 : 0),
         0,
       ),
     0,
   )
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
-  const route = request.model.route.id
-  if (!RESPECTS_INLINE_HINTS.has(route)) return request
-  const policy =
-    (route === "openrouter" || route === "vercel-ai-gateway-messages") &&
-    (request.cache === undefined || request.cache === "auto")
-      ? gatewayPolicy(request.model.id)
-      : route === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
-        ? request.model.id.toLowerCase().startsWith("qwen")
-          ? QWEN
-          : NONE
-        : resolve(request.cache)
+  const policy = selectPolicy(request)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)
@@ -192,4 +187,18 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
   return LLMRequest.update(request, { tools, system, messages })
+}
+
+// A declared cache format overrides the route allowlist and its model-ID heuristics.
+const selectPolicy = (request: LLMRequest): CachePolicyObject => {
+  const format = request.model.compatibility?.cacheFormat
+  const route = request.model.route.id
+  const auto = request.cache === undefined || request.cache === "auto"
+  if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
+  if (format === "anthropic") return resolve(request.cache)
+  if (!RESPECTS_INLINE_HINTS.has(route)) return NONE
+  if (!auto) return resolve(request.cache)
+  if (route === "openrouter" || route === "vercel-ai-gateway-messages") return gatewayPolicy(request.model.id)
+  if (route === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
+  return AUTO
 }
