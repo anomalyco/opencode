@@ -11,6 +11,24 @@
     animation: session-compaction-fade 320ms ease-out var(--session-compaction-delay) both;
   }
 
+  /* Its own name restarts the fade when a compaction ends inside the grace, and nothing inside crossfades, so only
+     Compacted appears. */
+  &[data-enter="now"] {
+    [data-slot="session-compaction-divider"] {
+      animation-name: session-compaction-enter;
+    }
+
+    [data-slot="session-compaction-line"]::before,
+    [data-slot="session-compaction-light"],
+    [data-slot="session-compaction-running"] {
+      transition: none;
+    }
+
+    [data-slot="session-compaction-done"] {
+      transition: color 150ms ease-out;
+    }
+  }
+
   [data-slot="session-compaction-divider"] {
     padding: 0;
     border: 0;
@@ -161,6 +179,12 @@
 }
 
 @keyframes session-compaction-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes session-compaction-enter {
   from {
     opacity: 0;
   }

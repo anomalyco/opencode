@@ -462,7 +462,8 @@ function CompactionReplayStory(props: { duration: number }) {
   )
 }
 
-const replayDurations = { instant: 0, short: 1_200, long: 20_000 }
+// `instant` arrives finished, as when started and ended land in one flush; `quick` ends inside the 400 ms grace.
+const replayDurations = { instant: 0, quick: 150, short: 1_200, long: 20_000 }
 
 export const CompactionReplay = {
   args: { run: "long" },

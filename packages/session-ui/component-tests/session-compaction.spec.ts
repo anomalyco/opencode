@@ -8,6 +8,8 @@ story("shows a running automatic compaction as one Compacting divider", async ({
   const divider = message.locator('[data-slot="session-compaction-divider"]')
 
   await expect(message).toHaveAttribute("data-quiet", "")
+  // Already running when the history loads, so it shows at once rather than waiting out the grace.
+  await expect(message).not.toHaveAttribute("data-enter")
   await expect(divider).toHaveAttribute("data-state", "running")
   await expect(divider).toBeDisabled()
   await expect(divider).toHaveAttribute("aria-busy", "true")
@@ -30,6 +32,7 @@ story("opens a finished automatic compaction's summary from its divider", async 
   await expect(message.locator('[data-slot="session-compaction-done"]')).toHaveCSS("opacity", "1")
   await expect(divider).toHaveAccessibleName("Compacted")
   await expect(divider).toHaveAttribute("aria-expanded", "false")
+  await expect(divider).not.toHaveAttribute("aria-controls")
   await expect(summary).toHaveCount(0)
 
   await divider.click()
@@ -40,6 +43,7 @@ story("opens a finished automatic compaction's summary from its divider", async 
 
   await divider.click()
   await expect(divider).toHaveAttribute("aria-expanded", "false")
+  await expect(divider).not.toHaveAttribute("aria-controls")
   await expect(summary).toHaveCount(0)
 })
 
@@ -50,9 +54,40 @@ story("fades in an instant automatic compaction as Compacted", async ({ mount })
 
   await expect(message).toHaveAttribute("data-enter", "now")
   await expect(divider).toHaveAttribute("data-state", "done")
-  await expect(divider).toHaveCSS("animation-name", "session-compaction-fade")
+  await expect(divider).toHaveCSS("animation-name", "session-compaction-enter")
   await expect(divider).toHaveAccessibleName("Compacted")
   await expect(message.locator('[data-slot="session-compaction-light"]').first()).toBeHidden()
+})
+
+story("fades in a compaction that ends inside the grace as Compacted only", async ({ mount, page }) => {
+  await mount(`${rows}--compaction-replay`, { args: { run: "quick" } })
+
+  // Sample the frame after it finishes: Compacting must already be gone rather than crossfading under Compacted.
+  const ended = await page.evaluate(
+    () =>
+      new Promise<{ enter: string | null; animation: string; running: string; done: string }>((resolve) => {
+        const sample = () => {
+          const message = document.querySelector('[data-component="session-compaction-message"]')
+          const divider = message?.querySelector('[data-slot="session-compaction-divider"]')
+
+          if (!message || !divider || divider.getAttribute("data-state") !== "done")
+            return requestAnimationFrame(sample)
+
+          requestAnimationFrame(() =>
+            resolve({
+              enter: message.getAttribute("data-enter"),
+              animation: getComputedStyle(divider).animationName,
+              running: getComputedStyle(message.querySelector('[data-slot="session-compaction-running"]')!).opacity,
+              done: getComputedStyle(message.querySelector('[data-slot="session-compaction-done"]')!).opacity,
+            }),
+          )
+        }
+
+        sample()
+      }),
+  )
+
+  expect(ended).toEqual({ enter: "now", animation: "session-compaction-enter", running: "0", done: "1" })
 })
 
 story("keeps the full record for a manual compaction", async ({ mount }) => {

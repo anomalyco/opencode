@@ -688,13 +688,24 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 function QuietCompaction(props: { id: string; created: number; running: boolean; summary: string; usage: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
-  // One that finishes within the grace never shows Compacting. A finished one only fades in when it is new, not when
-  // it loads with the history.
-  const enter = props.running ? "grace" : Date.now() - props.created < 10_000 ? "now" : undefined
+  // A new one waits out the grace (400 ms, matched in session-compaction.css) before showing Compacting; one that
+  // ends inside it, as a precomputed summary does, only fades in as Compacted. One already running or finished when
+  // the history loads shows without an entrance.
+  const mounted = performance.now()
+  const age = Date.now() - props.created
+
+  const [enter, setEnter] = createSignal(
+    props.running ? (age < 400 ? "grace" : undefined) : age < 1_000 ? "now" : undefined,
+  )
+
   const expandable = () => !props.running && !!props.summary.trim()
 
+  createEffect(() => {
+    if (!props.running && enter() === "grace" && performance.now() - mounted < 400) setEnter("now")
+  })
+
   return (
-    <div data-component="session-compaction-message" data-quiet="" data-enter={enter}>
+    <div data-component="session-compaction-message" data-quiet="" data-enter={enter()}>
       <div class="py-2">
         <button
           type="button"
@@ -704,7 +715,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           disabled={!expandable()}
           aria-busy={props.running}
           aria-expanded={expandable() ? open() : undefined}
-          aria-controls={expandable() ? `${props.id}-summary` : undefined}
+          aria-controls={expandable() && open() ? `${props.id}-summary` : undefined}
           onClick={() => setOpen((value) => !value)}
         >
           <span data-slot="session-compaction-line" data-side="start" class="h-px min-w-0 flex-1">
