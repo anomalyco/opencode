@@ -2,9 +2,10 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { useComposerLaneAlignment } from "./composer-lane"
 import "./activity-chips.css"
 
 export type SessionActivityItem = {
@@ -42,8 +43,7 @@ export function formatElapsed(ms: number, t: (key: DurationKey, params: Record<s
   })
 }
 
-// Live work above the composer, one capsule like the iOS app's background-work summary. It floats out of flow in a
-// lane the timeline reserves at its tail, so coming and going never resizes the composer region or moves the timeline.
+// Live work above the composer, one capsule like the iOS app's background-work summary, in the composer lane.
 export function SessionActivityChips(props: {
   subagents: readonly SessionActivityItem[]
   shells: readonly SessionActivityItem[]
@@ -56,16 +56,9 @@ export function SessionActivityChips(props: {
   const active = () =>
     settings.general.backgroundActivity() !== "off" && (props.subagents.length > 0 || props.shells.length > 0)
 
-  const alignment = createMemo(() => {
-    const value = settings.general.backgroundActivity()
+  const alignment = useComposerLaneAlignment()
 
-    if (value === "center") return "center"
-
-    // Left/right are physical positions; Kobalte and flex alignment use logical start/end.
-    return (value === "left") !== (language.direction() === "rtl") ? "start" : "end"
-  })
-
-  const placement = () => ({ center: "top", start: "top-start", end: "top-end" } as const)[alignment()]
+  const placement = () => (({ center: "top", start: "top-start", end: "top-end" }) as const)[alignment()]
 
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
@@ -143,15 +136,7 @@ export function SessionActivityChips(props: {
 
   return (
     <Show when={active()}>
-      <div
-        data-component="session-activity-chips"
-        class="pointer-events-none absolute inset-x-0 bottom-full flex items-center pb-2.5"
-        classList={{
-          "justify-start": alignment() === "start",
-          "justify-center": alignment() === "center",
-          "justify-end": alignment() === "end",
-        }}
-      >
+      <div data-component="session-activity-chips" class="flex min-w-0 shrink items-center">
         <Menu gutter={8} placement={placement()} onOpenChange={setOpen}>
           <Menu.Trigger
             as="button"

@@ -188,7 +188,7 @@ for (const locale of ["en", "ar"]) {
       await expect
         .poll(async () => {
           const anchor = await capsule.boundingBox()
-          const container = await page.locator('[data-component="session-activity-chips"]').boundingBox()
+          const container = await page.locator('[data-component="session-composer-lane"]').boundingBox()
           if (!anchor || !container) return Infinity
           return Math.abs(
             value === "Center"

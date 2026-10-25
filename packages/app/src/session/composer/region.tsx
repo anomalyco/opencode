@@ -35,6 +35,9 @@ import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { SessionComposerLane } from "./composer-lane"
+import { SessionTodoPill } from "./todo-pill"
+import { sessionTodos, todoFinished } from "./todos"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
 import { composerProviderName } from "@/composer/selection"
@@ -407,6 +410,10 @@ export function ActiveSessionComposerRegion(props: {
       .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
   )
 
+  const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
+  // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
+  const todosVisible = () => props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
+
   const open = (item: SessionActivityItem) => {
     const current = props.session.identity.params.id
 
@@ -476,7 +483,12 @@ export function ActiveSessionComposerRegion(props: {
       }
       above={
         <Show when={!missing() && !props.session.data.isChild()}>
-          <SessionActivityChips subagents={subagents()} shells={shells()} onOpen={open} onStop={stop} />
+          <SessionComposerLane>
+            <SessionActivityChips subagents={subagents()} shells={shells()} onOpen={open} onStop={stop} />
+            <Show when={todosVisible()}>
+              <SessionTodoPill todos={todos()} />
+            </Show>
+          </SessionComposerLane>
           <SessionQueuePanel queue={props.model.queue} hidden={props.model.region.state.blocked()} />
         </Show>
       }
