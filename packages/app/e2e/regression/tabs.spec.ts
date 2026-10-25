@@ -539,6 +539,31 @@ test("a remote tab stays busy while a child session runs", async ({ page }) => {
   await expect(tabA.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
 })
 
+test("an unseen finished turn shows its unread dot while subagents still run", async ({ page }) => {
+  const done = { ...b, time: { created: 1, updated: 2, idle: 2 } }
+  const seen = { ...c, time: { created: 1, updated: 2, idle: 2, viewed: 2 } }
+  const children = [
+    { id: "ses_tab_b_child", title: "Tab B subagent", parentID: b.id },
+    { id: "ses_tab_c_child", title: "Tab C subagent", parentID: c.id },
+  ]
+  await mockWorkspace(page, {
+    name: "TabSubagents",
+    sessions: [a, done, seen, ...children],
+    sessionStatus: Object.fromEntries(children.map((child) => [child.id, { type: "running" }])),
+    seed: { tabs: [a.id, b.id, c.id] },
+  })
+  await page.goto(sessionHref(a.id))
+  await page.mouse.move(0, 0)
+
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+  const progress = '[data-component="session-progress-indicator-v2"]'
+  // The viewed tab's spinner proves the running subagents have loaded before the unread tab is checked.
+  await expect(tab(c.id).locator(progress)).toBeVisible()
+  await expect(tab(c.id).locator('[data-slot="tab-unread-dot"]')).toHaveCount(0)
+  await expect(tab(b.id).locator('[data-slot="tab-unread-dot"]')).toBeVisible()
+  await expect(tab(b.id).locator(progress)).toHaveCount(0)
+})
+
 test("inactive tabs stay busy while work waits in their inbox, and pulse on a new prompt, as in the TUI", async ({
   page,
 }) => {

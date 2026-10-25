@@ -68,10 +68,15 @@ export function useSessionTabAvatarState(
     const busy = (id: string) =>
       data.session.status(id) === "running" || data.session.pending.list(id).some((item) => item.type !== "synthetic")
 
-    if (root?.())
-      return data.session.list().some((session) => data.session.root(session.id) === sessionId() && busy(session.id))
+    if (busy(sessionId())) return true
 
-    return busy(sessionId())
+    if (!root?.()) return false
+
+    // A finished root turn that nobody has seen yet outranks subagents still running in the background, so the
+    // unread dot shows alongside its "Response ready" notification.
+    if (unread()) return false
+
+    return data.session.list().some((session) => data.session.root(session.id) === sessionId() && busy(session.id))
   })
 
   return { unread, loading }
