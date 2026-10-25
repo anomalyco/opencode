@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Socket } from "effect/socket"
-import { LLM, LLMRequest, Message, ToolRuntime } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
 import {
   LLMClient,
   WebSocketTransport,

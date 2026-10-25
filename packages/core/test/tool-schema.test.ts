@@ -193,6 +193,28 @@ test("Effect tool schemas resolve escaped definition names", () => {
   expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
 })
 
+test("definitions keep their pinned serialization", () => {
+  const Item = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Item" })
+  const tool: Info = {
+    name: "pinned.tool",
+    description: "Pinned",
+    options: { namespace: "mcp.server" },
+    input: Schema.Struct({
+      offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      items: Schema.Array(Item),
+    }),
+    output: Schema.Struct({}).annotate({ description: "Nothing" }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+  // Key order matters for provider prompt caches.
+  const expected =
+    '{"type":"tool","name":"mcp_server_pinned_tool","description":"Pinned","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0},"items":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}}},"required":["items"],"additionalProperties":false},"outputSchema":{"not":{"type":"null"},"description":"Nothing"}}'
+
+  expect(JSON.stringify(definition(tool))).toBe(expected)
+  expect(JSON.stringify(definition(tool))).toBe(expected)
+  expect(JSON.stringify(definition({ ...tool }))).toBe(expected)
+})
+
 test.each(["Lookup Input", "café", "A/B~C% D#E"])(
   "Effect tool schemas inline URI-encoded definition %s",
   (identifier) => {

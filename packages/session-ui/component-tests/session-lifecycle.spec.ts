@@ -112,7 +112,7 @@ story("shimmers and expands a running shell command", async ({ mount }) => {
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await expect(tool.locator('[data-slot="bash-pre"]')).toContainText("still running")
+  await expect(tool.locator('[data-slot="bash-result"]')).toContainText("still running")
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts

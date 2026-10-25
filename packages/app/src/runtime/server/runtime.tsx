@@ -6,12 +6,12 @@ import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
 import { createData, createSessionRetention } from "@opencode/client/solid"
-import { useTabs } from "@/shell/tabs/tabs"
-import { useCurrentRoute } from "@/shell/state/layout"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
+import { useCurrentRoute } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
@@ -188,6 +188,8 @@ function createServerController(
 ) {
   const language = useLanguage()
   const settings = useSettings()
+  const tabs = useTabs()
+  const currentRoute = useCurrentRoute()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
 
@@ -218,20 +220,18 @@ function createServerController(
 
   // Transcripts otherwise stay loaded for every session this window ever opened. Open tabs and the three most
   // recently viewed sessions keep theirs; any other session reloads its transcript when it is opened again.
-  const tabs = useTabs()
-  const route = useCurrentRoute()
   createSessionRetention({
     session: source.session,
     current: () => {
-      const value = route()
+      const route = currentRoute()
 
-      return value.type === "session" && value.server === connKey ? value.sessionId : undefined
+      return route.type === "session" && route.server === connKey ? route.sessionId : undefined
     },
     keep: () =>
       tabs.ready()
         ? tabs.store.flatMap((tab) =>
             tab.type === "session" && tab.server === connKey
-              ? [tab.sessionId, tab.routeSessionId ?? tab.sessionId]
+              ? [tab.sessionId, ...(tab.routeSessionId ? [tab.routeSessionId] : [])]
               : [],
           )
         : source.session.list().map((session) => session.id),

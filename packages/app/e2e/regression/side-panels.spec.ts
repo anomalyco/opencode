@@ -35,7 +35,7 @@ test("review and terminal tabs follow the session tab and the terminal stays mou
   await openReviewLauncher(page.locator("#review-panel"))
   await expect(review).toBeVisible()
   await expect(chat).toHaveCSS("width", "580px")
-  await expect(reviewTab).toHaveText("Files Changed 2740")
+  await expect(reviewTab).toHaveText("2740 files changed")
 
   // The terminal opens as a tab beside review in the same strip.
   await page.keyboard.press("Control+Backquote")

@@ -43,6 +43,21 @@ export const lenient = <const S extends Schema.Top>(schema: S) =>
   Schema.optionalKey(
     Schema.UndefinedOr(schema).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(undefined)))),
   )
+/** A billed amount in USD; a malformed or negative one decodes as absent. */
+const billedAmount = lenient(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)))
+
+/** Billing an endpoint reports beside its token usage: `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode Zen). */
+export const ReportedBilling = Schema.Struct({
+  cost: billedAmount,
+})
+
+/** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
+export const reportedBilling = (usage: unknown) =>
+  Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
+    onNone: () => ({}),
+    onSome: (billing) => ({ cost: billing.cost }),
+  })
+
 /**
  * Accepts stream frames that carry no `type`, alongside the typed event schema. Gateways inject such frames as
  * keep-alives, so they decode as an ignored event; one with an `error` still decodes as an error event.
@@ -255,14 +270,14 @@ export const mediaReference = (
 }
 
 /**
- * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, an `http(s)` URL, or raw base64 in
+ * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, a URI, or raw base64 in
  * `uri`; the declared `mime` wins over any data-URL prefix so tool authors control the type the model sees.
  */
 export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   const parsed = Media.parseDataUrl(item.uri)
   const asset = parsed
     ? Media.from({ ...parsed.source, mediaType: item.mime })
-    : /^https?:\/\//.test(item.uri)
+    : item.uri.includes("://")
       ? Media.url(item.uri, { mediaType: item.mime })
       : Media.base64(item.uri, item.mime)
   return Message.media(asset, { filename: item.name })

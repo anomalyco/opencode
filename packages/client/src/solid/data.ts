@@ -497,6 +497,7 @@ export function createData(config: CreateDataInput) {
     // Streaming events target one assistant message and, within it, the latest part of a kind.
     // A missing target means the row was never loaded or was evicted; the event is dropped.
     editAssistant(sessionID: string, messageID: string, fn: (assistant: SessionMessageAssistant) => void) {
+      if (!messageIndex.get(sessionID)?.has(messageID)) return
       message.update(sessionID, (draft, index) => {
         const position = index.get(messageID)
         const item = position === undefined ? undefined : draft[position]
@@ -907,6 +908,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.shell.ended":
+        if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const match = message.shell(draft, event.data.shell.id)
           if (!match) return
@@ -1180,6 +1182,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.delta":
+        if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const current = message.compaction(draft)
           if (current?.status === "running") current.summary += event.data.text
@@ -1307,15 +1310,9 @@ export function createData(config: CreateDataInput) {
         refreshLocation("skill", result.location.skill, location)
         break
       case "vcs.branch.updated":
-        if (!store.location[locationKey(location)]?.vcs) break
-        setStore("location", locationKey(location), (data) => ({
-          vcs: {
-            branch: {
-              ...data?.vcs?.branch,
-              current: event.data.branch,
-            },
-          },
-        }))
+        // The event names only the current branch. Reload the rest: the default branch and provider can change with
+        // it, and a read served before the location's VCS provider loaded has neither.
+        refreshLocation("vcs", result.location.vcs, location)
         break
       case "form.created":
         if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break

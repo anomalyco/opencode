@@ -6,6 +6,7 @@ on:
       - dev
       - beta
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       quarantine:
@@ -29,6 +30,7 @@ env:
 jobs:
   affected:
     name: affected packages
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       e2e: ${{ steps.packages.outputs.app }}
@@ -61,7 +63,7 @@ jobs:
 
   unit:
     name: unit (${{ matrix.settings.name }})
-    if: ${{ !inputs.quarantine }}
+    if: ${{ !inputs.quarantine && !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -145,14 +147,9 @@ jobs:
         working-directory: packages/protocol
         run: bun run check:generated
 
-      - name: Check generated documentation
-        if: runner.os == 'Linux'
-        working-directory: services/www
-        run: bun run check:generated
-
   build:
     name: build (${{ matrix.settings.name }})
-    if: ${{ !inputs.quarantine }}
+    if: ${{ !inputs.quarantine && !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -334,7 +331,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.os }})
     needs: [affected, e2e-suite]
-    if: ${{ !cancelled() && !inputs.quarantine }}
+    if: ${{ !cancelled() && !inputs.quarantine && !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:

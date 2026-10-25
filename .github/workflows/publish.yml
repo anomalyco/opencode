@@ -4,11 +4,8 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
-      - ci
       - dev
       - beta
-      - fix/npm-native-binary-install
-      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
@@ -52,6 +49,8 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     env:
       BETA: ${{ github.ref_name == 'beta' }}
+    # Versioned releases wait for approval in the release environment, which only allows dev.
+    environment: ${{ (inputs.bump || inputs.version) && 'release' || '' }}
     steps:
       # A beta version only depends on the run number, so beta computes it without a checkout or an install.
       - name: Beta version
@@ -703,6 +702,8 @@ jobs:
       - build-electron
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Versioned and beta releases wait for approval in the release environment; dev previews do not.
+    environment: ${{ needs.version.outputs.release && 'release' || '' }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -834,6 +835,7 @@ jobs:
       - publish
     if: ${{ !cancelled() && github.repository == 'anomalyco/opencode' && github.ref_name == 'dev' && needs.version.outputs.release && needs.publish.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: release
     steps:
       # Unlike dev, V2 publishes a tag rather than a GitHub Release event.
       - name: Announce V2 release in Discord

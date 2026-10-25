@@ -1,5 +1,5 @@
 import type { SessionApi } from "@opencode/client/effect/api"
-import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
+import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { PromptInput } from "@opencode/schema/prompt-input"

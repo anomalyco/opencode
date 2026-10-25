@@ -113,6 +113,7 @@ function ComposerDocksPreview(props: DockArgs) {
     state: {
       questionRequest: () =>
         state.question ? { ...activeQuestionRequest, id: `${activeQuestionRequest.id}:${state.revision}` } : undefined,
+      elicitationRequest: () => undefined,
       websearch: {
         request: () => (state.websearch ? websearchRequest : undefined),
         options: () => [

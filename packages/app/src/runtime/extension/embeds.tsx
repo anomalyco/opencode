@@ -275,8 +275,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    const shown = props.visible && store.visible && !props.input.dialog() && !props.input.moving()
-    const cover = !!props.frozen || covered(rect)
+    const shown = props.visible && store.visible && !props.input.moving()
+    // A dialog's scrim covers the box like floating content does, so it dims a still of the page
+    // instead of a blank box, and the page does not blink out and back as the dialog opens and closes.
+    const cover = !!props.frozen || props.input.dialog() || covered(rect)
 
     if (shown && cover) freeze(id)
 
@@ -385,7 +387,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
         // The native views are not clipped by the retained panel's DOM. Hide before the next
         // animation frame so closing the panel cannot leave the embed above the app.
-        if (!props.visible || !store.visible || props.input.dialog() || props.input.moving() || !props.id) return hide()
+        if (!props.visible || !store.visible || props.input.moving() || !props.id) return hide()
         schedule(300)
       },
     ),

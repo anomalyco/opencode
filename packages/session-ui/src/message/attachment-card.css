@@ -36,7 +36,8 @@
     font-family: var(--v2-font-family-sans, "Inter", sans-serif);
     font-style: normal;
     font-size: 11px;
-    line-height: 12px;
+    /* Inter's descenders need 14px at 11px; a tighter line box clips them where the text truncates. */
+    line-height: 14px;
     letter-spacing: 0.05px;
     font-variation-settings: "slnt" 0;
   }

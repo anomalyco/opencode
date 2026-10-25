@@ -610,3 +610,19 @@ test("keeps matching session and file results steady across keystrokes while sea
     sameFileNode: true,
   })
 })
+
+test("keeps the same height as the number of results changes", async ({ page }) => {
+  const { dialog, input } = await openCommandPalette(page)
+  const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
+  const height = async () => (await container.boundingBox())?.height
+  const initial = await height()
+  expect(initial).toBe(480)
+
+  await input.fill("copy session")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  expect(await height()).toBe(initial)
+
+  await input.fill("zzzz no palette match")
+  await expect(dialog.getByText("No results found")).toBeVisible()
+  expect(await height()).toBe(initial)
+})

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src/index.js"
+import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
+import { AIError, HttpContext } from "../src/schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -206,6 +207,47 @@ describe("provider error classification", () => {
     ).toBe("ContentPolicy")
   })
 
+  test("classifies Alibaba Model Studio data inspection failures", () => {
+    const alibaba = {
+      request_id: "1537ecc9-6873-93f7-9865-6fe4eb1d7851",
+      code: "DataInspectionFailed",
+      message: "Green net check failed for text (input): Input data may contain inappropriate content.",
+    }
+
+    expect(
+      classifyProviderFailure({ message: alibaba.message, status: 400, rawBody: JSON.stringify(alibaba) })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("classifies OpenAI image moderation blocks directly and through the Vercel AI Gateway", () => {
+    const message =
+      "Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include the request ID req_123."
+    const openai = {
+      error: {
+        message,
+        type: "image_generation_user_error",
+        param: null,
+        code: "moderation_blocked",
+        moderation_details: { moderation_stage: "input", categories: ["other"] },
+      },
+    }
+    // The gateway keeps OpenAI's message but replaces its type and drops the code.
+    const vercel = {
+      error: {
+        message,
+        type: "AI_APICallError",
+        param: { error: message, statusCode: 400, name: "AI_APICallError", message, isRetryable: false },
+      },
+    }
+
+    expect(
+      [openai, vercel].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 400, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
   test("recovers policy codes that OpenCode Zen preserves only in its message label", () => {
     // Zen drops upstream codes outside its allow-list and replaces the type, but
     // `Protocol.errorMessage` keeps the original code as a `[code]` prefix.
@@ -380,6 +422,62 @@ describe("provider error classification", () => {
           classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
       ),
     ).toEqual(["RateLimit", "RateLimit"])
+  })
+
+  test("classifies Bedrock throttling as a retryable rate limit, not context overflow", () => {
+    // Bedrock throttles with 429 ThrottlingException and a "Too many tokens" message; the token
+    // phrasing used to classify it as overflow and compact the session instead of retrying.
+    const bodies = [
+      '{"message":"Too many tokens, please wait before trying again."}',
+      '{"message":"Too many tokens per day, please wait before trying again."}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body),
+          status: 429,
+          rawBody: body,
+        }),
+      })
+      expect(error.reason._tag).toBe("RateLimit")
+      expect(isContextOverflowFailure(error)).toBe(false)
+      expect(isRetryable(error)).toBe(true)
+    }
+    expect(isContextOverflow("Too many tokens, please wait before trying again.")).toBe(false)
+    expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
+    // Plain overflow phrasing without the throttle cue still compacts.
+    expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("does not infer context overflow from known throttling exceptions", () => {
+    const cases = [
+      { status: 429, data: { code: "ThrottlingException" } },
+      { status: 429, rawBody: '{"__type":"com.amazonaws.bedrock#ThrottlingException"}' },
+      { rawBody: '{"exception":{"type":"throttlingException"}}' },
+      {
+        status: 429,
+        http: new HttpContext({
+          url: "https://bedrock.test/model/example/converse-stream",
+          status: 429,
+          headers: { "x-amzn-errortype": "ThrottlingException:http://internal.amazon.com/coral/" },
+        }),
+      },
+    ]
+    for (const input of cases) {
+      for (const message of ["Token limit exceeded", "Too many tokens, please try again later"]) {
+        const error = new AIError({ reason: classifyProviderFailure({ ...input, message }) })
+        expect(error.reason._tag).toBe("RateLimit")
+        expect(isContextOverflowFailure(error)).toBe(false)
+        expect(isRetryable(error)).toBe(true)
+      }
+    }
+    expect(
+      classifyProviderFailure({
+        message: "prompt is too long",
+        status: 400,
+        data: { code: "ValidationException" },
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
   })
 
   test("does not let substituted server codes make a 4xx retryable", () => {

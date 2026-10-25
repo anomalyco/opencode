@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { blob, sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
@@ -9,6 +9,7 @@ import type { FileDiff } from "@opencode/schema/file-diff"
 import type { Permission } from "@opencode/schema/permission"
 import type { Project } from "@opencode/schema/project"
 import type { SessionSchema } from "./schema.js"
+import type { SessionStored } from "./stored.js"
 import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode/schema/instruction"
@@ -18,7 +19,10 @@ import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
-type SessionMessageData = DistributiveOmit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
+type SessionMessageData = DistributiveOmit<
+  Exclude<(typeof SessionMessage.Info)["Encoded"], { readonly type: "user" }> | (typeof SessionStored.User)["Encoded"],
+  "type" | "id"
+>
 
 export const SessionTable = sqliteTable(
   "session_v2",
@@ -132,7 +136,9 @@ export const SessionInboxTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionInbox.Info["type"]>().notNull(),
-    payload: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | CompactionPayload | MovePayload>().notNull(),
+    payload: text({ mode: "json" })
+      .$type<SessionStored.UserPayload | SyntheticPayload | CompactionPayload | MovePayload>()
+      .notNull(),
     delivery: text().$type<SessionInbox.Delivery>().notNull(),
     enqueued_seq: integer().notNull(),
     time_created: integer()
@@ -175,3 +181,35 @@ export const InstructionStateTable = sqliteTable("instruction_state", {
   initial_values: text({ mode: "json" }).notNull().$type<Instruction.Values>(),
   current_values: text({ mode: "json" }).notNull().$type<Instruction.Values>(),
 })
+
+export const BlobTable = sqliteTable("blob", {
+  hash: text().primaryKey(),
+  mime: text().notNull(),
+  bytes: integer().notNull(),
+  width: integer(),
+  height: integer(),
+  data: blob({ mode: "buffer" }).notNull(),
+  time_created: integer()
+    .notNull()
+    .$default(() => Date.now()),
+})
+
+export const BlobRefTable = sqliteTable(
+  "blob_ref",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    message_id: text().$type<SessionMessage.ID>().notNull(),
+    hash: text()
+      .notNull()
+      .references(() => BlobTable.hash, { onDelete: "cascade" }),
+    seq: integer().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.session_id, table.message_id, table.hash] }),
+    index("blob_ref_hash_idx").on(table.hash),
+    index("blob_ref_session_seq_idx").on(table.session_id, table.seq),
+  ],
+)

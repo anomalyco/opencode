@@ -198,6 +198,7 @@ export const dict = {
     "All Zen models are hosted in the US and EU. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.privacy.exceptionsLink": "following exceptions",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro is now available in Go.",
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -280,7 +281,6 @@ export const dict = {
     "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
     "ZDR agreement is renewed monthly. The current agreement is valid through October 31, 2026.",
-  "go.faq.a5.geminiRetention": "Your prompts and completions may be used to train future Google models.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.q6": "Can I top up credit?",

@@ -1,7 +1,8 @@
 import { DataProvider } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
-import { createMemo, type ParentProps } from "solid-js"
+import { useQuery } from "@tanstack/solid-query"
+import { createMemo, onCleanup, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -75,6 +76,25 @@ export function SessionUIProvider(
 
   const providers = useProviders(directory)
 
+  const config = useQuery(() => ({
+    queryKey: [serverSDK.scope, "session-ui-config", directory()],
+    enabled: serverSDK.connection.status() === "connected",
+    queryFn: () => serverSDK.api.config.get({ location: { directory: directory() } }),
+  }))
+
+  onCleanup(
+    serverSDK.event.on("config.updated", (event) => {
+      if (event.location && event.location.directory !== directory()) return
+      void config.refetch()
+    }),
+  )
+
+  // Matches the server: the highest-priority document that sets `experimental` decides.
+  const backgroundCompaction = () =>
+    config.data
+      ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
+      .at(-1)?.background_compaction === true
+
   // Turn diffs live in the tab's in-memory state, so they outlast timeline remounts and go when the tab closes.
   const turnDiffs = () => {
     const id = params.id
@@ -123,6 +143,7 @@ export function SessionUIProvider(
         }}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
+        backgroundCompaction={backgroundCompaction()}
         onPrompt={async (input) => {
           // Like the composer, a staged revert commits first; its committed echo would otherwise drop this reply.
           if (data.session.get(input.sessionID)?.revert)

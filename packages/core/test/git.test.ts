@@ -7,7 +7,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Git } from "@opencode/core/git"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { VcsPatch } from "@opencode/core/vcs/patch"
-import { branch, commit, initRepo, read, withRemote } from "./fixture/git"
+import { branch, commit, initGit, initRepo, read, withRemote } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -101,6 +101,51 @@ describe("Git worktrees", () => {
       if (!linked) throw new Error("Linked worktree not found")
       yield* git.worktree.remove({ repository: linked, directory: worktree, force: false })
       expect((yield* git.worktree.list(repo)).some((entry) => entry.directory.endsWith("-git-worktree"))).toBe(false)
+    }),
+  )
+
+  it.live("reads no remote and no root commits from an unborn repository", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initGit(root.path))
+      const git = yield* Git.Service
+      const repo = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!repo) throw new Error("Repository not found")
+      expect(yield* git.remote.get(repo)).toBeUndefined()
+      expect(yield* git.history.rootCommits(repo)).toEqual([])
+    }),
+  )
+
+  it.live("fingerprint changes with repository metadata, including from a linked worktree", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const main = path.join(root.path, "main")
+      const linked = path.join(root.path, "linked")
+      yield* Effect.promise(() => initGit(main))
+      const git = yield* Git.Service
+      const fingerprint = (dir: string) => git.repo.fingerprint(AbsolutePath.make(path.join(dir, ".git")))
+
+      expect(yield* fingerprint(root.path)).toBeUndefined()
+      const unborn = yield* fingerprint(main)
+      expect(unborn).toBeDefined()
+      expect(yield* fingerprint(main)).toBe(unborn)
+
+      yield* Effect.promise(() => $`git commit --allow-empty -qm root`.cwd(main).quiet())
+      const committed = yield* fingerprint(main)
+      expect(committed).not.toBe(unborn)
+
+      yield* Effect.promise(() => $`git worktree add -q ${linked}`.cwd(main).quiet())
+      const before = yield* fingerprint(linked)
+      expect(before).toBeDefined()
+      yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(main).quiet())
+      expect(yield* fingerprint(main)).not.toBe(committed)
+      expect(yield* fingerprint(linked)).not.toBe(before)
     }),
   )
 })

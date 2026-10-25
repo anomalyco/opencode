@@ -80,6 +80,14 @@ test("commandKeymap puts a user's binding before a default on the same keys", ()
   expect(commandKeymap([{ ...rename, disabled: true }], () => false).size).toBe(0)
 })
 
+test("commandKeymap treats a command following a user's binding as the user's", () => {
+  const rename = { id: "session.rename", title: "Rename session", keybind: "ctrl+r" }
+  const close = { id: "file.close", title: "Close file", keybind: "ctrl+r", follows: "tab.close" }
+  const event = new KeyboardEvent("keydown", { key: "r", ctrlKey: true })
+
+  expect(resolveKeybindOption(commandKeymap([rename, close], (id) => id === "tab.close").get("r:1"), event)).toBe(close)
+})
+
 test.each([true, false])("resolveKeybindOption leaves the key to a skipping command's target: %p", (inside) => {
   const rename = { id: "session.rename", title: "Rename session", skip: () => inside }
   const focus = { id: "input.focus", title: "Focus input" }

@@ -671,14 +671,7 @@ export type ModelCost = {
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
 
-export type VoiceModel = {
-  model: string
-  provider: string
-  transports: Array<VoiceTransportType>
-  available: boolean
-  integration?: string | undefined
-  workspace?: string | undefined
-}
+export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
 
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
 
@@ -727,6 +720,7 @@ export type IntegrationCommandAttempt = { attemptID: IntegrationAttemptID; time:
 export type McpServer = {
   name: string
   status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
+  title?: string
   integrationID?: IntegrationID
 }
 
@@ -2022,7 +2016,7 @@ export type ProviderInfo = {
 
 export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
-export type VoiceSessionResponse = { data: { transport: VoiceTransport; session?: { id: string } | undefined } }
+export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
@@ -5040,13 +5034,6 @@ export type VoiceSessionInput = {
 }
 
 export type VoiceSessionOutput = VoiceSessionResponse["data"]
-
-export type VoiceInstructionsInput = {
-  readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly instructions: { readonly instructions: string }["instructions"]
-}
-
-export type VoiceInstructionsOutput = void
 
 export type ProviderListInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]

@@ -25,6 +25,7 @@ export function ExtensionCommands() {
         category: item.value.group,
         section: item.value.section,
         keybind: item.value.bind,
+        follows: item.value.follows,
         slash: item.value.slash?.name,
         slashArguments: item.value.slash?.arguments,
         slashAfter: item.value.slash?.after,

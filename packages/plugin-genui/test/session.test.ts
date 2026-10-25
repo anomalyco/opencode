@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message } from "@opencode/ai"
+import { Message } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionContext, SessionPrompt } from "@opencode/plugin/effect/session"
 import { Agent } from "@opencode/schema/agent"

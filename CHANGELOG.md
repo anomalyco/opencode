@@ -2,6 +2,69 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.1.4 — 2026-10-23
+
+### Highlights
+
+- **MCP Input Forms Now Appear**: When an MCP server asks for input during a tool call, the form now shows up instead of the call waiting until it times out. Desktop and web can now show these forms too, including text, number, choice, multiselect, boolean, and URL requests. ([#58184](https://github.com/anomalyco/opencode/pull/58184), [#58305](https://github.com/anomalyco/opencode/pull/58305))
+- **Background Compaction**: Set `experimental.background_compaction` to `true` to prepare a summary in the background as a session nears its compaction threshold, so automatic compaction does not wait for it. Summaries that are never used still cost tokens. ([#57444](https://github.com/anomalyco/opencode/pull/57444), [#58294](https://github.com/anomalyco/opencode/pull/58294))
+
+### Core
+
+#### Improvements
+
+- Added experimental background compaction through `experimental.background_compaction`. ([#57444](https://github.com/anomalyco/opencode/pull/57444), [#58294](https://github.com/anomalyco/opencode/pull/58294))
+- When a compaction request exceeds the provider limit, older tool output and exchanges are now shortened first, so more useful history survives. ([#58015](https://github.com/anomalyco/opencode/pull/58015))
+- ChatGPT sign-in context caps are now a documented built-in plugin. Add `"-opencode.provider.openai-context-caps"` to `plugins` to turn them off. ([#58194](https://github.com/anomalyco/opencode/pull/58194))
+- Added `opencode debug heap-dump [--server <url>]` to capture a running server's heap without restarting it. ([#58252](https://github.com/anomalyco/opencode/pull/58252))
+
+#### Bug fixes
+
+- Sessions without their own model now use the selected agent's model. ([#58355](https://github.com/anomalyco/opencode/pull/58355))
+- Compaction buffers that leave the model no room are now ignored, and more provider context-overflow errors are recognized. ([#58313](https://github.com/anomalyco/opencode/pull/58313), [#57982](https://github.com/anomalyco/opencode/pull/57982))
+- Agent files that use V2-only fields are now read as V2 agents. ([#58218](https://github.com/anomalyco/opencode/pull/58218))
+- Codex models that ChatGPT accounts reject are now hidden. ([#58180](https://github.com/anomalyco/opencode/pull/58180))
+- Imported V1 global sessions are now attributed to the correct project. ([#56322](https://github.com/anomalyco/opencode/pull/56322))
+
+### TUI
+
+#### Improvements
+
+- Added an experimental **TUI tools** option in the experiments dialog, which lets agents open and type into the session terminal through `tui_open_terminal` and `tui_write_terminal` without taking keyboard focus. ([#57506](https://github.com/anomalyco/opencode/pull/57506))
+- After an update restart, the TUI now tells you to start OpenCode again. ([#58139](https://github.com/anomalyco/opencode/pull/58139))
+
+#### Bug fixes
+
+- Rows that contain Unicode direction marks, common in Hebrew and Arabic text, no longer shift one column when part of the row redraws. ([#58380](https://github.com/anomalyco/opencode/pull/58380))
+
+### Desktop
+
+#### Improvements
+
+- MCP elicitation forms now appear in desktop and web sessions, with controls for structured and URL requests. ([#58305](https://github.com/anomalyco/opencode/pull/58305))
+- Added **Capture heap snapshots** to the command palette. It saves app-window, main-process, and server snapshots together in Downloads, with native-memory, GPU, and page diagnostics. ([#58259](https://github.com/anomalyco/opencode/pull/58259), [#58311](https://github.com/anomalyco/opencode/pull/58311))
+
+#### Bug fixes
+
+- File change counts now appear before their labels in review and file summaries. ([#58353](https://github.com/anomalyco/opencode/pull/58353))
+- Linux AppImage executable names no longer end in `.desktop`. Thanks [@ImBIOS](https://github.com/ImBIOS). ([#58263](https://github.com/anomalyco/opencode/pull/58263))
+
+### SDK
+
+#### Improvements
+
+- Added `connectClientMcp()` for hosting MCP tools in a client over the experimental client MCP WebSocket transport. ([#57504](https://github.com/anomalyco/opencode/pull/57504), [#57505](https://github.com/anomalyco/opencode/pull/57505))
+
+### Extensions
+
+#### Bug fixes
+
+- MCP elicitation forms now appear during tool calls instead of the call waiting until it times out. Thanks [@dimitriskourg](https://github.com/dimitriskourg) and [@chrischall](https://github.com/chrischall). ([#58184](https://github.com/anomalyco/opencode/pull/58184))
+- MCP OAuth login now keeps waiting after unrelated requests reach its callback. Thanks [@reynold-hu](https://github.com/reynold-hu). ([#58342](https://github.com/anomalyco/opencode/pull/58342))
+- Remote MCP requests now stay open past Bun's fetch idle timeout. ([#58341](https://github.com/anomalyco/opencode/pull/58341))
+- MCP servers started during initial reconciliation are no longer duplicated, and MCP servers now stop in parallel on shutdown. ([#58349](https://github.com/anomalyco/opencode/pull/58349), [#58351](https://github.com/anomalyco/opencode/pull/58351))
+- MCP tools whose output schema is not a root object are now accepted. ([#58224](https://github.com/anomalyco/opencode/pull/58224))
+
 ## v2.1.3 — 2026-10-22
 
 ### Highlights

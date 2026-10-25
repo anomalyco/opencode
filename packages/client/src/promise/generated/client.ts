@@ -112,8 +112,6 @@ import type {
   VoiceModelsOutput,
   VoiceSessionInput,
   VoiceSessionOutput,
-  VoiceInstructionsInput,
-  VoiceInstructionsOutput,
   ProviderListInput,
   ProviderListOutput,
   ProviderGetInput,
@@ -1198,18 +1196,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      instructions: (input: VoiceInstructionsInput, requestOptions?: RequestOptions) =>
-        request<VoiceInstructionsOutput>(
-          {
-            method: "POST",
-            path: `/api/experimental/voice/session/${encodeURIComponent(input.sessionID)}/instructions`,
-            body: { instructions: input["instructions"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404, 503],
-            empty: true,
-          },
-          requestOptions,
-        ),
     },
     provider: {
       list: (input?: ProviderListInput, requestOptions?: RequestOptions) =>
@@ -1556,7 +1542,7 @@ export function make(options: ClientOptions) {
             path: `/api/project`,
             query: { archived: input?.["archived"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401],
             empty: false,
           },
           requestOptions,
@@ -1639,7 +1625,7 @@ export function make(options: ClientOptions) {
               method: "DELETE",
               path: `/api/permission/saved/${encodeURIComponent(input.id)}`,
               successStatus: 204,
-              declaredStatuses: [400, 401, 404],
+              declaredStatuses: [400, 401],
               empty: true,
             },
             requestOptions,

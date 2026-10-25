@@ -11,7 +11,7 @@ import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
-const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(globalThis.navigator?.platform ?? "")
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
 
@@ -112,6 +112,8 @@ export interface CommandOption {
   /** Section of Settings > Shortcuts. Host commands leave it unset and are placed by id prefix. */
   section?: CommandSection
   keybind?: KeybindConfig
+  /** Command id whose custom keybind this command takes; Settings > Shortcuts lists only that command. */
+  follows?: string
   slash?: string
   slashArguments?: boolean
   /** Listed right after the option whose slash name this is, when one is registered. */
@@ -155,7 +157,8 @@ export function commandKeymap(options: CommandOption[], custom: (id: string) => 
       const sig = signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)
       const existing = map.get(sig) ?? []
 
-      map.set(sig, custom(actionId(option.id)) ? [option, ...existing] : [...existing, option])
+      const own = custom(actionId(option.id)) || (option.follows !== undefined && custom(option.follows))
+      map.set(sig, own ? [option, ...existing] : [...existing, option])
     }
   }
 
@@ -176,6 +179,7 @@ const CommandCatalogItem = Persistence.struct({
   category: Schema.optional(Schema.String),
   section: Persistence.optional(CommandSection),
   keybind: Schema.optional(Schema.String),
+  follows: Schema.optional(Schema.String),
   slash: Schema.optional(Schema.String),
   hidden: Schema.optional(Schema.Boolean),
 })
@@ -303,7 +307,7 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
   if (!kb.key) return parts
 
-  const keys = new Map([
+  const keys = new Map<string, string>([
     ["arrowup", "↑"],
     ["arrowdown", "↓"],
     ["arrowleft", "←"],
@@ -383,8 +387,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const [catalog, setCatalog, _, catalogReady] = persisted(Persist.global("command.catalog.v1"), CommandCatalog, {})
 
-    const bind = (id: string, def: KeybindConfig | undefined) => {
-      const custom = settings.keybinds.get(actionId(id))
+    const bind = (id: string, def: KeybindConfig | undefined, follows?: string) => {
+      const custom = settings.keybinds.get(actionId(id)) ?? (follows ? settings.keybinds.get(follows) : undefined)
       const config = custom ?? def
 
       if (!config || config === "none") return
@@ -429,6 +433,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
               category: opt.category,
               section: opt.section,
               keybind: opt.keybind,
+              follows: opt.follows,
               slash: opt.slash,
             }),
           )
@@ -450,7 +455,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const options = createMemo(() => {
       const resolved = registered().map((opt) => ({
         ...opt,
-        keybind: bind(opt.id, opt.keybind),
+        keybind: bind(opt.id, opt.keybind, opt.follows),
       }))
 
       const suggested = resolved.filter((x) => x.suggested && !x.disabled)
@@ -530,7 +535,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     function register(key: string, cb: () => CommandOption[]): void
     function register(key: string | (() => CommandOption[]), cb?: () => CommandOption[]) {
       const id = Predicate.isString(key) ? key : undefined
-      const next = Predicate.isFunction(key) ? key : cb
+      const next = Predicate.isString(key) ? cb : key
 
       if (!next) return
       const options = createMemo(next)
@@ -552,7 +557,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       if (id === PALETTE_ID) return settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
       const base = actionId(id)
 
-      return options().find((x) => actionId(x.id) === base)?.keybind ?? bind(base, catalog[base]?.keybind)
+      return (
+        options().find((x) => actionId(x.id) === base)?.keybind ??
+        bind(base, catalog[base]?.keybind, catalog[base]?.follows)
+      )
     }
 
     return {

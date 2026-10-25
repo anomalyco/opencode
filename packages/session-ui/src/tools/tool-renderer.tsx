@@ -1843,32 +1843,11 @@ ToolRegistry.register({
   },
 })
 
-function ConsoleOutput(props: { copy: string; children: JSX.Element; variant?: "shell" }) {
+function ConsoleOutput(props: { command?: string; output: string }) {
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-
-  const copy = async () => {
-    if (!props.copy) return
-
-    if (!(await writeClipboard(props.copy))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
-    <div data-component="bash-output" data-variant={props.variant} dir="ltr">
-      <div data-slot="bash-copy">
-        <Tooltip value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-          <IconButton
-            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
-            size="normal"
-            variant="ghost-muted"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={copy}
-            aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-          />
-        </Tooltip>
-      </div>
+    <div data-component="bash-output" data-variant="shell" dir="ltr">
       <div
         data-slot="bash-scroll"
         data-scrollable
@@ -1876,10 +1855,59 @@ function ConsoleOutput(props: { copy: string; children: JSX.Element; variant?: "
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
       >
-        <pre data-slot="bash-pre">
-          <code>{props.children}</code>
-        </pre>
+        <Show when={props.command}>
+          {(command) => (
+            <div data-slot="bash-command">
+              <ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />
+              <pre data-slot="bash-pre">
+                <code>{command()}</code>
+              </pre>
+            </div>
+          )}
+        </Show>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-slot="bash-result">
+              <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
+              <pre data-slot="bash-pre">
+                <code>
+                  <LinkedText text={output()} />
+                </code>
+              </pre>
+            </div>
+          )}
+        </Show>
       </div>
+    </div>
+  )
+}
+
+// The button sits beside its section's <pre>, not inside it, so selecting and copying text never picks it up.
+function ConsoleCopy(props: { text: string; label: string }) {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+  const label = () => (copied() ? i18n.t("ui.message.copied") : props.label)
+
+  const copy = async () => {
+    if (!props.text) return
+
+    if (!(await writeClipboard(props.text))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div data-slot="bash-copy">
+      <Tooltip value={label()} placement="top">
+        <IconButton
+          icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+          size="normal"
+          variant="ghost-muted"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={copy}
+          aria-label={label()}
+        />
+      </Tooltip>
     </div>
   )
 }
@@ -2125,11 +2153,7 @@ function ExecuteOutputRow(props: { output: string }) {
       </div>
       <Show when={open()}>
         <div data-slot="execute-tool-output">
-          <ConsoleOutput copy={props.output} variant="shell">
-            <span data-slot="bash-result">
-              <LinkedText text={props.output} />
-            </span>
-          </ConsoleOutput>
+          <ConsoleOutput output={props.output} />
         </div>
       </Show>
     </div>
@@ -2257,18 +2281,7 @@ ToolRegistry.register({
         ),
       )
 
-      return (
-        <ConsoleOutput copy={command()} variant="shell">
-          <span data-slot="bash-command">{command()}</span>
-          <Show when={output()}>
-            {(value) => (
-              <span data-slot="bash-result">
-                <LinkedText text={value()} />
-              </span>
-            )}
-          </Show>
-        </ConsoleOutput>
-      )
+      return <ConsoleOutput command={command()} output={output()} />
     }
 
     return (

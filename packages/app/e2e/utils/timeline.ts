@@ -109,6 +109,7 @@ type TimelineServerInput = Partial<
   Pick<
     MockServerConfig,
     | "inbox"
+    | "configEntries"
     | "forms"
     | "permissions"
     | "sessionPermissions"

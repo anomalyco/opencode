@@ -1,7 +1,7 @@
 export default {
   "tab.title": "Review",
-  "tab.count.one": "Files Changed {{count}}",
-  "tab.count.other": "Files Changed {{count}}",
+  "tab.count.one": "{{count}} file changed",
+  "tab.count.other": "{{count}} files changed",
   "menu.count.one": "{{count}} file changed",
   "menu.count.other": "{{count}} files changed",
   "folder.more": "{{count}} · more not shown",

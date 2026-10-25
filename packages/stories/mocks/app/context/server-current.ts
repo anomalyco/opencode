@@ -1,5 +1,11 @@
 // Stories render without a connected server: no location has synced integrations or usage limits yet.
 const data = {
+  session: {
+    form: {
+      reply: async () => {},
+      cancel: async () => {},
+    },
+  },
   location: {
     default: () => ({ directory: "/tmp/story" }),
     syncInfo: async () => {},

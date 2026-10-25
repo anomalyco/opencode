@@ -1427,8 +1427,6 @@ export type VoiceModelsOutput = {
     readonly provider: string
     readonly transports: ReadonlyArray<"webrtc" | "websocket">
     readonly available: boolean
-    readonly integration?: string | undefined
-    readonly workspace?: string | undefined
   }>
   readonly default?: string | undefined
 }
@@ -1445,20 +1443,12 @@ export type VoiceSessionOutput = {
   readonly transport:
     | { readonly type: "webrtc"; readonly sdp: string }
     | { readonly type: "websocket"; readonly url: string; readonly token: string; readonly expiresAt: number }
-  readonly session?: { readonly id: string } | undefined
 }
 export type VoiceSessionOperation<E = never> = (input: VoiceSessionInput) => Effect.Effect<VoiceSessionOutput, E>
-
-export type VoiceInstructionsInput = { readonly sessionID: string; readonly instructions: string }
-export type VoiceInstructionsOutput = void
-export type VoiceInstructionsOperation<E = never> = (
-  input: VoiceInstructionsInput,
-) => Effect.Effect<VoiceInstructionsOutput, E>
 
 export interface VoiceApi<E = never> {
   readonly models: VoiceModelsOperation<E>
   readonly session: VoiceSessionOperation<E>
-  readonly instructions: VoiceInstructionsOperation<E>
 }
 
 export type ProviderListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

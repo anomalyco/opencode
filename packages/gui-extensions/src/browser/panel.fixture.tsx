@@ -80,6 +80,8 @@ type PaneFixtureState = {
   covered: boolean
   /** A panel is in flight, as the host's panel motion reports it. */
   moving: boolean
+  /** Whether a host dialog is open over the app. */
+  dialog: boolean
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
@@ -140,6 +142,7 @@ export function mountBrowserPane(input: PaneHost) {
       layouts: {},
       covered: false,
       moving: false,
+      dialog: false,
       captures: 0,
       holdCapture: false,
       picker: {},
@@ -204,7 +207,7 @@ export function mountBrowserPane(input: PaneHost) {
     const embeds = input.createEmbeds({
       bridge: bridge as Bridge,
       zoom: () => 1,
-      dialog: () => false,
+      dialog: () => store.dialog,
       moving: () => store.moving,
     })
 
@@ -505,6 +508,7 @@ export function mountBrowserPane(input: PaneHost) {
                 </button>
               )}
             </For>
+            <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
             <button onClick={pick}>Pick element</button>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>

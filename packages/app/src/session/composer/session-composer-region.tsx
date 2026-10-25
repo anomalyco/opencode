@@ -1,4 +1,5 @@
 import { createMemo, Show, type JSX } from "solid-js"
+import { SessionElicitationDock } from "@/session/requests/session-elicitation-dock"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
 import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
@@ -7,7 +8,13 @@ import { ComposerMorph, Grow } from "./spring-height"
 
 type SessionComposerRegionState = Pick<
   SessionComposerRegionController["state"],
-  "questionRequest" | "websearch" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
+  | "questionRequest"
+  | "elicitationRequest"
+  | "websearch"
+  | "permissionRequest"
+  | "permissionResponding"
+  | "decide"
+  | "blocked"
 >
 
 export type SessionComposerRegionViewController = Pick<
@@ -25,9 +32,10 @@ export function SessionComposerRegion(props: {
   const face = createMemo(() => {
     const websearch = controller.state.websearch.request()
     const question = controller.state.questionRequest()
+    const elicitation = controller.state.elicitationRequest()
     const permission = controller.state.permissionRequest()
     const composer = controller.showComposer() && !controller.child() && !controller.state.blocked()
-    return { key: composer ? "composer" : "docks", websearch, question, permission, composer }
+    return { key: composer ? "composer" : "docks", websearch, question, elicitation, permission, composer }
   })
 
   return (
@@ -53,6 +61,9 @@ export function SessionComposerRegion(props: {
                 </Grow>
                 <Grow when={current().question} fade card class={controller.child() ? "mb-2" : undefined}>
                   {(request) => <SessionQuestionDock request={request} onSubmit={controller.onResponseSubmit} />}
+                </Grow>
+                <Grow when={current().elicitation} fade card class={controller.child() ? "mb-2" : undefined}>
+                  {(request) => <SessionElicitationDock request={request} onSubmit={controller.onResponseSubmit} />}
                 </Grow>
 
                 <Grow when={current().permission} fade card class={controller.child() ? "mb-2" : undefined}>
