@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, mapArray, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
@@ -14,6 +14,7 @@ import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
 import { createSessionRetention } from "./session-retention"
+import { createSessionRequests } from "../util/session-requests"
 import { createProgramStatus, type PendingSession } from "./program-status"
 import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {
@@ -150,9 +151,20 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const sessionID = current()
       return sessionID !== undefined && !state().tabs.some((tab) => tab.sessionID === sessionID)
     }, false)
+    const tracked = createMemo(() => {
+      const viewed = current()
+      return Array.from(new Set([...state().tabs.map((tab) => root(tab.sessionID)), ...(viewed ? [viewed] : [])]))
+    })
+    const requests = mapArray(tracked, (sessionID) => ({
+      sessionID,
+      permissions: createSessionRequests(() => family(sessionID), data.session.permission.list),
+      forms: createSessionRequests(() => family(sessionID), data.session.form.list),
+    }))
+    const requestMap = createMemo(() => new Map(requests().map((item) => [item.sessionID, item])))
     const status = (sessionID: string) => {
       const session = root(sessionID)
       const members = family(session)
+      const prompts = requestMap().get(session)
       return {
         // Unread reads the root session only: background subagent completions wake the parent,
         // whose own idle transition then carries the signal.
@@ -162,9 +174,13 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("error" as const)
             : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+        attention: (
+          prompts
+            ? prompts.permissions().length > 0
+            : members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+        )
           ? ("permission" as const)
-          : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
+          : (prompts ? prompts.forms().length > 0 : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0))
             ? ("question" as const)
             : (false as const),
         // Parked synthetic context (user shells, plan reminders) stays pending without execution; only work counts as busy.
