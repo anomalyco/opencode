@@ -700,6 +700,10 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
 
   const expandable = () => !props.running && !!props.summary.trim()
 
+  const label = createMemo(() =>
+    splitEnding(i18n.t("ui.messagePart.compaction.running"), i18n.t("ui.messagePart.compaction.done")),
+  )
+
   createEffect(() => {
     if (!props.running && enter() === "grace" && performance.now() - mounted < 400) setEnter("now")
   })
@@ -716,6 +720,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           aria-busy={props.running}
           aria-expanded={expandable() ? open() : undefined}
           aria-controls={expandable() && open() ? `${props.id}-summary` : undefined}
+          aria-label={props.running ? label().running : label().done}
           onClick={() => setOpen((value) => !value)}
         >
           <span data-slot="session-compaction-line" data-side="start" class="h-px min-w-0 flex-1">
@@ -723,16 +728,16 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           </span>
           <span
             data-slot="session-compaction-label"
-            class="grid shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
+            class="relative flex shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
           >
-            <span data-slot="session-compaction-running" aria-hidden={!props.running}>
-              {i18n.t("ui.messagePart.compaction.running")}
-              <span data-slot="session-compaction-glint" aria-hidden="true">
-                {i18n.t("ui.messagePart.compaction.running")}
-              </span>
+            <span>{label().stem}</span>
+            <span data-slot="session-compaction-ending" class="grid justify-items-start">
+              <span data-slot="session-compaction-running">{label().ending.running}</span>
+              <span data-slot="session-compaction-done">{label().ending.done}</span>
             </span>
-            <span data-slot="session-compaction-done" aria-hidden={props.running}>
-              {i18n.t("ui.messagePart.compaction.done")}
+            <span data-slot="session-compaction-glint" aria-hidden="true">
+              <span data-slot="session-compaction-glint-stem">{label().stem}</span>
+              <span data-slot="session-compaction-glint-ending">{label().ending.running}</span>
             </span>
           </span>
           <span data-slot="session-compaction-line" data-side="end" class="h-px min-w-0 flex-1">
@@ -754,6 +759,16 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
       </Show>
     </div>
   )
+}
+
+/** Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. */
+function splitEnding(running: string, done: string) {
+  const chars = [...running]
+  const others = [...done]
+  const at = chars.findIndex((char, index) => char !== others[index])
+  const stem = chars.slice(0, at === -1 ? chars.length : at).join("")
+
+  return { running, done, stem, ending: { running: running.slice(stem.length), done: done.slice(stem.length) } }
 }
 
 export function AssistantTextContent(props: {

@@ -13,6 +13,7 @@ story("shows a running automatic compaction as one Compacting divider", async ({
   await expect(divider).toHaveAttribute("data-state", "running")
   await expect(divider).toBeDisabled()
   await expect(divider).toHaveAttribute("aria-busy", "true")
+  await expect(divider).toHaveAccessibleName("Compacting")
   await expect(divider).not.toHaveAttribute("aria-expanded")
   await expect(message.locator('[data-slot="session-compaction-running"]')).toHaveCSS("opacity", "1")
   await expect(message).not.toContainText("Session compaction started")
@@ -90,6 +91,42 @@ story("fades in a compaction that ends inside the grace as Compacted only", asyn
   expect(ended).toEqual({ enter: "now", animation: "session-compaction-enter", running: "0", done: "1" })
 })
 
+story("warms the label only once the gathering light reaches it", async ({ mount }) => {
+  const timeline = await mount(`${rows}--compaction-in-progress`)
+  const message = timeline.locator('[data-component="session-compaction-message"]')
+
+  // Hold the divider's animations at a point in their 3.2 s cycle and read the light and the label's glint there.
+  const at = (progress: number) =>
+    message.evaluate((root, progress) => {
+      root.ownerDocument
+        .getAnimations()
+        .filter(
+          (animation) => animation instanceof CSSAnimation && animation.animationName.startsWith("session-compaction-"),
+        )
+        .forEach((animation) => {
+          animation.pause()
+          animation.currentTime = progress * 3_200
+        })
+
+      const light = root.querySelector('[data-slot="session-compaction-light"]')
+      const glint = root.querySelector('[data-slot="session-compaction-glint"]')
+
+      if (!light || !glint) throw new Error("Expected the light and the glint")
+
+      return [getComputedStyle(light, "::after").opacity, getComputedStyle(glint).opacity].map(Number)
+    }, progress)
+
+  const [travelling, arriving, landed, cooled] = await Promise.all(
+    [0.3, 0.48, 0.57, 0.9].map((progress) => at(progress)),
+  )
+
+  expect(travelling).toEqual([1, 0])
+  expect(arriving).toEqual([1, 0])
+  expect(landed[0]).toBeLessThan(1)
+  expect(landed[1]).toBeCloseTo(0.75, 2)
+  expect(cooled).toEqual([0, 0])
+})
+
 story("keeps the full record for a manual compaction", async ({ mount }) => {
   const timeline = await mount(`${rows}--compaction-manual`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
@@ -116,14 +153,20 @@ story("keeps the divider's box while an automatic compaction runs and finishes",
   const timeline = await mount(`${rows}--conversation`, { args: { scenario: "compaction" } })
   const message = timeline.locator('[data-component="session-compaction-message"]')
   const label = message.locator('[data-slot="session-compaction-label"]')
+  const stem = label.locator("span").first()
 
   // The story's turn above gains its footer when the Session goes idle, so measure the divider against itself.
   const box = async () => {
-    const [outer, text] = await Promise.all([message.boundingBox(), label.boundingBox()])
+    const [outer, text, start] = await Promise.all([message.boundingBox(), label.boundingBox(), stem.boundingBox()])
 
-    if (!outer || !text) throw new Error("Expected the compaction divider to be laid out")
+    if (!outer || !text || !start) throw new Error("Expected the compaction divider to be laid out")
 
-    return { width: outer.width, height: outer.height, label: [text.x - outer.x, text.y - outer.y, text.width] }
+    return {
+      width: outer.width,
+      height: outer.height,
+      label: [text.x - outer.x, text.y - outer.y, text.width],
+      stem: [start.x - outer.x, start.width],
+    }
   }
 
   await expect(message.locator('[data-slot="session-compaction-divider"]')).toHaveAttribute("data-state", "running")
