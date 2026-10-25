@@ -232,6 +232,97 @@ test("reconciles a stale running tool when execution settles", async () => {
   }
 })
 
+test("omits inline tool-result file payloads from read and live tool results when asked", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const tool = (id: string, state: object) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state,
+  })
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1 },
+            content: [
+              tool("call_read", {
+                status: "completed",
+                input: {},
+                content: [
+                  { type: "text", text: "Took a screenshot" },
+                  { type: "file", uri: screenshot, mime: "image/png", name: "page.png" },
+                  { type: "file", uri: "file:///project/notes.md", mime: "text/markdown" },
+                ],
+              }),
+              tool("call_live", { status: "running", input: {}, metadata: {} }),
+            ],
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: true,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const success: OpenCodeEvent = {
+      id: "evt_success",
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 2 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_assistant",
+        id: "call_live",
+        executed: true,
+        content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: success.type, details: success }))
+
+    expect(setup.data.session.message.get("ses_refresh", "msg_assistant")).toMatchObject({
+      content: [
+        {
+          state: {
+            content: [
+              { type: "text", text: "Took a screenshot" },
+              { type: "file", uri: "data:image/png;base64,", mime: "image/png", name: "page.png" },
+              { type: "file", uri: "file:///project/notes.md", mime: "text/markdown" },
+            ],
+          },
+        },
+        {
+          state: { status: "completed", content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] },
+        },
+      ],
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))

@@ -34,6 +34,7 @@ import type {
   SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
+  ToolContent,
   UsageLimitsInfo,
   VcsInfo,
   OpenCodeEvent,
@@ -79,6 +80,11 @@ export type CreateDataInput = {
   }
   /** Receives failed event-driven reads. Explicit reads still reject to their caller. */
   readonly onError?: (error: unknown) => void
+  /**
+   * Drops the payload of inline `data:` files in tool results before they enter the store. For clients that never
+   * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive.
+   */
+  readonly omitToolFileData?: boolean
 }
 
 const messagePageLimit = 20
@@ -163,6 +169,26 @@ function optimisticFiles(files: SessionPromptInput["files"]) {
     return [item]
   })
   return items?.length ? items : undefined
+}
+
+// Keeps an empty `data:<mime>;base64,` URI so the item still says what it was. It is built from `mime` because any
+// slice of the original URI is a V8 sliced string that keeps the whole payload alive.
+function omitFileData(content: [ToolContent, ...ToolContent[]]): [ToolContent, ...ToolContent[]] {
+  const omit = (item: ToolContent): ToolContent =>
+    item.type === "file" && item.uri.startsWith("data:") ? { ...item, uri: `data:${item.mime};base64,` } : item
+  return [omit(content[0]), ...content.slice(1).map(omit)]
+}
+
+function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
+  if (message.type !== "assistant") return message
+  return {
+    ...message,
+    content: message.content.map((part) =>
+      part.type === "tool" && "content" in part.state && part.state.content
+        ? { ...part, state: { ...part.state, content: omitFileData(part.state.content) } }
+        : part,
+    ),
+  }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -283,6 +309,7 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
@@ -1024,7 +1051,7 @@ export function createData(config: CreateDataInput) {
             status: "completed",
             input: tool.state.input,
             metadata: event.data.metadata,
-            content: [...event.data.content],
+            content: config.omitToolFileData ? omitFileData(event.data.content) : [...event.data.content],
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1039,7 +1066,8 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content: event.data.content,
+            content:
+              config.omitToolFileData && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1719,7 +1747,7 @@ export function createData(config: CreateDataInput) {
               limit: config.initialMessageLimit?.() ?? messagePageLimit,
               order: "desc",
             })
-            const fetched = response.data.toReversed()
+            const fetched = response.data.toReversed().map(stored)
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
             const ids = new Set(fetched.map((item) => item.id))
@@ -1787,7 +1815,7 @@ export function createData(config: CreateDataInput) {
                 { signal },
               )
               if (signal?.aborted) return
-              fetched.push(...response.data)
+              fetched.push(...response.data.map(stored))
               next = response.cursor.next ?? undefined
               if (!options?.all) break
             } while (next)
