@@ -184,6 +184,7 @@ export const provider = (options: Options): OAuthClientProvider => {
       redirect_uris: [redirectUrl],
       client_name: "opencode",
       client_uri: "https://opencode.ai",
+      logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: client?.client_secret ? "client_secret_post" : "none",
