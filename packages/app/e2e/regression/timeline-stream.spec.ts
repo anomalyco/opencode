@@ -1509,11 +1509,19 @@ test.describe("compaction", () => {
         await timeline.send(compactionDelta({ sessionID, text: outcome.partial }))
         await expect(compactions).toHaveCount(index + 1)
         const compaction = compactions.nth(index)
-        await expect(compaction).toContainText(outcome.partial)
+
+        // An automatic compaction runs as one quiet divider and keeps its partial summary out of the timeline.
+        if (outcome.reason === "auto") {
+          await expect(compaction.locator('[data-slot="session-compaction-divider"]')).toHaveAttribute(
+            "data-state",
+            "running",
+          )
+          await expect(compaction).not.toContainText(outcome.partial)
+        }
+
+        if (outcome.reason === "manual") await expect(compaction).toContainText(outcome.partial)
 
         if (name === "interrupted") {
-          await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
-
           const request = page.waitForRequest(
             (request) =>
               request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/interrupt`,
