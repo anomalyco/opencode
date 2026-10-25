@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { IntegrationInfo } from "@opencode/client"
 import {
+  activeCredentialIDs,
   connectionSummary,
   connectMethods,
   credentialConnections,
@@ -24,7 +25,35 @@ describe("integrationOptions", () => {
         integration({ id: "opencode", name: "OpenCode Zen" }),
         integration({ id: "opencode-go", name: "OpenCode Go" }),
       ]).map((item) => item.id),
-    ).toEqual(["opencode-go", "opencode", "openai", "anthropic", "mistral", "custom-z"])
+    ).toEqual(["opencode", "openai", "anthropic", "mistral", "custom-z"])
+  })
+
+  test("folds OpenCode Go into one OpenCode row with account sign-in and both API keys", () => {
+    const [row] = integrationOptions([
+      integration({
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }, { type: "env", names: ["OPENCODE_API_KEY"] }],
+        connections: [{ type: "credential", method: "key", id: "cred_go", label: "Go key" }],
+      }),
+      integration({
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [
+          { type: "key", label: "API key (service account)" },
+          { type: "oauth", id: "device", label: "OpenCode Console account" },
+        ],
+        connections: [{ type: "credential", method: "oauth", id: "cred_acme", label: "Acme" }],
+      }),
+    ])
+
+    expect(row.name).toBe("OpenCode")
+    expect(connectMethods(row).map((method) => method.label)).toEqual([
+      "Sign in with your OpenCode account",
+      "Use a Zen API key",
+      "Use a Go API key",
+    ])
+    expect(credentialConnections(row).map((connection) => connection.id)).toEqual(["cred_acme", "cred_go"])
   })
 
   test("keeps MCP integrations above popular integrations without relying on their IDs", () => {
@@ -36,7 +65,35 @@ describe("integrationOptions", () => {
         integration({ id: "opencode", name: "OpenCode Zen" }),
         integration({ id: "opencode-go", name: "OpenCode Go" }),
       ]).map((item) => item.id),
-    ).toEqual(["github", "linear", "opencode-go", "opencode", "openai"])
+    ).toEqual(["github", "linear", "opencode", "openai"])
+  })
+})
+
+describe("activeCredentialIDs", () => {
+  test("keeps one active credential per integration in the OpenCode row", () => {
+    const list = [
+      integration({
+        id: "opencode",
+        name: "OpenCode Console",
+        connections: [{ type: "credential", method: "oauth", id: "cred_acme", label: "Acme" }],
+      }),
+      integration({
+        id: "opencode-go",
+        name: "OpenCode Go",
+        connections: [
+          { type: "credential", method: "key", id: "cred_go2", label: "Go key 2" },
+          { type: "credential", method: "key", id: "cred_go1", label: "Go key 1" },
+        ],
+      }),
+      integration({
+        id: "openai",
+        name: "OpenAI",
+        connections: [{ type: "credential", method: "key", id: "cred_openai", label: "Work" }],
+      }),
+    ]
+
+    expect([...activeCredentialIDs(list, "opencode")]).toEqual(["cred_acme", "cred_go2"])
+    expect([...activeCredentialIDs(list, "openai")]).toEqual(["cred_openai"])
   })
 })
 

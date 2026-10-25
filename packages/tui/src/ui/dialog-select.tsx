@@ -113,6 +113,8 @@ export interface DialogSelectOption<T = any> {
   fg?: RGBA
   gutter?: (color: RGBA) => JSX.Element
   margin?: JSX.Element
+  /** Marks this option current instead of matching the list's `current`, for lists with several current options. */
+  current?: boolean
   /**
    * Shown below the list while this option is selected, under the "new-designs" experiment. A string is shown in muted
    * text. A function is called each time the option becomes selected, because a rendered element cannot be shown again
@@ -777,7 +779,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   <For each={options}>
                     {(option) => {
                       const active = createMemo(() => !props.locked && isDeepEqual(option.value, selected()?.value))
-                      const current = createMemo(() => isDeepEqual(option.value, props.current))
+                      const current = createMemo(() => option.current ?? isDeepEqual(option.value, props.current))
                       return (
                         <box
                           flexDirection="column"
