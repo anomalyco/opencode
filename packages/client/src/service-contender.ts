@@ -66,6 +66,10 @@ export function contenderPool(timing: EnsureTiming) {
   return {
     /** The first startup failure seen since the last eviction. */
     failure: () => failure,
+    /** Whether this pool started the process behind `pid`. */
+    owns(pid: number) {
+      return [...contenders].some((item) => item.child.pid === pid)
+    },
     /** A registered service answered, so the next attempt waits the base delay again. */
     serviceAnswered() {
       spawnDelay = timing.spawnDelay

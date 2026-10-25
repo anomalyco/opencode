@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { alive, decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -44,7 +44,10 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
 // version-mismatched one, and otherwise spawns small contenders until a server
-// becomes discoverable. A contender is never killed merely for slow startup.
+// becomes discoverable. A live registered owner is never killed because a health
+// probe timed out: it may be busy, and on Windows SIGTERM is an immediate,
+// uncatchable kill. Only a contender this call started, or a registration whose
+// process is gone, yields.
 /** Ensure a healthy, compatible local service is running. */
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
@@ -72,19 +75,29 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
+    let waitingOnOwner = false
     if (registration.timedOut && info !== undefined) {
-      timeouts = {
-        info,
-        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        yield* announce("missing")
-        yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
-        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
-        pool.evict(info.pid)
-        pool.recruitNow()
+      // A registered owner that still exists is busy, not gone: a long request can keep
+      // /api/info unanswered well past the probe timeout, and on Windows SIGTERM ends the
+      // process at once with no shutdown. Wait for it, and do not race it with new contenders.
+      // Only a contender this call started, or a registration whose process is gone, yields.
+      if (!pool.owns(info.pid) && alive(info.pid)) {
+        waitingOnOwner = true
         timeouts = undefined
+      } else {
+        timeouts = {
+          info,
+          count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
+        }
+        if (timeouts.count >= 3) {
+          yield* announce("missing")
+          yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
+          yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+          yield* terminate(info, options, timing)
+          pool.evict(info.pid)
+          pool.recruitNow()
+          timeouts = undefined
+        }
       }
     } else timeouts = undefined
     if (service !== undefined) {
@@ -105,6 +118,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       return Option.none()
     }
 
+    if (waitingOnOwner) return Option.none()
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
     if (pool.shouldRecruit(info !== undefined)) {
@@ -172,23 +186,23 @@ const signal = (pid: number, name: NodeJS.Signals) =>
   Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
 
 const stopped = Effect.fnUntraced(function* (pid: number) {
-  const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
-    Effect.orElseSucceed(() => false),
-  )
-  if (!running) return true
+  if (!alive(pid)) return
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
 })
 
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
-  yield* signal(info.pid, "SIGTERM")
-  const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
-  // The registration can disappear or change hands before this process exits. Only the PID we
-  // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (Option.isNone(done)) {
-    yield* signal(info.pid, "SIGKILL")
-    yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+  // Never signal a PID that no longer exists: it may already belong to an unrelated process.
+  if (alive(info.pid)) {
+    yield* signal(info.pid, "SIGTERM")
+    const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
+    // The registration can disappear or change hands before this process exits. Only the PID we
+    // signalled can tell us whether it has stopped, so escalate based on that process.
+    if (Option.isNone(done)) {
+      yield* signal(info.pid, "SIGKILL")
+      yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+    }
   }
   const latest = yield* read(options.file)
   if (latest === undefined || !same(latest, info)) return

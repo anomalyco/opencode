@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { alive, decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -52,19 +52,30 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (Date.now() >= deadline)
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
+      let waitingOnOwner = false
       if (registration.timedOut && registration.info !== undefined) {
-        timeouts = {
-          info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-        }
-        if (timeouts.count >= 3) {
-          announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
-          pool.recruitNow()
+        const owner = registration.info
+        // A registered owner that still exists is busy, not gone: a long request can keep
+        // /api/info unanswered well past the probe timeout, and on Windows SIGTERM ends the
+        // process at once with no shutdown. Wait for it, and do not race it with new contenders.
+        // Only a contender this call started, or a registration whose process is gone, yields.
+        if (!pool.owns(owner.pid) && alive(owner.pid)) {
+          waitingOnOwner = true
           timeouts = undefined
+        } else {
+          timeouts = {
+            info: owner,
+            count: timeouts !== undefined && same(timeouts.info, owner) ? timeouts.count + 1 : 1,
+          }
+          if (timeouts.count >= 3) {
+            announce("missing")
+            console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+            await PtyHandoff.clear(options.file ?? fallback())
+            await terminate(owner, options, timing)
+            pool.evict(owner.pid)
+            pool.recruitNow()
+            timeouts = undefined
+          }
         }
       } else timeouts = undefined
 
@@ -84,7 +95,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
           pool.evict(service.info.pid)
         }
-      } else {
+      } else if (!waitingOnOwner) {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
         if (pool.shouldRecruit(registration.info !== undefined)) {
@@ -134,12 +145,7 @@ function signal(pid: number, name: NodeJS.Signals) {
 }
 
 function stopped(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return false
-  } catch {
-    return true
-  }
+  return !alive(pid)
 }
 
 async function waitUntilStopped(pid: number, timing: EnsureTiming) {
@@ -153,12 +159,15 @@ async function waitUntilStopped(pid: number, timing: EnsureTiming) {
 async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
-  signal(info.pid, "SIGTERM")
-  // The registration can disappear or change hands before this process exits. Only the PID we
-  // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (!(await waitUntilStopped(info.pid, timing))) {
-    signal(info.pid, "SIGKILL")
-    if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  // Never signal a PID that no longer exists: it may already belong to an unrelated process.
+  if (alive(info.pid)) {
+    signal(info.pid, "SIGTERM")
+    // The registration can disappear or change hands before this process exits. Only the PID we
+    // signalled can tell us whether it has stopped, so escalate based on that process.
+    if (!(await waitUntilStopped(info.pid, timing))) {
+      signal(info.pid, "SIGKILL")
+      if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+    }
   }
   const latest = await read(options.file)
   if (latest === undefined || !same(latest, info)) return

@@ -71,6 +71,10 @@ const server = Bun.serve({
     if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff-broken")
       return new Response(null, { status: 500 })
     if (pathname !== "/api/info") return new Response(null, { status: 404 })
+    if (mode === "busy") {
+      await appendFile(registration + ".requests", process.pid + "\n")
+      while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
+    }
     if (mode === "protocol" && (await Bun.file(registration + ".missing-health").exists()))
       return new Response(null, { status: 404 })
     requests += 1

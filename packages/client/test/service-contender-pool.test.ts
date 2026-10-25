@@ -50,6 +50,15 @@ test("evicting a replaced owner forgets its failure and restarts the spawn clock
   expect(owner.child.exitCode).toBeNull()
 })
 
+test("knows which processes it started", () => {
+  const pool = contenderPool(defaultEnsureTiming)
+  const owner = running()
+  pool.add(owner)
+
+  expect(pool.owns(owner.child.pid!)).toBe(true)
+  expect(pool.owns(process.pid)).toBe(false)
+})
+
 test("an unanswered registration gets one spawn delay before an attempt competes", () => {
   const timing = { ...defaultEnsureTiming, spawnDelay: 60_000 }
   expect(contenderPool(timing).shouldRecruit(false)).toBe(true)

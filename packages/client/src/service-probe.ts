@@ -45,6 +45,22 @@ export function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
+/**
+ * Whether the process still exists. Unknown errors count as alive: callers use a negative answer
+ * to justify replacing the service, so guessing "gone" is the dangerous direction.
+ */
+export function alive(pid: number) {
+  // The registration file is plain JSON, so the pid is not guaranteed to be usable. Signalling 0
+  // targets the caller's whole process group.
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return !(typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH")
+  }
+}
+
 /** Ask a registered owner for its health and classify the answer. */
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {

@@ -203,26 +203,46 @@ test("reports a bounded contender stderr tail with native promises", async () =>
   expect(error.message.length).toBeLessThan(9_000)
 }, 10_000)
 
-test("evicts an unresponsive registered service before starting its replacement", async () => {
+test("keeps a busy registered service alive and reuses it when it answers", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
-  const existing = fixture.spawn("hanging")
+  const existing = fixture.spawn("busy")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
+  const starts: EnsureReason[] = []
 
-  const endpoint = await ensure({
+  const pending = ensure({
     file: registration,
     version: "test",
-    command: fixture.command("delayed", "10"),
+    command: fixture.command("record-start"),
+    onStart: (reason) => starts.push(reason),
   })
-  const replacement = await Bun.file(registration).json()
-  fixture.track(replacement.pid)
+  pending.catch(() => undefined)
+  const requests = async () =>
+    (
+      await Bun.file(registration + ".requests")
+        .text()
+        .catch(() => "")
+    )
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+  for (let attempt = 0; attempt < 400 && existing.exitCode === null; attempt++) {
+    if ((await requests()).length >= 4) break
+    await Bun.sleep(5)
+  }
 
-  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
-  expect(await existing.exited).toBe(stoppedExitCode)
-  expect(replacement.pid).not.toBe(original.pid)
-  expect(endpoint.url).toBe(replacement.url)
-})
+  // Three probes timed out by now; a busy owner is still running and must not be replaced.
+  expect((await requests()).length).toBeGreaterThanOrEqual(4)
+  expect(existing.exitCode).toBe(null)
+  await Bun.write(registration + ".release", "")
+  const endpoint = await pending
+
+  expect(starts).toEqual([])
+  expect(existing.exitCode).toBe(null)
+  expect(endpoint.url).toBe(original.url)
+  expect((await Bun.file(registration).json()).pid).toBe(original.pid)
+}, 10_000)
 
 test("recovers when the starting service it waits for is stopped", async () => {
   await using fixture = await serviceFixture()
