@@ -560,7 +560,6 @@ test.describe("Working", () => {
     const working = page.locator('[data-component="session-working"]')
     const shimmer = working.locator('[data-component="text-shimmer"]')
     await expect(working).toHaveCount(1)
-    await expect(working).toHaveRole("status")
     await expect(shimmer).toHaveAttribute("aria-label", "Working")
     await expect(working).toBeInViewport()
     await expect(shimmer).toHaveAttribute("data-active", "true")
@@ -679,7 +678,9 @@ test.describe("Working", () => {
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "running", { path: "src/four.ts" })))
-    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("one.ts, two.ts, three.ts, four.ts")
+    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(
+      "one.ts, two.ts, three.ts, four.ts",
+    )
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "completed", { path: "src/four.ts" })))
@@ -775,6 +776,35 @@ test.describe("Working", () => {
       "The response is streaming.",
     )
     await expect(working).toHaveCount(0)
+  })
+
+  test("announces the running phase in one polite live region", async ({ page }) => {
+    const timeline = await setupTimeline(page, {
+      messages: [userMessage(), assistantMessage([], { completed: false })],
+      settings: {
+        timelineDetail: { ...timelinePresets[0].value, shell: { placement: "separate", details: "collapsed" } },
+      },
+    })
+
+    const announcer = page.getByRole("status")
+    await expect(announcer).toHaveCount(1)
+    await expect(announcer).toHaveAttribute("aria-live", "polite")
+    await expect(announcer).toHaveAttribute("aria-atomic", "true")
+    await expect(announcer).toHaveText("Working")
+
+    await timeline.send(partUpdated(shell("prt_announce_shell", "running", "ready")))
+    await expect(announcer).toHaveText("Running commands")
+    await expect(page.locator('[data-timeline-virtual-content] [role="status"]')).toHaveCount(0)
+
+    await timeline.send(partUpdated(shell("prt_announce_shell", "completed", "ready")))
+    await expect(announcer).toHaveText("Working")
+
+    await timeline.send(partUpdated(toolPart("prt_announce_read", "read", "running", { path: "src/one.ts" })))
+    await expect(announcer).toHaveText("Exploring")
+
+    await timeline.send(partUpdated(textPart("prt_announce_text", "The answer is ready.")))
+    await expect(announcer).toHaveText("Responding")
+    await expect(page.locator('[data-timeline-virtual-content] [role="status"]')).toHaveCount(0)
   })
 })
 
@@ -1126,7 +1156,7 @@ test.describe("background shortcut", () => {
     await expect(header.getByRole("heading")).toHaveText("Only running task")
     await expect(trigger).toHaveCount(0)
 
-    const working = header.getByRole("status", { name: "Working", exact: true })
+    const working = header.locator('[data-component="session-progress-indicator-v2"]').locator("..")
 
     await expect(working.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
 
@@ -1359,7 +1389,9 @@ test.describe("background shortcut", () => {
 
     expect(breadcrumbOrder).toEqual(["session-title-parent", "session-title-child"])
     await expect(header.locator('[data-slot="session-title-separator"]')).toHaveCount(1)
-    await expect(header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" })).toBeEnabled()
+    await expect(
+      header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" }),
+    ).toBeEnabled()
 
     await trigger.click()
     await expect(list.getByRole("menuitem")).toHaveText([

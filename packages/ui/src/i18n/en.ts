@@ -102,6 +102,8 @@ const source = {
   "ui.sessionTurn.status.thinkingWithTopic": "Thinking - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Gathering thoughts",
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps",
+  "ui.sessionTurn.status.responding": "Responding",
+  "ui.sessionTurn.status.waitingForYou": "Waiting for your response",
 
   "ui.messagePart.diagnostic.error": "Error",
   "ui.messagePart.title.edit": "Edit",
