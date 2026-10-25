@@ -3,6 +3,7 @@ import { Effect, Exit } from "effect"
 import fs from "fs"
 import os from "os"
 import path from "path"
+import { zshUsesFifoProcessSubstitution } from "../fixture/bash"
 import { ShellParse } from "../../src/shell/parse.js"
 import { ShellScan } from "../../src/shell/scan.js"
 
@@ -66,8 +67,17 @@ const dialects = {
   posix: () => true,
 } satisfies Record<ShellScan.Dialect, (executable: string) => boolean>
 
+const zshFifo = zshUsesFifoProcessSubstitution()
+
+function shellsFor(source: string) {
+  // A FIFO-based zsh blocks on an unread process substitution, so only compare
+  // its parser output here; the scanner-only fixtures still use the source.
+  if (!zshFifo || !source.includes("<(")) return shells
+  return shells.filter((executable) => path.basename(executable) !== "zsh")
+}
+
 function expectProbesReported(source: string) {
-  const runs = shells.map((executable) => [executable, observe(executable, source)] as const)
+  const runs = shellsFor(source).map((executable) => [executable, observe(executable, source)] as const)
   if (strict)
     expect(
       runs.some(([, invocations]) => invocations.length > 0),

@@ -8,6 +8,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
+import { readdir, stat } from "node:fs/promises"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
@@ -198,14 +199,126 @@ export const testLayer = Layer.effectContext(
   }),
 )
 
+type Scan = () => Promise<Map<string, string>>
+
+export async function pollWith(
+  scan: Scan,
+  interval: number,
+  publish: (update: Update) => void,
+): Promise<Subscription> {
+  let previous = await scan()
+  let active = true
+  let running = false
+  const tick = async () => {
+    if (!active || running) return
+    running = true
+    try {
+      const next = await scan()
+      if (!active) return
+      for (const [file, signature] of next) {
+        const prior = previous.get(file)
+        if (prior === undefined) publish({ path: file, type: "create" })
+        else if (prior !== signature) publish({ path: file, type: "update" })
+      }
+      for (const file of previous.keys()) if (!next.has(file)) publish({ path: file, type: "delete" })
+      previous = next
+    } finally {
+      running = false
+    }
+  }
+  const timer = setInterval(tick, interval)
+  return {
+    unsubscribe: () => {
+      active = false
+      clearInterval(timer)
+      return Promise.resolve()
+    },
+    backend: "poll",
+  }
+}
+
+export function scanEntries(directory: string, names: ReadonlySet<string>): Scan {
+  return async () => {
+    const next = new Map<string, string>()
+    let entries
+    try {
+      entries = await readdir(directory, { withFileTypes: true })
+    } catch {
+      return next
+    }
+    for (const entry of entries) {
+      if (!names.has(entry.name)) continue
+      const file = path.join(directory, entry.name)
+      if (entry.isDirectory()) {
+        next.set(file, "directory")
+        continue
+      }
+      try {
+        const info = await stat(file)
+        next.set(file, `${info.mtimeMs}:${info.size}`)
+      } catch {
+        next.set(file, "file")
+      }
+    }
+    return next
+  }
+}
+
+export function scanDirectory(directory: string, ignore: readonly string[]): Scan {
+  const ignored = (file: string) => {
+    const relative = path.relative(directory, file)
+    return ignore.some((entry) => {
+      if (entry.includes("*") || entry.includes("?") || entry.includes("[")) {
+        const matchesGlob = (path as typeof path & { matchesGlob?: (p: string, g: string) => boolean }).matchesGlob
+        return matchesGlob?.(relative, entry) ?? false
+      }
+      const normalized = entry.replace(/^\.\//, "")
+      return relative === normalized || relative.startsWith(normalized + path.sep)
+    })
+  }
+  return async () => {
+    const next = new Map<string, string>()
+    const visit = async (dir: string) => {
+      let entries
+      try {
+        entries = await readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        const file = path.join(dir, entry.name)
+        if (ignored(file)) continue
+        if (entry.isDirectory()) {
+          next.set(file, "directory")
+          await visit(file)
+          continue
+        }
+        try {
+          const info = await stat(file)
+          next.set(file, `${info.mtimeMs}:${info.size}`)
+        } catch {
+          next.set(file, "file")
+        }
+      }
+    }
+    await visit(directory)
+    return next
+  }
+}
+
 export const nativeLayer = Layer.succeed(
   Native,
   Native.of({
     subscribe: (input) => {
       if (input.type === "file" || input.type === "entries") {
+        const directory = input.type === "file" ? path.dirname(input.target) : input.target
+        const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
+        // kqueue reports directory changes without the new entry's name and
+        // cannot watch paths that do not exist yet.
+        if (process.platform === "freebsd") {
+          return Effect.promise(() => pollWith(scanEntries(directory, names), 100, input.publish))
+        }
         return Effect.sync(() => {
-          const directory = input.type === "file" ? path.dirname(input.target) : input.target
-          const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
           const subscription = watch(directory, { recursive: false }, (_event, file) => {
             if (file && !names.has(file)) return
             for (const name of file ? [file] : names) {
@@ -217,6 +330,9 @@ export const nativeLayer = Layer.succeed(
           )
           return { unsubscribe: () => Promise.resolve(subscription.close()), backend: "node" }
         })
+      }
+      if (process.platform === "freebsd") {
+        return Effect.promise(() => pollWith(scanDirectory(input.target, input.ignore), 500, input.publish))
       }
       return subscribeDirectory(watcher(), getBackend(), input.target, input.ignore, input.publish)
     },

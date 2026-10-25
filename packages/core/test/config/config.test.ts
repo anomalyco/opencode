@@ -359,6 +359,7 @@ describe("Config", () => {
       AbsolutePath.make("/Library/Application Support/opencode"),
     )
     expect(ConfigDiscovery.systemDirectory("linux", {})).toBe(AbsolutePath.make("/etc/opencode"))
+    expect(ConfigDiscovery.systemDirectory("freebsd", {})).toBe(AbsolutePath.make("/usr/local/etc/opencode"))
     expect(ConfigDiscovery.systemDirectory("win32", { ProgramData: "D:\\ProgramData" })).toBe(
       AbsolutePath.make(path.join("D:\\ProgramData", "opencode")),
     )

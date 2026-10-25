@@ -24,10 +24,12 @@ export interface Sources {
   readonly agents: readonly AbsolutePath[]
 }
 
-/** Platform system configuration directory (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`). */
+/** Platform system configuration directory (`/Library/Application Support/opencode`, `/usr/local/etc/opencode`, `/etc/opencode`, `%ProgramData%\opencode`). */
 export function systemDirectory(platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env) {
   if (platform === "darwin") return AbsolutePath.make("/Library/Application Support/opencode")
   if (platform === "win32") return AbsolutePath.make(path.join(env.ProgramData || "C:\\ProgramData", "opencode"))
+  // FreeBSD installs third-party software under LOCALBASE, not /etc.
+  if (platform === "freebsd") return AbsolutePath.make("/usr/local/etc/opencode")
   return AbsolutePath.make("/etc/opencode")
 }
 
