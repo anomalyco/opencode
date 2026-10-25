@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 export * as TuiConfigV1 from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
