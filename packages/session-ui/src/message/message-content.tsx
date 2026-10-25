@@ -342,7 +342,7 @@ export function CurrentUserMessageDisplay(props: {
           {(file) => {
             const directUrl = () => {
               const current = file()
-              const source = "source" in current ? current.source : current.origin
+              const source = current.source
 
               if (source?.type === "uri") return source.uri
 
@@ -593,11 +593,7 @@ export function CurrentUserMessageDisplay(props: {
   )
 }
 
-function CurrentHighlightedText(props: {
-  text: string
-  files: PromptAttachment[]
-  agents: PromptAgentAttachment[]
-}) {
+function CurrentHighlightedText(props: { text: string; files: PromptAttachment[]; agents: PromptAgentAttachment[] }) {
   const segments = createMemo(() => {
     const references = [
       ...props.files.flatMap((file) =>

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { resolveBlobUrl, setMediaBlobLoader } from "../persistence/drafts"
 import { createApiForServer } from "./api"
 import { readLocalImage } from "./image"
-import { createMediaCache, toMediaRef } from "./media"
+import { createMediaCache } from "./media"
 
 function setup(
   respond: (init?: RequestInit) => Response | Promise<Response> = () => new Response(new Uint8Array([0, 127, 255])),
@@ -148,15 +148,12 @@ describe("readLocalImage", () => {
     const hashC = "c".repeat(64)
     const { api, requests } = setup(() => new Response(new Uint8Array([137, 80, 78, 71])))
     const cache = createMediaCache(() => api, { maxEntries: 2 })
-    expect(toMediaRef(`/api/experimental/media/${hashA}`)).toBe(`media:${hashA}`)
-    expect(toMediaRef(`media:${hashA}`)).toBe(`media:${hashA}`)
-    expect(toMediaRef("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA")
 
     try {
       expect(cache.peek(`media:${hashA}`, "image/png")).toBeUndefined()
       const [first, second] = await Promise.all([
         cache.load(`media:${hashA}`, "image/png"),
-        cache.load(`/api/experimental/media/${hashA}`, "image/png"),
+        cache.load(`media:${hashA}`, "image/png"),
       ])
 
       expect(first).toStartWith("blob:")

@@ -1,24 +1,14 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
 
-export const MEDIA_REF_SCHEME = "media:"
-
 export const DEFAULT_MAX_MEDIA_CACHE_ENTRIES = 128
 
 const MEDIA_REF = /^media:([0-9a-f]{64})$/
-const MEDIA_URL = /^(?:https?:\/\/[^/?#]+)?\/api\/(?:experimental\/)?media\/([0-9a-f]{64})(?:[?#].*)?$/
 
-/** The blob hash in a `media:<hash>` ref or a media route path or URL, matching the server's `hashFromUri`. */
+/** The blob hash in a `media:<hash>` ref, the only form the server sends stored media in. */
 export function mediaHashFromUri(uri: string | undefined): string | undefined {
   if (!uri) return undefined
 
-  return (MEDIA_REF.exec(uri) ?? MEDIA_URL.exec(uri))?.[1]
-}
-
-/** Drafts keep the URL-neutral `media:<hash>` ref; a fetch URL is built only when the bytes load. */
-export function toMediaRef(uri: string) {
-  const hash = mediaHashFromUri(uri)
-
-  return hash ? `${MEDIA_REF_SCHEME}${hash}` : uri
+  return MEDIA_REF.exec(uri)?.[1]
 }
 
 export type MediaCache = {

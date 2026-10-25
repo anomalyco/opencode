@@ -1,6 +1,6 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { Option, Schema } from "effect"
-import { mediaHashFromUri, toMediaRef } from "@/runtime/server/media"
+import { mediaHashFromUri } from "@/runtime/server/media"
 
 export type BlobReference = { id: string; url: string }
 
@@ -330,8 +330,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
         // A live reference keeps the id it was created with; publish the id its bytes now live under.
         const id = aliases.get(blob.id) ?? blob.id
         const kept = retained.get(id)?.blob
-        const url =
-          typeof blob.url === "string" && !mediaHashFromUri(blob.url) ? blob.url : retained.get(id)?.url
+        const url = typeof blob.url === "string" && !mediaHashFromUri(blob.url) ? blob.url : retained.get(id)?.url
 
         if (kept) sources.set(id, { blob: async () => kept })
         else if (url) sources.set(id, { blob: () => fetch(url).then((response) => response.blob()) })
@@ -616,7 +615,7 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
   const kept = retained.get(aliases.get(blob.id) ?? blob.id)
   const url = kept ? undefined : await resolveBlobUrl(blob)
 
-  if (!kept && !url && mediaHashFromUri(blob.id)) return toMediaRef(blob.id)
+  if (!kept && !url && mediaHashFromUri(blob.id)) return blob.id
   if (!kept && !url) throw new Error(`Attachment ${blob.id} has no stored bytes`)
   const data = kept ? kept.blob : await fetch(url!).then((response) => response.blob())
 
@@ -632,7 +631,5 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
 }
 
 export function createLegacyBlobReference(dataUrl: string): BlobReference {
-  const id = toMediaRef(dataUrl)
-
-  return { id, url: id }
+  return { id: dataUrl, url: dataUrl }
 }

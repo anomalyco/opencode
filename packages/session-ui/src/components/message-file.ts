@@ -17,21 +17,21 @@ export function imageAttachmentPlaceholderStyle(input: {
             "min-width": `${Math.min(input.width, MIN_IMAGE_PLACEHOLDER_PX)}px`,
             "min-height": `${Math.min(input.height, MIN_IMAGE_PLACEHOLDER_PX)}px`,
           }),
-    } as const
+    }
   }
 
   return input.loaded
     ? undefined
-    : ({
+    : {
         "min-width": `${MIN_IMAGE_PLACEHOLDER_PX}px`,
         "min-height": `${MIN_IMAGE_PLACEHOLDER_PX}px`,
-      } as const)
+      }
 }
 
 export function attached(file: PromptAttachment) {
   if (file.mention) return false
 
-  const source = "source" in file ? file.source : file.origin
+  const source = file.source
   if (!source || source.type === "inline") return true
 
   return source.uri.startsWith("data:") || source.uri.startsWith("blob:")

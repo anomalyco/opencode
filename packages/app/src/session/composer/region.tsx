@@ -89,15 +89,11 @@ export function createActiveSessionRegion(input: {
   )
 
   const openAttachment: NonNullable<SessionUserActions["openAttachment"]> = (file) => {
-    const source = "source" in file ? file.source : file.origin
+    const source = file.source
     const fileData = "data" in file ? file.data : undefined
     const fileUri = "uri" in file ? file.uri : undefined
     const inlineUrl =
-      source?.type === "uri"
-        ? source.uri
-        : fileData !== undefined
-          ? `data:${file.mime};base64,${fileData}`
-          : undefined
+      source?.type === "uri" ? source.uri : fileData !== undefined ? `data:${file.mime};base64,${fileData}` : undefined
 
     const download = () => {
       void (
@@ -106,15 +102,13 @@ export function createActiveSessionRegion(input: {
           : fileUri
             ? server.media.load(fileUri, file.mime)
             : Promise.resolve(undefined)
-      ).then(
-        (url) => {
-          if (!url) return
-          const anchor = document.createElement("a")
-          anchor.href = url
-          anchor.download = getFilename(file.name) || "attachment"
-          anchor.click()
-        },
-      )
+      ).then((url) => {
+        if (!url) return
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = getFilename(file.name) || "attachment"
+        anchor.click()
+      })
     }
 
     const path = file.name ?? ""

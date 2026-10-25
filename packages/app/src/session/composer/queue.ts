@@ -417,9 +417,7 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
           id: `${item.id}:file:${index}`,
           filename: file.name ?? "attachment",
           mime: file.mime,
-          blob: createLegacyBlobReference(
-            "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`,
-          ),
+          blob: createLegacyBlobReference("uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`),
         }),
       ),
     ...(readPromptPresentation(item.payload.metadata)?.attachments ?? []).map(
@@ -475,14 +473,12 @@ export async function undoQueuedPrompt(input: {
 // A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its
 // provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
 function storedFileUri(file: QueuedPromptFile) {
-  const source = "source" in file ? file.source : file.origin
-  return source?.type === "uri"
-    ? source.uri
-    : ("uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`)
+  const source = file.source
+  return source?.type === "uri" ? source.uri : "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`
 }
 
 function isComposerAttachment(file: QueuedPromptFile) {
-  const source = "source" in file ? file.source : file.origin
+  const source = file.source
   return !file.mention && (!source || source.type === "inline")
 }
 

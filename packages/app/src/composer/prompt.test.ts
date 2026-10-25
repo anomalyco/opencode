@@ -195,7 +195,7 @@ describe("extractPromptFromMessage", () => {
     ])
   })
 
-  test("restores experimental-media-uri attachments and file:// origins when data and source are omitted", () => {
+  test("restores experimental-media-uri attachments, whose bytes stay on the server", () => {
     const imageHash = "a".repeat(64)
 
     const message = {
@@ -204,26 +204,27 @@ describe("extractPromptFromMessage", () => {
       text: "inspect @src/app.ts",
       files: [
         {
-          uri: `/api/experimental/media/${imageHash}`,
+          uri: `media:${imageHash}`,
           mime: "image/png",
+          source: { type: "inline" },
           width: 640,
           height: 480,
           bytes: 4096,
           name: "screen.png",
         },
         {
-          uri: `/api/experimental/media/${"b".repeat(64)}`,
+          uri: `media:${"b".repeat(64)}`,
           mime: "text/plain",
           bytes: 128,
-          origin: { type: "uri", uri: "file:///repo/src/app.ts?start=3&end=7" },
+          source: { type: "uri", uri: "file:///repo/src/app.ts?start=3&end=7" },
           name: "app.ts",
           mention: { text: "@src/app.ts", start: 8, end: 19 },
         },
         {
-          uri: `/api/experimental/media/${"c".repeat(64)}`,
+          uri: `media:${"c".repeat(64)}`,
           mime: "text/plain",
           bytes: 256,
-          origin: { type: "uri", uri: "file:///repo/src/context.ts" },
+          source: { type: "uri", uri: "file:///repo/src/context.ts" },
           name: "context.ts",
         },
       ],

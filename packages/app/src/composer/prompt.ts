@@ -1,6 +1,5 @@
 import type { FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { toMediaRef } from "@/runtime/server/media"
 import type { PromptAttachment, SessionMessageUser } from "@opencode/client/promise"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
@@ -95,14 +94,14 @@ export function extractPromptFromMessage(
 
   for (const file of message.files ?? []) {
     const mention = file.mention
-    const source = "source" in file ? file.source : file.origin
+    const source = file.source
     const fileUri = "uri" in file ? file.uri : undefined
     const fileData = "data" in file ? file.data : undefined
     const uri =
       source?.type === "uri"
         ? source.uri
         : fileUri !== undefined
-          ? toMediaRef(fileUri)
+          ? fileUri
           : fileData !== undefined
             ? `data:${file.mime};base64,${fileData}`
             : ""
@@ -197,15 +196,12 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
   )
 
   const files = (message.files ?? []).flatMap((file): FileContextItem[] => {
-    const source = "source" in file ? file.source : file.origin
+    const source = file.source
     if (file.mention || source?.type !== "uri" || !source.uri.startsWith("file:")) return []
 
     if (regenerated.has(source.uri)) return []
 
-    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(source.uri))).replace(
-      /^\/([A-Za-z]:)/,
-      "$1",
-    )
+    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(source.uri))).replace(/^\/([A-Za-z]:)/, "$1")
 
     return [
       {

@@ -78,7 +78,7 @@ describe("queuedPromptAttachments", () => {
 
   test("undoQueuedPrompt rehydrates media:<hash> attachments before inbox.cancel sweeps the server blob", async () => {
     const hash = "e".repeat(64)
-    const mediaUri = `/api/experimental/media/${hash}`
+    const mediaUri = `media:${hash}`
     const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     const pngBytes = Uint8Array.from(Buffer.from(pngBase64, "base64"))
     const blobs = new Map<string, Uint8Array>([[hash, pngBytes]])
@@ -91,6 +91,7 @@ describe("queuedPromptAttachments", () => {
         {
           uri: mediaUri,
           mime: "image/png",
+          source: { type: "inline" },
           width: 1,
           height: 1,
           bytes: pngBytes.byteLength,
@@ -99,7 +100,6 @@ describe("queuedPromptAttachments", () => {
       ],
     })
 
-    // The draft keeps the URL-neutral ref, not the route the server sent.
     expect(extracted.find((part) => part.type === "image")).toMatchObject({
       blob: { id: `media:${hash}`, url: `media:${hash}` },
     })
