@@ -81,6 +81,7 @@ const names: Record<string, string> = {
   rosepine: "Rose Pine",
   shadesofpurple: "Shades of Purple",
   solarized: "Solarized",
+  "solarized-osaka": "Solarized Osaka",
   synthwave84: "Synthwave '84",
   tokyonight: "Tokyonight",
   vercel: "Vercel",
