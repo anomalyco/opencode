@@ -193,6 +193,10 @@ import type {
   FileFindOutput,
   FileWriteInput,
   FileWriteOutput,
+  FileWatchInput,
+  FileWatchOutput,
+  FileUnwatchInput,
+  FileUnwatchOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -1731,6 +1735,32 @@ export function make(options: ClientOptions) {
             declaredStatuses: [400, 401, 404],
             empty: false,
             binaryBody: true,
+          },
+          requestOptions,
+        ),
+      watch: (input: FileWatchInput, requestOptions?: RequestOptions) =>
+        request<FileWatchOutput>(
+          {
+            method: "POST",
+            path: `/api/experimental/fs/watch`,
+            query: { location: input["location"] },
+            body: { path: input["path"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      unwatch: (input: FileUnwatchInput, requestOptions?: RequestOptions) =>
+        request<FileUnwatchOutput>(
+          {
+            method: "DELETE",
+            path: `/api/experimental/fs/watch`,
+            query: { location: input["location"] },
+            body: { path: input["path"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
           },
           requestOptions,
         ),

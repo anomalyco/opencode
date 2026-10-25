@@ -1840,9 +1840,25 @@ export type FileFindInput = {
 export type FileFindOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
 
+export type FileWatchInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+export type FileWatchOutput = void
+export type FileWatchOperation<E = never> = (input: FileWatchInput) => Effect.Effect<FileWatchOutput, E>
+
+export type FileUnwatchInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+export type FileUnwatchOutput = void
+export type FileUnwatchOperation<E = never> = (input: FileUnwatchInput) => Effect.Effect<FileUnwatchOutput, E>
+
 export interface FileApi<E = never> {
   readonly list: FileListOperation<E>
   readonly find: FileFindOperation<E>
+  readonly watch: FileWatchOperation<E>
+  readonly unwatch: FileUnwatchOperation<E>
 }
 
 export type CommandListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
