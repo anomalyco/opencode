@@ -559,6 +559,24 @@ context.ui.slot({
 })
 ```
 
+To keep the built-in look in a horizontal bar of your own, render `context.ui.tabs.Item`. The host draws the tab's
+status, pulse, scrolling title and close button and handles clicks. `label` replaces the status marker with your own
+text, while its colour and the pulse still show the status. Reordering and the context menu stay with the built-in bar.
+
+```tsx
+context.ui.slot({
+  replace: "session.tabs.horizontal",
+  render: (bar) => (
+    <box width={bar.width} flexDirection="row">
+      <text>agents: 2 </text>
+      <For each={context.ui.tabs.list().slice(0, 4)}>
+        {(tab) => <context.ui.tabs.Item sessionID={tab.sessionID} width={24} />}
+      </For>
+    </box>
+  ),
+})
+```
+
 ### Session panels
 
 Register a contribution to `session.panel`, then open the panel from a command. The host owns sizing, focus, and

@@ -602,9 +602,7 @@ function VerticalSessionTabs(props: {
     return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
   })
   const items = ordered
-  const highlightColor = createMemo(() =>
-    tint(background(), actionHovered(), actionHovered().a),
-  )
+  const highlightColor = createMemo(() => tint(background(), actionHovered(), actionHovered().a))
   const highlighted = (sessionID: string | undefined) =>
     sessionID !== undefined && (activeID() === sessionID || hovered() === sessionID || dragging() === sessionID)
   const addHighlighted = () => newTab() || addHovered()
@@ -856,9 +854,7 @@ function VerticalSessionTabs(props: {
               const separatorUpperColor = createMemo(() =>
                 tint(background(), previousGlowHue(), 0.1 * previousGlowLevel()),
               )
-              const separatorLowerColor = createMemo(() =>
-                tint(background(), glowHue(), 0.12 * glowLevel()),
-              )
+              const separatorLowerColor = createMemo(() => tint(background(), glowHue(), 0.12 * glowLevel()))
               const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
@@ -923,9 +919,7 @@ function VerticalSessionTabs(props: {
                         edge="top"
                         width={width()}
                         color={pulseBackground()}
-                        background={
-                          highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()
-                        }
+                        background={highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()}
                       />
                       <SessionTabHalfRow
                         top={1}
@@ -1283,6 +1277,268 @@ function VerticalSessionTabs(props: {
   )
 }
 
+type HorizontalSessionTabStatus = SessionTabsStatus & { complete: boolean }
+
+// One tab of the horizontal strip. Layout, drag, close-hold and the context menu belong to the bar,
+// which passes their state in; everything a single tab draws lives here.
+function HorizontalSessionTab(props: {
+  tab: SessionTab
+  title: string
+  status: HorizontalSessionTabStatus
+  width: number
+  selected: boolean
+  // 0..1, animated by the bar.
+  selection: number
+  activity: number
+  hovered: boolean
+  dragged: boolean
+  label: string
+  labelWidth: number
+  marquee: ReturnType<typeof createTabMarquee>
+  animations: boolean
+  numbers: boolean
+  spinner?: TabSpinner
+  unreadMarker?: TabUnreadMarker
+  onMouseDown: (event: MouseEvent) => void
+  onMouseUp?: (event: MouseEvent) => void
+  suppressClick?: () => boolean
+  onClosePress?: () => void
+  onClose: (event: MouseEvent) => void
+}) {
+  const theme = useTheme()
+  const animations = () => props.animations
+  const unreadColor = () => theme.hue.accent[200]
+  const activeNumber = () => theme.hue.interactive[200]
+  const idleNumber = () => tint(theme.text.formfield.base, theme.background.base, 0.55)
+  const background = createMemo(() => {
+    const lifted = (props.hovered || props.dragged) && !props.selected
+    const base = lifted ? theme.background.action.primary.hovered : theme.background.base
+    // A dragged tab lifts to full selected elevation while it is held.
+    return tint(base, theme.decrease(theme.background.raised.base), props.dragged ? 1 : props.selection)
+  })
+  const pulseColor = () => tint(background(), theme.text.base, 0.45)
+  // The edge flash washes toward a brighter stop on the same background-to-text ramp,
+  // so it reads as a lift of the pulse color rather than a different hue.
+  const flashColor = () => tint(background(), theme.text.base, 0.65)
+  const feedbackColor = () => tabFeedbackColor(props.status, theme)
+  const glowLevel = createGlowLevel(() => props.selected && Boolean(props.status.attention), animations)
+  const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
+  const glows = () =>
+    Boolean(props.status.attention || (!props.selected && !props.status.busy && props.status.unread !== undefined))
+  // Hovering reveals the close mark, so the title's right bound shifts left of it.
+  const restingTitleWidth = () => Math.max(1, props.width - 1 - props.labelWidth)
+  const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 2)
+  const availableTitleWidth = () => (props.hovered ? hoveredTitleWidth() : restingTitleWidth())
+  const scrolling = () => props.marquee.active() === props.tab.sessionID
+  const visibleTitleParts = createMemo(() =>
+    scrolling()
+      ? marqueeTextParts(props.title, availableTitleWidth(), props.marquee.offset())
+      : Locale.graphemes(Locale.takeWidth(props.title, availableTitleWidth())).map((value) => ({
+          value,
+          separator: false,
+        })),
+  )
+  const visibleTitle = createMemo(() =>
+    visibleTitleParts()
+      .map((part) => part.value)
+      .join(""),
+  )
+  const titleFades = createMemo(
+    () => marqueeOverflows(props.title, availableTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
+  )
+  const runs = () => props.status.busy && !props.status.attention
+  const numberIgnition = createNumberIgnition(runs, () => props.status.promptPulse, animations)
+  const foreground = () => {
+    if (props.hovered) return theme.text.base
+    return tint(theme.text.muted, theme.text.base, props.selection)
+  }
+  // Title characters sitting over the glow tinge toward its color, following the same
+  // spatial falloff as the glow itself; characters beyond the tail stay neutral.
+  const characterColor = (index: number, separator: boolean) => {
+    const base = foreground()
+    const color = glows() ? glowTextColor(base, glowColor(), 1 + props.labelWidth + index, props.width) : base
+    const faded = titleFades()
+      ? fadeTitleColor(
+          color,
+          background(),
+          index,
+          visibleTitleParts().length,
+          scrolling() ? props.marquee.leading() : 0,
+        )
+      : color
+    return separator ? tint(faded, background(), 0.55) : faded
+  }
+  // The running sweep's level under the number cell, reported by the pulse renderable.
+  const [sweepLevel, setSweepLevel] = createSignal(0)
+  const [closeHovered, setCloseHovered] = createSignal(false)
+  const numberColor = () => {
+    const feedback = feedbackColor()
+    const base =
+      props.hovered && !props.selected
+        ? foreground()
+        : tint(idleNumber(), tint(theme.text.base, background(), 0.25), props.selection)
+    const color = runs() ? activeNumber() : (feedback ?? tint(base, unreadColor(), props.activity))
+    // The number brightens faintly as the running sweep passes beneath it.
+    return tint(color, theme.text.base, Math.max(numberIgnition.value().level, 0.15 * sweepLevel()))
+  }
+  const bold = () => (props.selected || props.dragged ? TextAttributes.BOLD : undefined)
+  const closeColor = () => tint(theme.text.muted, theme.text.base, 0.6)
+  return (
+    <box
+      width={props.width}
+      position="relative"
+      flexDirection="row"
+      backgroundColor={background()}
+      onMouseOver={() => props.marquee.enter(props.tab.sessionID, props.title, hoveredTitleWidth())}
+      onMouseOut={() => props.marquee.leave(props.tab.sessionID)}
+      onMouseDown={(event) => {
+        if (event.button !== MIDDLE_MOUSE_BUTTON && event.button !== RIGHT_MOUSE_BUTTON)
+          props.marquee.enter(props.tab.sessionID, props.title, hoveredTitleWidth())
+        props.onMouseDown(event)
+      }}
+      onMouseUp={(event) => props.onMouseUp?.(event)}
+    >
+      <TabPulse
+        enabled={animations()}
+        active={props.status.busy && !props.status.attention}
+        promptPulse={props.status.promptPulse}
+        complete={props.status.complete && !props.status.attention}
+        glow={glows()}
+        color={pulseColor()}
+        glowColor={glowColor()}
+        flashColor={flashColor()}
+        completionColor={unreadColor()}
+        backgroundColor={background()}
+        onLevel={setSweepLevel}
+      />
+      <box zIndex={1} width="100%" flexDirection="row">
+        <TabIndicator
+          status={props.status}
+          label={props.label}
+          width={props.labelWidth}
+          color={numberColor()}
+          unreadColor={feedbackColor() ?? unreadColor()}
+          backgroundColor={background()}
+          flashColor={theme.text.base}
+          animations={animations()}
+          numbers={props.numbers}
+          spinner={props.spinner}
+          unreadMarker={props.unreadMarker}
+          attributes={bold()}
+        />
+        <title_shimmer
+          width={availableTitleWidth()}
+          height={1}
+          fg={foreground()}
+          rename={{ pending: props.status.renaming, title: props.title }}
+          enabled={animations()}
+          backdrop={background()}
+          wrapMode="none"
+          selectable={false}
+          attributes={props.status.renaming && !animations() ? TextAttributes.DIM : bold()}
+        >
+          <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
+            <Index each={visibleTitleParts()}>
+              {(part, index) => <span style={{ fg: characterColor(index, part().separator) }}>{part().value}</span>}
+            </Index>
+          </Show>
+        </title_shimmer>
+        <text
+          position="absolute"
+          right={1}
+          zIndex={2}
+          width={1}
+          fg={closeHovered() ? theme.text.base : closeColor()}
+          selectable={false}
+          onMouseOver={() => setCloseHovered(true)}
+          onMouseOut={() => setCloseHovered(false)}
+          onMouseDown={(event) => {
+            if (event.button === RIGHT_MOUSE_BUTTON || !props.hovered) return
+            props.onClosePress?.()
+            event.stopPropagation()
+          }}
+          onMouseUp={(event) => {
+            if (event.button === RIGHT_MOUSE_BUTTON) return
+            if (props.suppressClick?.()) return
+            // The close mark only renders while hovered; without motion events a click can
+            // land here first, and must select the tab instead of closing it invisibly.
+            if (!props.hovered) return
+            event.stopPropagation()
+            props.onClose(event)
+          }}
+        >
+          {props.hovered ? "✕" : ""}
+        </text>
+      </box>
+    </box>
+  )
+}
+
+export type SessionTabItemProps = {
+  readonly sessionID: string
+  readonly width: number
+  // Replaces the status marker, as in numbers mode: the label's colour and the pulse still show the status.
+  readonly label?: string
+  readonly controller?: SessionTabsController
+}
+
+// A host-styled tab for plugins that draw their own bar. It takes its status, title and actions
+// from the host; reordering, close-hold and the context menu stay with the built-in bar.
+export function SessionTabItem(props: SessionTabItemProps) {
+  const tabs = props.controller ?? useSessionTabs()
+  const data = props.controller ? undefined : useData()
+  const config = useConfig().data
+  const animations = () => config.animations ?? true
+  const marquee = createTabMarquee(animations)
+  const tab = createMemo(
+    (): SessionTab => tabs.tabs().find((item) => item.sessionID === props.sessionID) ?? { sessionID: props.sessionID },
+  )
+  const selected = () => tabs.current() === props.sessionID
+  const status = createMemo((): HorizontalSessionTabStatus => {
+    const current = tabs.status(props.sessionID)
+    return { ...current, complete: sessionTabComplete(current.unread, current.busy) }
+  })
+  const motion = createAnimatable(
+    { selection: Number(selected()), activity: Number(status().complete) },
+    { enabled: animations, transition: spring({ visualDuration: 0.1 }) },
+  )
+  createEffect(() => motion.animate({ selection: Number(selected()), activity: Number(status().complete) }))
+  const label = () =>
+    props.label ?? sessionTabNumberLabel(tabs.tabs().findIndex((item) => item.sessionID === props.sessionID))
+  let pressed = false
+  return (
+    <HorizontalSessionTab
+      tab={tab()}
+      title={data?.session.get(props.sessionID)?.title ?? tab().title ?? "Untitled session"}
+      status={status()}
+      width={props.width}
+      selected={selected()}
+      selection={motion.value().selection as number}
+      activity={motion.value().activity as number}
+      hovered={marquee.hovered() === props.sessionID}
+      dragged={false}
+      label={label()}
+      labelWidth={Math.max(2, stringWidth(label()))}
+      marquee={marquee}
+      animations={animations()}
+      numbers={props.label !== undefined || config.tabs.indicators === "numbers"}
+      onMouseDown={(event) => {
+        pressed = event.button === 0
+        if (event.button !== MIDDLE_MOUSE_BUTTON) return
+        tabs.close(props.sessionID)
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onMouseUp={(event) => {
+        if (!pressed || event.button !== 0) return
+        pressed = false
+        tabs.select(props.sessionID)
+      }}
+      onClose={() => tabs.close(props.sessionID)}
+    />
+  )
+}
+
 function HorizontalSessionTabs(props: {
   controller?: SessionTabsController
   animations?: boolean
@@ -1325,9 +1581,6 @@ function HorizontalSessionTabs(props: {
   onCleanup(clearCloseHold)
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
   let suppressClick = false
-  const unreadColor = () => theme.hue.accent[200]
-  const activeNumber = () => theme.hue.interactive[200]
-  const idleNumber = () => tint(theme.text.formfield.base, theme.background.base, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
   const ordered = createMemo(() => {
@@ -1559,96 +1812,26 @@ function HorizontalSessionTabs(props: {
       </Show>
       <For each={layout().tabs}>
         {(tab) => {
-          const selected = () => activeID() === tab.sessionID
-          const status = () => statuses().get(tab.sessionID)!
-          const width = () => visuals().get(tab.sessionID)?.width ?? 1
-          const selection = () => visuals().get(tab.sessionID)?.selection ?? Number(selected())
-          const activity = () => visuals().get(tab.sessionID)?.activity ?? Number(status().complete)
-          const dragged = () => dragging() === tab.sessionID
-          const background = createMemo(() => {
-            const lifted = (hovered() === tab.sessionID || dragged()) && !selected()
-            const base = lifted ? theme.background.action.primary.hovered : theme.background.base
-            // A dragged tab lifts to full selected elevation while it is held.
-            return tint(base, theme.decrease(theme.background.raised.base), dragged() ? 1 : selection())
-          })
-          const pulseColor = () => tint(background(), theme.text.base, 0.45)
-          // The edge flash washes toward a brighter stop on the same background-to-text ramp,
-          // so it reads as a lift of the pulse color rather than a different hue.
-          const flashColor = () => tint(background(), theme.text.base, 0.65)
-          const feedbackColor = () => tabFeedbackColor(status(), theme)
-          const glowLevel = createGlowLevel(() => selected() && Boolean(status().attention), animations)
-          const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
-          const glows = () =>
-            Boolean(status().attention || (!selected() && !status().busy && status().unread !== undefined))
           const title = () => data?.session.get(tab.sessionID)?.title ?? tab.title ?? "Untitled session"
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
-          const numberWidth = () => Math.max(2, String(items().length).length)
-          // Hovering reveals the close mark, so the title's right bound shifts left of it.
-          const restingTitleWidth = () => Math.max(1, width() - 1 - numberWidth())
-          const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 2)
-          const availableTitleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
-          const scrolling = () => marquee.active() === tab.sessionID
-          const visibleTitleParts = createMemo(() =>
-            scrolling()
-              ? marqueeTextParts(title(), availableTitleWidth(), marquee.offset())
-              : Locale.graphemes(Locale.takeWidth(title(), availableTitleWidth())).map((value) => ({
-                  value,
-                  separator: false,
-                })),
-          )
-          const visibleTitle = createMemo(() =>
-            visibleTitleParts()
-              .map((part) => part.value)
-              .join(""),
-          )
-          const titleFades = createMemo(
-            () => marqueeOverflows(title(), availableTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
-          )
-          const runs = () => status().busy && !status().attention
-          const numberIgnition = createNumberIgnition(runs, () => status().promptPulse, animations)
-          const foreground = () => {
-            if (hovered() === tab.sessionID) return theme.text.base
-            return tint(theme.text.muted, theme.text.base, selection())
-          }
-          // Title characters sitting over the glow tinge toward its color, following the same
-          // spatial falloff as the glow itself; characters beyond the tail stay neutral.
-          const characterColor = (index: number, separator: boolean) => {
-            const base = foreground()
-            const color = glows() ? glowTextColor(base, glowColor(), 1 + numberWidth() + index, width()) : base
-            const faded = titleFades()
-              ? fadeTitleColor(
-                  color,
-                  background(),
-                  index,
-                  visibleTitleParts().length,
-                  scrolling() ? marquee.leading() : 0,
-                )
-              : color
-            return separator ? tint(faded, background(), 0.55) : faded
-          }
-          // The running sweep's level under the number cell, reported by the pulse renderable.
-          const [sweepLevel, setSweepLevel] = createSignal(0)
-          const [closeHovered, setCloseHovered] = createSignal(false)
-          const numberColor = () => {
-            const feedback = feedbackColor()
-            const base =
-              hovered() === tab.sessionID && !selected()
-                ? foreground()
-                : tint(idleNumber(), tint(theme.text.base, background(), 0.25), selection())
-            const color = runs() ? activeNumber() : (feedback ?? tint(base, unreadColor(), activity()))
-            // The number brightens faintly as the running sweep passes beneath it.
-            return tint(color, theme.text.base, Math.max(numberIgnition.value().level, 0.15 * sweepLevel()))
-          }
-          const bold = () => (selected() || dragged() ? TextAttributes.BOLD : undefined)
-          const closeColor = () => tint(theme.text.muted, theme.text.base, 0.6)
           return (
-            <box
-              width={width()}
-              position="relative"
-              flexDirection="row"
-              backgroundColor={background()}
-              onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
-              onMouseOut={() => marquee.leave(tab.sessionID)}
+            <HorizontalSessionTab
+              tab={tab}
+              title={title()}
+              status={statuses().get(tab.sessionID)!}
+              width={visuals().get(tab.sessionID)?.width ?? 1}
+              selected={activeID() === tab.sessionID}
+              selection={visuals().get(tab.sessionID)?.selection ?? Number(activeID() === tab.sessionID)}
+              activity={visuals().get(tab.sessionID)?.activity ?? Number(statuses().get(tab.sessionID)!.complete)}
+              hovered={hovered() === tab.sessionID}
+              dragged={dragging() === tab.sessionID}
+              label={tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)}
+              labelWidth={Math.max(2, String(items().length).length)}
+              marquee={marquee}
+              animations={animations()}
+              numbers={props.numbers}
+              spinner={props.spinner}
+              unreadMarker={props.unreadMarker}
               onMouseDown={(event) => {
                 if (event.button === MIDDLE_MOUSE_BUTTON) {
                   releaseCloseHold()
@@ -1675,86 +1858,15 @@ function HorizontalSessionTabs(props: {
                 }
                 didDrag = false
                 releaseCloseHold()
-                marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}
-            >
-              <TabPulse
-                enabled={animations()}
-                active={status().busy && !status().attention}
-                promptPulse={status().promptPulse}
-                complete={status().complete && !status().attention}
-                glow={glows()}
-                color={pulseColor()}
-                glowColor={glowColor()}
-                flashColor={flashColor()}
-                completionColor={unreadColor()}
-                backgroundColor={background()}
-                onLevel={setSweepLevel}
-              />
-              <box zIndex={1} width="100%" flexDirection="row">
-                <TabIndicator
-                  status={status()}
-                  label={tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)}
-                  width={numberWidth()}
-                  color={numberColor()}
-                  unreadColor={feedbackColor() ?? unreadColor()}
-                  backgroundColor={background()}
-                  flashColor={theme.text.base}
-                  animations={animations()}
-                  numbers={props.numbers}
-                  spinner={props.spinner}
-                  unreadMarker={props.unreadMarker}
-                  attributes={bold()}
-                />
-                <title_shimmer
-                  width={availableTitleWidth()}
-                  height={1}
-                  fg={foreground()}
-                  rename={{ pending: status().renaming, title: title() }}
-                  enabled={animations()}
-                  backdrop={background()}
-                  wrapMode="none"
-                  selectable={false}
-                  attributes={status().renaming && !animations() ? TextAttributes.DIM : bold()}
-                >
-                  <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
-                    <Index each={visibleTitleParts()}>
-                      {(part, index) => (
-                        <span style={{ fg: characterColor(index, part().separator) }}>{part().value}</span>
-                      )}
-                    </Index>
-                  </Show>
-                </title_shimmer>
-                <text
-                  position="absolute"
-                  right={1}
-                  zIndex={2}
-                  width={1}
-                  fg={closeHovered() ? theme.text.base : closeColor()}
-                  selectable={false}
-                  onMouseOver={() => setCloseHovered(true)}
-                  onMouseOut={() => setCloseHovered(false)}
-                  onMouseDown={(event) => {
-                    if (event.button === RIGHT_MOUSE_BUTTON || hovered() !== tab.sessionID) return
-                    didDrag = false
-                    event.stopPropagation()
-                  }}
-                  onMouseUp={(event) => {
-                    if (event.button === RIGHT_MOUSE_BUTTON) return
-                    if (suppressClick) return
-                    // The close mark only renders while hovered; without motion events a click can
-                    // land here first, and must select the tab instead of closing it invisibly.
-                    if (hovered() !== tab.sessionID) return
-                    event.stopPropagation()
-                    holdCloseCell(tab.sessionID, event.x)
-                    tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
-                  }}
-                >
-                  {hovered() === tab.sessionID ? "✕" : ""}
-                </text>
-              </box>
-            </box>
+              suppressClick={() => suppressClick}
+              onClosePress={() => (didDrag = false)}
+              onClose={(event) => {
+                holdCloseCell(tab.sessionID, event.x)
+                tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
+              }}
+            />
           )
         }}
       </For>

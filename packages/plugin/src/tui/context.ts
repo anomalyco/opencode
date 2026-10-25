@@ -533,6 +533,16 @@ export interface UI {
     move(sessionID: string, index: number): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
+    /**
+     * A built-in horizontal tab for plugins that draw their own bar. The host draws its status, title,
+     * pulse and close button and handles clicks. `label` replaces the status marker, as in numbers mode;
+     * its colour and the pulse still show the status. Reordering and the context menu stay with the built-in bar.
+     */
+    readonly Item: (props: {
+      readonly sessionID: string
+      readonly width: number
+      readonly label?: string
+    }) => JSX.Element
   }
   readonly model: {
     /** The prompt's selected model; variant is undefined for the model default. Reactive when read in a Solid computation. */
