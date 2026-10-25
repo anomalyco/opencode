@@ -778,6 +778,48 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("does not finalize tool calls that open after a truncated finish", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "length"),
+              // Truncation is intentional: a call opening after it stays unconfirmed.
+              deltaChunk({
+                tool_calls: [
+                  { index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"}' } },
+                ],
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "length", raw: "length" })
+
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({}, "content_filter"),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_2", function: { arguments: "{}" } }] }),
+            ),
+          ),
+        ),
+      )
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(filtered.toolCalls).toEqual([])
+    }),
+  )
+
   it.effect("ignores trailing no-op tool deltas after a finalized call", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

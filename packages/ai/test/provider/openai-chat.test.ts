@@ -2260,6 +2260,61 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("does not finalize tool calls that open after a truncated finish", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ content: "Hello" }),
+        deltaChunk({}, "length"),
+        // Truncation is intentional: a call opening after it stays unconfirmed.
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"}' } }],
+        }),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "text-start", id: "text-0" },
+        { type: "text-delta", id: "text-0", text: "Hello" },
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"}',
+          input: { query: "weather" },
+        },
+        { type: "text-end", id: "text-0" },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "length", raw: "length" },
+          usage: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "finish", reason: { normalized: "length", raw: "length" }, usage: undefined },
+      ])
+      expect(response.toolCalls).toEqual([])
+
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({}, "content_filter"),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_2", function: { arguments: "{}" } }] }),
+            ),
+          ),
+        ),
+      )
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(filtered.toolCalls).toEqual([])
+    }),
+  )
+
   it.effect("maps unknown finish reasons to unknown and keeps the raw value", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
