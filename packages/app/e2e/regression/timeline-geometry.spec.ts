@@ -558,6 +558,33 @@ for (const failed of [false, true]) {
   })
 }
 
+test("parks a jumped-to prompt below the header from the prompt rail", async ({ page }) => {
+  await setupTimeline(page, { seedHistory: true })
+  const rail = page.locator('[data-slot="session-prompt-rail"]')
+  const bars = rail.getByRole("button")
+  await expect(rail).toBeVisible()
+  await expect(rail).toHaveRole("navigation")
+  await expect(rail).toHaveAccessibleName("Prompt navigation")
+  // One bar per user prompt: eighteen seeded history prompts and the newest one.
+  await expect(bars).toHaveCount(19)
+  await expect(rail.locator('[aria-current="location"]')).toHaveCount(1)
+  await expect(bars.last()).toHaveAttribute("aria-current", "location")
+
+  // The clicked prompt keeps the highlight even though the next prompt starts just below it.
+  await bars.nth(2).click()
+  await expect(bars.nth(2)).toHaveAttribute("aria-current", "location")
+  await expect(
+    page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_00002_history_a_user"]'),
+  ).toBeInViewport()
+  await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible()
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+
+  // The rail sits in the gutter beside the transcript; a narrow panel hides it instead of covering text.
+  await page.setViewportSize({ width: 700, height: 900 })
+  await expect(rail).toBeHidden()
+})
+
 async function captureCardEdges(page: Page, card: Locator) {
   const box = await card.boundingBox()
 

@@ -1,0 +1,11 @@
+/* The rail lives in the gutter beside the centered transcript. Narrow panels have no gutter, so
+   hide it rather than letting the bars overlap message text. */
+[data-slot="session-prompt-rail"] {
+  display: none;
+}
+
+@container (min-width: 840px) {
+  [data-slot="session-prompt-rail"] {
+    display: flex;
+  }
+}
