@@ -228,7 +228,10 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
     },
   ])
   await expect(control).toHaveText("Alpha")
-  await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
+  const variant = page.getByRole("button", { name: /Choose model variant$/ })
+  await expect(variant).toHaveText("high")
+  // The trigger keeps the selected value in its accessible name so a screen reader announces it.
+  await expect(variant).toHaveAccessibleName(/high: Choose model variant/)
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
   expect(switches).toEqual([{ model: { id: "alpha", providerID: "opencode", variant: "high" } }])

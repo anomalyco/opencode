@@ -139,7 +139,7 @@ test("restores each existing session's model and variant when switching tabs", a
   const hrefB = sessionHref(sessions[1]!.id)
   const composer = page.locator('[data-component="composer"]')
   const modelControl = composer.locator('[data-action="composer-model"]')
-  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+  const variant = composer.getByRole("button", { name: /Choose model variant$/ })
   await expect(modelControl).toHaveText("Model A")
   await expect(variant).toHaveText("balanced")
   await variant.click()
