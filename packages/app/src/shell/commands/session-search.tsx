@@ -1,5 +1,5 @@
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, createSignal, startTransition } from "solid-js"
+import { startTransition } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
@@ -48,14 +48,12 @@ export function DialogSessionSearch() {
           }))
 
     return {
-      all: () => format(load.all()),
       items: (query: string) => format(load.items(query)),
       search: (query: string) => load.search(query).then(format),
-      recent: load.recent,
     }
   })
 
-  const ranked = (query: string) => {
+  const items = (query: string) => {
     const entries = loaders
       .flatMap((loader) => loader.items(query))
       .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
@@ -63,31 +61,12 @@ export function DialogSessionSearch() {
     return query ? entries : entries.slice(0, RECENT_LIMIT)
   }
 
-  // Rank recent sessions once, from what is already known, and keep that order while the dialog is open instead of
-  // moving rows as sessions get activity. Rows still show live titles, and deleted or archived sessions leave.
-  const top = () => ranked("").map((entry) => entry.id)
-  const [order, setOrder] = createSignal(top())
-
-  // The server's list only adds the sessions the order is missing, such as all of them when none were known.
-  const initial = Promise.all(loaders.map((loader) => loader.recent().catch(() => {}))).then(() =>
-    setOrder((current) => [...current, ...top().filter((id) => !current.includes(id))].slice(0, RECENT_LIMIT)),
-  )
-
-  const recent = createMemo(() => {
-    const live = new Map(loaders.flatMap((loader) => loader.all()).map((entry) => [entry.id, entry] as const))
-
-    return order().flatMap((id) => live.get(id) ?? [])
-  })
-
-  const items = (query: string) => (query ? ranked(query) : recent())
-
   const sessions = async (query: string) => {
-    // Waiting on the server's list shows the loading state, not an empty one, when no recent sessions were known.
-    if (!query) return initial.then(() => [])
-
-    return (await Promise.all(loaders.map((loader) => loader.search(query))))
+    const entries = (await Promise.all(loaders.map((loader) => loader.search(query))))
       .flat()
       .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
+
+    return query ? entries : entries.slice(0, RECENT_LIMIT)
   }
 
   const select = (item: CommandPaletteEntry | undefined) => {

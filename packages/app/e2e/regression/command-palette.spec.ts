@@ -249,21 +249,6 @@ const olderSession = {
   time: { created: 1699999999000, updated: 1699999999000 },
 }
 
-test("titlebar search adds recent sessions only the server lists", async ({ page }) => {
-  await openPaletteWorkspace(page, false, [paletteSession, olderSession])
-  const release = Promise.withResolvers<void>()
-  await page.route("**/api/session?*", async (route) => {
-    await release.promise
-    await route.fallback()
-  })
-  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
-  const options = page.getByRole("dialog").getByRole("option")
-  // Only the open session is known before the list arrives.
-  await expect(options).toHaveText([/Palette fixture session/])
-  release.resolve()
-  await expect(options).toHaveText([/Palette fixture session/, /Older fixture session/])
-})
-
 test("titlebar search drops a recent session deleted while it is open", async ({ page }) => {
   const mock = await openPaletteWorkspace(page, true, [paletteSession, olderSession])
   await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
@@ -280,24 +265,6 @@ test("titlebar search drops a recent session deleted while it is open", async ({
     },
   ])
   await expect(options).toHaveText([/Palette fixture session/])
-})
-
-test("titlebar search keeps loading recent sessions while a query is typed", async ({ page }) => {
-  await openPaletteWorkspace(page, false, [paletteSession, olderSession])
-  const release = Promise.withResolvers<void>()
-  await page.route("**/api/session?*", async (route) => {
-    if (new URL(route.request().url()).searchParams.get("search")) return route.fallback()
-    await release.promise
-    await route.fallback()
-  })
-  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
-  const dialog = page.getByRole("dialog")
-  const input = dialog.getByRole("combobox")
-  await input.fill("Palette")
-  await expect(dialog.getByRole("option")).toHaveText([/Palette fixture session/])
-  await input.fill("")
-  release.resolve()
-  await expect(dialog.getByRole("option")).toHaveText([/Palette fixture session/, /Older fixture session/])
 })
 
 test("reopens from its shortcut as soon as it closes", async ({ page }) => {
