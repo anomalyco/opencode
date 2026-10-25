@@ -1,6 +1,6 @@
 ---
 title: "Policies"
-description: "Allow or deny OpenCode actions on named resources, with organization policy taking final authority."
+description: "Allow or deny OpenCode actions on named resources, with managed and organization policy outranking user and project configuration."
 ---
 
 Policies decide whether OpenCode may perform an action on a named resource. They are
@@ -190,10 +190,6 @@ configuration and the connected Console always outrank user and project files.
 | 5           | Direct `opencode.json(c)`; outer directories beat inner ones                                                   |
 | 6 (lowest)  | `.opencode/opencode.json(c)`; outer directories beat inner ones                                                |
 
-This order applies when the Console serves its workspace configuration in the current
-format. A Console that still serves the older format ranks first instead, above managed
-preferences and the system file; see [Console](#console).
-
 A repository cannot re-enable a provider you deny globally:
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
@@ -213,15 +209,11 @@ A repository cannot re-enable a provider you deny globally:
 ## Console
 
 A workspace on the [OpenCode Console](/console) compiles its Providers and Tools
-policies into statements and returns them with the workspace configuration. OpenCode
+policies into regular `policies` statements in the workspace configuration. OpenCode
 merges that configuration like a configuration file that ranks right below managed
 preferences and the system file, so an organization `deny` cannot be lifted by a
 repository or user `allow`, and an organization `allow` lifts a lower-authority `deny`.
 Managed preferences and the system file still override the workspace.
-
-A Console that serves the older format instead has its statements appended after every
-authored statement, so they have the final say, over managed preferences and the system
-file too.
 
 Denials from these statements name the workspace:
 
