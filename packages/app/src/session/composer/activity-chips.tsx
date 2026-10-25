@@ -5,6 +5,7 @@ import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-prog
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { messageMenu } from "@/session/timeline/message-menu"
 import "./activity-chips.css"
 
 export type SessionActivityItem = {
@@ -145,8 +146,13 @@ export function SessionActivityChips(props: {
     <Show when={active()}>
       <div
         data-component="session-activity-chips"
-        class="pointer-events-none absolute inset-x-0 bottom-full flex items-center pb-2.5"
+        class="pointer-events-none absolute bottom-full flex items-center pb-2.5"
         classList={{
+          // The composer column (px-3) is wider than the timeline's turn column (turnPadding in message-timeline), so
+          // the capsule insets by the difference to share its edges with the rows above it.
+          "start-1 md:start-3": true,
+          "end-1 md:end-3": !messageMenu(),
+          "end-8 md:end-10": messageMenu(),
           "justify-start": alignment() === "start",
           "justify-center": alignment() === "center",
           "justify-end": alignment() === "end",

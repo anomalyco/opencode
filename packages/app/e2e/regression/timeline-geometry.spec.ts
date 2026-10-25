@@ -681,6 +681,7 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
       const card = region.querySelector('[data-component="composer"]')!.getBoundingClientRect()
       const pill = region.querySelector('[data-slot="session-activity-chip"]')!.getBoundingClientRect()
       const hint = viewport.querySelector('[data-component="session-background-hint-row"]')!.getBoundingClientRect()
+      const move = viewport.querySelector('[data-component="session-background-hint-row"] button')!.getBoundingClientRect()
       const parts = [...viewport.querySelectorAll("[data-timeline-part-id]")]
       const last = parts.find((element) => element.textContent?.includes("The last answer ends"))!
 
@@ -696,11 +697,13 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
         floats: pill.bottom <= dock.top,
         // It floats in the timeline's reserved tail, below the background hint and the last answer.
         reserved: hint.bottom <= pill.top && last.getBoundingClientRect().bottom <= hint.top,
+        // Its outline starts on the turn column, with the Move to background button and the rows above it.
+        aligned: Math.round(pill.left - move.left),
         atEnd: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1,
       }
     })
 
-  const expected = { behind: 0, inset: 0, fade: 0, floats: true, reserved: true, atEnd: true }
+  const expected = { behind: 0, inset: 0, fade: 0, floats: true, reserved: true, aligned: 0, atEnd: true }
   await expect.poll(geometry).toEqual(expected)
   const before = (await dock.boundingBox())!.height
 
