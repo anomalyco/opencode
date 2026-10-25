@@ -1531,4 +1531,34 @@ describe("SessionProjector", () => {
       expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
     }).pipe(Effect.provide(mediaBlob)),
   )
+
+  it.effect("releases a tool's blob when a content update drops its ref", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_media_rewritten")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toHaveLength(1)
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.MessageContentUpdated, { sessionID, messageID: assistantMessageID, content: [] })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
 })

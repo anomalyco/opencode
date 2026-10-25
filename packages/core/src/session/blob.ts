@@ -1,7 +1,7 @@
 export * as SessionBlob from "./blob.js"
 
 import { createHash } from "node:crypto"
-import { and, eq, gte, inArray, notExists, type SQL, sql } from "drizzle-orm"
+import { and, eq, gte, inArray, notExists, notInArray, type SQL, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { FileAttachment } from "@opencode/schema/prompt"
@@ -183,26 +183,29 @@ const files = Effect.fnUntraced(function* (db: DatabaseService, input: ReadonlyA
   const pending: Pending = new Map()
   const stored = input.map((file) => fileRef(pending, file))
   yield* save(db, pending)
-  return stored
+  return { files: stored, extracted: pending.size > 0 }
 })
 
 /**
  * With `experimental.media_blob` on, moves inline user files and tool `data:` files into `blob` and returns the
- * message to store with refs in their place. Existing refs pass through. Record the stored row with {@link recordRefs}.
+ * message to store with refs in their place. Existing refs pass through; `extracted` says whether any new ones
+ * appeared. Record the stored row with {@link recordRefs}.
  */
 export const externalize = Effect.fnUntraced(function* (
   db: DatabaseService,
   message: SessionMessage.Info | SessionStored.User,
 ) {
   if (message.type === "user") {
-    if (message.files === undefined || !(yield* writeEnabled)) return message
-    return { ...message, files: yield* files(db, message.files) }
+    if (message.files === undefined || !(yield* writeEnabled)) return { message, extracted: false }
+    const stored = yield* files(db, message.files)
+    return { message: { ...message, files: stored.files }, extracted: stored.extracted }
   }
-  if (message.type !== "assistant" || !(yield* writeEnabled)) return message
+  if (message.type !== "assistant" || !(yield* writeEnabled)) return { message, extracted: false }
   const pending: Pending = new Map()
   const content = message.content.map((part) => toolPartRefs(pending, part))
+  if (pending.size === 0) return { message, extracted: false }
   yield* save(db, pending)
-  return { ...message, content }
+  return { message: { ...message, content }, extracted: true }
 })
 
 /** {@link externalize} for a pending inbox user payload. */
@@ -211,17 +214,22 @@ export const externalizePayload = Effect.fnUntraced(function* (
   payload: SessionStored.UserPayload,
 ) {
   if (payload.files === undefined || !(yield* writeEnabled)) return payload
-  return { ...payload, files: yield* files(db, payload.files) }
+  return { ...payload, files: (yield* files(db, payload.files)).files }
 })
 
-/** Records that `owner` references each blob its stored row names, so a sweep keeps them. */
+const hashesOf = (data: MessageRow["data"] | InboxRow["payload"]) => {
+  const hashes = new Set<string>()
+  collect(data, hashes)
+  return hashes
+}
+
+/** Records that `owner` references each blob its stored row names, so release keeps them until it lets go. */
 export const recordRefs = Effect.fnUntraced(function* (
   db: DatabaseService,
   owner: Owner,
   data: MessageRow["data"] | InboxRow["payload"],
 ) {
-  const hashes = new Set<string>()
-  collect(data, hashes)
+  const hashes = hashesOf(data)
   if (hashes.size === 0) return
   // A ref whose blob is already gone keeps nothing alive; reads render it as unavailable.
   const found = yield* db
@@ -242,6 +250,14 @@ export const recordRefs = Effect.fnUntraced(function* (
     })
     .run()
     .pipe(Effect.orDie)
+})
+
+/** Records the refs a rewritten message names and releases the ones it no longer does. */
+export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: MessageRow["data"]) {
+  yield* recordRefs(db, owner, data)
+  const present = [...hashesOf(data)]
+  const own = [eq(BlobRefTable.session_id, owner.sessionID), eq(BlobRefTable.message_id, owner.messageID)] as const
+  yield* present.length === 0 ? release(db, ...own) : release(db, ...own, notInArray(BlobRefTable.hash, present))
 })
 
 /** Deletes the matching refs, then every blob among theirs that no ref names anymore. */
