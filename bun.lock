@@ -683,7 +683,6 @@
         "pele": "1.7.0",
         "remend": "catalog:",
         "solid-js": "catalog:",
-        "strip-ansi": "7.1.2",
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
