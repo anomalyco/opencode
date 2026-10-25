@@ -4,7 +4,7 @@ import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 
 // Regression: a dialog opened from a transcript row outlives that row. A reconnect
-// resync keeps only the newest page, dropping the row's message before the rows
+// resync keeps only the newest server page, dropping the row's message before the rows
 // rebuild. The dialog must not read the row's narrowed props.
 
 const session = {
@@ -28,7 +28,7 @@ const execute = {
     metadata: {},
   },
 }
-const messages = Array.from({ length: 30 }, (_, i) => {
+const messages = Array.from({ length: 110 }, (_, i) => {
   const turn = String(i).padStart(2, "0")
   return [
     { type: "user", id: `msg_${turn}_a`, text: `Turn ${turn} prompt`, time: { created: i * 10 } },
@@ -65,7 +65,7 @@ async function openDialogThenResync(target: string, dialog: string) {
       return json({ data: messages.slice(start, end), cursor: end < messages.length ? { next: String(end) } : {} })
     },
   })
-  await setup.waitForFrame((frame) => frame.includes("Turn 29 prompt"))
+  await setup.waitForFrame((frame) => frame.includes("Turn 109 prompt"))
   // Jumping to the first message loads every older page into the store.
   setup.mockInput.pressKey("g", { ctrl: true })
   await setup.waitForFrame((frame) => frame.includes(target))

@@ -82,6 +82,8 @@ export type CreateDataInput = {
 }
 
 const messagePageLimit = 20
+// The server's largest message page.
+const resyncMessageLimit = 200
 // Trailing window for event bursts that each ask for the same refetch.
 export const settleMs = 150
 
@@ -283,6 +285,8 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  // Sessions whose transcript holds older pages the reader scrolled back to load.
+  const scrolledBack = new Set<string>()
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
@@ -586,6 +590,7 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
+    scrolledBack.delete(sessionID)
     // Keep unacknowledged submissions until their echo or rollback settles them.
     const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
     const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
@@ -608,6 +613,7 @@ export function createData(config: CreateDataInput) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    scrolledBack.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -1709,9 +1715,15 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
+            const limit = config.initialMessageLimit?.() ?? messagePageLimit
+            // After scrolling back, a re-read covers the history already loaded, plus room for rows that arrived
+            // meanwhile, so a reconnect keeps the transcript's place. Deeper history collapses to the newest page the
+            // server allows. At the bottom it reads the newest window, since live rows alone are cheap to drop.
+            const grow = scrolledBack.has(sessionID)
+            const loaded = store.session.message[sessionID]?.length ?? 0
             const response = await api().message.list({
               sessionID,
-              limit: config.initialMessageLimit?.() ?? messagePageLimit,
+              limit: grow ? Math.min(resyncMessageLimit, loaded + limit) : limit,
               order: "desc",
             })
             const fetched = response.data.toReversed()
@@ -1727,6 +1739,8 @@ export function createData(config: CreateDataInput) {
               (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
             )
             const messages = local.length === 0 ? fetched : [...fetched, ...local]
+            // The newest window replaces any older page loaded while it was read.
+            if (!grow) scrolledBack.delete(sessionID)
             batch(() => {
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
@@ -1790,6 +1804,7 @@ export function createData(config: CreateDataInput) {
             const existing = store.session.message[sessionID] ?? []
             const ids = new Set(existing.map((item) => item.id))
             const messages = [...fetched.reverse().filter((item) => !ids.has(item.id)), ...existing]
+            scrolledBack.add(sessionID)
             batch(() => {
               options?.beforePublish?.()
               messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
