@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
+import { Slash } from "@opencode/ui/slash"
 import { Show, createMemo, createSignal, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -46,6 +47,16 @@ export const ProviderTipSchema = Persistence.struct({
   dismissedAt: Schema.Finite,
 })
 
+type WordmarkState = {
+  box?: HTMLDivElement
+  mode: "flat" | "open" | "closing"
+  game: boolean
+}
+
+type BrickBreakerHandles = {
+  board?: PinBoardHandle
+  ball?: LodgerBall
+}
 
 export function NewSessionView(props: {
   composer: ComposerModel
@@ -60,13 +71,11 @@ export function NewSessionView(props: {
   )
 
   const settings = useSettings()
-  const [wordmark, setWordmark] = createStore({
-    box: undefined as HTMLDivElement | undefined,
-    mode: "flat" as "flat" | "open" | "closing",
-    game: false,
-  })
+
+  const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
+
   // Imperative handles for the brick breaker; they are not reactive state.
-  const handles: { board?: PinBoardHandle; ball?: LodgerBall } = {}
+  const handles: BrickBreakerHandles = {}
   let panel!: HTMLDivElement
 
   return (
@@ -309,9 +318,8 @@ function NewSessionLocation(props: {
             <Show when={worktree()}>
               {(name) => (
                 <>
-                  <span class="shrink-0 ps-1 pe-0.5 text-[11px] font-medium text-v2-text-text-faint" aria-hidden="true">
-                    /
-                  </span>
+                  <Slash gap={0} />
+                  <span class="sr-only">{" / "}</span>
                   <span class="min-w-12 shrink-[1000] truncate">{name()}</span>
                 </>
               )}

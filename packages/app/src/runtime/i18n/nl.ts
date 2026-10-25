@@ -421,7 +421,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Kan opdracht niet verzenden",
   "prompt.toast.promptSendFailed.title": "Kan de prompt niet verzenden",
   "dialog.mcp.title": "MCP's",
-  "dialog.mcp.description": "{{enabled}} of {{total}} ingeschakeld",
   "dialog.mcp.empty": "Geen MCP's geconfigureerd",
   "dialog.fork.empty": "Geen berichten om van af te splitsen",
   "dialog.directory.action.selectFile": "Selecteer bestand",

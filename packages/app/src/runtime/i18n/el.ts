@@ -218,7 +218,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Αποτυχία αποστολής εντολής",
   "prompt.toast.promptSendFailed.title": "Αποτυχία αποστολής προτροπής",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} από {{total}} ενεργοποιημένα",
   "dialog.mcp.empty": "Δεν έχει διαμορφωθεί το MCPs",
   "dialog.fork.empty": "Δεν υπάρχουν μηνύματα για διακλάδωση",
   "dialog.directory.action.selectFile": "Επιλογή αρχείου",

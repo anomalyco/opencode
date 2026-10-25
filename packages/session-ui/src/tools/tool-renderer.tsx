@@ -1976,7 +1976,11 @@ const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unkno
 function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
-  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", text.split("\n").length)
+  const lineCount = (text: string) => text.split("\n").length
+  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
+  // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
+  const numberDigits = () =>
+    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
 
   return (
     <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
@@ -1994,7 +1998,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
         </div>
       </DialogHeader>
       <DialogBody class="min-h-0 flex-none overflow-y-auto">
-        <div data-component="execute-details">
+        <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
           <ExecuteDetailsSection
             label={i18n.t("ui.tool.execute.code")}
             meta={lines(props.code)}
@@ -2005,7 +2009,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               component={fileComponent}
               mode="text"
               file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
-              overflow="scroll"
+              overflow="wrap"
             />
           </ExecuteDetailsSection>
           <Show
@@ -2028,7 +2032,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                         contents: output(),
                         cacheKey: checksum(output()),
                       }}
-                      overflow="scroll"
+                      overflow="wrap"
                     />
                   </ExecuteDetailsSection>
                 )}

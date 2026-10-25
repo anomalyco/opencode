@@ -5,7 +5,7 @@ import { messageMenu } from "@/session/timeline/message-menu"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
-import { LocalProvider, useLocal } from "@/providers/models/selection"
+import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { useData } from "@/runtime/server/current"
@@ -116,7 +116,7 @@ export function SessionUIProvider(
         data={sessionUIData()}
         directory={directory()}
         sessionID={params.id}
-        agents={useLocal().agent.visible()}
+        agents={settings.visibility.customAgents()}
         shellRunning={(id) => !!data.shell.get(id)}
         shellOutput={(input) => serverSDK.api.shell.output(input)}
         turnDiff={{

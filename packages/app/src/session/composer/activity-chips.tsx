@@ -1,39 +1,11 @@
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
-import { motionTuning } from "@opencode/ui/motion-tuning"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { createEffect, createMemo, createResource, createSignal, For, onCleanup, Show } from "solid-js"
-import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
-import en from "@/runtime/i18n/en"
 import { useSettings } from "@/settings/model"
 import "./activity-chips.css"
-
-const chip = motionTuning.choice("activity.chip", {
-  label: en["experiment.activityChip.style"],
-  group: "Composer",
-  subsection: en["experiment.activityChip"],
-  description: "Chip above the composer",
-  target: '[data-component="session-activity-chips"]',
-  experiment: true,
-  value: "today",
-  labels: { today: en["experiment.activityChip.today"], orb: en["experiment.activityChip.orb"] },
-})
-
-const corners = motionTuning.choice("activity.chip.corners", {
-  label: en["experiment.chipCorners"],
-  group: "Composer",
-  subsection: en["experiment.activityChip"],
-  experiment: true,
-  value: "capsule",
-  labels: { capsule: en["experiment.chipCorners.capsule"], composer: en["experiment.chipCorners.composer"] },
-})
-
-const [experiment, setExperiment] = createStore({ chip: chip(), corners: corners() })
-
-motionTuning.subscribe(() => setExperiment({ chip: chip(), corners: corners() }))
 
 export type SessionActivityItem = {
   key: string
@@ -185,13 +157,11 @@ export function SessionActivityChips(props: {
             as="button"
             type="button"
             data-slot="session-activity-chip"
-            data-orb={experiment.chip === "orb"}
-            style={{ "--activity-chip-radius": experiment.corners === "capsule" ? "9999px" : "var(--radius-xl)" }}
             aria-label={label()}
             class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out motion-reduce:animate-none"
             classList={{ "animate-in fade-in": enter() }}
           >
-            <ActivityGlyph />
+            <SessionProgressIndicatorV2 class="shrink-0" />
             <span data-slot="session-activity-summary" class="flex min-w-0 items-center gap-2 overflow-hidden">
               {language.activitySummaryRich(
                 { subagents: props.subagents.length, shells: props.shells.length },
@@ -206,7 +176,6 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
-              data-orb={experiment.chip === "orb"}
               aria-label={label()}
               onFocusIn={(event: FocusEvent) => {
                 if (!(event.target instanceof HTMLElement)) return
@@ -220,7 +189,7 @@ export function SessionActivityChips(props: {
               <For each={props.subagents}>
                 {(item) => (
                   <Menu.Item {...row(item)}>
-                    <ActivityGlyph muted />
+                    <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
                     <span class="shrink-0 font-[530]">
                       <bdi>
                         {item.agent
@@ -254,30 +223,5 @@ export function SessionActivityChips(props: {
         </Menu>
       </div>
     </Show>
-  )
-}
-
-// Load on first opt-in, then retain both identities for an interruptible crossfade.
-function ActivityGlyph(props: { muted?: boolean }) {
-  const enabled = createMemo((previous) => previous || experiment.chip === "orb", false)
-
-  const [orb] = createResource(enabled, async () => {
-    const { CssAgentOrb } = await import("@/session/agent-glyph/css-agent-orb")
-
-    return CssAgentOrb
-  })
-
-  // Guard the first read so loading this experiment never suspends the composer or hides today's glyph.
-  const loaded = () => orb.state === "ready"
-
-  return (
-    <span data-slot="activity-glyph" data-orb={experiment.chip === "orb" && loaded()} aria-hidden="true">
-      <span data-slot="activity-glyph-today">
-        <SessionProgressIndicatorV2 class={props.muted ? "shrink-0 text-v2-icon-icon-muted" : "shrink-0"} />
-      </span>
-      <span data-slot="activity-glyph-orb">
-        <Show when={loaded() && orb.latest}>{(component) => <Dynamic component={component()} />}</Show>
-      </span>
-    </span>
   )
 }

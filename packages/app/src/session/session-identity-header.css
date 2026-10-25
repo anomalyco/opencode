@@ -97,14 +97,10 @@
     calc(var(--separator-gap) - var(--separator-after, 6px) - 0.5px);
 }
 
-/* The original "/" text, as generated content so the separator itself stays empty for assistive tech. */
-.session-header-slash::before {
-  content: "/";
+/* The header's segments are 13px text, and the slash takes their size. */
+.session-header-separator[data-glyph="slash"] {
   font-size: 13px;
-  font-weight: var(--font-weight-normal);
   line-height: var(--line-height-compact);
-  /* Cancels the glyph's side bearings so the margins above measure to its ink. */
-  margin-inline: -0.25px -0.34px;
 }
 
 .session-header-separator[data-glyph="chevron"]:dir(rtl) > svg {

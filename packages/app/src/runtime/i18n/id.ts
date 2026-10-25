@@ -249,7 +249,6 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Gagal mengirim prompt",
 
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} dari {{total}} diaktifkan",
   "dialog.mcp.empty": "Tidak ada MCP yang dikonfigurasi",
 
 

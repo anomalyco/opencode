@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Не успеа да се испрати командата",
   "prompt.toast.promptSendFailed.title": "Не успеа да се испрати потсетник",
   "dialog.mcp.title": "MCPс",
-  "dialog.mcp.description": "{{enabled}} од {{total}} е овозможено",
   "dialog.mcp.empty": "Не се конфигурирани MCPs",
   "dialog.fork.empty": "Нема пораки од кои може да се префрлите",
   "dialog.directory.action.selectFile": "Изберете датотека",

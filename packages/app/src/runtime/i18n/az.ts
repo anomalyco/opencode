@@ -218,7 +218,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Əmr göndərilə bilmədi",
   "prompt.toast.promptSendFailed.title": "Prompt göndərilə bilmədi",
   "dialog.mcp.title": "MCP-lər",
-  "dialog.mcp.description": "{{total}}-dən {{enabled}} aktiv",
   "dialog.mcp.empty": "MCP konfiqurasiya edilməyib",
   "dialog.fork.empty": "Yeni sessiyaya ayırmaq üçün mesaj yoxdur",
   "dialog.directory.action.selectFile": "Fayl seçin",

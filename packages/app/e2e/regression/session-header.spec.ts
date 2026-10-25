@@ -32,11 +32,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     // Every control in the header highlights the same 28px band on hover.
     const usage = header.getByRole("button", { name: "Toggle session context", exact: true })
+
     const heights = await Promise.all(
       [project, header.getByRole("heading"), options, usage, details, review].map(
         async (control) => (await control.boundingBox())?.height,
       ),
     )
+
     expect(heights).toEqual([28, 28, 28, 28, 28, 28])
 
     for (const editing of [false, true]) {
@@ -146,6 +148,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(page.locator('[data-slot="shell-drag-inset"]')).toHaveCSS("app-region", "drag")
 
     const gap = header.locator('[data-slot="session-header-gap"]')
+
     const aligned = async () => {
       const [box, space, end, start, row] = await Promise.all([
         area.boundingBox(),
@@ -156,6 +159,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       ])
 
       if (!box || !space || !end || !start || !row) return false
+
       const between =
         direction === "ltr"
           ? space.x >= end.x + end.width && space.x + space.width <= start.x
@@ -246,11 +250,13 @@ test.describe("location", () => {
       await expect(header.getByRole("button", { name: "More options", exact: true })).toBeInViewport()
       await header.getByRole("heading").hover()
       await location.hover()
+
       if (state.project && state.worktree) {
         // Advance past the shared tooltip delay, so absence is not just its initial waiting period.
         await page.clock.fastForward(500)
         await expect(tooltip).toBeHidden()
       }
+
       if (!state.project || !state.worktree) await expect(tooltip).toHaveText("Location / quiet-falcon")
       await expect
         .poll(() =>
@@ -562,13 +568,80 @@ test.describe("revert", () => {
         new URL(response.url()).pathname === `/api/session/${session.id}/revert/stage`,
     )
 
-    await message.getByRole("button", { name: "Revert message" }).click()
+    await message.getByRole("button", { name: "Rewind to here" }).click()
     expect((await response).ok()).toBe(true)
 
     await expect(page.getByRole("textbox", { name: "Prompt" })).toHaveText("Second prompt")
     expect(staged).toEqual([{ sessionID: session.id, messageID: "msg_second" }])
     // Interrupt acknowledges before the run settles, and the server refuses to stage while it is active.
     expect(settles).toEqual(["/interrupt", "/wait", "/revert/stage"])
+  })
+
+  test("Undo on the Rewound toast clears the revert and puts the draft back before the staged event arrives", async ({
+    page,
+  }) => {
+    const { session, editor } = await openSession(page, workspace)
+    const prompt = page.getByRole("textbox", { name: "Prompt" })
+    await editor.pressSequentially("Unsent draft")
+    const message = page.locator('[data-message-id="msg_second"]')
+    await message.hover()
+    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await expect(prompt).toHaveText("Second prompt")
+
+    const cleared = page.waitForRequest(
+      (request) =>
+        request.method() === "DELETE" && new URL(request.url()).pathname === `/api/session/${session.id}/revert`,
+    )
+
+    // The mock server never sends session.revert.staged, so Undo must not depend on it.
+    await page.getByRole("button", { name: "Undo", exact: true }).click()
+    await cleared
+    await expect(prompt).toHaveText("Unsent draft")
+  })
+
+  test("Undo after switching tabs restages the earlier revert in the Session it came from", async ({ page }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+    const cleared: string[] = []
+
+    const { editor } = await openSession(page, {
+      ...workspace,
+      sessions: [
+        { id: "ses_rewind_a", title: "Rewind source", revert: { messageID: "msg_second" } },
+        { id: "ses_rewind_b", title: "Rewind other" },
+      ],
+      onRevertStage: (input) => staged.push(input),
+    })
+
+    page.on("request", (request) => {
+      if (request.method() === "DELETE") cleared.push(new URL(request.url()).pathname)
+    })
+    const prompt = page.getByRole("textbox", { name: "Prompt" })
+    await editor.pressSequentially("Draft in source")
+    const message = page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_first"]')
+    await message.hover()
+    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await expect(prompt).toHaveText("First prompt")
+
+    await tabs(page).filter({ hasText: "Rewind other" }).click()
+    await expectSessionTitle(page, "Rewind other")
+
+    const restaged = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/session/ses_rewind_a/revert/stage",
+    )
+
+    await page.getByRole("button", { name: "Undo", exact: true }).click()
+    await restaged
+    expect(staged).toEqual([
+      { sessionID: "ses_rewind_a", messageID: "msg_first" },
+      { sessionID: "ses_rewind_a", messageID: "msg_second" },
+    ])
+    expect(cleared).toEqual([])
+
+    await tabs(page).filter({ hasText: "Rewind source" }).click()
+    await expectSessionTitle(page, "Rewind source")
+    await expect(prompt).toHaveText("Draft in source")
   })
 
   test("redo restores every reverted message at once, as in the TUI", async ({ page }) => {
@@ -608,6 +681,6 @@ test.describe("revert", () => {
     await expectSessionTitle(page, "Session message revert")
     const message = page.locator('[data-message-id="msg_second"]')
     await message.hover()
-    await expect(message.getByRole("button", { name: "Revert message" })).toHaveCount(0)
+    await expect(message.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
   })
 })

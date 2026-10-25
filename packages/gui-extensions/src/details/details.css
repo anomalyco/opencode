@@ -409,6 +409,17 @@ button.session-service-dot {
   white-space: nowrap;
 }
 
+/* A quiet ghost action in the switch's place, as in the MCPs dialog. */
+.session-mcp-sign-in[data-component="button-v2"][data-size="small"] {
+  height: 20px;
+  margin-inline-end: -5px;
+  padding-inline: 5px;
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 16px;
+  letter-spacing: 0.05px;
+}
+
 div.session-mcp-row {
   cursor: pointer;
 }

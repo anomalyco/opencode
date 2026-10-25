@@ -52,6 +52,7 @@ import type {
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
+import { relativeTime, useNow } from "./relative-time"
 import { attached, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
@@ -82,24 +83,55 @@ export async function writeClipboard(text: string): Promise<boolean> {
   )
 }
 
-function modelLabel(
-  data: ReturnType<typeof useData>,
-  i18n: ReturnType<typeof useI18n>,
-  model: SessionMessageAssistant["model"],
-) {
+type MetaItem = { label: string; variant?: boolean }
+
+const RELATIVE_TIME_KEYS = {
+  minute: "ui.message.time.minutesAgo",
+  hour: "ui.message.time.hoursAgo",
+  day: "ui.message.time.daysAgo",
+} as const
+
+// The variant follows the model name without a separator and renders dimmer, so the model leads.
+function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssistant["model"]): MetaItem[] {
   const name = data.store.provider?.all?.get(model.providerID)?.models?.[model.id]?.name ?? model.id
 
-  if (!model.variant || model.variant === "default") return name
+  if (!model.variant || model.variant === "default") return [{ label: name }]
 
-  return i18n.t("ui.message.modelVariant", {
-    model: name,
-    variant: model.variant[0]?.toUpperCase() + model.variant.slice(1),
-  })
+  return [{ label: name }, { label: model.variant[0]?.toUpperCase() + model.variant.slice(1), variant: true }]
+}
+
+function metaText(items: MetaItem[]) {
+  return items
+    .map((item, index) => (index === 0 ? item.label : item.variant ? ` ${item.label}` : ` \u00B7 ${item.label}`))
+    .join("")
+}
+
+function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
+  return (
+    <For each={props.items}>
+      {(item, index) => (
+        <>
+          <Show when={index() > 0 && !item.variant}>
+            <span data-slot={`${props.slot}-meta-separator`} aria-hidden="true">
+              {"\u00B7"}
+            </span>
+          </Show>
+          <span
+            data-slot={`${props.slot}-meta-item`}
+            data-variant={item.variant ? "" : undefined}
+            dir={props.slot === "text-part" ? "auto" : undefined}
+          >
+            {item.label}
+          </span>
+        </>
+      )}
+    </For>
+  )
 }
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "arrow-down-to-line" | "outline-trash"
+    icon: "check" | "copy" | "reset" | "fork" | "arrow-down-to-line" | "outline-trash"
     label: JSX.Element
     size?: "small" | "normal"
   },
@@ -326,7 +358,7 @@ export function CurrentUserMessageDisplay(props: {
   const i18n = useI18n()
   const menu = useMessageMenu()
 
-  const [state, setState] = createStore({ copied: false, reverting: false, updating: false })
+  const [state, setState] = createStore({ copied: false, reverting: false, forking: false, updating: false })
 
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
   const pending = createMemo(() => status() !== undefined && status() !== "queued")
@@ -336,27 +368,37 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-  const model = createMemo(() => modelLabel(data, i18n, props.model))
-  const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
+  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
+  const datefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium" }))
   const fulltimefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "full", timeStyle: "long" }))
+  const now = useNow()
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
 
-  const metaLabels = createMemo(() => {
-    const agent = props.agent
+  const labels = createMemo<MetaItem[]>(() => {
+    const agent = agentLabel(props.agent, data.agents)
 
-    if (mobile()) return []
-
-    return [agentLabel(agent, data.agents), model()].filter(Boolean)
+    return [...(agent ? [{ label: agent }] : []), ...modelItems(data, props.model)]
   })
 
-  const stamp = createMemo(() => timefmt().format(props.message.time.created))
+  const metaLabels = createMemo(() => (mobile() ? [] : labels()))
+
+  const stamp = createMemo(() => {
+    const created = props.message.time.created
+    const relative = relativeTime(created, now())
+
+    if (relative.unit === "now") return i18n.t("ui.message.time.justNow")
+
+    if (relative.unit === "date") return datefmt().format(created)
+
+    return i18n.t(RELATIVE_TIME_KEYS[relative.unit], { count: numfmt().format(relative.count) })
+  })
 
   const info = createMemo(() =>
     [
       waiting() ? i18n.t("ui.message.pending") : "",
-      [agentLabel(props.agent, data.agents), model()].filter(Boolean).join(" \u00B7 "),
+      metaText(labels()),
       fulltimefmt().format(props.message.time.created),
     ].filter(Boolean),
   )
@@ -423,6 +465,17 @@ export function CurrentUserMessageDisplay(props: {
     }
   }
 
+  const fork = async () => {
+    if (!props.actions?.fork || state.forking) return
+    setState("forking", true)
+
+    try {
+      await props.actions.fork({ sessionID: props.sessionID, messageID: props.message.id })
+    } finally {
+      setState("forking", false)
+    }
+  }
+
   const updatePending = async (action: "queue" | "remove") => {
     const actions = props.actions?.pending
 
@@ -475,6 +528,22 @@ export function CurrentUserMessageDisplay(props: {
               void revert()
             }}
             aria-label={i18n.t("ui.message.revertMessage")}
+          />
+        </UserMessageTransition>
+      </Show>
+      <Show when={props.actions?.fork}>
+        <UserMessageTransition active={!pending()}>
+          <MessageActionButton
+            icon="fork"
+            size="small"
+            label={i18n.t("ui.message.forkMessage")}
+            disabled={state.forking}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => {
+              event.stopPropagation()
+              void fork()
+            }}
+            aria-label={i18n.t("ui.message.forkMessage")}
           />
         </UserMessageTransition>
       </Show>
@@ -668,18 +737,7 @@ export function CurrentUserMessageDisplay(props: {
               </UserMessageTransition>
               <Show when={metaLabels().length > 0}>
                 <span data-slot="user-message-meta-label">
-                  <For each={metaLabels()}>
-                    {(label, index) => (
-                      <>
-                        <Show when={index() > 0}>
-                          <span data-slot="user-message-meta-separator" aria-hidden="true">
-                            {"\u00B7"}
-                          </span>
-                        </Show>
-                        <span data-slot="user-message-meta-item">{label}</span>
-                      </>
-                    )}
-                  </For>
+                  <MetaItems items={metaLabels()} slot="user-message" />
                 </span>
               </Show>
               {/* A pending steer has not been sent, so Pending stands in for the time instead of reserving its width. */}
@@ -921,7 +979,11 @@ export function AssistantTextContent(props: {
     return !!type && (type.includes("abort") || type.includes("interrupt"))
   }
 
-  const model = createMemo(() => modelLabel(data, i18n, props.message.model))
+  const labels = createMemo<MetaItem[]>(() => {
+    const agent = agentLabel(props.message.agent, data.agents)
+
+    return [...(agent ? [{ label: agent }] : []), ...modelItems(data, props.message.model)]
+  })
 
   const duration = createMemo(() => {
     const completed = props.message.time.completed
@@ -949,15 +1011,12 @@ export function AssistantTextContent(props: {
   // Mobile omits the per-response agent and model; see CurrentUserMessageDisplay.
   const mobile = createMediaQuery("(max-width: 767px)")
 
-  const meta = createMemo(() => {
-    const agent = props.message.agent
-
-    return [
-      ...(mobile() ? [] : [agentLabel(agent, data.agents), model()]),
-      duration(),
-      interrupted() ? i18n.t("ui.message.interrupted") : "",
-    ].filter(Boolean)
-  })
+  const meta = createMemo<MetaItem[]>(() => [
+    ...(mobile() ? [] : labels()),
+    ...[duration(), interrupted() ? i18n.t("ui.message.interrupted") : ""].flatMap((label) =>
+      label ? [{ label }] : [],
+    ),
+  ])
 
   const [copied, setCopied] = createSignal(false)
 
@@ -976,7 +1035,7 @@ export function AssistantTextContent(props: {
         <Show when={menu() && props.showCopy}>
           <MessageOptions
             info={[
-              [agentLabel(props.message.agent, data.agents), model()].filter(Boolean).join(" \u00B7 "),
+              metaText(labels()),
               [duration(), interrupted() ? i18n.t("ui.message.interrupted") : ""].filter(Boolean).join(" \u00B7 "),
             ].filter(Boolean)}
           >
@@ -1013,20 +1072,7 @@ export function AssistantTextContent(props: {
         />
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
-            <For each={meta()}>
-              {(label, index) => (
-                <>
-                  <Show when={index() > 0}>
-                    <span data-slot="text-part-meta-separator" aria-hidden="true">
-                      {"\u00B7"}
-                    </span>
-                  </Show>
-                  <span data-slot="text-part-meta-item" dir="auto">
-                    {label}
-                  </span>
-                </>
-              )}
-            </For>
+            <MetaItems items={meta()} slot="text-part" />
           </span>
         </Show>
       </div>

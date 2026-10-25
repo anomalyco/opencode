@@ -370,7 +370,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Impossibile inviare il comando",
   "prompt.toast.promptSendFailed.title": "Impossibile inviare il prompt",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} di {{total}} abilitati",
   "dialog.mcp.empty": "Nessun MCP configurato",
   "dialog.fork.empty": "Nessun messaggio da cui effettuare il fork",
   "dialog.directory.action.selectFile": "Seleziona file",

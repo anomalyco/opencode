@@ -174,7 +174,7 @@ export function createPromptController(input: {
   return {
     controller: {
       ...interaction,
-      model: { selection: modelSelection, paid: true, loading: false },
+      model: { selection: modelSelection, providerName: storyComposerModel.provider.name, paid: true, loading: false },
     } satisfies ComposerModel,
     setValue(value: string) {
       draft[1]("prompt", [{ type: "text", content: value, start: 0, end: value.length }])

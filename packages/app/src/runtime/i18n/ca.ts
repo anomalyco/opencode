@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "No s'ha pogut enviar l'ordre",
   "prompt.toast.promptSendFailed.title": "No s'ha pogut enviar la sol·licitud",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} de {{total}} activat",
   "dialog.mcp.empty": "No s'ha configurat cap MCP",
   "dialog.fork.empty": "No hi ha missatges per bifurcar",
   "dialog.directory.action.selectFile": "Seleccioneu el fitxer",

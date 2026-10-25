@@ -229,7 +229,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Mistókst að senda skipun",
   "prompt.toast.promptSendFailed.title": "Mistókst að senda tilkynningu",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} af {{total}} virkt",
   "dialog.mcp.empty": "Engar MCPs stilltar",
   "dialog.fork.empty": "Engin skilaboð til að punga frá",
   "dialog.directory.action.selectFile": "Veldu skrá",

@@ -30,6 +30,7 @@ import type { SessionScreenLayout } from "../screen-layout"
 import { syncPromptModel } from "../session-model-helpers"
 import type { SessionTimelineInteraction } from "../timeline/interaction"
 import { createSessionRevert } from "../revert"
+import { useSessionFork } from "../fork"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
@@ -201,6 +202,8 @@ export function createActiveSessionRegion(input: {
   })
 
   const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
+  const fork = useSessionFork()
+  const forkMessage: NonNullable<SessionUserActions["fork"]> = (target) => fork(target).then(() => undefined)
 
   const recalled = new Set<string>()
 
@@ -341,6 +344,11 @@ export function createActiveSessionRegion(input: {
           if (input.session.data.isChild()) return
 
           return revertMessage
+        },
+        get fork() {
+          if (input.session.data.isChild()) return
+
+          return forkMessage
         },
         get pending() {
           if (input.session.data.isChild()) return

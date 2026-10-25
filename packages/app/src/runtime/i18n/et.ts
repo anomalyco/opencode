@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Käsu saatmine ebaõnnestus",
   "prompt.toast.promptSendFailed.title": "Viipa saatmine ebaõnnestus",
   "dialog.mcp.title": "MCP-d",
-  "dialog.mcp.description": "{{enabled}} / {{total}} on lubatud",
   "dialog.mcp.empty": "MCP-sid pole konfigureeritud",
   "dialog.fork.empty": "Ühtegi sõnumit pole",
   "dialog.directory.action.selectFile": "Valige fail",

@@ -34,7 +34,8 @@ type LocationEntry =
 
 /**
  * Opens the new-session location dialog: one project list across every ready server, → on a Git project lists where
- * the session can run, and → on "Add project" picks the server when there are several.
+ * the session can run, and → on "Add project" picks the server when there are several. Search projects passes
+ * `projectsOnly` for just the project list: no "Add project", no worktrees and no key hints, like the other palettes.
  */
 export function useNewSessionLocationDialog(input: {
   project: PromptProjectController
@@ -43,13 +44,14 @@ export function useNewSessionLocationDialog(input: {
 }) {
   const dialog = useDialog()
 
-  return (options?: { onWorkspace?: (value: string) => void }) => {
+  return (options?: { onWorkspace?: (value: string) => void; projectsOnly?: boolean }) => {
     void dialog.show(
       () => (
         <NewSessionLocationDialog
           project={input.project}
           workspace={input.workspace}
           onWorkspace={options?.onWorkspace}
+          projectsOnly={options?.projectsOnly}
         />
       ),
       input.onDone,
@@ -61,6 +63,7 @@ function NewSessionLocationDialog(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   onWorkspace?: (value: string) => void
+  projectsOnly?: boolean
 }) {
   const dialog = useDialog()
   const language = useLanguage()
@@ -127,7 +130,7 @@ function NewSessionLocationDialog(props: {
       .projects()
       .filter((project) => matches(displayName(project), project.worktree, tagged(project.server)?.name))
       .map((project) => ({ id: projectEntryID(project), type: "project" as const, project })),
-    addEntry,
+    ...(props.projectsOnly ? [] : [addEntry]),
   ])
 
   const serverEntries = createMemo<LocationEntry[]>(() =>
@@ -163,7 +166,9 @@ function NewSessionLocationDialog(props: {
     return projectEntries()
   }
 
-  const pinned = () => !store.drilled && !store.picking
+  const pinned = () => !props.projectsOnly && !store.drilled && !store.picking
+
+  const drillable = (project: PromptProject) => !props.projectsOnly && !!project.id && project.vcs === "git"
 
   const listEntries = () => entries().filter((entry) => entry.type !== "add")
 
@@ -439,28 +444,30 @@ function NewSessionLocationDialog(props: {
             </div>
           </div>
         </div>
-        <div class="new-session-location-hints">
-          <span>
-            <Keybind keys={["↵"]} variant="neutral" />
-            {language.t("session.new.location.select")}
-          </span>
-          <Show
-            when={store.drilled || store.picking}
-            fallback={
-              <span>
-                <Keybind keys={["→"]} variant="neutral" />
-                {activeEntry()?.type === "add" && choosesServer()
-                  ? language.t("session.new.location.servers")
-                  : language.t("session.new.location.worktrees")}
-              </span>
-            }
-          >
+        <Show when={!props.projectsOnly}>
+          <div class="new-session-location-hints">
             <span>
-              <Keybind keys={["←"]} variant="neutral" />
-              {language.t("session.new.location.back")}
+              <Keybind keys={["↵"]} variant="neutral" />
+              {language.t("session.new.location.select")}
             </span>
-          </Show>
-        </div>
+            <Show
+              when={store.drilled || store.picking}
+              fallback={
+                <span>
+                  <Keybind keys={["→"]} variant="neutral" />
+                  {activeEntry()?.type === "add" && choosesServer()
+                    ? language.t("session.new.location.servers")
+                    : language.t("session.new.location.worktrees")}
+                </span>
+              }
+            >
+              <span>
+                <Keybind keys={["←"]} variant="neutral" />
+                {language.t("session.new.location.back")}
+              </span>
+            </Show>
+          </div>
+        </Show>
       </DialogBody>
     </Dialog>
   )
@@ -556,10 +563,6 @@ function WorkspaceRow(props: { title: string; value: string; description: string
       </div>
     </>
   )
-}
-
-function drillable(project: PromptProject) {
-  return !!project.id && project.vcs === "git"
 }
 
 function projectEntryID(project: PromptProject) {

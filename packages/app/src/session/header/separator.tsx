@@ -1,3 +1,4 @@
+import { Slash } from "@opencode/ui/slash"
 import { Show } from "solid-js"
 
 // The chevron's height and stroke, and the visible space on each side of a separator, in px.
@@ -32,7 +33,7 @@ export function SessionHeaderSeparator(props: {
       }}
       aria-hidden="true"
     >
-      <Show when={props.glyph !== "slash"} fallback={<span class="session-header-slash text-v2-icon-icon-faint" />}>
+      <Show when={props.glyph !== "slash"} fallback={<Slash gap={0} />}>
         <svg
           class="block fill-none stroke-current"
           width={width}

@@ -27,11 +27,11 @@ export type MotionFeature = {
 export type MotionFeaturePreset = string
 
 // The areas in the order the panel shows them; any other area follows in the order it registered.
-const areas = ["Sidebars", "Timeline", "Composer", "Projects", "Voice"]
+const areas = ["Timeline", "Composer", "Projects", "Voice"]
 
 // Features named here lead their area in this order, whichever module registered first; the rest follow in the order
 // they registered.
-const order = ["Open & close", "Scale by distance", "Peek", "Hover", "Docks"]
+const order = ["Docks"]
 
 /** Every registered knob and action as features under their areas, leaving out the speed the debug bar owns. */
 export function motionFeatures() {

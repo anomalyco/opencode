@@ -1,6 +1,5 @@
 import { HoverCard } from "@kobalte/core/hover-card"
-import { frameLoop, prefersReducedMotion, Spring } from "@opencode/ui/motion"
-import { motionTuning } from "@opencode/ui/motion-tuning"
+import { prefersReducedMotion } from "@opencode/ui/motion"
 import { createEffect, createSignal, on, onCleanup, Show, type JSXElement } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -20,43 +19,9 @@ let lastClosedAt = 0
 
 let activePreview: (() => void) | undefined
 
-const style = motionTuning.choice("sidebars.preview.style", {
-  label: "Style",
-  group: "Sidebars",
-  subsection: "Hover",
-  description: "Tab tooltip between rows",
-  target: "#vertical-tabs-sidebar",
-  experiment: true,
-  value: "cursor",
-  labels: { today: "Today", glide: "Glide", cursor: "Follow cursor" },
-})
-
-const spring = motionTuning.spring("sidebars.preview", {
-  label: "Glide",
-  group: "Sidebars",
-  subsection: "Hover",
-  when: () => style() === "glide",
-  presets: {
-    snappy: { duration: 0.2, bounce: 0 },
-    smooth: { duration: 0.28, bounce: 0 },
-    calm: { duration: 0.36, bounce: 0 },
-  },
-})
-
-const glides = () => style() !== "today"
-
-// In the vertical strip, the next tab's preview starts where the last one was and glides to its own row, so moving
-// down the tabs reads as one card following the cursor. "Follow cursor" pins the card to the pointer's height instead.
-const glide: Glide = {
-  closedAt: Number.NEGATIVE_INFINITY,
-  offset: Spring.fromDuration(0, spring()),
-  pointerY: 0,
-}
-
-// Knob values aren't signals, so a style change reaches the open card through the tuning subscription.
-motionTuning.subscribe(() => {
-  if (style() !== "cursor") unwatch()
-})
+// In the vertical strip, the card follows the pointer's height over its row, clamped to the tabs, so moving down the
+// tabs reads as one card following the cursor.
+const follow: Follow = { pointerY: 0 }
 
 export interface TabPreviewData {
   projectName?: string
@@ -101,19 +66,17 @@ export function TabPreviewPopover(props: {
     on(
       open,
       (now, before) => {
-        if (!before || now || !triggerEl) return
-
-        if (triggerEl === glide.trigger) unwatch()
-
-        if (props.orientation === "vertical" && glides()) leave(triggerEl)
+        if (!before || now || !triggerEl || triggerEl !== follow.trigger) return
+        unwatch()
+        follow.card = undefined
       },
       { defer: true },
     ),
   )
   onCleanup(() => {
-    if (glide.trigger === triggerEl) {
+    if (follow.trigger === triggerEl) {
       unwatch()
-      Object.assign(glide, { trigger: undefined, card: undefined })
+      Object.assign(follow, { trigger: undefined, card: undefined })
     }
 
     if (activePreview !== close) return
@@ -151,9 +114,9 @@ export function TabPreviewPopover(props: {
         data-component="session-tab-popover-trigger"
         tabIndex={-1}
         onPointerMove={(event: PointerEvent) => {
-          glide.pointerY = event.clientY
+          follow.pointerY = event.clientY
 
-          if (props.orientation === "vertical" && style() === "cursor" && triggerEl === glide.trigger) place()
+          if (props.orientation === "vertical" && triggerEl === follow.trigger) place()
         }}
       >
         {props.trigger}
@@ -167,7 +130,7 @@ export function TabPreviewPopover(props: {
 
             if (theme) el.setAttribute("data-theme", theme)
 
-            if (triggerEl && props.orientation === "vertical" && glides()) show(el, triggerEl)
+            if (triggerEl && props.orientation === "vertical") show(el, triggerEl)
           }}
           data-component="session-tab-popover"
           data-instant={instant() || undefined}
@@ -197,76 +160,52 @@ export function TabPreviewPopover(props: {
 }
 
 function show(card: HTMLElement, trigger: HTMLElement) {
-  const previous = glide.trigger
-
-  // The last card may still be up (the next one usually opens first) or have closed a moment ago.
-  const handover =
-    previous !== undefined &&
-    previous !== trigger &&
-    previous.isConnected &&
-    (!!glide.card?.isConnected || performance.now() - glide.closedAt < 100)
-
-  Object.assign(glide, { card, trigger, closedAt: Number.NEGATIVE_INFINITY, rects: undefined })
+  Object.assign(follow, { card, trigger, rects: undefined })
   unwatch()
 
-  if (prefersReducedMotion()) return glide.offset.snap(0)
+  if (prefersReducedMotion()) return
+  watch(trigger)
+  place()
 
-  if (style() === "cursor") {
-    watch(trigger)
-    place()
-
-    // The card has no height while it mounts, so clamp again once it's laid out.
-    if (!glide.rects) requestAnimationFrame(place)
-
-    return
-  }
-
-  if (!handover) return glide.offset.snap(0)
-  // Starts from where the last card is, keeping the velocity of a glide already under way.
-  glide.offset.value += previous.getBoundingClientRect().top - trigger.getBoundingClientRect().top
-  glide.offset.target = 0
-  card.style.transform = `translateY(${glide.offset.value}px)`
-  glide.stop ??= frameLoop.add(step)
+  // The card has no height while it mounts, so clamp again once it's laid out.
+  if (!follow.rects) requestAnimationFrame(place)
 }
 
-// "Follow cursor" moves the card straight to the pointer, with no spring.
+// Moves the card straight to the pointer, with no spring.
 function place() {
-  const card = glide.card
+  const card = follow.card
 
   if (!card?.isConnected || prefersReducedMotion()) return
-  glide.stop?.()
-  glide.stop = undefined
-  glide.offset.snap(cursorOffset())
-  card.style.transform = `translateY(${glide.offset.value}px)`
+  card.style.transform = `translateY(${cursorOffset()}px)`
 }
 
 // Keeps the pointer level with the middle of the row-sized slot the card would sit in by default, so the offset is 0
 // at the row's centre and runs continuously across row boundaries, clamped to the sidebar.
 function cursorOffset() {
-  const rects = glide.rects ?? measure()
+  const rects = follow.rects ?? measure()
 
   if (!rects) return 0
 
   // The card has no height until it's attached, so a measurement taken as it mounts isn't kept.
-  if (rects.card > 0) glide.rects = rects
-  const top = glide.pointerY - rects.row.height / 2
+  if (rects.card > 0) follow.rects = rects
+  const top = follow.pointerY - rects.row.height / 2
   const clamped = Math.min(Math.max(top, rects.bounds.top), rects.bounds.bottom - rects.card)
 
   return clamped - rects.row.top
 }
 
 function measure() {
-  if (!glide.trigger || !glide.card) return
-  const bounds = (glide.trigger.closest('[data-slot="vertical-tabs"]') ?? glide.trigger).getBoundingClientRect()
+  if (!follow.trigger || !follow.card) return
+  const bounds = (follow.trigger.closest('[data-slot="vertical-tabs"]') ?? follow.trigger).getBoundingClientRect()
 
-  return { row: glide.trigger.getBoundingClientRect(), bounds, card: glide.card.offsetHeight }
+  return { row: follow.trigger.getBoundingClientRect(), bounds, card: follow.card.offsetHeight }
 }
 
-// While a "Follow cursor" card is up, scrolling or resizing the tabs moves the rows under the cached rects, so measure
-// again and re-clamp the card even if the pointer stays still.
+// While a card is up, scrolling or resizing the tabs moves the rows under the cached rects, so measure again and
+// re-clamp the card even if the pointer stays still.
 function watch(trigger: HTMLElement) {
   const refresh = () => {
-    glide.rects = undefined
+    follow.rects = undefined
     place()
   }
 
@@ -274,7 +213,7 @@ function watch(trigger: HTMLElement) {
   observer.observe(trigger.closest('[data-slot="vertical-tabs"]') ?? trigger)
   window.addEventListener("scroll", refresh, { capture: true, passive: true })
   window.addEventListener("resize", refresh, { passive: true })
-  glide.unwatch = () => {
+  follow.unwatch = () => {
     observer.disconnect()
     window.removeEventListener("scroll", refresh, { capture: true })
     window.removeEventListener("resize", refresh)
@@ -282,54 +221,15 @@ function watch(trigger: HTMLElement) {
 }
 
 function unwatch() {
-  glide.unwatch?.()
-  glide.unwatch = undefined
+  follow.unwatch?.()
+  follow.unwatch = undefined
 }
 
-function leave(trigger: HTMLElement) {
-  if (trigger !== glide.trigger) return
-  unwatch()
-  glide.card = undefined
-  glide.closedAt = performance.now()
-}
-
-function step(dt: number) {
-  const card = glide.card
-
-  if (!card?.isConnected) {
-    unwatch()
-    Object.assign(glide, { card: undefined, stop: undefined })
-
-    return false
-  }
-
-  glide.offset.omega = (2 * Math.PI) / spring().duration
-  glide.offset.zeta = 1 - spring().bounce
-
-  if (prefersReducedMotion()) glide.offset.snap(0)
-  const offset = glide.offset.step(dt)
-
-  if (!glide.offset.resting) {
-    card.style.transform = `translateY(${offset}px)`
-
-    return true
-  }
-
-  if (offset === 0) card.style.removeProperty("transform")
-  else card.style.transform = `translateY(${offset}px)`
-  glide.stop = undefined
-
-  return false
-}
-
-type Glide = {
+type Follow = {
   // The row whose preview is up, or closed last.
   trigger?: HTMLElement
   card?: HTMLElement
-  closedAt: number
-  offset: Spring
-  stop?: () => void
-  // The last pointer height over a row, and the rects "Follow cursor" clamps against, measured once per card.
+  // The last pointer height over a row, and the rects the card clamps against, measured once per card.
   pointerY: number
   rects?: { row: DOMRect; bounds: DOMRect; card: number }
   unwatch?: () => void

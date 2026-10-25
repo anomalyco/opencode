@@ -221,7 +221,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "ކޮމާންޑް ފޮނުވަން ނާކާމިޔާބުވިއެވެ",
   "prompt.toast.promptSendFailed.title": "ޕްރޮމްޕްޓް ފޮނުވަން ނާކާމިޔާބުވިއެވެ",
   "dialog.mcp.title": "MCPs އެވެ",
-  "dialog.mcp.description": "\u2068{{enabled}}\u2069 ގެ \u2068{{total}}\u2069 އެނެބަލްކޮށްފައިވެއެވެ",
   "dialog.mcp.empty": "އެއްވެސް MCPs ކޮންފިގްރޭޓް ކުރެވިފައެއް ނުވެއެވެ",
   "dialog.fork.empty": "ފޯކް ކުރާނެ މެސެޖެއް ނެތެވެ",
   "dialog.directory.action.selectFile": "ފައިލް ހޮވާށެވެ",

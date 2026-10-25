@@ -1,21 +1,13 @@
 import { afterEach, expect, it } from "bun:test"
 import { createRoot } from "solid-js"
-import { motionTuning } from "@opencode/ui/motion-tuning"
-import { createSidebarPeek, sidebarPeekEnabled } from "../src/shell/sidebar-peek"
+import { createSidebarPeek } from "../src/shell/sidebar-peek"
 
 const cleanups: (() => void)[] = []
 
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup()
   document.body.innerHTML = ""
-  setEnabled(true)
 })
-
-function setEnabled(on: boolean) {
-  const knob = motionTuning.list().find((item) => item.id === "sidebar.peek")
-
-  if (knob?.kind === "toggle") motionTuning.set(knob, on)
-}
 
 function mount() {
   const row = document.createElement("div")
@@ -34,9 +26,7 @@ function mount() {
       open: () => false,
       aside: () => aside,
       panel: () => panel,
-      width: () => 260,
       paint: () => {},
-      continues: () => true,
       whenDocked: (run) => run(),
     })
   })
@@ -101,13 +91,4 @@ it("a press, a drag, a dialog or a resize clears the pending peek", async () => 
     for (const cleanup of cleanups.splice(0)) cleanup()
     document.body.innerHTML = ""
   }
-})
-
-it("listens to nothing while the experiment is off", async () => {
-  setEnabled(false)
-  expect(sidebarPeekEnabled()).toBe(false)
-  const view = mount()
-  restOnEdge(view.content)
-  await afterDwell()
-  expect(view.peek.shown()).toBe(false)
 })

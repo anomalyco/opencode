@@ -206,7 +206,7 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expect(panel.getByText("exponential backoff", { exact: false })).toBeVisible()
   await expect(panel.getByText("const delay = 2 ** attempt", { exact: true })).toBeVisible()
   await expect(panel.getByRole("button", { name: "Copy message", exact: true })).toHaveCount(1)
-  await expect(panel.getByRole("button", { name: "Revert message", exact: true })).toHaveCount(0)
+  await expect(panel.getByRole("button", { name: "Rewind to here", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("button", { name: "Copy answer", exact: true })).toHaveCount(1)
   await expect(panel.locator('[data-slot="text-part-meta"]')).toContainText(/\d+s/)
   await panel.locator('[data-component="user-message"]').hover()

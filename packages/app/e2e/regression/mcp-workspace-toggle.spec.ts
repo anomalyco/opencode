@@ -156,7 +156,7 @@ for (const surface of ["dialog"] as const) {
 
     // The dialog opens with its search focused and the first server highlighted.
     if (surface === "dialog") {
-      await expect(view.panel.getByRole("searchbox", { name: "Search", exact: true })).toBeFocused()
+      await expect(view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })).toBeFocused()
       await expect(view.panel.getByRole("option")).toHaveAttribute("aria-selected", "true")
     }
 
@@ -176,13 +176,13 @@ for (const surface of ["dialog"] as const) {
     ])
     expect(view.requests.every((request) => request.directory === workspace)).toBe(true)
 
-    // Status is separate from the shared v2 button that opens the error.
-    const failed = view.panel.getByRole("button", { name: "Details for figma-desktop", exact: true })
+    // The red dot is the status and the switch stays on; a ghost action beside it opens the error.
+    const failed = view.panel.getByRole("button", { name: "View error for figma-desktop", exact: true })
     const details = page.getByRole("dialog", { name: "figma-desktop", exact: true })
-    await expect(view.toggle).toHaveCount(0)
-    await expect(view.panel.getByText("Failed", { exact: true })).toHaveCount(1)
-    await expect(failed).toHaveText("Details")
-    await expect(failed).toHaveAttribute("data-component", "button-v2")
+    await expect(view.toggle).toBeChecked()
+    await expect(view.toggle).toHaveAccessibleDescription("Failed")
+    await expect(failed).toHaveText("View error")
+    await expect(failed).toHaveAttribute("data-variant", "ghost-muted")
     await failed.click()
     await expect(details).toHaveAccessibleDescription("Connection failed")
     await expect(details.getByText(error, { exact: true })).toBeVisible()
@@ -220,6 +220,34 @@ for (const surface of ["dialog"] as const) {
   })
 }
 
+test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) => {
+  const connected = new Set<string>()
+  const names = ["alpha-mcp", "figma-desktop", "zeta-mcp"]
+
+  const view = await open(page, {
+    surface: "dialog",
+    mcp: () => names.map((name) => ({ name, status: { status: connected.has(name) ? "connected" : "disabled" } })),
+    onMcpAction: (input) =>
+      void (input.action === "connect" ? connected.add(input.server) : connected.delete(input.server)),
+  })
+
+  const row = view.panel.getByRole("option").filter({ hasText: "figma-desktop" })
+  const toggle = row.getByRole("switch", { name: "figma-desktop", exact: true })
+
+  // From the keyboard, Enter toggles the highlighted server and the highlight stays on it.
+  await page.keyboard.press("ArrowDown")
+  await expect(row).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("Enter")
+  await expect(toggle).toBeChecked()
+  await expect(row).toHaveAttribute("aria-selected", "true")
+
+  // With the pointer, the switch toggles the row under it and the highlight stays there too.
+  await row.locator('[data-slot="switch-control"]').click()
+  await expect(toggle).not.toBeChecked()
+  await expect(toggle).toBeEnabled()
+  await expect(row).toHaveAttribute("aria-selected", "true")
+})
+
 for (const surface of ["popover", "dialog"] as const) {
   test(`signs in to an auth-gated MCP from the ${surface}`, async ({ page, context }) => {
     const state = { signedIn: false }
@@ -254,6 +282,7 @@ for (const surface of ["popover", "dialog"] as const) {
     })
 
     await expect(signIn).toHaveAttribute("data-component", "button-v2")
+    await expect(signIn).toHaveAttribute("data-variant", "ghost-muted")
     await expect(signIn.locator("svg")).toHaveCount(0)
     await signIn.click()
     await expect(signIn).toHaveText("Signing in…")
@@ -312,9 +341,9 @@ for (const surface of ["popover", "dialog"] as const) {
         .locator(surface === "dialog" ? '[role="option"]' : ".session-mcp-row")
         .filter({ hasText: name })
 
-      // The popover's dot is the status, so the control beside the name must stay whole.
+      // The dot is the status, so the control beside the name must stay whole.
       const status =
-        surface === "dialog" || index === 3
+        index === 3
           ? row.getByText(["Connected", "Disabled", "Failed", "Sign in"][index], { exact: true })
           : row.locator('[data-slot="switch-control"]')
 
@@ -342,7 +371,7 @@ for (const surface of ["popover", "dialog"] as const) {
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(name).toHaveCSS("white-space", "normal")
     await expect.poll(() => name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    await view.panel.getByRole("button", { name: `Details for ${names[2]}`, exact: true }).scrollIntoViewIfNeeded()
-    await expect(view.panel.getByRole("button", { name: `Details for ${names[2]}`, exact: true })).toBeInViewport()
+    await view.panel.getByRole("button", { name: `View error for ${names[2]}`, exact: true }).scrollIntoViewIfNeeded()
+    await expect(view.panel.getByRole("button", { name: `View error for ${names[2]}`, exact: true })).toBeInViewport()
   })
 }

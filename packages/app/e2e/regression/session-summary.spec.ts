@@ -603,7 +603,7 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
   expect(writes).toHaveLength(6)
 
   await submenu.getByRole("button", { name: "Manage MCP servers", exact: true }).click()
-  await expect(page.getByRole("dialog").getByText("MCPs", { exact: true })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "MCPs", exact: true })).toBeVisible()
   await expect(submenu).toBeHidden()
 })
 

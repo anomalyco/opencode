@@ -226,7 +226,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "فرمان ارسال نشد",
   "prompt.toast.promptSendFailed.title": "درخواست ارسال نشد",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} از {{total}} فعال است",
   "dialog.mcp.empty": "MCPs پیکربندی نشده است",
   "dialog.fork.empty": "هیچ پیامی برای فورک وجود ندارد",
   "dialog.directory.action.selectFile": "فایل را انتخاب کنید",

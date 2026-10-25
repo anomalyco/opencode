@@ -221,7 +221,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "কমান্ড পাঠাতে ব্যর্থ হয়েছে",
   "prompt.toast.promptSendFailed.title": "প্রম্পট পাঠাতে ব্যর্থ হয়েছে৷",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{total}} এর {{enabled}} সক্ষম",
   "dialog.mcp.empty": "কোনো MCPs কনফিগার করা নেই",
   "dialog.fork.empty": "থেকে কাঁটাচামচ কোন বার্তা",
   "dialog.directory.action.selectFile": "ফাইল নির্বাচন করুন",

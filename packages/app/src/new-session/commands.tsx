@@ -2,6 +2,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { projectSearchCommand } from "@/shell/titlebar/titlebar"
 
 export function useNewSessionCommands(input: {
   restoreFocus: () => void
@@ -39,10 +40,9 @@ export function useNewSessionCommands(input: {
       onSelect: input.restoreFocus,
     },
     {
-      id: "project.select",
+      ...projectSearchCommand,
       title: language.t("session.new.project.search"),
       category: language.t("command.category.project"),
-      keybind: "mod+shift+o",
       disabled: input.project.empty(),
       onSelect: input.project.open,
     },

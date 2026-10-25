@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "ትዕዛዝ መላክ አልተሳካም",
   "prompt.toast.promptSendFailed.title": "ፕሮምፕት መላክ አልተሳካም",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} ከ{{total}} ነቅቷል",
   "dialog.mcp.empty": "ምንም MCPs አልተዋቀረም",
   "dialog.fork.empty": "አዲስ ቅርንጫፍ ለመፍጠር መልዕክት የለም",
   "dialog.directory.action.selectFile": "ፋይል ምረጥ",

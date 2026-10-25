@@ -273,6 +273,12 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+
+    /* The variant reads as a qualifier of the model before it, so it is dimmer and never the part that truncates. */
+    &[data-variant] {
+      flex: none;
+      opacity: 0.66;
+    }
   }
 
   [data-slot="user-message-meta-separator"] {
@@ -486,6 +492,11 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+
+    &[data-variant] {
+      flex: none;
+      opacity: 0.66;
+    }
   }
 
   [data-slot="text-part-meta-separator"] {
@@ -964,6 +975,15 @@
     overflow: auto;
     border-radius: 8px;
     box-shadow: 0 0 0 0.5px var(--v2-border-border-base);
+
+    /* The file wrapper sets Pierre's defaults inline, so override them on the shadow host below that wrapper. */
+    diffs-container {
+      --diffs-min-number-column-width: var(--execute-details-number-width, 1ch);
+      --opencode-diffs-number-inset: 12px;
+      --diffs-gap-block: 4px;
+      /* Wrapped blocks never scroll sideways; Pierre would otherwise subtract a scrollbar track from the bottom gap. */
+      --diffs-scrollbar-gutter-override: 0px;
+    }
   }
 
   [data-slot="execute-details-error"] {

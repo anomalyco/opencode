@@ -225,7 +225,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Gagal menghantar arahan",
   "prompt.toast.promptSendFailed.title": "Gagal menghantar prompt",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} daripada {{total}} diaktifkan",
   "dialog.mcp.empty": "Tiada MCP dikonfigurasi",
   "dialog.fork.empty": "Tiada mesej untuk dicabang",
   "dialog.directory.action.selectFile": "Pilih fail",

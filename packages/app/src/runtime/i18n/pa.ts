@@ -224,7 +224,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "کمانڈ بھیجن چ ناکام رہیا",
   "prompt.toast.promptSendFailed.title": "پرامپٹ بھیجن چ ناکام رہیا",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "\u2068{{total}}\u2069 وچوں \u2068{{enabled}}\u2069 چالو",
   "dialog.mcp.empty": "کوئی MCP سیٹ نئیں کیتا گیا",
   "dialog.fork.empty": "فورک کرن لئی کوئی پیغام نئیں",
   "dialog.directory.action.selectFile": "فائل چنو",

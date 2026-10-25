@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Buýruk iberilmedi",
   "prompt.toast.promptSendFailed.title": "Prompt iberilmedi",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{total}}-iň {{enabled}} açyk",
   "dialog.mcp.empty": "Hiç hili MCP düzülmedi",
   "dialog.fork.empty": "Şahalandyrmaly habar ýok",
   "dialog.directory.action.selectFile": "Faýly saýlaň",

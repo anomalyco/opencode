@@ -5,6 +5,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
+import { Slash } from "@opencode/ui/slash"
 import { consoleModelGroup } from "@/providers/models/provider-group"
 import { consoleProviderName } from "@/providers/catalog/console"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -131,17 +132,7 @@ function ComposerModelControl(props: {
           {(name) => (
             <>
               <span class="shrink-0 text-v2-text-text-faint">{name()}</span>
-              <svg
-                class="mx-1.5 shrink-0 self-center fill-none stroke-current text-v2-text-text-faint opacity-60"
-                width="3"
-                height="8"
-                viewBox="0 0 3 8"
-                stroke-width="1"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M2.5 0.5L0.5 7.5" />
-              </svg>
+              <Slash />
               <span class="sr-only">{" / "}</span>
             </>
           )}

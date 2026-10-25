@@ -47,6 +47,7 @@ export const Pending = {
 
     const actions = {
       revert: async () => {},
+      fork: async () => {},
       pending: {
         status: () => (state.status === "delivered" ? undefined : state.status),
         queue: async () => {

@@ -1,6 +1,7 @@
 import { createPromptProjectController } from "@/new-session/project/selector"
 import { useNewSessionLocationDialog } from "@/new-session/location/dialog"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
+import { useLayout } from "@/shell/state/layout"
 import { useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, on, untrack } from "solid-js"
 import { createComposerModel } from "@/composer/model"
@@ -15,6 +16,7 @@ import { createDraftMcpControls } from "./mcp"
 export default function NewSessionPage(props: { draftId: string }) {
   const [search, setSearch] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const tabs = useTabs()
+  const layout = useLayout()
 
   const draftTab = createMemo(() =>
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
@@ -51,7 +53,7 @@ export default function NewSessionPage(props: { draftId: string }) {
     restoreFocus: model.restoreFocus,
     project: {
       empty: project.empty,
-      open: () => location(),
+      open: () => location({ projectsOnly: true }),
     },
     workspace: {
       enabled: workspace.bar.visible,
@@ -62,7 +64,11 @@ export default function NewSessionPage(props: { draftId: string }) {
   // a stale cursor a frame after every key-up and yank the caret from a key pressed in that frame.
   createEffect(
     on(composer.ready, (ready) => {
-      if (ready) model.restoreFocus()
+      if (!ready) return
+
+      // Search projects opened this draft; the picker returns focus to the composer when it closes.
+      if (layout.draft.projectSearch.take()) location({ projectsOnly: true })
+      else model.restoreFocus()
     }),
   )
   createEffect(() => {

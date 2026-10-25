@@ -300,6 +300,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     // Opening Home with its shortcut focuses session search, so typing filters immediately.
     let homeSearchFocus = false
 
+    // Search projects outside a draft opens a new draft, which then opens its project picker.
+    let draftProjectSearch = false
+
     // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
     const [scoped, setScoped, , scopedReady] = persisted(
       Persist.global("layout.scoped"),
@@ -448,6 +451,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           take() {
             const requested = homeSearchFocus
             homeSearchFocus = false
+
+            return requested
+          },
+        },
+      },
+      draft: {
+        projectSearch: {
+          request() {
+            draftProjectSearch = true
+          },
+          take() {
+            const requested = draftProjectSearch
+            draftProjectSearch = false
 
             return requested
           },

@@ -152,7 +152,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "명령 전송 실패",
   "prompt.toast.promptSendFailed.title": "프롬프트 전송 실패",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{total}}개 중 {{enabled}}개 활성화됨",
   "dialog.mcp.empty": "구성된 MCP 없음",
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.action.selectFile": "파일 선택",

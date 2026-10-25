@@ -225,7 +225,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "שליחת הפקודה נכשלה",
   "prompt.toast.promptSendFailed.title": "שליחת הבקשה נכשלה",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} מתוך {{total}} מופעלים",
   "dialog.mcp.empty": "לא הוגדרו MCPs",
   "dialog.fork.empty": "אין הודעות שמהן אפשר ליצור הפעלה",
   "dialog.directory.action.selectFile": "בחר קובץ",

@@ -224,7 +224,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "ລົ້ມເຫລວໃນການສົ່ງຄໍາສັ່ງ",
   "prompt.toast.promptSendFailed.title": "ສົ່ງ prompt ບໍ່ສຳເລັດ",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} ຂອງ {{total}} ຖືກເປີດໃຊ້",
   "dialog.mcp.empty": "ບໍ່ມີ MCPs ທີ່ຖືກຕັ້ງຄ່າ",
   "dialog.fork.empty": "ບໍ່ມີຂໍ້ຄວາມທີ່ຈະແຍກອອກຈາກ",
   "dialog.directory.action.selectFile": "ເລືອກໄຟລ໌",

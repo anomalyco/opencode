@@ -230,7 +230,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Không gửi được lệnh",
   "prompt.toast.promptSendFailed.title": "Không gửi được lời nhắc",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} trong số {{total}} đã bật",
   "dialog.mcp.empty": "Không có MCP nào được định cấu hình",
   "dialog.fork.empty": "Không có tin nhắn nào để phân nhánh",
   "dialog.directory.action.selectFile": "Chọn tệp",

@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Neizdevās nosūtīt komandu",
   "prompt.toast.promptSendFailed.title": "Neizdevās nosūtīt pieprasījumu",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} no {{total}} ieslēgti",
   "dialog.mcp.empty": "Nav konfigurētu MCP",
   "dialog.fork.empty": "Nav ziņu, no kurām atzarot",
   "dialog.directory.action.selectFile": "Izvēlieties failu",

@@ -878,7 +878,7 @@ test("reverting to another prompt replaces the file chips of an earlier restore 
     const row = userRow(page, id)
 
     await row.hover()
-    await row.getByRole("button", { name: "Revert message" }).click()
+    await row.getByRole("button", { name: "Rewind to here" }).click()
     await expect(view.input).toHaveText(text)
     await expect(chip).toHaveCount(chips)
   }
@@ -925,7 +925,7 @@ test("reverting a delivered prompt leaves queued prompts alone, as in the TUI", 
   )
 
   await delivered.hover()
-  await delivered.getByRole("button", { name: "Revert message" }).click()
+  await delivered.getByRole("button", { name: "Rewind to here" }).click()
   expect((await staged).ok()).toBe(true)
 
   await expect(view.input).toHaveText("First prompt")
@@ -999,7 +999,7 @@ for (const [action, status] of [
     if (status === "steering") await expect(message).toHaveAttribute("data-pending", "true")
     else await expect(message).not.toHaveAttribute("data-pending")
     await pending.hover()
-    await expect(pending.getByRole("button", { name: "Revert message" })).toHaveCount(0)
+    await expect(pending.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
     await pending.getByRole("button", { name: action }).click()
 
     await expect(pending).toHaveCount(0)

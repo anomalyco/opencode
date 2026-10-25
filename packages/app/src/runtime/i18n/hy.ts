@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Չհաջողվեց ուղարկել հրամանը",
   "prompt.toast.promptSendFailed.title": "Չհաջողվեց ուղարկել հուշումը",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}}-ը {{total}}-ից միացված է",
   "dialog.mcp.empty": "Կազմաձևված չէ MCPs",
   "dialog.fork.empty": "Չկան պատառաքաղված հաղորդագրություններ",
   "dialog.directory.action.selectFile": "Ընտրել ֆայլը",

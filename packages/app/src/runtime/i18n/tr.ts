@@ -250,7 +250,6 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "İstem gönderilemedi",
 
   "dialog.mcp.title": "MCP'ler",
-  "dialog.mcp.description": "Toplam {{total}} öğeden {{enabled}} tanesi etkin",
   "dialog.mcp.empty": "Yapılandırılmış MCP yok",
 
 

@@ -564,6 +564,28 @@ test("clearing project fields sends explicit removal values", async ({ page }) =
   }
 })
 
+test("shortcuts list Search sessions once and unbind a shortcut while recording it", async ({ page }) => {
+  // Opening Settings from Home registers Home's Find, which must not add a second Search sessions.
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  await expect(settings.locator('[data-keybind-id="sessions.search"]')).toBeVisible()
+  await expect(settings.getByText("Search sessions", { exact: true })).toHaveCount(1)
+
+  const binding = settings.locator('[data-keybind-id="settings.open"]')
+  const unbind = settings.getByRole("button", { name: "Unbind", exact: true })
+  await expect(binding).toHaveText("Ctrl+,")
+  await expect(unbind).toHaveCount(0)
+  await binding.click()
+  await expect(binding).toHaveText("Press keys")
+  await unbind.click()
+  await expect(binding).toHaveText("Unassigned")
+  await expect(unbind).toHaveCount(0)
+  // An unassigned shortcut has nothing to unbind.
+  await binding.click()
+  await expect(binding).toHaveText("Press keys")
+  await expect(unbind).toHaveCount(0)
+})
+
 test("the new session shortcut waits for a shortcut recording, then leaves settings", async ({ page }) => {
   const { settings } = await open(page)
   await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
@@ -651,7 +673,7 @@ test.describe("pages open before slow data", () => {
     await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
   })
 
-  test("extensions separate MCP status from details, sign-in, and switch controls", async ({ page, context }) => {
+  test("extensions show MCP status dots with sign-in, error, and switch controls", async ({ page, context }) => {
     const error = "Connection closed: MCP server process exited with code 1"
     const signIns: string[] = []
     await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
@@ -675,23 +697,24 @@ test.describe("pages open before slow data", () => {
 
     await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
     await settings.getByRole("tab", { name: "MCPs", exact: true }).click()
+    // As in the MCPs dialog, a dot shows each status and the words stay for assistive technology.
     await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
-    await expect(settings.getByRole("switch")).toHaveCount(2)
-    await expect(settings.getByText("Connected", { exact: true })).toBeVisible()
-    await expect(settings.getByText("Disabled", { exact: true })).toBeVisible()
-    await expect(settings.getByText("Failed", { exact: true })).toBeVisible()
+    await expect(settings.getByRole("switch", { name: "demo-mcp" })).toHaveAccessibleDescription("Connected")
+    await expect(settings.getByRole("switch", { name: "disabled-mcp" })).toHaveAccessibleDescription("Disabled")
+    await expect(settings.getByRole("switch", { name: "blender" })).toHaveAccessibleDescription("Failed")
+    await expect(settings.getByRole("switch")).toHaveCount(3)
 
     const popup = page.waitForEvent("popup")
     const signIn = settings.getByRole("button", { name: "Sign in to stripe", exact: true })
-    await expect(signIn).toHaveAttribute("data-component", "button-v2")
+    await expect(signIn).toHaveAttribute("data-variant", "ghost-muted")
     await expect(signIn.locator("svg")).toHaveCount(0)
     await signIn.click()
     await expect(await popup).toHaveURL("https://auth.example.test/authorize")
     expect(signIns).toEqual(["stripe-oauth"])
 
-    const action = settings.getByRole("button", { name: "Details for blender", exact: true })
-    await expect(action).toHaveText("Details")
-    await expect(action).toHaveAttribute("data-component", "button-v2")
+    const action = settings.getByRole("button", { name: "View error for blender", exact: true })
+    await expect(action).toHaveText("View error")
+    await expect(action).toHaveAttribute("data-variant", "ghost-muted")
     await action.click()
     const details = page.getByRole("dialog", { name: "blender", exact: true })
     await expect(details).toHaveAccessibleDescription("Connection failed")

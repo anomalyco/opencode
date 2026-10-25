@@ -47,13 +47,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { reviewGlyphFill, SessionReviewToggle } from "./header/session-header-actions"
 import { createTimelineCache } from "./timeline/cache"
-import {
-  createPanelMotion,
-  holdLandingWidth,
-  jamesPanelShift,
-  panelOpacity,
-  replayPanelToggle,
-} from "@/shell/panel-motion"
+import { createPanelMotion, holdLandingWidth, panelOpacity } from "@/shell/panel-motion"
 
 export function SessionScreenView(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
@@ -196,14 +190,7 @@ function SessionScreenContent(props: {
       chat.style.width = closed === 0 ? open : `calc(${open} + (100% - ${open}) * ${closed})`
     },
     element: () => sidePresence,
-    offset: jamesPanelShift,
     distance: screen.side.width,
-  })
-
-  replayPanelToggle({
-    id: "side",
-    label: "Side panel",
-    toggle: () => session.layout.view().side.toggle(),
   })
 
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
@@ -509,12 +496,8 @@ function SessionScreenContent(props: {
                 !sideMotion.present()
                   ? // Out of the row, so a closed panel takes no space or gap.
                     "absolute inset-y-0 end-0 w-0 [content-visibility:hidden]"
-                  : sideMotion.pinned()
-                    ? // Under James the panel stays at its landing box, under the chat, while the chat's width moves.
-                      "absolute inset-y-0 end-0"
-                    : "relative flex-1"
+                  : "relative flex-1"
               }`}
-              style={{ width: sideMotion.pinned() ? screen.side.contentWidth() : undefined }}
             >
               <div
                 ref={sideContent}

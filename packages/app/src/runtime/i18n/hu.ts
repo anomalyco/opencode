@@ -229,7 +229,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Nem sikerült elküldeni a parancsot",
   "prompt.toast.promptSendFailed.title": "Nem sikerült elküldeni a felszólítást",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}}/{{total}} engedélyezve",
   "dialog.mcp.empty": "Nincs konfigurálva MCP",
   "dialog.fork.empty": "Nincsenek üzenetek, ahonnan elágazhatna",
   "dialog.directory.action.selectFile": "Válassza ki a fájlt",

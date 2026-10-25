@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Командыг илгээж чадсангүй",
   "prompt.toast.promptSendFailed.title": "Промпт илгээж чадсангүй",
   "dialog.mcp.title": "MCPсек",
-  "dialog.mcp.description": "{{total}}-ийн {{enabled}}-г идэвхжүүлсэн",
   "dialog.mcp.empty": "Тохируулсан MCPс байхгүй",
   "dialog.fork.empty": "Салаалах зурвас алга",
   "dialog.directory.action.selectFile": "Файл сонгоно уу",

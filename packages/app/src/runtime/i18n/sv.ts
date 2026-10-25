@@ -415,7 +415,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Det gick inte att skicka kommandot",
   "prompt.toast.promptSendFailed.title": "Det gick inte att skicka meddelandet",
   "dialog.mcp.title": "MCP:er",
-  "dialog.mcp.description": "{{enabled}} av {{total}} aktiverade",
   "dialog.mcp.empty": "Inga MCP:er konfigurerade",
   "dialog.fork.empty": "Inga meddelanden att förgrena från",
   "dialog.directory.action.selectFile": "Välj fil",

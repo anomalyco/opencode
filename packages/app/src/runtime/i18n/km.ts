@@ -224,7 +224,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "បរាជ័យក្នុងការផ្ញើពាក្យបញ្ជា",
   "prompt.toast.promptSendFailed.title": "បរាជ័យក្នុងការផ្ញើប្រអប់បញ្ចូល",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} នៃ {{total}} ត្រូវបានបើក",
   "dialog.mcp.empty": "មិនបានកំណត់រចនាសម្ព័ន្ធ MCPs ទេ។",
   "dialog.fork.empty": "គ្មានសារដែលត្រូវបំបែកពី",
   "dialog.directory.action.selectFile": "ជ្រើសរើសឯកសារ",

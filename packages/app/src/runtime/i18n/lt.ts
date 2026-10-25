@@ -229,7 +229,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Nepavyko išsiųsti komandos",
   "prompt.toast.promptSendFailed.title": "Nepavyko išsiųsti raginimo",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "Įjungtas {{enabled}} arba {{total}}",
   "dialog.mcp.empty": "MCP nesukonfigūruota",
   "dialog.fork.empty": "Nėra pranešimų, iš kurių būtų galima išsišakoti",
   "dialog.directory.action.selectFile": "Pasirinkite failą",

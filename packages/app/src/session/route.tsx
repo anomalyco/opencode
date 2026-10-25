@@ -17,6 +17,7 @@ import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSettingsCommand } from "@/settings/command"
+import { useSettings } from "@/settings/model"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs, type PendingSession } from "@/shell/tabs/tabs"
 import { requireServerKey } from "@/shell/routes/session"
@@ -54,11 +55,13 @@ export function TargetSessionRouteContent() {
 function PreparingSession(props: { sessionID: string; pending: PendingSession }) {
   const language = useLanguage()
   const providers = useProviders(() => props.pending.draft.directory)
+  const settings = useSettings()
 
   return (
     <SessionStatePanel>
       <DataProvider
         directory={props.pending.draft.directory}
+        agents={settings.visibility.customAgents()}
         data={{
           session: [],
           session_status: {},

@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Buyruq yuborilmadi",
   "prompt.toast.promptSendFailed.title": "Soʻrov yuborilmadi",
   "dialog.mcp.title": "MCPlar",
-  "dialog.mcp.description": "{{enabled}}, {{total}} yoqilgan",
   "dialog.mcp.empty": "Hech qanday MCP sozlanmagan",
   "dialog.fork.empty": "Hech qanday xabar yo'q",
   "dialog.directory.action.selectFile": "Faylni tanlang",

@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Odeslání příkazu se nezdařilo",
   "prompt.toast.promptSendFailed.title": "Odeslání výzvy se nezdařilo",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} z {{total}} povoleno",
   "dialog.mcp.empty": "Nejsou nakonfigurovány žádné MCP",
   "dialog.fork.empty": "Žádné zprávy k rozvětvení",
   "dialog.directory.action.selectFile": "Vyberte soubor",

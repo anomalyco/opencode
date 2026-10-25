@@ -505,7 +505,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
   const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
   await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
-  await expect(sidebar).toHaveCSS("width", "260px")
+  await expect(sidebar).toHaveCSS("width", "276px")
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   const actions = await Promise.all(
@@ -534,8 +534,8 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
     await expect(sidebar).toHaveCSS("width", width)
   }
 
-  await resize(-80, "180px")
-  await resize(-40, "140px")
+  await resize(-80, "196px")
+  await resize(-40, "156px")
 
   for (const name of ["Home", "New session"]) {
     const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
@@ -545,7 +545,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
       .toBeLessThanOrEqual(1)
   }
 
-  await resize(-200, "120px")
+  await resize(-200, "136px")
   const homeLabel = sidebar.getByRole("button", { name: "Home", exact: true }).getByText("Home", { exact: true })
   await expect
     .poll(() => homeLabel.evaluate((element) => element.scrollWidth - element.clientWidth))

@@ -21,50 +21,6 @@
       var(--v2-overlay-simple-overlay-pressed)
     );
   }
-
-  &[data-orb="true"] {
-    position: relative;
-    height: 28px;
-    min-height: 0;
-    gap: 6px;
-    padding-inline: 5px 12px;
-    border-radius: var(--activity-chip-radius);
-
-    /* Preserve a 44px touch target around the 28px visual capsule. */
-    &::before {
-      content: "";
-      position: absolute;
-      inset: -8px 0;
-    }
-  }
-}
-
-[data-slot="activity-glyph"] {
-  display: grid;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  > span {
-    grid-area: 1 / 1;
-    transition: opacity 150ms ease-out;
-  }
-  [data-slot="activity-glyph-orb"] {
-    opacity: 0;
-  }
-  &[data-orb="true"] {
-    [data-slot="activity-glyph-orb"] {
-      opacity: 1;
-    }
-    [data-slot="activity-glyph-today"] {
-      opacity: 0;
-    }
-  }
-  /* Hidden loops consume no animation work; both layers remain available for an interrupted fade. */
-  &[data-orb="false"] [data-component="css-agent-orb"] > span,
-  &[data-orb="false"] [data-component="css-agent-orb"] > span::before,
-  &[data-orb="false"] [data-component="css-agent-orb"] > span::after {
-    animation-play-state: paused;
-  }
 }
 
 [data-slot="session-activity-summary"] {
@@ -98,13 +54,6 @@
   border-radius: 10px;
   background: var(--v2-background-bg-layer-01);
   text-align: start;
-
-  &[data-orb="true"] {
-    column-gap: 6px;
-    [data-component="menu-v2-item"] {
-      padding-inline: 1px 8px;
-    }
-  }
 
   /* Match the queue panel's inset-ring pattern inside a clipped scrollport. */
   :is([data-component="menu-v2-item"], [data-component="icon-button-v2"]):is(:focus-visible, [data-state="focus"]) {

@@ -91,10 +91,11 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     if (layout.home.searchFocus.take()) focus()
   })
 
+  // Home's Find focuses its session search, so Settings > Shortcuts lists one Find and one Search sessions.
   command.register("home.search", () => [
     {
-      id: "home.sessions.search.focus",
-      title: placeholder(),
+      id: "session.search",
+      title: language.t("session.search.placeholder"),
       keybind: "mod+f",
       hidden: true,
       onSelect: focus,

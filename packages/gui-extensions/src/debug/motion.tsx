@@ -1,9 +1,11 @@
-import { createMemo, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, createSignal, Index, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
+import { createRemoteControls, type ControlDescriptor, type State, type Value } from "knobs"
+import { KnobsPanel } from "knobs/solid"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { springStyle } from "@opencode/ui/motion/solid"
-import { motionPresets, motionTuning } from "@opencode/ui/motion-tuning"
+import { motionPresets, motionTuning, type MotionKnob } from "@opencode/ui/motion-tuning"
 import {
   activeFeaturePreset,
   applyFeaturePreset,
@@ -11,12 +13,12 @@ import {
   featureControls,
   featurePresets,
   motionFeatures,
+  reset,
   resetFeature,
   type MotionFeature,
 } from "@opencode/ui/motion-tuning-features"
-import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
+import { applyMotion } from "@opencode/ui/motion-tuning-fields"
 import { useExtension } from "../sdk"
-import { ControlRow } from "./motion-rows"
 
 // Where the panel was dragged to, as an offset from its bottom-right home, its width, and the feature it last showed;
 // kept per device.
@@ -250,14 +252,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
 
   const page = () => (
     <Show when={feature()}>
-      {(item) => (
-        <FeaturePage
-          feature={item()}
-          live={live}
-          back={wide() ? undefined : back}
-          onFocus={focus}
-        />
-      )}
+      {(item) => <FeaturePage feature={item()} live={live} back={wide() ? undefined : back} onFocus={focus} />}
     </Show>
   )
 
@@ -332,30 +327,32 @@ function FeaturePage(props: {
   back?: () => void
   onFocus: (target: string) => void
 }) {
-  const ctx = useExtension()
+  // knobs fixes a store's presets when it's made, so a new store is made whenever the rows, the mode or the replays
+  // change.
+  const rows = createMemo(
+    () => {
+      props.live()
 
-  const state = createMemo(() => {
-    props.live()
-
-    return {
-      controls: featureControls(props.feature),
-      presets: featurePresets(props.feature),
-      active: activeFeaturePreset(props.feature),
-      changed: featureChanged(props.feature),
-      on: props.feature.switch?.value !== false,
-    }
-  })
-
-  const presetLabel = (preset: string) => {
-    if (preset === "shipped") return ctx.t("motion.shipped")
-
-    if (preset === "snappy" || preset === "smooth" || preset === "calm") return motionPresets[preset]
-
-    return props.feature.modes.find((item) => item.id === preset)?.label ?? preset
-  }
+      return {
+        feature: props.feature,
+        mode: props.feature.modes.find((item) => item.value),
+        controls: featureControls(props.feature),
+      }
+    },
+    undefined,
+    {
+      equals: (a, b) =>
+        !!a &&
+        a.feature.key === b.feature.key &&
+        a.feature.switch === b.feature.switch &&
+        a.mode === b.mode &&
+        same(a.controls, b.controls) &&
+        same(a.feature.actions, b.feature.actions),
+    },
+  )
 
   return (
-    <div class="pb-6">
+    <div class="pb-3">
       <Show when={props.back}>
         {(back) => (
           <button
@@ -368,86 +365,194 @@ function FeaturePage(props: {
           </button>
         )}
       </Show>
-      <h3 classList={{ "px-4 text-[17px] font-semibold leading-6": true, "pt-4": !props.back }}>{props.feature.name}</h3>
+      <h3 classList={{ "px-4 text-[15px] font-semibold leading-5": true, "pt-3": !props.back }}>
+        {props.feature.name}
+      </h3>
       <Show when={props.feature.description}>
-        {(description) => <p class="mt-1 px-4 text-[13px] leading-[18px] text-v2-text-text-muted">{description()}</p>}
+        {(description) => <p class="px-4 text-[12px] leading-[18px] text-v2-text-text-muted">{description()}</p>}
       </Show>
-      <div class="flex flex-wrap items-center gap-2 px-4 pt-4">
-        {/* One trigger is Replay; several replay on their own, each named for what it moves. */}
-        <For each={props.feature.actions}>
-          {(item) => (
-            <PageButton
-              icon="outline-rotate-clockwise"
-              label={props.feature.actions.length === 1 ? ctx.t("motion.replay") : item.label}
-              onClick={() => item.run()}
-            />
-          )}
-        </For>
-        <Show when={props.feature.target}>
-          {(target) => (
-            <PageButton icon="select-element" label={ctx.t("motion.focus")} onClick={() => props.onFocus(target())} />
-          )}
-        </Show>
-        <span class="ms-auto">
-          <PageButton
-            icon="outline-reset"
-            label={ctx.t("motion.reset")}
-            disabled={!state().changed}
-            onClick={() => resetFeature(props.feature)}
+      <Show when={rows()} keyed>
+        {(shown) => (
+          <FeatureKnobs
+            feature={shown.feature}
+            mode={shown.mode}
+            controls={shown.controls}
+            live={props.live}
+            onFocus={props.onFocus}
           />
-        </span>
-      </div>
-      <Show when={state().on && state().presets.length > 0}>
-        <div class="px-4 pt-4">
-          <SegmentedControl
-            class="segmented-control-v2--full-width"
-            aria-label={ctx.t("motion.presets")}
-            value={state().active ?? null}
-            onChange={(preset) => {
-              if (preset) applyFeaturePreset(props.feature, preset)
-            }}
-          >
-            <For each={state().presets}>
-              {(preset) => (
-                <SegmentedControlItem class="text-[12px]" style={{ padding: "0 4px" }} value={preset}>
-                  <span class="truncate">{presetLabel(preset)}</span>
-                </SegmentedControlItem>
-              )}
-            </For>
-          </SegmentedControl>
-          <Show when={!state().active}>
-            <p class="mt-1.5 text-[12px] leading-4 text-v2-text-text-faint">{ctx.t("motion.custom")}</p>
-          </Show>
-        </div>
+        )}
       </Show>
-      <div class="mt-4 divide-y divide-v2-border-border-muted border-t border-v2-border-border-muted">
-        {/* Keyed: a row keeps the knob it mounted with, so another feature's switch needs a row of its own. */}
-        <Show when={props.feature.switch} keyed>
-          {(item) => <ControlRow knob={item} live={props.live} label={ctx.t("motion.enabled")} />}
-        </Show>
-        <For each={state().controls}>{(item) => <ControlRow knob={item} live={props.live} />}</For>
-      </div>
     </div>
   )
 }
 
-function PageButton(props: {
-  icon: "outline-rotate-clockwise" | "select-element" | "outline-reset"
-  label: string
-  disabled?: boolean
-  onClick: () => void
+/**
+ * A feature's knobs as one embedded knobs group bound to the registry: Replay and Focus beside its reset and die, its
+ * presets, and its rows. Choosing a preset goes through the feature model, so a mode turns on as it does from
+ * anywhere else.
+ */
+function FeatureKnobs(props: {
+  feature: MotionFeature
+  mode?: MotionKnob
+  controls: MotionKnob[]
+  live: () => number
+  onFocus: (target: string) => void
 }) {
-  return (
-    <button
-      type="button"
-      disabled={props.disabled}
-      class="flex h-8 items-center gap-1.5 rounded-lg bg-v2-background-bg-layer-01 ps-2.5 pe-3 text-[13px] font-medium text-v2-text-text-base shadow-[0_0_0_0.5px_var(--v2-border-border-base)] hover:bg-v2-background-bg-layer-02 focus-visible:outline focus-visible:outline-2 focus-visible:outline-v2-border-border-focus disabled:pointer-events-none disabled:text-v2-text-text-faint"
-      onClick={() => props.onClick()}
-    >
-      <Icon name={props.icon} size="small" class="text-v2-icon-icon-muted" />
-      <span>{props.label}</span>
-    </button>
+  const ctx = useExtension()
+  const feature = props.feature
+  const group = feature.key
+  const toggle = feature.switch
+  const knobs = [...(toggle ? [toggle] : []), ...props.controls]
+  const byId = new Map(knobs.map((item) => [item.id, item]))
+  // While a mode is on, the spring presets don't move its springs; choosing one turns the mode off first.
+  const springs = props.mode ? [] : props.controls.flatMap((item) => (item.kind === "spring" ? [item] : []))
+  const presets = featurePresets(feature).filter((preset) => preset !== "shipped")
+
+  const preset = (id: string): State => {
+    if (id !== "snappy" && id !== "smooth" && id !== "calm") return {}
+
+    return Object.fromEntries(springs.map((item) => [item.id, { ...item.presets[id] }]))
+  }
+
+  const target = feature.target
+
+  const groupActions = () => [
+    // One trigger is Replay; several replay on their own, each named for what it moves.
+    ...feature.actions.map((item) => ({
+      label: feature.actions.length === 1 ? ctx.t("motion.replay") : item.label,
+      icon: "retrigger",
+      run: () => item.run(),
+    })),
+    ...(target ? [{ label: ctx.t("motion.focus"), icon: "target", run: () => props.onFocus(target) }] : []),
+  ]
+
+  // Everything but the switch dims while it's off.
+  const off = toggle ? (values: State) => values[toggle.id] === false : undefined
+
+  const descriptors = knobs.map((item) =>
+    item === toggle ? descriptor(item, group, ctx.t("motion.enabled")) : descriptor(item, group, item.label, off),
   )
+
+  const values = () => {
+    props.live()
+
+    return Object.fromEntries(knobs.map((item) => [item.id, item.value]))
+  }
+
+  const set = (key: string, value: Value | null) => {
+    const item = byId.get(key)
+
+    // With nullDefaults off, null never arrives; resets reach onReset.
+    if (!item || value === null) return
+
+    // SAFETY: each key's descriptor was made from its knob, so knobs sends that knob's kind of value.
+    applyMotion(item, value as MotionKnob["value"])
+  }
+
+  const controls = createRemoteControls(`opencode-motion-${group}`, descriptors, {
+    values: values(),
+    // Beta is a production build, where knobs resolves its production entry: the panel mounts only when shipped.
+    ship: () => import("knobs/panel"),
+    nullDefaults: false,
+    echo: 0,
+    persist: "none",
+    storage: null,
+    defaultLabel: ctx.t("motion.shipped"),
+    groupLabels: { [group]: feature.name },
+    presetLabels: { ...motionPresets, ...Object.fromEntries(feature.modes.map((item) => [item.id, item.label])) },
+    scopedPresets:
+      presets.length > 0 ? { [group]: Object.fromEntries(presets.map((id) => [id, preset(id)])) } : undefined,
+    onSet: set,
+    onSetBatch: (changes) => changes.forEach((change) => set(change.key, change.value)),
+    // A group's reset is the feature's, modes included.
+    onReset: (scope) => {
+      if (!scope.key) return resetFeature(feature)
+
+      const item = byId.get(scope.key)
+
+      if (item) reset(item)
+    },
+  })
+
+  // Shows the preset the registry is on: a mode, or what its values match.
+  const current = activeFeaturePreset(feature)
+
+  if (current && current !== "shipped" && presets.includes(current)) controls.preset(current, { scope: group })
+
+  let chosen = controls.activePreset(group)?.id
+
+  // A chip chosen in the strip applies through the feature model, which turns modes on and off.
+  onCleanup(
+    controls.subscribe(() => {
+      const next = controls.activePreset(group)?.id
+
+      if (next === chosen) return
+
+      chosen = next
+
+      // The Shipped chip clears the scope's active preset.
+      applyFeaturePreset(feature, next ?? "shipped")
+    }),
+  )
+
+  return (
+    // Inset so the rows' labels line up with the page's title.
+    <div class="px-2 pt-1">
+      <KnobsPanel
+        controls={controls}
+        values={values()}
+        theme={document.documentElement.dataset.colorScheme === "light" ? "light" : "dark"}
+        embed
+        surface="flat"
+        groups={[group]}
+        groupActions={groupActions}
+        hints="panel"
+        session={false}
+      />
+    </div>
+  )
+}
+
+function descriptor(
+  item: MotionKnob,
+  group: string,
+  label = item.label,
+  disabled?: (values: State) => boolean,
+): ControlDescriptor {
+  // Experiments are the design under test, not tuning: presets leave them be.
+  const meta = {
+    key: item.id,
+    label,
+    group,
+    description: item.description,
+    inPresets: item.experiment ? (false as const) : undefined,
+    disabled,
+  }
+
+  if (item.kind === "number")
+    return {
+      ...meta,
+      kind: "number",
+      default: item.initial,
+      min: item.min,
+      max: item.max,
+      step: item.step,
+      unit: item.unit,
+    }
+
+  if (item.kind === "choice")
+    return {
+      ...meta,
+      kind: "choice",
+      default: item.initial,
+      choices: item.options.map((option) => ({ id: option, label: item.labels[option] ?? option })),
+    }
+
+  if (item.kind === "toggle" || item.kind === "mode") return { ...meta, kind: "toggle", default: item.initial }
+
+  if (item.kind === "spring") return { ...meta, kind: "spring", default: { ...item.initial } }
+
+  return { ...meta, kind: "easing", default: [...item.initial] }
 }
 
 // Frames the part of the app a feature changes: a pointer-transparent outline that fades in and out. Its rects are read
@@ -503,4 +608,8 @@ function save(state: { x: number; y: number; width: number; feature: string | un
   try {
     localStorage.setItem(key, JSON.stringify(state))
   } catch {}
+}
+
+function same<T>(a: T[], b: T[]) {
+  return a.length === b.length && a.every((item, index) => item === b[index])
 }

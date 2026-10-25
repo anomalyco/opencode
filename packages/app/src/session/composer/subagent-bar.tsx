@@ -1,6 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
+import { Slash } from "@opencode/ui/slash"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { createEffect, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -75,7 +76,8 @@ export function SubagentBar(props: {
                 <span data-slot="subagent-model" class="flex min-w-0 px-[11px]">
                   <Show when={model().provider}>
                     <span class="shrink-0 text-v2-text-text-faint">{model().provider}</span>
-                    <span class="shrink-0 whitespace-pre text-v2-text-text-faint">{" / "}</span>
+                    <Slash />
+                    <span class="sr-only">{" / "}</span>
                   </Show>
                   <span class="truncate">{model().name}</span>
                 </span>

@@ -225,7 +225,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "အမိန့်ပေးပို့ရန် မအောင်မြင်ပါ။",
   "prompt.toast.promptSendFailed.title": "Prompt ပေးပို့ရန် မအောင်မြင်ပါ။",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} ၏ {{total}} ဖွင့်ထားသည်။",
   "dialog.mcp.empty": "MCP များကို ပြင်ဆင်သတ်မှတ်ထားခြင်းမရှိပါ။",
   "dialog.fork.empty": "လမ်းခွဲရန် မက်ဆေ့ချ်များ မရှိပါ။",
   "dialog.directory.action.selectFile": "ဖိုင်ကို ရွေးပါ။",

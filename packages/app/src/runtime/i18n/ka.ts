@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "ბრძანების გაგზავნა ვერ მოხერხდა",
   "prompt.toast.promptSendFailed.title": "მოთხოვნის გაგზავნა ვერ მოხერხდა",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} / {{total}}-დან ჩართულია",
   "dialog.mcp.empty": "არა MCPs კონფიგურირებული",
   "dialog.fork.empty": "განშტოებისთვის შეტყობინებები არ არის",
   "dialog.directory.action.selectFile": "აირჩიეთ ფაილი",

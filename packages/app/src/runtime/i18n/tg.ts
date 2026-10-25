@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Фармон фиристода нашуд",
   "prompt.toast.promptSendFailed.title": "Ирсоли промпт муяссар нашуд",
   "dialog.mcp.title": "MCPс",
-  "dialog.mcp.description": "{{enabled}} аз {{total}} фаъол",
   "dialog.mcp.empty": "Ягон MCP танзим карда нашудааст",
   "dialog.fork.empty": "Паёме барои сохтани шоха нест",
   "dialog.directory.action.selectFile": "Файлро интихоб кунед",

@@ -1329,8 +1329,7 @@ test.describe("background shortcut", () => {
             const content = item.querySelector('[data-slot="menu-v2-item-content"]')
 
             return [
-              content?.querySelector(':scope > [data-slot="activity-glyph"], :scope > svg')?.getBoundingClientRect()
-                .left ?? NaN,
+              content?.querySelector(":scope > svg")?.getBoundingClientRect().left ?? NaN,
               content?.querySelector(":scope > span:not([data-slot])")?.getBoundingClientRect().left ?? NaN,
               item.querySelector('[data-slot="session-activity-elapsed"]')?.getBoundingClientRect().right ?? NaN,
             ]

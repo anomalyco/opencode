@@ -242,7 +242,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Ukaza ni bilo mogoče poslati",
   "prompt.toast.promptSendFailed.title": "Poziva ni bilo mogoče poslati",
   "dialog.mcp.title": "MCP-ji",
-  "dialog.mcp.description": "{{enabled}} od {{total}} omogočen",
   "dialog.mcp.empty": "MCP-ji niso konfigurirani",
   "dialog.fork.empty": "Ni sporočil za odcepitev",
   "dialog.directory.action.selectFile": "Izberite datoteko",

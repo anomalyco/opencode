@@ -655,7 +655,8 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
                   >
                     <Button
                       size="small"
-                      variant="neutral"
+                      variant="ghost-muted"
+                      class="session-mcp-sign-in"
                       disabled={pending()}
                       aria-busy={busy()}
                       aria-label={ctx.t("mcp.signIn.open", { name: server().name })}

@@ -225,7 +225,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "کمانڈ بھیجنے میں ناکام",
   "prompt.toast.promptSendFailed.title": "پرامپٹ بھیجنے میں ناکام",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "\u2068{{total}}\u2069 میں سے \u2068{{enabled}}\u2069 فعال",
   "dialog.mcp.empty": "کوئی MCPs کنفیگر نہیں ہے۔",
   "dialog.fork.empty": "کوئی پیغامات نہیں ہیں جن سے فورک کیا جائے۔",
   "dialog.directory.action.selectFile": "فائل منتخب کریں۔",

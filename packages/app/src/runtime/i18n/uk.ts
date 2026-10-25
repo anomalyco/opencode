@@ -266,7 +266,6 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Не вдалося надіслати запит",
 
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} з {{total}} увімкнено",
   "dialog.mcp.empty": "MCP не налаштовано",
 
 

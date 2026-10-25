@@ -264,7 +264,6 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "发送提示失败",
 
   "dialog.mcp.title": "MCP 服务器",
-  "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",
   "dialog.mcp.empty": "未配置 MCP 服务器",
 
 

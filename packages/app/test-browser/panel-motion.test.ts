@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "bun:test"
 import { batch, createRoot, createSignal } from "solid-js"
-import { motionTuning } from "@opencode/ui/motion-tuning"
 import { createPanelMotion, guardClosingFocus, holdLandingWidth, panelsMoving } from "../src/shell/panel-motion"
 
 let frames: Map<number, FrameRequestCallback>
@@ -14,8 +13,6 @@ const cleanups: (() => void)[] = []
 const originals = { raf: globalThis.requestAnimationFrame, caf: globalThis.cancelAnimationFrame }
 
 beforeEach(() => {
-  // The spring tests run with James off; James's own tests turn it on.
-  setJames(false)
   frames = new Map()
   id = 0
   time = 0
@@ -34,28 +31,7 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup()
   globalThis.requestAnimationFrame = originals.raf
   globalThis.cancelAnimationFrame = originals.caf
-  setStyle("spring")
-  setJames(false)
 })
-
-function setStyle(value: string) {
-  const knob = motionTuning.list().find((item) => item.id === "sidebars.style")
-
-  if (knob?.kind === "choice") motionTuning.set(knob, value)
-}
-
-function setContentsFade(value: string) {
-  const knob = motionTuning.list().find((item) => item.id === "sidebars.contentsFade")
-
-  if (knob?.kind === "choice") motionTuning.set(knob, value)
-}
-
-// James is a mode, chosen in the preset strip rather than the Motion choice.
-function setJames(on: boolean) {
-  const knob = motionTuning.list().find((item) => item.id === "sidebars.james")
-
-  if (knob?.kind === "mode") motionTuning.set(knob, on)
-}
 
 function frame() {
   time += 1000 / 60
@@ -148,17 +124,6 @@ it("repaints at rest when the open size changes, like a resize drag", () => {
   expect(frames.size).toBe(0)
 })
 
-it("snaps when the Motion workspace sets Instant", () => {
-  setStyle("instant")
-  const panel = setup(true)
-
-  panel.setOpen(false)
-  expect(panel.painted.width).toBe(0)
-  expect(panel.present()).toBe(false)
-  expect(panel.closed).toHaveLength(1)
-  expect(frames.size).toBe(0)
-})
-
 it("shows another layout's state without motion or a close", () => {
   const panel = setup(true)
 
@@ -214,10 +179,6 @@ it("reports a flight from its first frame until it lands, for native views to hi
   panel.setOpen(true)
   expect(panelsMoving()).toBe(true)
   settle()
-  expect(panelsMoving()).toBe(false)
-
-  setStyle("instant")
-  panel.setOpen(false)
   expect(panelsMoving()).toBe(false)
 })
 
@@ -384,103 +345,4 @@ it("moves focus out of a closing panel when the close starts and when it re-ente
   setClosing(false)
   inner.focus()
   expect(document.activeElement).toBe(inner)
-})
-
-type Played = {
-  keyframes: PropertyIndexedKeyframes
-  options: KeyframeAnimationOptions
-  cancelled: boolean
-  finish: () => void
-}
-
-// happy-dom has no Web Animations, so the panel layer records what James asks it to play.
-function setupJames(initial: boolean) {
-  setJames(true)
-  const [open, setOpen] = createSignal(initial)
-  const played: Played[] = []
-  const closed: number[] = []
-  const painted = { width: initial ? 200 : 0 }
-  const element = document.createElement("div")
-  Object.defineProperty(element, "animate", {
-    value: (keyframes: PropertyIndexedKeyframes, options: KeyframeAnimationOptions) => {
-      const finished = Promise.withResolvers<void>()
-      const animation = { keyframes, options, cancelled: false, finish: () => finished.resolve() }
-      played.push(animation)
-
-      return {
-        finished: finished.promise,
-        cancel: () => {
-          animation.cancelled = true
-          finished.reject(new Error("cancelled"))
-        },
-      }
-    },
-  })
-
-  const motion = createRoot((dispose) => {
-    cleanups.push(dispose)
-
-    return createPanelMotion({
-      open,
-      paint: (shut) => {
-        painted.width = 200 * (1 - shut)
-      },
-      onClosed: () => closed.push(time),
-      element: () => element,
-      offset: () => -10,
-    })
-  })
-
-  return { played, setOpen, closed, painted, motion }
-}
-
-it("James snaps under reduced motion", () => {
-  document.documentElement.dataset.motion = "reduce"
-  cleanups.push(() => delete document.documentElement.dataset.motion)
-  const panel = setupJames(true)
-  panel.setOpen(false)
-
-  expect(panel.played).toEqual([])
-  expect(panel.painted.width).toBe(0)
-  expect(panel.motion.present()).toBe(false)
-})
-
-it("swaps the spring knobs for James's while it's on", () => {
-  const shown = () =>
-    motionTuning
-      .list()
-      .filter(
-        (knob) =>
-          knob.group === "Sidebars" &&
-          knob.subsection === "Open & close" &&
-          knob.kind !== "mode" &&
-          (knob.when?.() ?? true),
-      )
-      .map((knob) => knob.label)
-
-  expect(shown()).toEqual(["Spring", "Motion", "Contents fade", "Edge fade"])
-  setJames(true)
-  expect(shown()).toEqual(["Movement", "Fade", "Fade duration", "Panel shift", "Layout", "Layout open", "Layout close"])
-  setJames(false)
-  expect(shown()).toEqual(["Spring", "Motion", "Contents fade", "Edge fade"])
-})
-
-it("shows the edge fade's length only while the contents fade at the edge", () => {
-  const edge = motionTuning.list().find((item) => item.id === "sidebars.edgeFade")
-  cleanups.push(() => setContentsFade("edge"))
-
-  expect(edge?.when?.()).toBe(true)
-  setContentsFade("spring")
-  expect(edge?.when?.()).toBe(false)
-  setContentsFade("off")
-  expect(edge?.when?.()).toBe(false)
-})
-
-it("ships the spring as the default sidebar motion, with James one choice away", () => {
-  const knob = motionTuning.list().find((item) => item.id === "sidebars.james")
-
-  expect(knob?.kind).toBe("mode")
-  expect(knob?.initial).toBe(false)
-  // The side panel shifts 46px by default; the left sidebar stays at 10px.
-  expect(motionTuning.list().find((item) => item.id === "sidebars.james.panelShift")?.initial).toBe(46)
 })

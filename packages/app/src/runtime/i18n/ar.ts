@@ -229,7 +229,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "فشل إرسال الأمر",
   "prompt.toast.promptSendFailed.title": "فشل إرسال الموجه",
   "dialog.mcp.title": "خوادم MCP",
-  "dialog.mcp.description": "تم تفعيل {{enabled}} من أصل {{total}}",
   "dialog.mcp.empty": "لم يتم تكوين أي خوادم MCP",
   "dialog.fork.empty": "لا توجد رسائل للتفرع منها",
   "dialog.directory.action.selectFile": "اختيار ملف",

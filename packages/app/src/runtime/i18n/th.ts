@@ -246,7 +246,6 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "ไม่สามารถส่งพรอมต์",
 
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} จาก {{total}} ที่เปิดใช้งาน",
   "dialog.mcp.empty": "ไม่มี MCP ที่กำหนดค่า",
 
 

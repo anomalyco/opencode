@@ -59,7 +59,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     sessionID?: string
-    /** Whether the host lets the user pick agents; hosts that don't show no agent names. Defaults to true. */
+    /** Whether message meta names the agent; the app follows its Show agent setting. Defaults to true. */
     agents?: boolean
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>

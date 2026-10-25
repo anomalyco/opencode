@@ -308,6 +308,11 @@ export function createKeybindSettingsController(
     input.command.keybinds(false)
   }
 
+  const unbind = (id: string) => {
+    input.settings.keybinds.set(id, "none")
+    stop()
+  }
+
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
 
   const handle = (event: KeyboardEvent) => {
@@ -333,8 +338,7 @@ export function createKeybindSettingsController(
       !event.shiftKey
 
     if (clear) {
-      input.settings.keybinds.set(id, "none")
-      stop()
+      unbind(id)
 
       return
     }
@@ -387,6 +391,7 @@ export function createKeybindSettingsController(
     capture: {
       active: () => store.active,
       toggle,
+      unbind,
     },
     settings: {
       hasOverrides: () => Object.values(overrides()).some((value) => typeof value === "string"),
@@ -420,6 +425,7 @@ export function SettingsKeybinds(props: { active?: boolean }) {
       keybind={controller.catalog.keybind}
       active={controller.capture.active()}
       onCapture={controller.capture.toggle}
+      onUnbind={controller.capture.unbind}
       hasOverrides={controller.settings.hasOverrides()}
       onReset={controller.settings.reset}
     />
@@ -434,6 +440,7 @@ function SettingsKeybindsView(props: {
   keybind: (id: string) => string
   active: string | null
   onCapture: (id: string) => void
+  onUnbind: (id: string) => void
   hasOverrides: boolean
   onReset: () => void
 }) {
@@ -476,21 +483,33 @@ function SettingsKeybindsView(props: {
                         return (
                           <div class="flex items-center justify-between gap-4 py-3 border-b border-v2-border-border-base last:border-none">
                             <span>{props.title(id)}</span>
-                            <Button
-                              type="button"
-                              size="small"
-                              variant={binding() ? "ghost" : "ghost-muted"}
-                              data-keybind-id={id}
-                              data-expanded={props.active === id ? "" : undefined}
-                              onClick={() => props.onCapture(id)}
-                            >
-                              <Show
-                                when={props.active === id}
-                                fallback={binding() || language.t("settings.shortcuts.unassigned")}
-                              >
-                                {language.t("settings.shortcuts.pressKeys")}
+                            <div class="flex items-center gap-1">
+                              <Show when={props.active === id && binding()}>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant="ghost-danger"
+                                  onClick={() => props.onUnbind(id)}
+                                >
+                                  {language.t("settings.shortcuts.unbind")}
+                                </Button>
                               </Show>
-                            </Button>
+                              <Button
+                                type="button"
+                                size="small"
+                                variant={binding() ? "ghost" : "ghost-muted"}
+                                data-keybind-id={id}
+                                data-expanded={props.active === id ? "" : undefined}
+                                onClick={() => props.onCapture(id)}
+                              >
+                                <Show
+                                  when={props.active === id}
+                                  fallback={binding() || language.t("settings.shortcuts.unassigned")}
+                                >
+                                  {language.t("settings.shortcuts.pressKeys")}
+                                </Show>
+                              </Button>
+                            </div>
                           </div>
                         )
                       }}

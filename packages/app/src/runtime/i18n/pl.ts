@@ -220,7 +220,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Nie udało się wysłać polecenia",
   "prompt.toast.promptSendFailed.title": "Nie udało się wysłać zapytania",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "Włączone: {{enabled}} z {{total}}",
   "dialog.mcp.empty": "Brak skonfigurowanych MCP",
   "dialog.fork.empty": "Brak wiadomości do rozwidlenia",
   "dialog.directory.action.selectFile": "Wybierz plik",

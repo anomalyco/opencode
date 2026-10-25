@@ -179,6 +179,35 @@ story("opens an execution's code and output from its View code action", async ({
   await expect(dialog.getByRole("button", { name: "Copy output" })).toBeVisible()
 })
 
+story("wraps execute details code, pads it evenly, and starts line numbers near the block edge", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-code")
+  const tool = timeline.locator('[data-timeline-part-id="tool_execute_long_call"]')
+  await tool.hover()
+  await tool.getByRole("button", { name: "View code" }).click()
+  const source = timeline.page().getByRole("dialog").locator('[data-slot="execute-details-source"]').first()
+  await expect(source.locator("[data-column-number]").first()).toBeVisible()
+
+  const layout = await source.evaluate((element) => {
+    const root = element.querySelector("diffs-container")!.shadowRoot!
+    const code = root.querySelector<HTMLElement>("[data-code]")!
+    const number = root.querySelector("[data-line-number-content]")!
+    const lines = [...root.querySelectorAll("[data-line]")].map((line) => line.getBoundingClientRect())
+    const box = element.getBoundingClientRect()
+    return {
+      paddingTop: lines[0].top - box.top,
+      paddingBottom: box.bottom - lines.at(-1)!.bottom,
+      // A horizontally scrolling block reserves a scrollbar track under a single line.
+      overflow: code.scrollWidth - code.clientWidth,
+      numberStart: number.getBoundingClientRect().left - box.left,
+    }
+  })
+
+  expect(layout.overflow).toBe(0)
+  expect(layout.numberStart).toBe(12)
+  expect(layout.paddingTop).toBe(4)
+  expect(layout.paddingBottom).toBe(4)
+})
+
 story("reveals the View code action while hovering anywhere over the execution", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const tool = timeline.locator('[data-timeline-part-id="tool_execute_long_call"]')

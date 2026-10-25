@@ -210,11 +210,11 @@ test("Models and Shortcuts leave focus on navigation until the user types", asyn
   }
 
   const search = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
-  await page.keyboard.press("p")
+  await page.keyboard.press("e")
   await expect(search).toBeFocused()
-  await page.keyboard.type("alette")
-  await expect(search).toHaveValue("palette")
-  await expect(view.settings.getByText("Command palette", { exact: true })).toBeVisible()
+  await page.keyboard.type("verything")
+  await expect(search).toHaveValue("everything")
+  await expect(view.settings.getByText("Search everything", { exact: true })).toBeVisible()
 })
 
 test("section search takes typed input, clears in place, and escapes in steps", async ({ page }) => {

@@ -1,7 +1,7 @@
 import type { DurationOptions } from "./motion"
 
 // Live motion settings for developer mode. Each surface registers knobs under the area of the app it belongs to
-// (Sidebars, Composer…) and the feature they tune, with their shipped defaults, plus actions that replay its motion;
+// (Composer, Timeline…) and the feature they tune, with their shipped defaults, plus actions that replay its motion;
 // the Knobs panel lists the features (`motion-tuning-features`) and opens one to tune it. A knob marked `experiment`
 // is a design variant to try before one ships. Edits persist on this device.
 
@@ -86,7 +86,7 @@ export const motionTuning = {
     })
 
     return (): DurationOptions => ({
-      duration: Math.max(0.03, knob.value.duration * timeScale()),
+      duration: Math.max(0.03, knob.value.duration * motionTimeScale()),
       bounce: Math.min(0.95, Math.max(0, knob.value.bounce)),
     })
   },
@@ -200,9 +200,9 @@ export const motionTuning = {
     })
 
     return () => {
-      if (meta.time === "duration") return knob.value * timeScale()
+      if (meta.time === "duration") return knob.value * motionTimeScale()
 
-      if (meta.time === "rate") return knob.value / timeScale()
+      if (meta.time === "rate") return knob.value / motionTimeScale()
 
       return knob.value
     }
@@ -259,8 +259,8 @@ const slow = register({
 
 export const motionGlobals = { speed, slow }
 
-// How many times longer motion takes than tuned.
-function timeScale() {
+/** How many times longer motion takes than tuned, from the global speed and slow motion. */
+export function motionTimeScale() {
   return (slow.value ? 4 : 1) / speed.value
 }
 

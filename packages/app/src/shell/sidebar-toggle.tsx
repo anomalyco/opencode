@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, onCleanup, Show } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -8,13 +8,7 @@ import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useSettings } from "@/settings/model"
-import { motionTuning } from "@opencode/ui/motion-tuning"
-import { sidebarPeekEnabled, sidebarUnread } from "@/shell/sidebar-peek"
-
-// Whether the closed sidebar peeks, which the toggle's unread dot and tooltip follow.
-const [peek, setPeek] = createSignal(sidebarPeekEnabled())
-
-motionTuning.subscribe(() => setPeek(sidebarPeekEnabled()))
+import { sidebarUnread } from "@/shell/sidebar-peek"
 
 // The toggle's dot for sidebar sessions with unread activity, shown while the sidebar is closed.
 function UnreadBadge(props: { show: boolean; ring: "base" | "deep" }) {
@@ -72,34 +66,35 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
   const side = props.handoff
   let full: SVGSVGElement | undefined
   let outline: HTMLSpanElement | undefined
-  const unread = () => peek() && !settings.appearance.sidebarOpen() && sidebarUnread()
-  const ref =
-    side === "out"
-      ? collapsedRef((button, closed) => {
-          travel.header = button
-          button.style.opacity = closed === 0 ? "" : "0"
-        })
-      : side === "in"
-        ? collapsedRef((button, closed) => {
-            travel.toggle = button
-            const moving = closed > 0 && closed < 1
-            travel.dx = moving ? travel.x * (1 - closed) : 0
-            travel.dy = moving ? travel.y * (1 - closed) : 0
-            button.style.opacity = closed === 0 ? "0" : ""
-            button.style.transform = moving ? `translate3d(${travel.dx}px, ${travel.dy}px, 0)` : ""
+  const unread = () => !settings.appearance.sidebarOpen() && sidebarUnread()
 
-            if (full) full.style.opacity = `${1 - closed}`
+  const paints = {
+    out: (button: HTMLElement, closed: number) => {
+      travel.header = button
+      button.style.opacity = closed === 0 ? "" : "0"
+    },
+    in: (button: HTMLElement, closed: number) => {
+      travel.toggle = button
+      const moving = closed > 0 && closed < 1
+      travel.dx = moving ? travel.x * (1 - closed) : 0
+      travel.dy = moving ? travel.y * (1 - closed) : 0
+      button.style.opacity = closed === 0 ? "0" : ""
+      button.style.transform = moving ? `translate3d(${travel.dx}px, ${travel.dy}px, 0)` : ""
 
-            if (outline) outline.style.opacity = `${closed}`
-          })
-        : undefined
+      if (full) full.style.opacity = `${1 - closed}`
+
+      if (outline) outline.style.opacity = `${closed}`
+    },
+  }
+
+  const ref = side ? collapsedRef(paints[side]) : undefined
 
   return (
     <Tooltip
       class="shrink-0 [app-region:no-drag]"
       placement="bottom"
       // Held shut while the closed sidebar peeks on hover, where it would cover the peek.
-      forceOpen={peek() && !settings.appearance.sidebarOpen() ? false : undefined}
+      forceOpen={!settings.appearance.sidebarOpen() ? false : undefined}
       value={
         <>
           {language.t("command.sidebar.toggle")}
@@ -181,7 +176,9 @@ export function paintCollapsedSlots(closed: number) {
 
 // The two vertical-tabs toggles, how far the header one rests from the collapsed one (x, y), and the offset the
 // collapsed one is drawn at now (dx, dy).
-const travel: { header?: HTMLElement; toggle?: HTMLElement; x: number; y: number; dx: number; dy: number } = {
+type Travel = { header?: HTMLElement; toggle?: HTMLElement; x: number; y: number; dx: number; dy: number }
+
+const travel: Travel = {
   x: 0,
   y: 0,
   dx: 0,

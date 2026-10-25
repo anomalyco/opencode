@@ -349,7 +349,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Komennon lähettäminen epäonnistui",
   "prompt.toast.promptSendFailed.title": "Kehotteen lähettäminen epäonnistui",
   "dialog.mcp.title": "MCP:t",
-  "dialog.mcp.description": "{{enabled}}/{{total}} käytössä",
   "dialog.mcp.empty": "MCP:tä ei ole määritetty",
   "dialog.fork.empty": "Ei viestejä, joista voisi haarauttaa",
   "dialog.directory.action.selectFile": "Valitse tiedosto",

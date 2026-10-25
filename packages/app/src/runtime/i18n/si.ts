@@ -220,7 +220,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "විධානය යැවීමට අසමත් විය",
   "prompt.toast.promptSendFailed.title": "ප්‍රොම්ප්ට් එක යැවීමට අසමත් විය",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{total}} න් {{enabled}} සබලයි",
   "dialog.mcp.empty": "MCPs වින්‍යාස කර නැත",
   "dialog.fork.empty": "ෆෝක් කිරීමට පණිවිඩ නැත",
   "dialog.directory.action.selectFile": "ගොනුව තෝරන්න",

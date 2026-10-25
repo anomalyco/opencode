@@ -15,6 +15,9 @@ const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(globalThis.navigator?.platform ?? "
 
 const PALETTE_ID = "command.palette"
 
+/** Search commands: Search everything (the palette) limited to commands. */
+export const COMMAND_SEARCH_ID = "commands.search"
+
 export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
 
 const SUGGESTED_PREFIX = "suggested."

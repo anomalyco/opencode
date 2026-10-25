@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Nu s-a putut trimite comanda",
   "prompt.toast.promptSendFailed.title": "Nu s-a putut trimite promptul",
   "dialog.mcp.title": "MCP-uri",
-  "dialog.mcp.description": "{{enabled}} din {{total}} activate",
   "dialog.mcp.empty": "Niciun MCP configurat",
   "dialog.fork.empty": "Niciun mesaj de bifurcat",
   "dialog.directory.action.selectFile": "Selectează fișier",

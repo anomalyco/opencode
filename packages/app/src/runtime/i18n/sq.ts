@@ -217,7 +217,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Dërgimi i komandës dështoi",
   "prompt.toast.promptSendFailed.title": "Dërgimi i kërkesës dështoi",
   "dialog.mcp.title": "MCP-të",
-  "dialog.mcp.description": "{{enabled}} nga {{total}} është aktivizuar",
   "dialog.mcp.empty": "Asnjë MCP nuk është konfiguruar",
   "dialog.fork.empty": "Nuk ka mesazhe për të marrë nga",
   "dialog.directory.action.selectFile": "Zgjidhni skedarin",

@@ -433,7 +433,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Falha ao enviar comando",
   "prompt.toast.promptSendFailed.title": "Falha ao enviar prompt",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} de {{total}} ativados",
   "dialog.mcp.empty": "Nenhum MCP configurado",
   "dialog.fork.empty": "Nenhuma mensagem para bifurcar",
   "dialog.directory.action.selectFile": "Selecionar arquivo",

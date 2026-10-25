@@ -238,7 +238,6 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Neuspješno slanje upita",
 
   "dialog.mcp.title": "MCP-ovi",
-  "dialog.mcp.description": "{{enabled}} od {{total}} omogućeno",
   "dialog.mcp.empty": "Nema konfigurisanih MCP-ova",
 
 

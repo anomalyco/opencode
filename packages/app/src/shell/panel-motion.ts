@@ -1,227 +1,37 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js"
 import { ease, frameLoop, prefersReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
-import { motionGlobals, motionTuning } from "@opencode/ui/motion-tuning"
-
-const group = "Sidebars"
-
-const subsection = "Open & close"
+import { motionTimeScale } from "@opencode/ui/motion-tuning"
 
 // Panels in flight, across the app. Native views, which no DOM box clips, stay hidden while any panel moves.
 const [flights, setFlights] = createSignal(0)
 
 export const panelsMoving = () => flights() > 0
 
-// The "James" option, chosen in the preset strip beside Snappy, Smooth and Calm, swaps the section's knobs for its own: the
-// layout moves on its layout spring, like the shared spring's, while the panel opens with a short shift and fade (Web
-// Animations on the compositor) and closes at once. The shared spring ships; James stays one choice away.
-const james = motionTuning.mode("sidebars.james", { label: "James", group, subsection })
+// The left sidebar and the side panel share one spring, so they move as one system. Each panel's flight takes its time
+// scaled by the square root of how far it travels against a 480px panel, between 0.15s and 0.3s, so a narrow sidebar
+// doesn't crawl and a wide panel doesn't snap.
+const spring: DurationOptions = { duration: 0.3, bounce: 0 }
 
-const springs = () => !james()
-
-// The left sidebar and the side panel share one spring, so they move as one system.
-const spring = motionTuning.spring("sidebars", {
-  label: "Spring",
-  group,
-  subsection,
-  description: "Sidebar and side panel, one spring",
-  target: "#vertical-tabs-sidebar",
-  when: springs,
-  shipped: "smooth",
-  presets: {
-    snappy: { duration: 0.2, bounce: 0 },
-    smooth: { duration: 0.3, bounce: 0 },
-    calm: { duration: 0.45, bounce: 0 },
-  },
-})
-
-// Each panel's flight takes the shared spring's time scaled by the square root of how far it travels against a 480px
-// panel, so a narrow sidebar doesn't crawl and a wide panel doesn't snap.
-const scaleByDistance = motionTuning.toggle("sidebars.scaleByDistance", {
-  label: "Scale by distance",
-  group,
-  subsection: "Scale by distance",
-  description: "Wider panels take a little longer",
-  target: "#vertical-tabs-sidebar",
-  experiment: true,
-  value: true,
-})
-
-const distanceKnob = (
-  id: string,
-  meta: { label: string; value: number; min: number; max: number; step: number; unit: string },
-) =>
-  motionTuning.number(`sidebars.scaleByDistance.${id}`, {
-    ...meta,
-    group,
-    subsection: "Scale by distance",
-    when: scaleByDistance,
-  })
-
-const minDuration = distanceKnob("min", {
-  label: "Min duration",
-  value: 0.15,
-  min: 0.05,
-  max: 0.5,
-  step: 0.01,
-  unit: "s",
-})
-
-const maxDuration = distanceKnob("max", { label: "Max duration", value: 0.3, min: 0.2, max: 1, step: 0.01, unit: "s" })
-
-// The width whose flight takes the shared spring's own time.
-const referenceWidth = distanceKnob("reference", {
-  label: "Reference width",
-  value: 480,
-  min: 200,
-  max: 900,
-  step: 10,
-  unit: "px",
-})
-
-/** How flights scale by distance, or null while they don't. */
-export type DistanceScale = { min: number; max: number; reference: number }
-
-const distanceScale = (): DistanceScale | null =>
-  scaleByDistance() ? { min: minDuration(), max: maxDuration(), reference: referenceWidth() } : null
+const distance = { min: 0.15, max: 0.3, reference: 480 }
 
 /**
- * The shared spring for a panel that travels `distance` pixels, for motion that must read as the sidebar's own, like its
- * peek. Without a distance, or with scaling off, it is the shared spring as tuned.
+ * The shared spring for a panel that travels `width` pixels, stretched by the global speed and slow motion. Without a
+ * width it is the shared spring.
  */
-export function panelSpring(distance?: number, base = spring(), scale = distanceScale()): DurationOptions {
-  if (!scale || !distance || distance <= 0) return base
-  // The bounds stretch with the global speed and slow motion, like the spring itself. A min dragged past the max stops
-  // at it.
-  const time = (motionGlobals.slow.value ? 4 : 1) / motionGlobals.speed.value
-  const max = scale.max * time
-  const min = Math.min(scale.min * time, max)
-  const duration = base.duration * Math.sqrt(distance / scale.reference)
+export function panelSpring(width?: number): DurationOptions {
+  const time = motionTimeScale()
 
-  return { ...base, duration: Math.min(max, Math.max(min, duration)) }
+  if (!width || width <= 0) return { ...spring, duration: spring.duration * time }
+  const duration = spring.duration * time * Math.sqrt(width / distance.reference)
+
+  return { ...spring, duration: Math.min(distance.max * time, Math.max(distance.min * time, duration)) }
 }
 
-const style = motionTuning.choice("sidebars.style", {
-  label: "Motion",
-  group,
-  subsection,
-  when: springs,
-  value: "spring",
-  labels: { spring: "Spring", instant: "Instant" },
-})
-
-// How a panel's contents fade on a spring flight: only across the last stretch of travel before closed, so they stay
-// solid for most of a close and arrive almost at once on an open; not at all; or across the whole flight, down to half.
-const contentsFade = motionTuning.choice("sidebars.contentsFade", {
-  label: "Contents fade",
-  group,
-  subsection,
-  when: springs,
-  value: "edge",
-  labels: { edge: "Edge", off: "Off", spring: "Whole spring" },
-})
-
-const edgeFade = motionTuning.number("sidebars.edgeFade", {
-  label: "Edge fade",
-  group,
-  subsection,
-  when: () => springs() && contentsFade() === "edge",
-  value: 15,
-  min: 5,
-  max: 50,
-  step: 1,
-  unit: "%",
-})
-
-/** The opacity of a panel's contents `closed` of the way through a spring flight, as the contents fade sets it. */
-export const panelOpacity = (closed: number) => {
-  if (closed === 0 || james()) return ""
-  const fade = contentsFade()
-
-  if (fade === "off") return ""
-
-  if (fade === "spring") return `${1 - closed / 2}`
-
-  return `${Math.min(1, (1 - closed) / (edgeFade() / 100))}`
-}
-
-const jamesShift = motionTuning.spring("sidebars.james.shift", {
-  label: "Movement",
-  group,
-  subsection,
-  when: james,
-  shipped: "smooth",
-  presets: {
-    snappy: { duration: 0.18, bounce: 0 },
-    smooth: { duration: 0.24, bounce: 0 },
-    calm: { duration: 0.32, bounce: 0 },
-  },
-})
-
-const jamesFade = motionTuning.easing("sidebars.james.fade", {
-  label: "Fade",
-  group,
-  subsection,
-  when: james,
-  value: [0.17, 0.85, 0.63, 1.03],
-})
-
-const jamesFadeDuration = motionTuning.number("sidebars.james.fadeDuration", {
-  label: "Fade duration",
-  group,
-  subsection,
-  when: james,
-  value: 0.24,
-  min: 0.05,
-  max: 0.6,
-  step: 0.01,
-  unit: "s",
-  time: "duration",
-})
-
-/** How far the right side panel shifts in from its edge when James opens it, in pixels. */
-export const jamesPanelShift = motionTuning.number("sidebars.james.panelShift", {
-  label: "Panel shift",
-  group,
-  subsection,
-  when: james,
-  value: 46,
-  min: 0,
-  max: 48,
-  step: 1,
-  unit: "px",
-})
-
-// The layout's width moves on the layout spring, with the timeline held at its landing width as with the shared spring;
-// "off" moves it in one frame.
-const jamesLayout = motionTuning.choice("sidebars.james.layout", {
-  label: "Layout",
-  group,
-  subsection,
-  when: james,
-  value: "animate",
-  labels: { animate: "Animate", off: "Off" },
-})
-
-const layoutSpring = (direction: string, label: string) =>
-  motionTuning.spring(`sidebars.james.layout.${direction}`, {
-    label,
-    group,
-    subsection,
-    when: () => james() && jamesLayout() !== "off",
-    shipped: "smooth",
-    presets: {
-      snappy: { duration: 0.16, bounce: 0 },
-      smooth: { duration: 0.24, bounce: 0 },
-      calm: { duration: 0.32, bounce: 0 },
-    },
-  })
-
-const jamesLayoutOpen = layoutSpring("open", "Layout open")
-
-const jamesLayoutClose = layoutSpring("close", "Layout close")
-
-// The opacity a panel fades up from under James and down to.
-const faded = 0.15
+/**
+ * The opacity of a panel's contents `closed` of the way through a flight: they fade only across the last 15% of travel
+ * before closed, so they stay solid for most of a close and arrive almost at once on an open.
+ */
+export const panelOpacity = (closed: number) => (closed === 0 ? "" : `${Math.min(1, (1 - closed) / 0.15)}`)
 
 /** Where a neighbour's content sits: centred content follows its box's centre, start-pinned content its start edge. */
 export type Anchor = "center" | "start"
@@ -401,11 +211,6 @@ function measureBlocks(box: HTMLElement) {
   }
 }
 
-/** Adds a button that toggles a panel to the Knobs panel's Open & close page while the panel is mounted. */
-export function replayPanelToggle(input: { id: string; label: string; toggle: () => void }) {
-  onCleanup(motionTuning.action({ id: `sidebars.${input.id}`, label: input.label, group, subsection, run: input.toggle }))
-}
-
 /**
  * Opens and closes an edge panel on the shared sidebar spring. `paint` receives how far closed the panel is, from 0
  * (open) to 1 (closed), every frame of a flight and whenever a signal it reads changes at rest. It sizes the panel's
@@ -421,12 +226,8 @@ export function createPanelMotion(input: {
   onClosed?: () => void
   /** Reads layout in the frame loop's read phase, before each frame of a flight paints. */
   measure?: () => void
-  /**
-   * The panel layer, which fades in under reduced motion. James shifts and fades it, `offset` pixels toward its edge
-   * (negative for the inline-start edge; mirrored in RTL).
-   */
+  /** The panel layer, which fades in under reduced motion. */
   element?: Accessor<HTMLElement | undefined>
-  offset?: () => number
   /** The width the panel travels across, in pixels, read once as each flight starts; it scales the flight's time. */
   distance?: () => number | undefined
 }) {
@@ -438,11 +239,6 @@ export function createPanelMotion(input: {
   // A state `sync` asked to show at once, for when the change hasn't reached this motion yet, e.g. inside a batch.
   let snapTo: boolean | undefined
   let flying = false
-  // James's panel animations, its shift and fade, held at their end until the flight settles; `fading` while they run.
-  let fades: Animation[] = []
-  let fading = false
-  // James's layout flight: the panel stays at its landing box, so its only travel is its own shift.
-  const [pinned, setPinned] = createSignal(false)
 
   const fly = (next: boolean) => {
     if (flying === next) return
@@ -480,10 +276,6 @@ export function createPanelMotion(input: {
     landed = []
 
     if (!input.open()) setPresent(false)
-    fades.forEach((animation) => animation.cancel())
-    fades = []
-    fading = false
-    setPinned(false)
 
     if (!input.open()) input.onClosed?.()
 
@@ -511,10 +303,6 @@ export function createPanelMotion(input: {
         if (previous === undefined || previous[1] !== identity) {
           stop?.()
           stop = undefined
-          fades.forEach((animation) => animation.cancel())
-          fades = []
-          fading = false
-          setPinned(false)
           fly(false)
           motion.snap(target)
           paint()
@@ -532,32 +320,9 @@ export function createPanelMotion(input: {
           return open ? reveal() : undefined
         }
 
-        const instantLayout = james() && jamesLayout() === "off"
+        if (now) return snap(open)
 
-        if (now || (!james() && style() === "instant")) return snap(open)
-
-        // Without layout motion, the layout opens before the panel fades in and closes after it fades out.
-        if (instantLayout) {
-          stop?.()
-          stop = undefined
-
-          if (open) {
-            motion.snap(0)
-            paint()
-          }
-
-          fly(true)
-
-          return fadePanel(open)
-        }
-
-        // James's panel closes at once while its layout lands; it opens with its own fade and shift.
-        // James's panel shifts and fades on its own curves, in on open and back out on close.
-        if (james()) fadePanel(open)
-
-        setPinned(james())
-
-        const tuning = james() ? (open ? jamesLayoutOpen() : jamesLayoutClose()) : panelSpring(input.distance?.())
+        const tuning = panelSpring(input.distance?.())
         motion.omega = (2 * Math.PI) / tuning.duration
         motion.zeta = 1 - tuning.bounce
         // Retargeting keeps the current position and velocity, so a second toggle mid-flight turns around smoothly.
@@ -575,9 +340,7 @@ export function createPanelMotion(input: {
 
           if (!motion.resting) return true
           stop = undefined
-
-          // A panel still fading settles when its animations finish.
-          if (!fading) settle()
+          settle()
 
           return false
         }
@@ -594,72 +357,17 @@ export function createPanelMotion(input: {
       if (input.open()) input.element?.()?.animate?.({ opacity: [0, 1] }, { duration: 150, easing: ease.out })
     })
 
-  /**
-   * James: the panel shifts in and fades up on open, and shifts back out and fades down on close, then hides once the
-   * flight settles. A reversal turns around from where the panel is. Deferred so a panel that mounts with this open
-   * exists first.
-   */
-  const fadePanel = (open: boolean) =>
-    queueMicrotask(() => {
-      const element = input.element?.()
-
-      if (input.open() !== open) return
-
-      if (!element?.animate) return stop ? undefined : snap(open)
-
-      const x = (input.offset?.() ?? 0) * (element.matches(":dir(rtl)") ? -1 : 1)
-      const away = { transform: `translateX(${x}px)`, opacity: `${faded}` }
-      const rest = { transform: "none", opacity: "1" }
-      const now = getComputedStyle(element)
-      const start = fades.length > 0 ? { transform: now.transform, opacity: now.opacity } : open ? away : rest
-      const end = open ? rest : away
-      fades.forEach((animation) => animation.cancel())
-
-      const current = [
-        element.animate(
-          { transform: [start.transform, end.transform] },
-          { ...springEasing(jamesShift()), fill: "both" },
-        ),
-        element.animate(
-          { opacity: [start.opacity, end.opacity] },
-          {
-            duration: jamesFadeDuration() * 1000,
-            easing: `cubic-bezier(${(open ? jamesFade() : reverseBezier(jamesFade())).join(", ")})`,
-            fill: "both",
-          },
-        ),
-      ]
-
-      fades = current
-      fading = true
-      void Promise.all(current.map((animation) => animation.finished)).then(
-        () => {
-          if (current !== fades) return
-          fading = false
-
-          // Without a spring still landing the layout, the flight ends here (a close's layout moves now).
-          if (!stop) return snap(input.open())
-
-          // A closed panel is gone once it has faded out, while the layout's spring finishes landing.
-          if (!input.open()) fades.push(element.animate({ opacity: [0, 0] }, { duration: 0, fill: "forwards" }))
-        },
-        () => undefined,
-      )
-    })
-
   // Repaints at rest when the open size changes, e.g. a resize drag or a window resize.
   createEffect(paint)
 
   onCleanup(() => {
     stop?.()
-    fades.forEach((animation) => animation.cancel())
     fly(false)
     unhold()
   })
 
   return {
     present,
-    pinned,
     sync: (open: boolean) => {
       if (flying && input.open() === open) return snap(open)
       snapTo = open
@@ -700,23 +408,6 @@ export function guardClosingFocus(input: {
     root.addEventListener("focusin", evict)
     onCleanup(() => root.removeEventListener("focusin", evict))
   })
-}
-
-/** A spring sampled per 60 Hz frame into a CSS `linear()` easing. It ends once within 0.5% of rest, a twentieth of a
- * pixel on these shifts. */
-function springEasing(tuning: DurationOptions) {
-  const spring = Spring.fromDuration(0, tuning).set(1)
-  const points = [0]
-
-  while (points.length < 240 && points.at(-1)! < 0.995) points.push(Math.round(spring.step(1 / 60) * 1000) / 1000)
-  points[points.length - 1] = 1
-
-  return { duration: ((points.length - 1) * 1000) / 60, easing: `linear(${points.join(", ")})` }
-}
-
-/** The curve that plays `curve` backwards in time, so a close looks like its open in reverse. */
-function reverseBezier([x1, y1, x2, y2]: readonly number[]) {
-  return [1 - x2, 1 - y2, 1 - x1, 1 - y1].map((value) => Math.round(value * 1000) / 1000)
 }
 
 function anchorX(element: HTMLElement, anchor: Anchor) {

@@ -242,7 +242,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Nepodarilo sa odoslať príkaz",
   "prompt.toast.promptSendFailed.title": "Nepodarilo sa odoslať výzvu",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} z {{total}} povolených",
   "dialog.mcp.empty": "Nie sú nastavené žiadne MCP",
   "dialog.fork.empty": "Žiadne správy na vytvorenie vetvy",
   "dialog.directory.action.selectFile": "Vybrať súbor",

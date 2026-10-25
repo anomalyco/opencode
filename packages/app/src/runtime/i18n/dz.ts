@@ -228,7 +228,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "བརྡ་བཀོད་གཏང་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "prompt.toast.promptSendFailed.title": "བརྡ་སྟོན་གཏང་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "dialog.mcp.title": "MCPs།",
-  "dialog.mcp.description": "{{enabled}} གི་ {{total}} ལྕོགས་ཅན་བཟོ་ཡོདཔ།",
   "dialog.mcp.empty": "MCPsརིམ་སྒྲིག་མ་འབད་བས།",
   "dialog.fork.empty": "ལས་ཕོརཀ་འབད་ནི་ལུ་འཕྲིན་དོན་མེད།",
   "dialog.directory.action.selectFile": "ཡིག་སྣོད་སེལ་འཐུ་འབད།",

@@ -11,7 +11,6 @@ import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SessionPreview } from "@/session/story-model"
-import { SettingsProvider } from "@/settings/model"
 import type { SessionActivityItem } from "./activity-chips"
 
 // The app's default timeline preset.
@@ -231,8 +230,6 @@ export default {
   },
   parameters: {
     layout: "fullscreen",
-    // The activity chip experiments, shown in the components lab's inspector.
-    motion: ["activity.chip", "activity.chip.corners"],
     docs: {
       description: {
         component:
@@ -255,24 +252,3 @@ export const SubagentsAndShells = { args: { stage: 4, subagents: 2, shells: 2 } 
 export const ManySubagents = { args: { stage: 4, subagents: 12, shells: 2 } }
 
 export const Live = { render: () => <LiveActivity /> }
-
-// The real composer and activity lane, to try the activity chip experiments on.
-export const Experiments = {
-  render: () => <ExperimentPreview />,
-}
-
-function ExperimentPreview() {
-  return (
-    <SettingsProvider>
-      <SessionPreview
-        title="Activity chip"
-        description="Experiments in the inspector"
-        document={{ sessionID: CURRENT_SESSION_ID, messages: [], status: { type: "busy" }, diffs: [] }}
-        activity={{
-          subagents: Array.from({ length: 3 }, (_, i) => subagentItem(i)),
-          shells: [shellItem(0), shellItem(1)],
-        }}
-      />
-    </SettingsProvider>
-  )
-}

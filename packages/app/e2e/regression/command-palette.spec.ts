@@ -130,6 +130,49 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
 })
 
+test("Search commands lists only commands and runs the chosen one", async ({ page }) => {
+  const { dialog, input } = await openCommandPalette(page, true)
+  await input.fill("search commands")
+  await dialog.getByRole("option", { name: /^Search commands/ }).click()
+  const search = page.getByRole("dialog").getByRole("combobox")
+  await expect(search).toHaveAttribute("placeholder", "Search commands")
+  await expect(search).toBeFocused()
+  await expect(page.getByRole("dialog").getByRole("option", { name: /^Open settings/ })).toBeVisible()
+  await search.fill("Palette fixture")
+  await expect(page.getByRole("dialog").getByText("No results found", { exact: true })).toBeVisible()
+  await search.fill("open settings")
+  await expect(page.getByRole("dialog").getByRole("option")).toHaveCount(1)
+  await search.press("Enter")
+  await expect(page).toHaveURL("/settings")
+})
+
+test("Search projects opens a new session's project picker from a session and from Home", async ({ page }) => {
+  const editor = page.locator('[data-component="composer-editor"]')
+  const picker = page.getByRole("combobox", { name: "Search projects", exact: true })
+  const { dialog, input } = await openCommandPalette(page)
+  await input.fill("search projects")
+  await dialog.getByRole("option", { name: /^Search projects/ }).click()
+  await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
+  await expect(picker).toBeFocused()
+  // Just the projects: no "Add project", no worktrees and no key hints.
+  const projects = page.getByRole("dialog").getByRole("option")
+  await expect(projects).toHaveCount(1)
+  await expect(projects).toHaveText(/command-palette/)
+  await expect(projects.getByRole("button", { name: "Worktrees", exact: true })).toHaveCount(0)
+  await expect(page.locator(".new-session-location-hints")).toHaveCount(0)
+  await picker.press("Escape")
+  await expect(picker).toHaveCount(0)
+  await expect(editor).toBeFocused()
+
+  await page.goto("/")
+  await expect(
+    page.getByRole("region", { name: "Recent sessions" }).getByRole("button", { name: /Palette fixture session/ }),
+  ).toBeEnabled()
+  await page.keyboard.press("ControlOrMeta+Shift+O")
+  await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
+  await expect(picker).toBeFocused()
+})
+
 declare global {
   interface Window {
     __paletteOrders?: string[][]

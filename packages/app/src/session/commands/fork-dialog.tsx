@@ -1,20 +1,13 @@
 import { Component, createMemo, For, Show } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
-import { useComposerState } from "@/composer/persistence"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
-import { showToast } from "@/shell/notifications/toast"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode/util/encode"
-import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServer } from "@/runtime/server/current"
-import { sessionHref } from "@/shell/routes/session"
+import { useSessionFork } from "@/session/fork"
 import "@/shell/search-list.css"
 
 interface ForkableMessage {
@@ -29,14 +22,10 @@ function formatTime(date: Date): string {
 
 export const DialogFork: Component = () => {
   const params = useParams()
-  const navigate = useNavigate()
   const data = useData()
-  const serverSDK = useServerSDK()
-  const location = useWorkspaceLocation()
-  const prompt = useComposerState()
   const dialog = useDialog()
   const language = useLanguage()
-  const server = useServer()
+  const fork = useSessionFork()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -60,38 +49,13 @@ export const DialogFork: Component = () => {
   })
 
   const handleSelect = (item: ForkableMessage | undefined) => {
-    if (!item) return
-
     const sessionID = params.id
 
-    if (!sessionID) return
-    const message = data.session.message.get(sessionID, item.id)
+    if (!item || !sessionID) return
 
-    if (message?.type !== "user") return
-
-    const restored = extractPromptFromMessage(message, {
-      directory: location().directory,
-      attachmentName: language.t("common.attachment"),
-      sessionTitle: (id) => data.session.get(id)?.title,
+    void fork({ sessionID, messageID: item.id }).then((opened) => {
+      if (opened) dialog.close()
     })
-
-    const context = extractPromptContext(message, { directory: location().directory })
-    const dir = base64Encode(location().directory)
-
-    serverSDK.api.session
-      .fork({ sessionID, before: item.id })
-      .then((forked) => {
-        data.session.remember(forked)
-        dialog.close()
-        const target = prompt.capture({ dir, id: forked.id })
-        target.set(restored)
-        target.context.replace([...context.comments, ...context.files])
-        navigate(sessionHref(server.key, forked.id))
-      })
-      .catch((cause: unknown) => {
-        const message = cause instanceof Error ? cause.message : String(cause)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
   }
 
   const list = useFilteredList({

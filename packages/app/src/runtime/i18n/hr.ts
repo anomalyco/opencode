@@ -229,7 +229,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Slanje naredbe nije uspjelo",
   "prompt.toast.promptSendFailed.title": "Slanje upita nije uspjelo",
   "dialog.mcp.title": "MCPs",
-  "dialog.mcp.description": "{{enabled}} od {{total}} omogućen",
   "dialog.mcp.empty": "Nema konfiguriranih MCP-ova",
   "dialog.fork.empty": "Nema poruka za račvanje",
   "dialog.directory.action.selectFile": "Odaberite datoteku",

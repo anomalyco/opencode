@@ -216,7 +216,6 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "Tað eydnaðist ikki at senda skipan",
   "prompt.toast.promptSendFailed.title": "Tað eydnaðist ikki at senda boð",
   "dialog.mcp.title": "MCP",
-  "dialog.mcp.description": "{{enabled}} av {{total}} virkið",
   "dialog.mcp.empty": "Ongin MCP uppsettur",
   "dialog.fork.empty": "Eingi boð at greina frá",
   "dialog.directory.action.selectFile": "Vel fílu",
