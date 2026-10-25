@@ -42,8 +42,10 @@ export const Plugin = define({
     const watcher = yield* Effect.serviceOption(Watcher.Service)
     const watches = yield* FiberMap.make<string>()
 
-    const syncExternalWatches = Effect.fnUntraced(function* () {
-      const entries = yield* config.entries()
+    const syncExternalWatches = Effect.fnUntraced(function* (
+      entries: Entry[],
+      discoveredFiles: { directory: string; filepath: string }[],
+    ) {
       const currentDirs = new Set<string>()
       const currentFiles = new Set<string>()
 
@@ -56,12 +58,16 @@ export const Plugin = define({
             currentDirs.add(resolved)
           }
         }
-        const files = yield* discover(fs, entry.path)
-        for (const file of files) {
-          const resolved = yield* fs.realPath(file.filepath).pipe(Effect.orElseSucceed(() => undefined))
-          if (resolved && !FSUtil.contains(entry.path, resolved)) {
-            currentFiles.add(resolved)
-          }
+      }
+
+      for (const file of discoveredFiles) {
+        const resolved = yield* fs.realPath(file.filepath).pipe(Effect.orElseSucceed(() => undefined))
+        if (
+          resolved &&
+          !FSUtil.contains(file.directory, resolved) &&
+          !Array.from(currentDirs).some((dir) => FSUtil.contains(dir, resolved))
+        ) {
+          currentFiles.add(resolved)
         }
       }
 
@@ -89,19 +95,25 @@ export const Plugin = define({
       }
     })
     const loadEntry = Effect.fnUntraced(function* (entry: Entry) {
-      if (entry.type === "document") return [entry]
-      if (entry.type !== "directory") return []
+      if (entry.type === "document") return { documents: [entry], files: [] as { directory: string; filepath: string }[] }
+      if (entry.type !== "directory") return { documents: [] as Document[], files: [] as { directory: string; filepath: string }[] }
       const files = yield* discover(fs, entry.path)
-      return yield* Effect.forEach(files, (file) =>
+      const documents = yield* Effect.forEach(files, (file) =>
         fs.readFileStringSafe(file.filepath).pipe(
           Effect.flatMap((content) => (content ? decode(file, content) : Effect.succeed(undefined))),
           Effect.orElseSucceed(() => undefined),
         ),
-      ).pipe(Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)))
+      ).pipe(Effect.map((docs) => docs.filter((document): document is Document => document !== undefined)))
+      return { documents, files }
     })
     const load = Effect.fn("ConfigAgentPlugin.load")(function* () {
-      yield* syncExternalWatches()
-      return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
+      const entries = yield* config.entries()
+      const results = yield* Effect.forEach(entries, loadEntry)
+      yield* syncExternalWatches(
+        entries,
+        results.flatMap((item) => item.files),
+      )
+      return results.flatMap((item) => item.documents)
     })
     const loaded = { documents: [] as Document[] }
     const reload = load().pipe(

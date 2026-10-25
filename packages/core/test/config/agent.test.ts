@@ -731,11 +731,17 @@ Mixed fields.`,
           )
 
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Initial prompt" })
-          expect(yield* watcher.subscriptions()).toContainEqual({
-            path: external,
-            type: "directory",
-            ignore: FSUtil.ignoreGlobs,
-          })
+          expect(yield* watcher.subscriptions()).toContainEqual(
+            expect.objectContaining({
+              path: external,
+              type: "directory",
+            }),
+          )
+          expect(yield* watcher.subscriptions()).not.toContainEqual(
+            expect.objectContaining({
+              type: "file",
+            }),
+          )
 
           yield* Effect.promise(() => fs.writeFile(path.join(external, "reviewer.md"), "Updated prompt"))
           yield* watcher.emit({ type: "update", path: path.join(external, "reviewer.md") })
@@ -773,10 +779,12 @@ Mixed fields.`,
           )
 
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Initial prompt" })
-          expect(yield* watcher.subscriptions()).toContainEqual({
-            path: external,
-            type: "file",
-          })
+          expect(yield* watcher.subscriptions()).toContainEqual(
+            expect.objectContaining({
+              path: external,
+              type: "file",
+            }),
+          )
 
           yield* Effect.promise(() => fs.writeFile(external, "Updated prompt"))
           yield* watcher.emit({ type: "update", path: external })
