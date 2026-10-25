@@ -233,8 +233,17 @@
     }
   }
 
+  /* Tailwind v4 emits a `@supports (color: color-mix(...))` fallback nested inside this
+     rule, and Chromium DevTools crashes while building the highlighted-pseudo cascade for a
+     `::highlight()` rule that contains a nested at-rule. It reads `selectorList.selectors`
+     by a matching-selector index that serializes out of range, throws, and leaves the Styles
+     pane empty. Precompute the mix in a custom property so the rule body stays declaration-only. */
+  :root {
+    --timeline-search-hit-background: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  }
+
   ::highlight(timeline-search-hit) {
-    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    background-color: var(--timeline-search-hit-background);
   }
 
   ::highlight(timeline-search-hit-active) {
