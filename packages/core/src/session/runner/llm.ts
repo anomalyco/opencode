@@ -1,6 +1,6 @@
 export * as SessionRunnerLLM from "./llm.js"
 
-import { Message } from "@opencode/ai"
+import { Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
@@ -298,8 +298,11 @@ const layer = Layer.effect(
           }),
           OutputLimit: Effect.fn("SessionRunner.continueOutputLimit")(function* (outcome) {
             // The current response is included. User input or any other finish breaks the streak.
-            const rows = yield* db
-              .select()
+            const recent = yield* db
+              .select({
+                type: SessionMessageTable.type,
+                finish: sql<string | null>`json_extract(${SessionMessageTable.data}, '$.finish')`,
+              })
               .from(SessionMessageTable)
               .where(
                 and(
@@ -311,10 +314,8 @@ const layer = Layer.effect(
               .limit(3)
               .all()
               .pipe(Effect.orDie)
-            const recent = yield* Effect.forEach(rows, SessionHistory.decodeMessageRow)
             const exhausted =
-              recent.length === 3 &&
-              recent.every((message) => message.type === "assistant" && message.finish === "length")
+              recent.length === 3 && recent.every((row) => row.type === "assistant" && row.finish === "length")
             if (exhausted)
               return yield* new StepFailedError({
                 error: {

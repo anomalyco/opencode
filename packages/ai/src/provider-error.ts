@@ -250,6 +250,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     ...providerCodes(body),
     ...providerCodes(input.message),
     ...(GATEWAY_CODE_LABEL.exec(input.message)?.slice(1) ?? []),
+    ...awsErrorType(input.http?.headers["x-amzn-errortype"]),
   ].map((code) => code.toLowerCase())
   // Scan the raw payload too so signals missing from the summary message
   // (e.g. overflow phrases nested in a JSON error body) still classify.
@@ -261,7 +262,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
       codes.includes("request_too_large") ||
-      isContextOverflow(text))
+      (!codes.includes("throttlingexception") && isContextOverflow(text)))
   )
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
   if (input.status === 413 || isPayloadTooLarge(text))
@@ -325,6 +326,8 @@ function providerCodes(value: unknown) {
   const exception = isRecord(decoded.exception) ? decoded.exception : undefined
   return [
     decoded.code,
+    ...awsErrorType(decoded.__type),
+    ...awsErrorType(decoded.code),
     // Stability's `{ id, name, errors }` bodies carry the code in `name`.
     Array.isArray(decoded.errors) ? decoded.name : undefined,
     decoded.error_type,
@@ -342,4 +345,11 @@ function providerCodes(value: unknown) {
     response?.error_type,
     exception?.type,
   ].filter((value): value is string => typeof value === "string")
+}
+
+// AWS restJson1 reports the modeled error in `X-Amzn-Errortype`, `__type` or `code`, possibly
+// namespaced (`ns#Name`) or suffixed (`Name:uri`). Keep the shape name only.
+// https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#operation-error-serialization
+function awsErrorType(value: unknown) {
+  return typeof value === "string" ? [value.replace(/:.*/s, "").replace(/^[^#]*#/, "")] : []
 }

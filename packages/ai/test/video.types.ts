@@ -9,7 +9,7 @@ import {
   type VideoModelOptions,
   type VideoOptions,
   type VideoRequestFor,
-} from "../src/index.js"
+} from "../src/effect.js"
 import type { Service } from "../src/video-client.js"
 import { Anthropic, Fal, Google, OpenAI, Runway, XAI } from "../src/providers.js"
 

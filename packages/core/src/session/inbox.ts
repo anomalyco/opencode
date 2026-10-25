@@ -20,8 +20,10 @@ import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { SessionEvent } from "./event.js"
+import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
+import { SessionStored } from "./stored.js"
 import { SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
@@ -49,6 +51,7 @@ export {
 export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
+const decodeStoredUser = Schema.decodeUnknownSync(SessionStored.UserPayload)
 const encodeUser = Schema.encodeSync(UserPayload)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticPayload)
 const encodeSynthetic = Schema.encodeSync(SyntheticPayload)
@@ -107,7 +110,9 @@ const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
 
 export const find = Effect.fn("SessionInbox.find")(function* (db: DatabaseService, id: SessionMessage.ID) {
   const row = yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie)
-  return row === undefined ? undefined : fromRow(row)
+  if (row === undefined) return undefined
+  const [hydrated] = yield* SessionBlob.hydrateInbox(db, [row])
+  return hydrated && fromRow(hydrated)
 })
 
 const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(function* (
@@ -125,7 +130,8 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   if (row === undefined) return undefined
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* new LifecycleConflict({ id })
-  const message = SessionHistory.decodeMessageRowSync(row)
+  const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
+  if (!message) return undefined
   const base = { id, sessionID, time: { created: message.time.created }, delivery }
   if (message.type === "user")
     return User.make({
@@ -341,8 +347,20 @@ export const projectDelivered = Effect.fn("SessionInbox.projectDelivered")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-  return fromRow(deleted)
+  return delivered(deleted)
 })
+
+/** A consumed row with its payload as stored, so user file refs reach the message without their blobs. */
+export type Delivered =
+  | { readonly id: SessionMessage.ID; readonly type: "user"; readonly payload: SessionStored.UserPayload }
+  | { readonly id: SessionMessage.ID; readonly type: "synthetic"; readonly payload: SyntheticPayload }
+  | { readonly id: SessionMessage.ID; readonly type: "compaction" | "move" }
+
+const delivered = (row: typeof SessionInboxTable.$inferSelect): Delivered => {
+  if (row.type === "user") return { id: row.id, type: "user", payload: decodeStoredUser(row.payload) }
+  if (row.type === "synthetic") return { id: row.id, type: "synthetic", payload: decodeSynthetic(row.payload) }
+  return { id: row.id, type: row.type }
+}
 
 export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(function* (
   db: DatabaseService,
@@ -400,7 +418,7 @@ export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseServic
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
     .pipe(Effect.orDie)
-  return rows.map(fromRow)
+  return (yield* SessionBlob.hydrateInbox(db, rows)).map(fromRow)
 })
 
 export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
@@ -419,7 +437,7 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
   promotable: Promotable,
 ) {
   const steer = (yield* pendingSteers(db, sessionID))[0]
-  if (steer) return fromRow(steer)
+  if (steer) return promotion(steer)
   if (promotable !== "input") return undefined
   const queued = yield* db
     .select()
@@ -429,8 +447,18 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
     .limit(1)
     .get()
     .pipe(Effect.orDie)
-  return queued ? fromRow(queued) : undefined
+  return queued ? promotion(queued) : undefined
 })
+
+/** What a boundary decides on: prompts are promoted by id, so only a move's payload is read. */
+export type Promotion =
+  | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic" | "compaction"; readonly delivery: Delivery }
+  | { readonly id: SessionMessage.ID; readonly type: "move"; readonly delivery: Delivery; readonly payload: MovePayload }
+
+const promotion = (row: typeof SessionInboxTable.$inferSelect): Promotion =>
+  row.type === "move"
+    ? { id: row.id, type: "move", delivery: row.delivery, payload: decodeMove(row.payload) }
+    : { id: row.id, type: row.type, delivery: row.delivery }
 
 /** Which pending rows count: "input" means any item in either delivery mode. */
 export type Scope = "input" | Delivery

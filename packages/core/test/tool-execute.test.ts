@@ -205,12 +205,8 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   ).toBe("call_execute:x")
   expect(conversions).toBe(1)
 
-  // Converted schemas are cached by identity, so a fresh schema shows the new inventory's runtime is rebuilt.
   await Effect.runPromise(
-    createCodeMode(new Map([["echo", { ...echo, input: { ...echo.input } }]])).execute(
-      { code: 'return await tools.echo({ value: "next" })' },
-      context,
-    ),
+    createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
   )
   expect(conversions).toBe(2)
 })

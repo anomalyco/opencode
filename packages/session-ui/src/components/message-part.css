@@ -479,21 +479,34 @@
   &[data-variant="shell"] {
     background: var(--v2-background-bg-base);
 
-    [data-slot="bash-pre"] {
-      padding: 0;
-    }
-
     [data-slot="bash-pre"] code {
+      display: block;
       font-family: var(--v2-font-family-code);
       font-weight: 440;
       line-height: var(--line-height-base);
       letter-spacing: -0.04px;
     }
 
+    /* Each section stacks its copy button over its text in one grid cell, so the sticky button stays in view
+       while that section scrolls and never leaves its own section. */
     [data-slot="bash-command"],
     [data-slot="bash-result"] {
-      display: block;
-      padding: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-slot="bash-pre"],
+    [data-slot="bash-copy"] {
+      grid-area: 1 / 1;
+    }
+
+    [data-slot="bash-copy"] {
+      position: sticky;
+      top: 4px;
+      z-index: 1;
+      justify-self: end;
+      align-self: start;
+      margin: 4px;
     }
 
     [data-slot="bash-result"] {

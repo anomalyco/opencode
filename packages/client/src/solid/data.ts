@@ -1284,14 +1284,10 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.location.skill.sync(location))
         break
       case "vcs.branch.updated":
-        setStore("location", locationKey(location), (data) => ({
-          vcs: {
-            branch: {
-              ...data?.vcs?.branch,
-              current: event.data.branch,
-            },
-          },
-        }))
+        // The event names only the current branch. Reload the rest: the default branch and provider can change with
+        // it, and a read served before the location's VCS provider loaded has neither.
+        result.location.vcs.invalidate(location)
+        refresh(() => result.location.vcs.sync(location))
         break
       case "form.created":
         if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break

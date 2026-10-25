@@ -70,6 +70,7 @@
     "@types/npm-package-arg": "6.1.4",
     "@types/npmcli__arborist": "6.3.3",
     "@types/pacote": "11.1.8",
-    "@typescript/native": "catalog:"
+    "@typescript/native": "catalog:",
+    "jsqr": "1.4.0"
   }
 }

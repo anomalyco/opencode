@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LanguageModel, LLM, LLMEvent } from "@opencode/ai"
+import { LanguageModel, LLM, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"

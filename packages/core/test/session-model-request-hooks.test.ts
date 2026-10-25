@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
@@ -77,6 +78,41 @@ describe("SessionModelRequest HTTP hooks", () => {
           { hook: "response", kind, agent: Agent.ID.make("build") },
         ]),
       )
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
+  it.effect("keeps hook edits to a tool schema out of later requests", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          const input = event.tools.lookup!.input as { required: string[] }
+          input.required.push("extra")
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const inputSchema = { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
+      const tools = {
+        definitions: [new ToolDefinition({ name: "lookup", description: "Lookup", inputSchema })],
+        execute: () => Effect.die("unused tool execution"),
+      }
+
+      const required = yield* Effect.forEach([1, 2], () =>
+        requests
+          .primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools })
+          .pipe(
+            Effect.map((prepared) => {
+              const tool = prepared.request.tools[0]
+              return tool?.type === "tool" ? tool.inputSchema.required : undefined
+            }),
+          ),
+      )
+
+      expect(required).toEqual([
+        ["id", "extra"],
+        ["id", "extra"],
+      ])
+      expect(inputSchema.required).toEqual(["id"])
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 

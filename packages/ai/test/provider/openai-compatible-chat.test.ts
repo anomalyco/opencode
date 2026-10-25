@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -651,7 +651,49 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("rejects content after a terminal chunk", () =>
+  it.effect("preserves late text and reasoning for replay without changing the finished tool call", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.encrypted", data: "opaque", id: "late-reasoning" }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_content: "First" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+              deltaChunk({}, "tool_calls"),
+              deltaChunk({ content: " world" }),
+              deltaChunk({ refusal: " (refusal)" }),
+              deltaChunk({ reasoning_content: " then" }),
+              deltaChunk({ reasoning: " more" }),
+              deltaChunk({ reasoning_text: " thoughts", reasoning_details: details }, "stop"),
+              usageChunk({ prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello world (refusal)")
+      expect(response.reasoning).toBe("First then more thoughts")
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+      expect(response.usage).toMatchObject({ inputTokens: 11, outputTokens: 7 })
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: {} }])
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
+        response.events.findIndex(LLMEvent.is.toolCall),
+      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages[0]).toMatchObject({
+        role: "assistant",
+        content: "Hello world (refusal)",
+        reasoning_content: "First then more thoughts",
+        reasoning_details: details,
+      })
+    }),
+  )
+
+  it.effect("rejects tool changes after a terminal chunk", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(

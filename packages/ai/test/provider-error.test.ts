@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/index.js"
-import { AIError } from "../src/schema/index.js"
+import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
+import { AIError, HttpContext } from "../src/schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -447,6 +447,37 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
     // Plain overflow phrasing without the throttle cue still compacts.
     expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("does not infer context overflow from known throttling exceptions", () => {
+    const cases = [
+      { status: 429, data: { code: "ThrottlingException" } },
+      { status: 429, rawBody: '{"__type":"com.amazonaws.bedrock#ThrottlingException"}' },
+      { rawBody: '{"exception":{"type":"throttlingException"}}' },
+      {
+        status: 429,
+        http: new HttpContext({
+          url: "https://bedrock.test/model/example/converse-stream",
+          status: 429,
+          headers: { "x-amzn-errortype": "ThrottlingException:http://internal.amazon.com/coral/" },
+        }),
+      },
+    ]
+    for (const input of cases) {
+      for (const message of ["Token limit exceeded", "Too many tokens, please try again later"]) {
+        const error = new AIError({ reason: classifyProviderFailure({ ...input, message }) })
+        expect(error.reason._tag).toBe("RateLimit")
+        expect(isContextOverflowFailure(error)).toBe(false)
+        expect(isRetryable(error)).toBe(true)
+      }
+    }
+    expect(
+      classifyProviderFailure({
+        message: "prompt is too long",
+        status: 400,
+        data: { code: "ValidationException" },
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
   })
 
   test("does not let substituted server codes make a 4xx retryable", () => {

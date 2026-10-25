@@ -139,7 +139,8 @@ story("shows question navigation shortcuts in buttons and tooltips", async ({ mo
   await expect(back).toHaveText("Back")
   await expect(back).toHaveAttribute("aria-keyshortcuts", mac ? "Meta+[" : "Alt+ArrowLeft")
   await back.hover()
-  await expect(page.getByRole("tooltip")).toContainText(mac ? "⌘[" : "Alt+←")
+  // Moving straight from Submit opens Back's tooltip while Submit's is still fading out.
+  await expect(page.getByRole("tooltip", { name: /Back/ })).toContainText(mac ? "⌘[" : "Alt+←")
   await back.press(mac ? "Meta+[" : "Alt+ArrowLeft")
   await expect(next).toBeVisible()
 })

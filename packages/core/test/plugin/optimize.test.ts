@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SystemPart } from "@opencode/ai"
+import { SystemPart } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"

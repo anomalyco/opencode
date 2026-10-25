@@ -99,6 +99,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       title: ctx.t("command.close"),
       group: ctx.t("command.category.view"),
       bind: "mod+w",
+      follows: "tab.close",
       scope: "#browser-panel",
       hidden: true,
       editable: true,

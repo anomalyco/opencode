@@ -401,7 +401,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         fileCommand({
           id: "file.close",
           title: language.t("command.tab.close"),
-          keybind: settings.keybinds.get("tab.close") ?? "mod+w",
+          keybind: "mod+w",
+          follows: "tab.close",
           when: (event) => !extensionScoped(event.target),
           onSelect: closeTab,
         }),

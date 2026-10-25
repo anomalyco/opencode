@@ -1,4 +1,4 @@
-import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai"
+import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai/effect"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { Media, Video, VideoClient, type GenerationEvent, type VideoEvent } from "../src/index.js"
+import { Media, Video, VideoClient, type GenerationEvent, type VideoEvent } from "../src/effect.js"
 import { Fal, Google, Runway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"

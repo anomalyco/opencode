@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { Base64 } from "effect/encoding"
-import { Speech, SpeechClient, SpeechEvent } from "../src/index.js"
+import { Speech, SpeechClient, SpeechEvent } from "../src/effect.js"
 import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"

@@ -12,7 +12,7 @@
 
 - Use `HttpClient`, `Stream`, and Schema codecs instead of `fetch`, async generators, and `JSON.parse`/`JSON.stringify`.
 - `return yield* new MyError(...)` instead of `Effect.fail(...)`; `Effect.void` instead of `Effect.succeed(undefined)`.
-- Only `src/promise.ts` may use Promises.
+- Only `src/index.ts` (the Promise entry) may use Promises.
 
 ## Tests
 

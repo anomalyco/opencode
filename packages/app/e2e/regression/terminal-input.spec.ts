@@ -19,6 +19,22 @@ test("clears the terminal line with Command+Delete", async ({ page }) => {
   await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("\x15")
 })
 
+test("a custom Close tab shortcut closes the focused terminal, not the session tab", async ({ page }) => {
+  const { session } = await openSession(page, {
+    ...workspace,
+    seed: { settings: { keybinds: { "tab.close": "mod+e" } } },
+  })
+
+  const terminal = page.locator('[data-component="terminal"]')
+  await page.keyboard.press("Control+Backquote")
+  await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+
+  await page.keyboard.press("ControlOrMeta+e")
+  await expect(terminal).toHaveCount(0)
+  await expect(page).toHaveURL(sessionHref(session.id))
+})
+
 test("reveals the terminal after its first output and hides the native caret", async ({ page }) => {
   const { pty } = await openSession(page, workspace)
   await page.keyboard.press("Control+Backquote")

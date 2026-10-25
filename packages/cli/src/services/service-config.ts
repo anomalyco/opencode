@@ -131,13 +131,22 @@ const paths = Effect.gen(function* () {
   }
 })
 
+// Clients find the service at its registration under XDG_STATE_HOME. A saved value would move the
+// registration away from them, and children of the service (tool shells, a relaunched Desktop) would
+// look for it in the wrong place, so the service keeps the state directory it was launched with.
+export function processEnv(env: Info["env"]) {
+  if (env === undefined) return undefined
+  const { XDG_STATE_HOME: _state, ...rest } = env
+  return rest
+}
+
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: (yield* read()).env,
+    env: processEnv((yield* read()).env),
     command: [
       ...selfCommand(),
       "serve",

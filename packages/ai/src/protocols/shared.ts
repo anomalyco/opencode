@@ -270,14 +270,14 @@ export const mediaReference = (
 }
 
 /**
- * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, an `http(s)` URL, or raw base64 in
+ * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, a URI, or raw base64 in
  * `uri`; the declared `mime` wins over any data-URL prefix so tool authors control the type the model sees.
  */
 export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   const parsed = Media.parseDataUrl(item.uri)
   const asset = parsed
     ? Media.from({ ...parsed.source, mediaType: item.mime })
-    : /^https?:\/\//.test(item.uri)
+    : item.uri.includes("://")
       ? Media.url(item.uri, { mediaType: item.mime })
       : Media.base64(item.uri, item.mime)
   return Message.media(asset, { filename: item.name })

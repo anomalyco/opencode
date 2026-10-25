@@ -1,6 +1,10 @@
 import { expect, story } from "../../storybook/playwright/story"
 
-for (const tool of ["shell", "execute", "subagent"]) {
+for (const [tool, title] of [
+  ["shell", "Shell"],
+  ["execute", "Execute"],
+  ["subagent", "Agent"],
+]) {
   for (const open of [false, true]) {
     story(`keeps ${tool} inside an existing ${open ? "open" : "closed"} group through execution`, async ({ mount }) => {
       const timeline = await mount("current-session-terminal-work--terminal-commands", {
@@ -16,7 +20,6 @@ for (const tool of ["shell", "execute", "subagent"]) {
       await timeline.getByRole("button", { name: "Start tool", exact: true }).click()
       await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
       const original = await group.elementHandle()
-      const title = tool === "subagent" ? "Agent" : tool === "execute" ? "Execute" : "Shell"
 
       for (const action of [undefined, "Complete input", "Run command", "Complete command"]) {
         if (action) await timeline.getByRole("button", { name: action, exact: true }).click()
@@ -109,7 +112,7 @@ story("shimmers and expands a running shell command", async ({ mount }) => {
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await expect(tool.locator('[data-slot="bash-pre"]')).toContainText("still running")
+  await expect(tool.locator('[data-slot="bash-result"]')).toContainText("still running")
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts

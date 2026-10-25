@@ -1,5 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
-import { createMemo } from "solid-js"
+import { createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
@@ -14,6 +14,7 @@ import {
   compactionCancelledDocument,
   compactionDocument,
   compactionFailedDocument,
+  compactionManualDocument,
   compactionRunningDocument,
   instructionsUpdatedMultipleDocument,
   instructionsUpdatedSingleDocument,
@@ -207,7 +208,10 @@ function RetryAndRecoverStory() {
             ? {
                 attempt: 2,
                 at: 1_900_000_000_000,
-                error: { type: "ProviderRateLimitError" as const, message: "Rate limit reached. Retrying with backoff." },
+                error: {
+                  type: "ProviderRateLimitError" as const,
+                  message: "Rate limit reached. Retrying with backoff.",
+                },
               }
             : undefined,
           time: { created: STORY_TIME, completed: finished ? STORY_TIME + 300 : undefined },
@@ -231,7 +235,7 @@ function RetryAndRecoverStory() {
           Finish response
         </button>
       </div>
-      <CurrentSessionProviders document={document()}>
+      <CurrentSessionProviders document={document()} backgroundCompaction>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -364,7 +368,7 @@ function CompactSessionStory() {
           Cancel next compaction
         </button>
       </div>
-      <CurrentSessionProviders document={document()}>
+      <CurrentSessionProviders document={document()} backgroundCompaction>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -373,25 +377,111 @@ function CompactSessionStory() {
 
 const CompactSession = { render: () => <CompactSessionStory /> }
 
+// Automatic compactions only show quietly with experimental.background_compaction on; turn it off to see today's record.
+const backgroundCompaction = {
+  args: { backgroundCompaction: true },
+  argTypes: { backgroundCompaction: { control: "boolean" } },
+}
+
 export const CompactionInProgress = {
-  render: () => (
+  ...backgroundCompaction,
+  render: (args: { backgroundCompaction: boolean }) => (
     <CurrentSessionTimelineStory
       title="Compaction in progress"
-      description="The production divider remains stable while the context summary streams below it."
+      description="With background compaction on, an automatic compaction is one quiet divider whose lines carry light toward Compacting."
       document={compactionRunningDocument}
       width="600px"
+      backgroundCompaction={args.backgroundCompaction}
     />
   ),
 }
 
 export const CompactionAndContinuation = {
-  render: () => (
+  ...backgroundCompaction,
+  render: (args: { backgroundCompaction: boolean }) => (
     <CurrentSessionTimelineStory
       title="Compaction and continuation"
-      description="The context summary separates earlier output from the continued response."
+      description="With background compaction on, a finished automatic compaction reads Compacted; clicking it opens the summary."
       document={compactionDocument}
       width="600px"
+      backgroundCompaction={args.backgroundCompaction}
     />
+  ),
+}
+
+export const CompactionManual = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Manual compaction"
+      description="A /compact keeps the full record: started divider, summary and usage."
+      document={compactionManualDocument}
+      width="600px"
+      backgroundCompaction
+    />
+  ),
+}
+
+/** Replays an automatic compaction live: Working, then the divider for `duration` ms, then the continued reply. */
+function CompactionReplayStory(props: { duration: number }) {
+  // The fixture's earlier reply was cut off for the compaction; here it finished, so no Interrupted divider shows first.
+  const prelude = compactionDocument.messages
+    .slice(0, 2)
+    .map((message) => (message.type === "assistant" ? { ...message, error: undefined } : message))
+
+  const [compaction, continuation] = [compactionDocument.messages[2], compactionDocument.messages[3]]
+  const [state, setState] = createStore({ phase: "working", created: 0, run: 0 })
+
+  const start = () => {
+    const run = state.run + 1
+    setState({ phase: "working", created: 0, run })
+    const at = (ms: number, apply: () => void) => setTimeout(() => state.run === run && apply(), ms)
+    at(1_500, () => setState({ phase: props.duration > 0 ? "running" : "completed", created: Date.now() }))
+    at(1_500 + props.duration, () => setState("phase", "completed"))
+    at(2_900 + props.duration, () => setState("phase", "continued"))
+  }
+
+  onMount(start)
+  onCleanup(() => setState("run", -1))
+
+  const document = createMemo(() => {
+    if (state.phase === "working" || compaction?.type !== "compaction" || compaction.status !== "completed")
+      return { ...compactionDocument, messages: prelude, status: { type: "busy" } } satisfies SessionDocument
+
+    const message =
+      state.phase === "running"
+        ? { ...compaction, status: "running" as const, time: { created: state.created } }
+        : { ...compaction, time: { created: state.created } }
+
+    return {
+      ...compactionDocument,
+      messages: [...prelude, message, ...(state.phase === "continued" && continuation ? [continuation] : [])],
+      status: { type: state.phase === "continued" ? "idle" : "busy" },
+    } satisfies SessionDocument
+  })
+
+  return (
+    <section class="mx-auto flex w-full max-w-[640px] flex-col gap-4 p-6">
+      <div class="flex gap-3">
+        <button type="button" onClick={start}>
+          Replay
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()} backgroundCompaction>
+        <SessionTimeline document={document()} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+// `instant` arrives finished, as when started and ended land in one flush; `quick` ends inside the 400 ms grace.
+const replayDurations = { instant: 0, quick: 150, short: 1_200, long: 20_000 }
+
+export const CompactionReplay = {
+  args: { run: "long" },
+  argTypes: { run: { control: "select", options: Object.keys(replayDurations) } },
+  render: (args: { run: string }) => (
+    // SAFETY: the run control only offers replayDurations keys.
+    <CompactionReplayStory duration={replayDurations[args.run as keyof typeof replayDurations]} />
   ),
 }
 
@@ -402,6 +492,7 @@ export const CompactionFailed = {
       description="A failed compaction keeps the production divider and shows the provider error."
       document={compactionFailedDocument}
       width="600px"
+      backgroundCompaction
     />
   ),
 }
@@ -413,6 +504,7 @@ export const CompactionCancelled = {
       description="An interrupted compaction keeps the production divider without an empty error block."
       document={compactionCancelledDocument}
       width="600px"
+      backgroundCompaction
     />
   ),
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Usage } from "@opencode/ai"
+import { Usage } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import { SessionUsage } from "@opencode/core/session/usage"
 
