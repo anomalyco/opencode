@@ -376,7 +376,13 @@ const layer = Layer.effect(
           },
         },
       }),
-      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (data) =>
+          Array.from(data.integrations.values(), (entry) => project(entry, resolveConnections(entry, []))).toSorted(
+            (a, b) => a.name.localeCompare(b.name),
+          ),
+        () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {

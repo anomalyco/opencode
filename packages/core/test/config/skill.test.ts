@@ -415,7 +415,8 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
 
           yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
-          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
+          yield* watcher.emit({ type: "create", path: path.join(tmp.path, "generated") })
+          while ((yield* watcher.subscriptions()).at(-1)?.path !== source) yield* Effect.sleep("10 millis")
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(source, "deploy"), { recursive: true })
             await write(source, "deploy", "Deploy")
