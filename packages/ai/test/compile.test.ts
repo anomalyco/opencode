@@ -470,7 +470,7 @@ describe("tool result encoding", () => {
   it.effect("compiles an unencodable json tool result without throwing", () =>
     Effect.gen(function* () {
       const cases = [
-        { result: undefined, output: "undefined" },
+        { result: undefined, output: "null" },
         { result: { a: 1 }, output: '{"a":1}' },
       ]
 

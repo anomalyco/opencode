@@ -32,7 +32,7 @@ it.effect("conversation lowering excludes generation settings and tool definitio
 it.effect("conversation lowering degrades an unencodable json tool result to text", () =>
   Effect.gen(function* () {
     const cases = [
-      { result: undefined, output: "undefined" },
+      { result: undefined, output: "null" },
       { result: { a: 1 }, output: '{"a":1}' },
       { result: "abc", output: '"abc"' },
     ]

@@ -284,11 +284,16 @@ export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
 }
 
 // A tool result the provider can only read as text. `undefined` has no JSON encoding, and a throw here would be a
-// defect that escapes the typed channel — the session dies instead of one step failing — so fall back to String.
+// defect that escapes the typed channel — the session dies instead of one step failing — so fall back instead.
 const encodeJsonOption = Schema.encodeUnknownOption(Json)
 
 const jsonText = (value: unknown) =>
-  Option.getOrElse(encodeJsonOption(value), () => String(value))
+  Option.getOrElse(encodeJsonOption(value), () => {
+    // The fallback stays diagnosable: `String(value)` would yield "undefined" / "[object Object]" for the two cases
+    // that actually reach it, which cannot be told apart from a literal tool result.
+    if (value === undefined) return "null"
+    return typeof value === "object" && value !== null ? "[unserializable tool result]" : String(value)
+  })
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text") return String(part.result.value)

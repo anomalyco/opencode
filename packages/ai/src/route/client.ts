@@ -596,7 +596,31 @@ const compileUnsafe = Effect.fnUntraced(function* (request: LLMRequest, options?
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
-  const body = yield* route.body.from(resolved)
+  // Lowering is allowed to fail, not to defect: a defect here escapes the typed error channel and kills the
+  // session drain fiber, so route failures become a route-scoped AIError without re-wrapping typed failures.
+  const body = yield* Effect.suspend(() => route.body.from(resolved)).pipe(
+    Effect.catchCause((cause) => {
+      if (Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+      const failure = Cause.findErrorOption(cause)
+      if (Option.isSome(failure)) {
+        // The typed failure wins below, so a defect riding along in the same cause would vanish from both channels.
+        if (!Cause.hasDies(cause)) return Effect.fail(failure.value)
+        const defect = cause.reasons.find(Cause.isDieReason)?.defect
+        const squashed = ProviderShared.errorText(Cause.squash(cause))
+        return Effect.andThen(
+          Effect.logError(`Route ${route.id} lowering defect alongside a typed failure: ${squashed}`, defect),
+          Effect.fail(failure.value),
+        )
+      }
+      const defect = Cause.squash(cause)
+      return Effect.fail(
+        ProviderShared.invalidRequest(
+          `Route ${route.id} failed to build the request body: ${ProviderShared.errorText(defect)}`,
+          defect,
+        ),
+      )
+    }),
+  )
   const prepared = yield* route.prepareTransport(body, resolved, options)
 
   return {

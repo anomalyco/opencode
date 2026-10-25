@@ -114,7 +114,7 @@ export const ToolOutput = withStatics(
       }
     },
     toResultValue: (output: ToolOutput): ToolResultValue => {
-      if (output.content.length === 0) return { type: "json", value: output.structured }
+      if (output.content.length === 0) return ToolResultValue.make(output.structured)
       if (output.content.length === 1 && output.content[0]?.type === "text")
         return { type: "text", value: output.content[0].text }
       return { type: "content", value: output.content }
