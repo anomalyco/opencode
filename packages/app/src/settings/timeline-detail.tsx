@@ -177,7 +177,10 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
                       </Show>
                     </div>
                     <div data-slot="timeline-detail-expansion">
-                      {category === "shell" || category === "edit" || category === "thinking" ? (
+                      {category === "shell" ||
+                      category === "edit" ||
+                      category === "thinking" ||
+                      category === "notices" ? (
                         <>
                           <span data-slot="timeline-detail-field-label" aria-hidden="true">
                             {language.t("settings.timeline.collapse")}

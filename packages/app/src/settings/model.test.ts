@@ -34,6 +34,19 @@ describe("settings timeline detail migration", () => {
     expect(settings.appearance.fontSize).toBe(16)
     expect(decode(encode(settings))).toEqual(settings)
   })
+
+  test("gives saved notices the compaction summary detail their placement showed", () => {
+    const { details: _, ...everythingNotices } = timelinePresets[0].value.notices
+
+    const everything = decode({
+      general: { timelineDetail: { ...timelinePresets[0].value, notices: everythingNotices } },
+    })
+
+    const grouped = decode({ general: { timelineDetail: { notices: { placement: "grouped" } } } })
+
+    expect(everything.general.timelineDetail).toEqual(timelinePresets[0].value)
+    expect(grouped.general.timelineDetail.notices).toEqual({ placement: "grouped", details: "collapsed" })
+  })
 })
 
 describe("settings schema", () => {

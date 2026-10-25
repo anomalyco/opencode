@@ -20,8 +20,8 @@ export const context = createContext<{
   terminal: { width: number; height: number }
   sessionID: string
   anchors: ReturnType<typeof createTimelineAnchors>
-  /** Saved disclosure, falling back to the verbosity default for the group kind. */
-  groupExpanded: (groupID: string, kind: GroupKind) => boolean
+  /** Saved disclosure, falling back to the default for the group kind or the compaction summary setting. */
+  groupExpanded: (groupID: string, kind: GroupKind | "compaction") => boolean
   /** An anchor keeps its viewport row through the layout change the toggle causes. */
   setGroupExpanded: (groupID: string, expanded: boolean, anchor?: Renderable | null) => void
   thinkingMode: () => ThinkingMode

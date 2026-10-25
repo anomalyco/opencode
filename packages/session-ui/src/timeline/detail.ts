@@ -14,7 +14,7 @@ export type TimelineDetail = {
   edit: { placement: TimelinePlacement; details: TimelineExpansion }
   thinking: { placement: TimelinePlacement; details: TimelineExpansion }
   subagents: { placement: TimelinePlacement }
-  notices: { placement: TimelinePlacement }
+  notices: { placement: TimelinePlacement; details: TimelineExpansion }
   tools: { placement: TimelinePlacement }
 }
 
@@ -26,7 +26,7 @@ export const timelinePresets = [
       edit: { placement: "separate", details: "expanded" },
       thinking: { placement: "separate", details: "expanded" },
       subagents: { placement: "separate" },
-      notices: { placement: "separate" },
+      notices: { placement: "separate", details: "expanded" },
       tools: { placement: "separate" },
     },
   },
@@ -37,7 +37,7 @@ export const timelinePresets = [
       edit: { placement: "separate", details: "expanded" },
       thinking: { placement: "grouped", details: "collapsed" },
       subagents: { placement: "separate" },
-      notices: { placement: "grouped" },
+      notices: { placement: "grouped", details: "collapsed" },
       tools: { placement: "grouped" },
     },
   },
@@ -48,7 +48,7 @@ export const timelinePresets = [
       edit: { placement: "grouped", details: "collapsed" },
       thinking: { placement: "grouped", details: "collapsed" },
       subagents: { placement: "grouped" },
-      notices: { placement: "grouped" },
+      notices: { placement: "grouped", details: "collapsed" },
       tools: { placement: "grouped" },
     },
   },
@@ -59,7 +59,7 @@ export const timelinePresets = [
       edit: { placement: "grouped", details: "collapsed" },
       thinking: { placement: "hidden", details: "collapsed" },
       subagents: { placement: "grouped" },
-      notices: { placement: "hidden" },
+      notices: { placement: "hidden", details: "collapsed" },
       tools: { placement: "hidden" },
     },
   },
@@ -70,7 +70,7 @@ export const timelinePresets = [
       edit: { placement: "hidden", details: "collapsed" },
       thinking: { placement: "hidden", details: "collapsed" },
       subagents: { placement: "hidden" },
-      notices: { placement: "hidden" },
+      notices: { placement: "hidden", details: "collapsed" },
       tools: { placement: "hidden" },
     },
   },

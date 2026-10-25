@@ -18,7 +18,7 @@ for (const { width, ...profile } of [
 
     await setupTimeline(page, {
       settings: {
-        timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } },
+        timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate", details: "expanded" } },
       },
       locale: profile.locale,
       viewport: { width, height: 900 },
@@ -59,6 +59,7 @@ for (const { width, ...profile } of [
         notices.evaluateAll((nodes) =>
           nodes.map((node) => {
             const style = getComputedStyle(node)
+            // SAFETY: the locator matches only rendered timeline notices, which are HTML elements.
             const element = node as HTMLElement
 
             return {

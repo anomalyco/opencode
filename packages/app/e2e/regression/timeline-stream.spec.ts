@@ -48,7 +48,7 @@ test.describe("static projection", () => {
         ownerWarnings.push(message.text())
     })
     await setupTimeline(page, {
-      settings: { timelineDetail: { ...detailed, notices: { placement: "separate" } } },
+      settings: { timelineDetail: { ...detailed, notices: { placement: "separate", details: "expanded" } } },
       sessionMessages: [
         user,
         { id: "msg_agent", type: "agent-switched", agent: "explore", time: { created: 2 } },
@@ -1405,7 +1405,7 @@ test.describe("background shortcut", () => {
 test.describe("compaction", () => {
   test("renders compaction progress, summary, and outcome in order", async ({ page }) => {
     const timeline = await setupTimeline(page, {
-      settings: { timelineDetail: { ...detailed, notices: { placement: "separate" } } },
+      settings: { timelineDetail: { ...detailed, notices: { placement: "separate", details: "expanded" } } },
       sessionMessages: [user, completed],
       sessionStatus: { [sessionID]: { type: "busy" } },
     })
@@ -1427,12 +1427,14 @@ test.describe("compaction", () => {
     await expect(compaction).toContainText("Streamed implementation details.")
     const running = compaction.getByRole("status").getByLabel("Compacting", { exact: true })
     await expect(running).toBeVisible()
+    // Separate notices keep the summary open, streaming under its "Compacting" header.
+    const summary = compaction.locator('[data-slot="collapsible-content"]')
     await expect
       .poll(async () => {
-        const summary = await compaction.locator('[data-component="text-part"]').boundingBox()
+        const body = await summary.boundingBox()
         const status = await running.boundingBox()
 
-        return !!summary && !!status && status.y >= summary.y + summary.height
+        return !!body && !!status && body.y >= status.y + status.height
       })
       .toBe(true)
     await expect(compaction.getByText("Session compacted", { exact: true })).toHaveCount(0)
@@ -1447,19 +1449,42 @@ test.describe("compaction", () => {
     )
     await expect(compaction).toContainText("Final implementation details.")
     await expect(compaction).not.toContainText("Streamed implementation details.")
-    await expect(compaction.getByText("Session compaction started", { exact: true })).toBeVisible()
-    await expect(compaction.getByText("Session compacted", { exact: true })).toBeVisible()
+
+    // Finished, the summary sits under a single divider that folds it.
+    const done = compaction.getByRole("button", { name: "Session compacted", exact: true })
+    await expect(done).toHaveAttribute("aria-expanded", "true")
+    await expect(compaction.getByText("Session compaction started", { exact: true })).toHaveCount(0)
     await expect
       .poll(async () => {
-        const summary = await compaction.locator('[data-component="text-part"]').boundingBox()
-        const done = await compaction.getByText("Session compacted", { exact: true }).boundingBox()
+        const body = await compaction.locator('[data-component="text-part"]').boundingBox()
+        const divider = await done.boundingBox()
 
-        return !!summary && !!done && done.y >= summary.y + summary.height
+        return !!body && !!divider && body.y >= divider.y + divider.height
       })
       .toBe(true)
     await expect(compaction.getByRole("status")).toHaveCount(0)
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible()
     await expect(page.locator('[data-component="session-working"]')).toBeVisible()
+  })
+
+  test("folds the summary under the compaction by default and opens it on click", async ({ page }) => {
+    const timeline = await setupTimeline(page, { sessionMessages: [user, completed] })
+
+    await timeline.send(compactionStarted({ sessionID, reason: "auto" }))
+    await timeline.send(compactionDelta({ sessionID, text: "Streamed folded details." }))
+    const compaction = page.locator('[data-component="session-compaction-message"]')
+    await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
+    await expect(compaction.getByText("Streamed folded details.")).toBeHidden()
+
+    await timeline.send(compactionEnded({ sessionID, reason: "auto", text: "Final folded details." }))
+    const trigger = compaction.getByRole("button", { name: "Session compacted", exact: true })
+    await expect(trigger).toHaveAttribute("aria-expanded", "false")
+    await expect(compaction.getByText("Session compaction started", { exact: true })).toHaveCount(0)
+    await expect(compaction.getByText("Final folded details.")).toBeHidden()
+
+    await trigger.click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(compaction.getByText("Final folded details.")).toBeVisible()
   })
 
   const outcomes = {
@@ -1494,11 +1519,16 @@ test.describe("compaction", () => {
   // Failed then cancelled share one history, so each boundary must keep its own outcome.
   for (const names of [["failed", "cancelled"], ["interrupted"]] as const) {
     test(`ends running compactions as ${names.join(", then ")}`, async ({ page }) => {
+      // Expanded notices show the partial summary while it streams.
+      const settings = {
+        timelineDetail: { ...detailed, notices: { placement: "grouped", details: "expanded" } },
+      } as const
+
       const timeline = await setupTimeline(
         page,
         names[0] === "interrupted"
-          ? { sessionMessages: [user, completed], sessionStatus: { [sessionID]: { type: "busy" } } }
-          : { sessionMessages: [user, completed] },
+          ? { settings, sessionMessages: [user, completed], sessionStatus: { [sessionID]: { type: "busy" } } }
+          : { settings, sessionMessages: [user, completed] },
       )
 
       const compactions = page.locator('[data-component="session-compaction-message"]')

@@ -112,7 +112,7 @@ const generalSchema = Persistence.struct({
     edit: activitySchema,
     thinking: activitySchema,
     subagents: placementOnlySchema,
-    notices: placementOnlySchema,
+    notices: activitySchema,
     tools: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
@@ -188,7 +188,12 @@ function storedTimelineCategory(category: TimelineCategory) {
     ]).pipe(
       Schema.decode({
         decode: SchemaGetter.transform((value) => {
-          if (!Predicate.isString(value)) return value
+          if (!Predicate.isString(value)) {
+            if (category !== "notices" || value.details !== undefined || value.placement === undefined) return value
+
+            // Saved before notices had details: separate notices showed compaction summaries in full.
+            return { ...value, details: value.placement === "separate" ? "expanded" : "collapsed" }
+          }
 
           return {
             placement:

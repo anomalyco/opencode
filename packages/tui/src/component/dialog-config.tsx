@@ -85,6 +85,15 @@ export const settings: Setting[] = [
     keywords: ["reasoning", "chain of thought"],
   },
   {
+    title: "Compaction summaries",
+    category: "Session",
+    path: ["session", "compaction"],
+    description: "Whether compaction summaries are shown in the chat or folded under their divider",
+    default: "hide",
+    values: ["hide", "show"],
+    keywords: ["compact", "summary", "context"],
+  },
+  {
     title: "Markdown",
     category: "Session",
     path: ["session", "markdown"],

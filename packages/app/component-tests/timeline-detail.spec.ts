@@ -8,7 +8,7 @@ story("maps grouped and collapsed switches to the timeline settings", async ({ m
   const collapsed = shell.getByRole("switch", { name: "Shell collapsed", exact: true })
   const value = component.locator('[data-slot="timeline-detail-fixture-value"]')
 
-  await expect(component.getByRole("switch")).toHaveCount(9)
+  await expect(component.getByRole("switch")).toHaveCount(10)
   await expect(component.getByText("Activity", { exact: true })).toHaveCount(0)
   await expect(grouped).toBeChecked()
   await expect(collapsed).toBeChecked()
@@ -21,6 +21,11 @@ story("maps grouped and collapsed switches to the timeline settings", async ({ m
   await collapsed.press("Space")
   await expect(value).toContainText('"shell":{"placement":"grouped","details":"collapsed"}')
   await expect(component.getByRole("group", { name: "Subagents", exact: true }).getByRole("switch")).toHaveCount(1)
+  // Notices fold compaction summaries.
+  const notices = component.getByRole("group", { name: "Notices", exact: true })
+  await expect(notices.getByRole("switch", { name: "Notices collapsed", exact: true })).toBeChecked()
+  await notices.locator('[data-field="details"] [data-slot="switch-control"]').click()
+  await expect(value).toContainText('"notices":{"placement":"grouped","details":"expanded"}')
 })
 
 story("replaces hidden switches with solid lines and restores options", async ({ mount, page }) => {
@@ -139,7 +144,7 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
   await slider.press("Home")
   await expect(slider).toHaveAttribute("aria-valuetext", "Messages only")
   await expect(component.getByRole("switch")).toHaveCount(0)
-  await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(9)
+  await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(10)
   await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="false"]')).toHaveCount(6)
   await component.getByRole("button", { name: "Shell visibility" }).click()
   await expect(component.getByRole("switch", { name: "Shell grouped", exact: true })).toBeChecked()
@@ -147,7 +152,7 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
   await slider.focus()
   await slider.press("End")
   await expect(slider).toHaveAttribute("aria-valuetext", "Everything")
-  await expect(component.getByRole("switch")).toHaveCount(9)
+  await expect(component.getByRole("switch")).toHaveCount(10)
   await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(0)
   await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="true"]')).toHaveCount(6)
   await expect(component.getByRole("switch", { checked: true })).toHaveCount(0)
