@@ -26,13 +26,20 @@ export type Input = {
   delivery?: SessionInbox.Delivery
 }
 
-export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
+type PrepareRequest = {
   session: Session.Info
   messageID: SessionMessage.ID
   input: Input
-}) {
-  const fs = yield* FSUtil.Service
+}
+
+export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: PrepareRequest) {
   const instances = yield* Instance.Service
+  return yield* prepareLocated(request).pipe(instances.provide(request.session))
+})
+
+/** `prepare` inside the session's instance services, which the caller provides. */
+export const prepareLocated = Effect.fn("SessionPrompt.prepareLocated")(function* (request: PrepareRequest) {
+  const fs = yield* FSUtil.Service
 
   return yield* Effect.gen(function* () {
     yield* Plugin.awaitActivation
@@ -85,7 +92,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
       }),
       delivery: event.delivery,
     } satisfies SessionInbox.Item
-  }).pipe(instances.provide(request.session))
+  })
 })
 
 const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (
