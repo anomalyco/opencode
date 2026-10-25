@@ -10,7 +10,7 @@ import {
   type Media,
   Message,
   SystemPart,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
   SessionCompaction,
@@ -238,8 +238,12 @@ export const layer = Layer.effect(
       }
       // Remember which tool each definition object came from. Hooks rename a tool by moving
       // its definition to a new key, so after the hook we find the tool by object identity.
+      // Definitions are shared across steps and sessions, and hooks may edit schemas in place,
+      // so each hook gets a deep copy.
       const given = new Map(
-        tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
+        tools.definitions.map(
+          (t) => [{ description: t.description, input: JSON.parse(JSON.stringify(t.inputSchema)) }, t] as const,
+        ),
       )
       // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
       // because their reasoning is hard to budget.

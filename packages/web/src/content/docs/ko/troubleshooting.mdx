@@ -226,8 +226,8 @@ opencode와 문제가 발생하면:
 
 예제:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 당신이 액세스 할 수있는 모델을 파악하려면, `opencode models`를 실행

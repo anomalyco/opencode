@@ -19,7 +19,7 @@ const pending = new Map<
   { raw: string; promise: Promise<MarkdownCacheEntry>; controller: AbortController; consumers: Set<symbol> }
 >()
 
-// Mermaid registers hooks on the shared instance that overwrite link attributes.
+// A private instance keeps this hook set separate from other DOMPurify users.
 const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
 const config = {

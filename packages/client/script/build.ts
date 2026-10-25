@@ -36,6 +36,7 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
 import { Snapshot } from "@opencode/schema/snapshot"
+import { UsageLimits } from "@opencode/schema/usage-limits"
 import { Vcs } from "@opencode/schema/vcs"
 import { WebSearch } from "@opencode/schema/websearch"
 import { Workspace } from "@opencode/schema/workspace"
@@ -79,6 +80,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Shell", "@opencode/schema/shell", Shell),
   ...namespaceTypes("Skill", "@opencode/schema/skill", Skill),
   ...namespaceTypes("Snapshot", "@opencode/schema/snapshot", Snapshot),
+  ...namespaceTypes("UsageLimits", "@opencode/schema/usage-limits", UsageLimits),
   ...namespaceTypes("Vcs", "@opencode/schema/vcs", Vcs),
   ...namespaceTypes("WebSearch", "@opencode/schema/websearch", WebSearch),
   ...namespaceTypes("Workspace", "@opencode/schema/workspace", Workspace),

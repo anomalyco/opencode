@@ -44,7 +44,7 @@ export const Plugin = define({
         init: (input) =>
           Effect.gen(function* () {
             const result = yield* processes.run(
-              ChildProcess.make(gitExecutable, ["init"], { cwd: input.worktree, stdin: "ignore" }),
+              ChildProcess.make(gitExecutable(), ["init"], { cwd: input.worktree, stdin: "ignore" }),
             )
             if (result.exitCode !== 0) return yield* Effect.fail(new Error("Git initialization failed"))
           }),
@@ -209,7 +209,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const run = Effect.fnUntraced(
     function* (args: string[], opts: { cwd: string; maxOutputBytes?: number }) {
       const result = yield* proc.run(
-        ChildProcess.make(gitExecutable, [...cfg, ...args], {
+        ChildProcess.make(gitExecutable(), [...cfg, ...args], {
           cwd: opts.cwd,
           env,
           extendEnv: true,

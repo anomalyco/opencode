@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,8 @@
     "build": "bun run script/build.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
-    "typecheck": "tsc -b tsconfig.json tsconfig.tests.json"
+    "typecheck": "bun check --no-script -b -p tsconfig.tests.json",
+    "typecheck:tsc": "tsc -b tsconfig.json tsconfig.tests.json"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -78,7 +79,7 @@
     "@ai-sdk/openai-compatible": "2.0.41",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/server": "2.3.1",
     "@opencode/http-recorder": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
@@ -104,8 +105,8 @@
     "@ff-labs/fff-bun": "0.10.5",
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",
-    "@modelcontextprotocol/client": "2.0.0",
-    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/core": "2.3.1",
     "@opencode-ai/pty": "0.3.1",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",

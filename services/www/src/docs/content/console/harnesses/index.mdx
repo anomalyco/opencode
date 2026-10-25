@@ -10,9 +10,12 @@ is billed to your workspace like any other request.
 | --------------------------------------------- | ------------- | --------- | ------------------------- | --- |
 | [Claude Code](/console/harnesses/claude-code) | Yes           | Yes       | Anthropic Messages models | Yes |
 | [Codex](/console/harnesses/codex)             | Yes           | Yes       | OpenAI Responses models   | Yes |
-| [Hermes](/console/harnesses/hermes)           | Built in      | Built in  | All models                | Yes |
-| [Pi](/console/harnesses/pi)                   | Built in      | Built in  | All models                | Yes |
-| [Raycast](/console/harnesses/raycast)         | Extension     | Extension | All models                | Yes |
+| [Hermes](/console/harnesses/hermes)           | Built in      | Built in  | Paid and Go models        | Yes |
+| [Pi](/console/harnesses/pi)                   | Built in      | Built in  | Paid and Go models        | Yes |
+| [Raycast](/console/harnesses/raycast)         | Extension     | Extension | Paid and Go models        | Yes |
+
+Free-tier chat models are only available from within OpenCode. Other harnesses receive HTTP `403` for those models,
+even with a Console API key. Use paid models or a Go subscription.
 
 ## Get an API key
 
@@ -62,7 +65,7 @@ A harness can only use the models that accept the API it speaks. Most models acc
 The endpoint column in the [Console](/console/models#endpoints) and [Go](/console/go#endpoints) tables lists one API per
 model, so check the harness page for the full list.
 
-Hermes, Pi, and the Raycast extension pick the right API for each model, so they can use every model. Claude Code and
+Hermes, Pi, and the Raycast extension pick the right API for each paid or Go model. Claude Code and
 Codex speak a single API and only reach part of the catalog.
 
 | Harness     | API                | Models                                                           |

@@ -383,6 +383,18 @@ test("clearing project fields sends explicit removal values", async ({ page }) =
   }
 })
 
+for (const own of [false, true]) {
+  test(`shortcuts list a command that shares Close tab only with its own shortcut: ${own}`, async ({ page }) => {
+    const { settings } = await open(page, {
+      seed: { settings: { keybinds: own ? { "terminal.close": "ctrl+alt+e" } : {} } },
+    })
+
+    await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+    await expect(settings.locator('[data-keybind-id="terminal.new"]')).toBeVisible()
+    await expect(settings.locator('[data-keybind-id="terminal.close"]')).toHaveText(own ? ["Ctrl+Alt+E"] : [])
+  })
+}
+
 test("the new session shortcut waits for a shortcut recording, then leaves settings", async ({ page }) => {
   const { settings } = await open(page)
   await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()

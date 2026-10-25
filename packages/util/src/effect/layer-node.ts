@@ -160,13 +160,17 @@ type CheckTags<Items extends GraphList, Names extends string> = [
 
 export interface Tags<Config extends TagConfig> {
   readonly values: { readonly [Name in TagNames<Config>]: Tag<Name> }
-  readonly make: <Name extends TagNames<Config>>(
-    name: Name,
-  ) => <const Implementation extends Layer.Any, const Items extends GraphList>(
-    input: DistributiveOmit<MakeInput<Implementation, Items, Tag<Name>>, "tag"> &
-      CheckTags<Items, Name | Extract<Config[Name][number], string>>,
-  ) => Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, Tag<Name>>
+  readonly make: <Name extends TagNames<Config>>(name: Name) => TagMaker<Config, Name>
 }
+
+// Named so declaration emit can reference a tag's node factory instead of serializing its cyclic graph types.
+export type TagMaker<Config extends TagConfig, Name extends TagNames<Config>> = <
+  const Implementation extends Layer.Any,
+  const Items extends GraphList,
+>(
+  input: DistributiveOmit<MakeInput<Implementation, Items, Tag<Name>>, "tag"> &
+    CheckTags<Items, Name | Extract<Config[Name][number], string>>,
+) => Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, Tag<Name>>
 
 export function tags<const Config extends { readonly [Name in keyof Config]: readonly (keyof Config & string)[] }>(
   config: Config,

@@ -76,6 +76,19 @@ const APP_IDS = {
   prod: "ai.opencode.desktop",
 } as const
 
+// libappimage (used by AppImageLauncher) resolves the .desktop entry inside an
+// AppImage by globbing `*.desktop` at the squashfs root. If the main
+// executable itself ends in `.desktop` (prod appId `ai.opencode.desktop`), the
+// ELF binary matches the glob and is parsed as a desktop entry, so
+// integration fails with `Malformed desktop entry: Unexpected char '\x7f' at 0`
+// (0x7F is the first byte of the ELF magic).
+// https://github.com/anomalyco/opencode/issues/51867
+// Strip a trailing `.desktop` so the executable can never collide with the
+// desktop-entry glob. Beta/dev appIds end in `.beta`/`.dev` and are unaffected.
+function linuxExecutableName(appId: string): string {
+  return appId.replace(/\.desktop$/, "")
+}
+
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
 
@@ -205,7 +218,11 @@ const getBase = (appId: string): Configuration => {
     linux: {
       icon: `resources/icons`,
       category: "Development",
-      executableName: appId,
+      executableName: linuxExecutableName(appId),
+      // Derive the installed `.desktop` filename from `desktopName`
+      // (`ai.opencode.desktop.desktop` for prod) instead of `executableName`,
+      // so window association is unaffected by the executable rename above.
+      syncDesktopName: true,
       desktop: {
         entry: {
           // Match the installed .desktop file and hicolor icon basename so

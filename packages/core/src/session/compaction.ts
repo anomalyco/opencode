@@ -13,7 +13,7 @@ import {
   type ToolEntry,
   UnknownProviderError,
   type Usage,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
@@ -1121,7 +1121,8 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   // all, only a provider rejection can limit the request.
   const window = limit.input || limit.context
   if (window <= 0) return Number.POSITIVE_INFINITY
-  if (buffer !== undefined) return window - buffer
+  // A buffer that leaves no room, such as one set for a larger model, is ignored.
+  if (buffer !== undefined && buffer < window) return window - buffer
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
 }
 

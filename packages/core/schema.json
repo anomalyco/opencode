@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "5067fae0-90ff-4601-82d7-dd050ea9dc8f",
-  "prevIds": ["e98619ef-c334-45e3-8c48-9932ed1ef290"],
+  "id": "76109fbf-f324-4af0-934c-3ae695275099",
+  "prevIds": ["ff2efc22-36c2-4af5-8f24-2288090b0ba6"],
   "ddl": [
     {
       "name": "account_state",

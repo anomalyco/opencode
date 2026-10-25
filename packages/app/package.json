@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "",
   "type": "module",
   "exports": {
@@ -12,7 +12,8 @@
     "./index.css": "./src/index.css"
   },
   "scripts": {
-    "typecheck": "tsc -b",
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b",
     "typecheck:e2e": "tsc -p e2e/tsconfig.json",
     "start": "vite",
     "dev": "vite",

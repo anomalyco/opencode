@@ -3,7 +3,7 @@ title: カスタムツール
 description: LLM が OpenCode で呼び出すことができるツールを作成します。
 ---
 
-カスタムツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、OpenCode の[組み込みツール](/docs/tools) (`read`、`write`、`shell` など) と連携して動作します。
+カスタムツールは、会話中に LLM が呼び出すことができる作成した関数です。これらは、OpenCode の[組み込みツール](/docs/tools) (`read`、`write`、`bash` など) と連携して動作します。
 
 ---
 
@@ -83,13 +83,13 @@ export const multiply = tool({
 
 カスタムツールはツール名でキー設定されます。カスタムツールが組み込みツールと同じ名前を使用する場合、カスタムツールが優先されます。
 
-たとえば、このファイルは組み込みの `shell` ツールを置き換えます。
+たとえば、このファイルは組み込みの `bash` ツールを置き換えます。
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },

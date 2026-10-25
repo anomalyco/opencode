@@ -2,7 +2,7 @@ export * as Session from "./session.js"
 export * from "./session/schema.js"
 
 import { DateTime, Effect, Layer, Context, Stream } from "effect"
-import { LLMClient } from "@opencode/ai"
+import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"

@@ -80,18 +80,7 @@ brew install --cask opencode-desktop
 
 #### Каталог установки
 
-Скрипт установки выбирает путь установки в следующем порядке приоритета:
-
-1. `$OPENCODE_INSTALL_DIR` - Пользовательский каталог установки
-2. `$XDG_BIN_DIR` - Путь, совместимый со спецификацией XDG Base Directory
-3. `$HOME/bin` - Стандартный каталог пользовательских бинарников (если существует или можно создать)
-4. `$HOME/.opencode/bin` - Fallback по умолчанию
-
-```bash
-# Примеры
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/v2/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/v2/install | bash
-```
+Скрипт установки устанавливает OpenCode в `$HOME/.opencode/bin`.
 
 ### Agents
 
@@ -106,11 +95,11 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/v2/install | bash
 Также включен сабагент **general** для сложных поисков и многошаговых задач.
 Он используется внутренне и может быть вызван в сообщениях через `@general`.
 
-Подробнее об [agents](https://opencode.ai/docs/agents).
+Подробнее об [agents](https://opencode.ai/v2/docs/agents).
 
 ### Документация
 
-Больше информации о том, как настроить OpenCode: [**наши docs**](https://opencode.ai/docs).
+Больше информации о том, как настроить OpenCode: [**наши docs**](https://opencode.ai/v2/docs).
 
 ### Вклад
 

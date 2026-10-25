@@ -2,18 +2,10 @@
   overflow: hidden;
 }
 
-/* Anchor to the top edge of where a centered 480px-tall dialog would sit, so the
-   top stays put while the content-driven height grows and shrinks. */
-[data-component="dialog-v2"]:has(.command-palette) {
-  align-items: flex-start;
-}
-
+/* Keep a fixed height so the dialog does not resize as results change while typing. */
 [data-component="dialog-v2"]:has(.command-palette) [data-slot="dialog-container"] {
   width: min(calc(100vw - 24px), 640px);
-  height: auto;
-  min-height: 280px;
-  max-height: min(calc(100vh - 96px), 480px);
-  margin-top: max(48px, calc((100vh - 480px) / 2));
+  height: min(calc(100vh - 96px), 480px);
   border-radius: 12px;
   background: var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-floating);

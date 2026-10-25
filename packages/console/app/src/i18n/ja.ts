@@ -70,12 +70,8 @@ export const dict = {
   "home.what.title": "OpenCodeとは？",
   "home.what.body":
     "OpenCodeは、ターミナル、IDE、またはデスクトップでのコード作成を支援するオープンソースのエージェントです。",
-  "home.what.lsp.title": "LSP対応",
-  "home.what.lsp.body": "LLMに適したLSPを自動的に読み込みます",
   "home.what.multiSession.title": "マルチセッション",
   "home.what.multiSession.body": "同じプロジェクトで複数のエージェントを並行実行できます",
-  "home.what.shareLinks.title": "共有リンク",
-  "home.what.shareLinks.body": "参照やデバッグのために、任意のセッションへのリンクを共有できます",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "GitHubでログインしてCopilotアカウントを利用できます",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -114,8 +110,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "さらに、",
   "home.faq.a3.p4.localLink": "ローカルモデル",
   "home.faq.q4": "既存のAIサブスクリプションをOpenCodeで使えますか？",
-  "home.faq.a4.p1":
-    "はい、OpenCodeは主要プロバイダーのサブスクリプションプランに対応しています。Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilotのサブスクリプションを利用できます。",
+  "home.faq.a4.p1": "はい、ChatGPT Plus/ProまたはGitHub Copilotのサブスクリプションを利用できます。",
   "home.faq.q5": "ターミナルだけで使えますか？",
   "home.faq.a5.beforeDesktop": "もう違います！OpenCodeは今は",
   "home.faq.a5.desktop": "デスクトップ",
@@ -163,7 +158,7 @@ export const dict = {
   "zen.faq.a4.p3": "コストを賄うために、OpenCodeは$20の残高チャージあたり$1.23の小さな決済手数料のみを追加します。",
   "zen.faq.q5": "データとプライバシーは？",
   "zen.faq.a5.beforeExceptions":
-    "Zenのモデルはすべて米国でホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
+    "Zenのモデルはすべて米国とEUでホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
   "zen.faq.a5.exceptionsLink": "以下の例外",
   "zen.faq.q6": "支出上限を設定できますか？",
   "zen.faq.a6": "はい、アカウントで月次の支出上限を設定できます。",
@@ -197,12 +192,13 @@ export const dict = {
   "zen.how.step2.link": "リクエストごとに支払う",
   "zen.how.step2.afterLink": "（マークアップなし）",
   "zen.how.step3.title": "自動チャージ",
-  "zen.how.step3.body": "残高が$5に達すると、自動的に$20が追加されます",
+  "zen.how.step3.body": "任意で自動チャージを有効にし、残高のしきい値とチャージ額を設定できます",
   "zen.privacy.title": "あなたのプライバシーは私たちにとって重要です",
   "zen.privacy.beforeExceptions":
-    "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
+    "すべてのZenモデルは米国とEUでホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro を Go で提供開始しました。",
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
@@ -283,7 +279,6 @@ export const dict = {
   "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
   "go.faq.a5.museRetention":
     "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
-  "go.faq.a5.geminiRetention": "プロンプトと生成結果は、将来のGoogleモデルのトレーニングに使用される場合があります。",
   "go.faq.a5.learnMore": "詳しく見る",
   "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年10月31日まで有効です。",
   "go.faq.q6": "クレジットをチャージできますか？",
@@ -373,7 +368,7 @@ export const dict = {
     "まずはチームでの社内トライアルから始めてください。OpenCodeはデフォルトでコードやコンテキストデータを保存しないため、簡単に始められます。その後、価格や導入オプションについてお問い合わせください。",
   "enterprise.faq.q3": "エンタープライズ価格の仕組みは？",
   "enterprise.faq.a3":
-    "シート単位（ユーザー数）でのエンタープライズ価格を提供します。独自のLLMゲートウェイをお持ちの場合、使用トークンに対する課金はありません。詳細は、組織の要件に基づいた見積もりのためにお問い合わせください。",
+    "独自のLLMゲートウェイをお持ちの場合、使用トークンに対する課金はありません。詳細は、組織の要件に基づいた見積もりのためにお問い合わせください。",
   "enterprise.faq.q4": "OpenCode Enterpriseでデータは安全ですか？",
   "enterprise.faq.a4":
     "はい。OpenCodeはコードやコンテキストデータを保存しません。すべての処理はローカル、またはAIプロバイダーへの直接API呼び出しを通じて行われます。集中設定とSSO統合により、データは組織のインフラ内で安全に保たれます。",

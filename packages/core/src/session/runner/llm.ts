@@ -1,6 +1,6 @@
 export * as SessionRunnerLLM from "./llm.js"
 
-import { Message } from "@opencode/ai"
+import { Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
@@ -114,6 +114,7 @@ const layer = Layer.effect(
               if (pending?.type === "compaction") {
                 const compacted = yield* restore(
                   Effect.gen(function* () {
+                    yield* plugins.awaitActivation
                     const selected = yield* context.select(sessionID)
                     const model = yield* context.resolveModel(selected.session)
                     // Preview updates without admitting them after the already-delivered compaction marker.
@@ -193,6 +194,8 @@ const layer = Layer.effect(
     })
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
+      // Plugins can reload mid-turn; each step and retry must read the settled agents, models and skills.
+      yield* plugins.awaitActivation
       const selected = yield* context.select(sessionID)
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
@@ -246,7 +249,11 @@ const layer = Layer.effect(
           assistantMessageID,
           agent: loaded.agent.id,
           model: loaded.model,
-          prepared,
+          prepared: {
+            ...prepared,
+            // A tool call can arrive during a reload; its permission check reads the session's agent.
+            executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
+          },
           retry: (cause, error, proposed) =>
             retry.decide({
               cause,

@@ -209,7 +209,7 @@ export function createReviewModel(input: {
   )
 
   // Opening the side region refreshes changes a tree already shows. Otherwise it loads them once, so the
-  // pinned tab reads "Files Changed N": v2 opened the region on the review tab before selecting another.
+  // pinned tab reads "N files changed": v2 opened the region on the review tab before selecting another.
   // A region restored open does not load them until something shows them.
   const opened = createMemo(
     on(

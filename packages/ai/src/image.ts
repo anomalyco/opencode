@@ -3,14 +3,7 @@ import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./gen
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import {
-  AIError,
-  HttpOptions,
-  MediaUsage,
-  ProviderMetadata,
-  ProviderOptions,
-  type OpenString,
-} from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
 // ---------------------------------------------------------------------------
@@ -58,29 +51,20 @@ export const ImageModelSchema = Schema.declare((value): value is ImageModel => v
 // Request
 // ---------------------------------------------------------------------------
 
-export type ImageSize = `${number}x${number}`
-export const ImageSize = Schema.declare<ImageSize>(
-  (value): value is ImageSize => typeof value === "string" && /^\d+x\d+$/.test(value),
-  { title: "ImageSize" },
-)
-
 export type ImageAspectRatio = Media.AspectRatio
 export const ImageAspectRatio = Media.AspectRatio
 
-export type ImageFormat = OpenString<"png" | "jpeg" | "webp">
+/** Size tier: `1K` is about as many pixels as 1024×1024 at the requested aspect, `2K` as 2048×2048. */
+export type ImageResolution = OpenString<"1K" | "2K" | "4K">
 
 export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
   prompt: Schema.String,
   /** Edit sources or style/subject references, in order. */
   images: Schema.optional(Schema.Array(Media.AssetSchema)),
-  /** Inpainting mask; routes that cannot honor it fail with `UnsupportedOperation`. */
-  mask: Schema.optional(Media.AssetSchema),
   n: Schema.optional(Schema.Int),
-  size: Schema.optional(ImageSize),
-  aspectRatio: Schema.optional(ImageAspectRatio),
-  seed: Schema.optional(Schema.Number),
-  format: Schema.optional(Schema.String),
+  aspect: Schema.optional(ImageAspectRatio),
+  resolution: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
 }) {
@@ -99,10 +83,10 @@ export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ?
 
 export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
   ConstructorParameters<typeof ImageRequest>[0],
-  "model" | "providerOptions" | "http"
+  "model" | "providerOptions" | "http" | "resolution"
 > & {
   readonly model: Model
-  readonly format?: ImageFormat
+  readonly resolution?: ImageResolution
   readonly providerOptions?: NoInfer<ImageModelOptions<Model>>
   readonly http?: HttpOptions.Input
 }

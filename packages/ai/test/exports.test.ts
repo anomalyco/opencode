@@ -3,6 +3,8 @@ import { Effect, Layer } from "effect"
 import {
   AIClient,
   AIError,
+  Decision,
+  DecisionClient,
   Generation,
   Image,
   ImageClient,
@@ -17,10 +19,11 @@ import {
   TranscriptionClient,
   Video,
   VideoClient,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
+  Alibaba,
   AssemblyAI,
   Baseten,
   BlackForestLabs,
@@ -29,6 +32,7 @@ import {
   CloudflareWorkersAI,
   Deepgram,
   DeepSeek,
+  DigitalOcean,
   ElevenLabs,
   Fal,
   Fireworks,
@@ -56,7 +60,6 @@ import {
 } from "@opencode/ai/protocols"
 import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode/ai/testing"
-import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
 
 describe("public exports", () => {
   test("modality, provider, and protocol entrypoints load first in a fresh process", async () => {
@@ -93,9 +96,9 @@ describe("public exports", () => {
     expect(TestLLM.layer).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
-    expect(Evaluation.run).toBeFunction()
-    expect(EvaluationClient.layer).toBeDefined()
-    expect(EvaluationClient.fetchLayer).toBeDefined()
+    expect(Decision.generate).toBeFunction()
+    expect(DecisionClient.layer).toBeDefined()
+    expect(DecisionClient.fetchLayer).toBeDefined()
   })
 
   test("AIClient.layerWith shares one executor across every client", async () => {
@@ -147,10 +150,13 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
-    expect(OpenRouter.experimental.evaluation).toBeFunction()
-    expect(TypeSafeAI.experimental.evaluation).toBeFunction()
-    expect(OpenCode.experimental.evaluation).toBeFunction()
-    expect(VercelAIGateway.experimental.evaluation).toBeFunction()
+    expect(OpenRouter.decision).toBeFunction()
+    expect(TypeSafeAI.decision).toBeFunction()
+    expect(OpenCode.decision).toBeFunction()
+    expect(VercelAIGateway.decision("typesafe-ai/jev").route.id).toBe("openai-decisions")
+    expect(Baseten.decision).toBeFunction()
+    expect(DigitalOcean.decision).toBeFunction()
+    expect(OpenAI.decision("gpt-6-luna").route.id).toBe("openai-decisions")
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)
@@ -178,6 +184,16 @@ describe("public exports", () => {
     expect(Meta.provider.image).toBe(Meta.image)
     expect(ZAI.configure({ apiKey: "fixture" }).image("glm-image").route.id).toBe("zai-images")
     expect(ZAI.provider.image).toBe(ZAI.image)
+    expect(Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).image("qwen-image-2.0").route.id).toBe(
+      "alibaba-images",
+    )
+    expect(VercelAIGateway.configure({ apiKey: "fixture" }).image("meta/muse-image-1.0").route.id).toBe("openai-images")
+    expect(VercelAIGateway.provider.image).toBe(VercelAIGateway.image)
+    expect(
+      CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).image(
+        "@cf/black-forest-labs/flux-1-schnell",
+      ).route.id,
+    ).toBe("cloudflare-workers-ai-images")
     expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
     expect(XAI.provider.video).toBe(XAI.video)
     expect(Google.configure({ apiKey: "fixture" }).video("veo-3.1-generate-preview").route.id).toBe("google-video")

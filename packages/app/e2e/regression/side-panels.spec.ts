@@ -40,7 +40,7 @@ test("review and terminal follow the session tab and stay mounted", async ({ pag
   await expect(terminalPanel).toHaveAttribute("data-size-animated", "true")
   await expect(chat).toHaveCSS("width", "580px")
   await expect(terminalPanel).toHaveCSS("height", "300px")
-  await expect(page.locator("#session-side-panel-review-tab")).toHaveText("Files Changed 2740")
+  await expect(page.locator("#session-side-panel-review-tab")).toHaveText("2740 files changed")
   await expect.poll(() => pty.sockets.length).toBe(1)
   await mark(review)
   await mark(terminal)

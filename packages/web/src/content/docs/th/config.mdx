@@ -14,7 +14,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -35,7 +35,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ไฟล์การกำหนดค่าจะถูกรวมเข้าด้วยกัน โดยไม่มีการแทนที่ การตั้งค่าจากตำแหน่งการกำหนดค่าต่อไปนี้จะรวมกัน การกำหนดค่าในภายหลังจะแทนที่การกำหนดค่าก่อนหน้าสำหรับคีย์ที่ขัดแย้งกันเท่านั้น การตั้งค่าที่ไม่ขัดแย้งจากการกำหนดค่าทั้งหมดจะยังคงอยู่
 
-ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-4-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสองรายการไว้ด้วย
+ตัวอย่างเช่น หากการกำหนดค่าส่วนกลางของคุณตั้งค่า `autoupdate: true` และการกำหนดค่าโปรเจ็กต์ของคุณตั้งค่า `model: "anthropic/claude-sonnet-5-5"` การกำหนดค่าสุดท้ายจะรวมการตั้งค่าทั้งสองรายการไว้ด้วย
 
 ---
 
@@ -220,7 +220,7 @@ opencode run "Hello world"
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": false,
-    "shell": false
+    "bash": false
   }
 }
 ```
@@ -237,8 +237,8 @@ opencode run "Hello world"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -327,7 +327,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -372,7 +372,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -447,14 +447,14 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ตามค่าเริ่มต้น opencode **อนุญาตการดำเนินการทั้งหมด** โดยไม่ต้องมีการอนุมัติอย่างชัดเจน คุณสามารถเปลี่ยนสิ่งนี้ได้โดยใช้ตัวเลือก `permission`
 
-ตัวอย่างเช่น เพื่อให้แน่ใจว่าเครื่องมือ `edit` และ `shell` ต้องได้รับการอนุมัติจากผู้ใช้:
+ตัวอย่างเช่น เพื่อให้แน่ใจว่าเครื่องมือ `edit` และ `bash` ต้องได้รับการอนุมัติจากผู้ใช้:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "ask",
-    "shell": "ask"
+    "bash": "ask"
   }
 }
 ```

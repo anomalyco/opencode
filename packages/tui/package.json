@@ -1,13 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/tui",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "private": true,
   "type": "module",
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsc -b"
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b"
   },
   "exports": {
     ".": "./src/index.tsx",

@@ -1,13 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "name": "@opencode/ai",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "setup:recording-env": "bun run script/setup-recording-env.ts",
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.types.json",
+    "typecheck": "bun check --no-script && bun check --no-script -p tsconfig.types.json",
+    "typecheck:tsc": "tsc --noEmit && tsc --noEmit -p tsconfig.types.json",
     "build": "tsc -p tsconfig.build.json"
   },
   "files": [
@@ -15,7 +16,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./promise": "./src/promise.ts",
+    "./effect": "./src/effect.ts",
     "./testing": "./src/testing.ts",
     "./*": "./src/*.ts"
   },

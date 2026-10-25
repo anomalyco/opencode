@@ -14,7 +14,8 @@ import type { ProviderPackage } from "../provider-package.js"
 export const id = ProviderID.make("xai")
 const baseURL = "https://api.x.ai/v1"
 
-export type XAIProviderOptionsInput = OpenAIOptionsInput & { readonly contextManagement?: never }
+export type XAIProviderOptionsInput = OpenAIOptionsInput &
+  XAIResponses.OptionsInput & { readonly contextManagement?: never }
 
 export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {

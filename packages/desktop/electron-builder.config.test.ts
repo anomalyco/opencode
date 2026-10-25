@@ -51,7 +51,14 @@ test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
-  expect(config.linux?.executableName).toBe(appId)
+  // The executable must never end in `.desktop`: libappimage resolves the
+  // AppImage's desktop entry by globbing `*.desktop`, and an ELF matching
+  // that glob breaks integration (anomalyco/opencode#51867).
+  expect(config.linux?.executableName).toBe(appId.replace(/\.desktop$/, ""))
+  expect(config.linux?.executableName).not.toMatch(/\.desktop$/)
+  // The installed `.desktop` filename still derives from `desktopName` so
+  // window association (StartupWMClass/desktop file basename) is unchanged.
+  expect(config.linux?.syncDesktopName).toBe(true)
   expect(config.linux?.desktop?.entry?.StartupWMClass).toBe(appId)
 
   for (const fpm of [config.deb?.fpm, config.rpm?.fpm]) {
@@ -69,8 +76,8 @@ test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
 
 test("legacy Linux launcher stays hidden", async () => {
   const desktop = await Bun.file(path.join(import.meta.dirname, "resources/linux/opencode-desktop.desktop")).text()
-  expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode.desktop %U")
-  expect(desktop).toContain("Icon=ai.opencode.desktop")
+  expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode %U")
+  expect(desktop).toContain("Icon=ai.opencode")
   expect(desktop).toContain("StartupWMClass=ai.opencode.desktop")
   expect(desktop).toContain("NoDisplay=true")
 })

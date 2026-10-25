@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "name": "@opencode/http-recorder",
   "description": "Record and replay Effect HTTP and WebSocket traffic with deterministic cassettes",
   "type": "module",
@@ -28,7 +28,8 @@
   },
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "typecheck": "bun check --no-script && bun check --no-script -p test/tsconfig.json",
+    "typecheck:tsc": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
     "build": "bun ./script/build.ts",
     "verify:package": "bun ./script/verify-package.ts"
   },

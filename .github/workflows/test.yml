@@ -5,6 +5,7 @@ on:
     branches:
       - dev
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -23,6 +24,7 @@ env:
 jobs:
   affected:
     name: affected packages
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       e2e: ${{ steps.packages.outputs.app }}
@@ -55,6 +57,7 @@ jobs:
 
   unit:
     name: unit (${{ matrix.settings.name }})
+    if: ${{ !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -133,13 +136,14 @@ jobs:
         working-directory: packages/client
         run: bun run check:generated
 
-      - name: Check generated documentation
+      - name: Check generated OpenAPI document
         if: runner.os == 'Linux'
-        working-directory: services/www
+        working-directory: packages/protocol
         run: bun run check:generated
 
   build:
     name: build (${{ matrix.settings.name }})
+    if: ${{ !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -318,7 +322,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.os }})
     needs: [affected, e2e-suite]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:

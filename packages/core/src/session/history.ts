@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gte, lt, or, sql } from "drizzle-orm"
-import { Message } from "@opencode/ai"
+import { Message } from "@opencode/ai/effect"
 import { Effect, Option, Schema } from "effect"
 import type { Model } from "@opencode/schema/model"
 import { SessionLegacy } from "@opencode/schema/session-legacy"

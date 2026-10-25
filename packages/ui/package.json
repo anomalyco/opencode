@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -91,7 +91,8 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
