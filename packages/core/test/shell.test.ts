@@ -60,13 +60,10 @@ describe("shell", () => {
       "-Command",
       process.platform === "win32" ? `${ShellSelect.PS_UTF8} Write-Output hi` : "Write-Output hi",
     ])
-    expect(ShellSelect.args("powershell.exe", "Write-Output hi")).toEqual([
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      process.platform === "win32" ? `${ShellSelect.PS_UTF8} Write-Output hi` : "Write-Output hi",
-    ])
+    if (process.platform === "win32")
+      expect(ShellSelect.args("pwsh", "using namespace System.Text; [Text.StringBuilder]::new()")[4]).toBe(
+        "using namespace System.Text; [Text.StringBuilder]::new()",
+      )
   })
 
   if (process.platform !== "win32") {

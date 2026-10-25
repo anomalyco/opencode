@@ -172,15 +172,23 @@ export const PS_UTF8 =
 export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
-  if (ps(file))
-    return [
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      process.platform === "win32" ? `${PS_UTF8} ${command}` : command,
-    ]
+  if (ps(file)) {
+    // `using` statements must be the first statement in a script, so they cannot follow
+    // the encoding setup. Those commands keep the default encoding; they rarely print
+    // non-ASCII output.
+    const prefix = process.platform === "win32" && !startsWithUsing(command) ? `${PS_UTF8} ` : ""
+    return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${prefix}${command}`]
+  }
   return ["-c", command]
+}
+
+function startsWithUsing(command: string) {
+  for (const line of command.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    return /^using\s+(namespace|module|assembly)\b/i.test(trimmed)
+  }
+  return false
 }
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.

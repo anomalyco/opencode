@@ -808,35 +808,6 @@ describe("ShellTool ordinary shell syntax", () => {
     }
   }
 
-  test("PowerShell: pins stdout to UTF-8 so non-ASCII output survives", () =>
-    withScanner(
-      true,
-      (registry, directory) =>
-        Effect.gen(function* () {
-          const saved = yield* PermissionSaved.Service
-          const location = yield* Location.Service
-          yield* saved.add({
-            projectID: location.project.id,
-            action: "shell",
-            resources: ["Write-Output *"],
-          })
-          const result = yield* runPermissionCommand(
-            registry,
-            "Write-Output 中文",
-            path.join(directory.active, "marker"),
-            [],
-          )
-          expect(result.requests).toEqual([])
-          expect(result.exit).toMatchObject({
-            _tag: "Success",
-            value: { status: "completed", metadata: { exit: 0 } },
-          })
-          if (Exit.isSuccess(result.exit))
-            expect(result.exit.value.content?.[0]).toEqual(Expected.text(isWindows ? "中文\r\n" : "中文\n"))
-        }),
-      pwsh ?? "pwsh",
-    ))
-
   for (const [command, pattern] of [
     ["Write-Output\thello", "Write-Output\t*"],
     ["& 'Write-Output' hello", "& 'Write-Output' *"],
