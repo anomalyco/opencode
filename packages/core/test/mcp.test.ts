@@ -210,14 +210,21 @@ function resourceServer(
           })
         }
         if (!input.emptyElicitation && !input.urlElicitation) {
-          protocol.setRequestHandler("tools/call", (request) => {
+          protocol.setRequestHandler("tools/call", async (request, ctx) => {
             state.toolCalls.push({
               name: request.params.name,
               arguments: request.params.arguments,
               sessionID: request.params._meta?.["ai.opencode/sessionID"],
               progressToken: request.params._meta?.progressToken,
             })
-            return Promise.resolve({ content: [] })
+            const steps = Number(request.params.arguments?.steps ?? 0)
+            const progressToken = request.params._meta?.progressToken
+            for (let step = 1; step <= steps && progressToken !== undefined; step++)
+              await ctx.mcpReq.notify({
+                method: "notifications/progress",
+                params: { progressToken, progress: step, total: steps, message: `step ${step} of ${steps}` },
+              })
+            return { content: [] }
           })
         }
         protocol.setRequestHandler("prompts/list", () => Promise.resolve({ prompts: [{ name: "greet" }] }))
@@ -618,6 +625,29 @@ test("passes session IDs as MCP request metadata", async () => {
           },
         ])
         expect(server.state.toolCalls[0]?.progressToken).not.toBe(server.state.toolCalls[1]?.progressToken)
+      }),
+    ),
+  )
+})
+
+test("reports a tool call's progress notifications", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        // A JSON response drops notifications sent before the result; the modern handler streams them.
+        const server = yield* resourceServer({ modern: true })
+        const connection = yield* connect(
+          "tool-progress",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+          import.meta.dir,
+        )
+        const progress: McpClient.Progress[] = []
+        yield* connection.callTool({ name: "echo", args: { steps: 2 }, onProgress: (update) => progress.push(update) })
+
+        expect(progress).toEqual([
+          { progress: 1, total: 2, message: "step 1 of 2" },
+          { progress: 2, total: 2, message: "step 2 of 2" },
+        ])
       }),
     ),
   )
@@ -2474,6 +2504,7 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
       name: "lookup",
       args: {},
       sessionID: directSessionID,
+      onProgress: expect.any(Function),
     })
 
     const codeModeSessionID = Session.ID.make("ses_mcp_codemode")
@@ -2492,6 +2523,7 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
       name: "search",
       args: {},
       sessionID: codeModeSessionID,
+      onProgress: expect.any(Function),
     })
   }),
 )
