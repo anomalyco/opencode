@@ -386,7 +386,6 @@ export const dict = {
   "session.question.progress": "{{current}} de {{total}} preguntes",
   "session.question.minimize": "Minimitzar la pregunta",
   "session.question.restore": "Pregunta de restauració",
-  "session.question.pending.many": "{{count}} preguntes pendents",
   "session.new.project.new": "Nou projecte",
   "session.new.project.search": "Cerca projectes",
   "session.new.project.add": "Afegeix projecte",
@@ -681,7 +680,6 @@ export const dict = {
   "session.error.incompatible.description":
     "{{server}} executa OpenCode {{version}}, que no és compatible amb aquesta aplicació. Actualitzeu el servidor a OpenCode V2 per continuar.",
   "session.background.moveInline": "Premeu {{keybind}} per moure la feina en curs al segon pla",
-  "session.background.runningCount.many": "{{count}} d'elements en curs en segon pla",
   "settings.general.row.terminalPlacement.title": "Ubicació del terminal",
   "settings.general.row.terminalPlacement.description": "Trieu on s'obre el terminal a les sessions",
   "settings.general.row.terminalPlacement.side": "Al costat",
@@ -777,8 +775,6 @@ export const dict = {
   "settings.timeline.category.notices": "Avisos",
   "settings.timeline.category.tools": "Altres eines",
 
-  "session.background.shell.many": "{{count}} shells",
-  "session.background.subagent.many": "{{count}} subagents",
   "settings.about.otherContributor.many": "{{count}} altres",
   "provider.connect.error.unsupportedFields": "Aquest formulari d'autenticació conté camps no admesos",
   "settings.about.writtenByNames": "Escrit per {{names}}",

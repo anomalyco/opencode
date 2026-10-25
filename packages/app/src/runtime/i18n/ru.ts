@@ -417,8 +417,6 @@ export const dict = {
 
   "session.question.minimize": "Свернуть вопрос",
   "session.question.restore": "Восстановить вопрос",
-  "session.question.pending.few": "{{count}} вопроса без ответа",
-  "session.question.pending.many": "{{count}} вопросов без ответа",
 
   "session.new.project.new": "Новый проект",
   "session.new.project.search": "Поиск проектов",
@@ -747,8 +745,6 @@ export const dict = {
   "session.error.incompatible.description":
     "На сервере {{server}} работает OpenCode {{version}}, несовместимый с приложением. Чтобы продолжить, обновите сервер до OpenCode V2.",
   "session.background.moveInline": "Нажмите {{keybind}}, чтобы перенести текущую работу в фоновый режим",
-  "session.background.runningCount.few": "{{count}} задачи выполняются в фоновом режиме",
-  "session.background.runningCount.many": "{{count}} задач выполняются в фоновом режиме",
   "settings.general.row.terminalPlacement.title": "Расположение терминала",
   "settings.general.row.terminalPlacement.description": "Выберите, где открывать терминал в сеансах",
   "settings.general.row.terminalPlacement.side": "Сбоку",
@@ -846,10 +842,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенты",
   "settings.timeline.category.notices": "Уведомления",
   "settings.timeline.category.tools": "Другие инструменты",
-  "session.background.shell.few": "{{count}} оболочки",
-  "session.background.shell.many": "{{count}} оболочек",
-  "session.background.subagent.few": "{{count}} субагента",
-  "session.background.subagent.many": "{{count}} субагентов",
   "settings.about.otherContributor.few": "{{count}} других",
   "settings.about.otherContributor.many": "{{count}} других",
   "provider.connect.error.unsupportedFields": "Эта форма аутентификации содержит неподдерживаемые поля",

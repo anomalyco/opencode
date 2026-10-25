@@ -4,13 +4,9 @@ export const dict = {
   "settings.workspaces.deleteAll.confirm.few": "Овим ћете трајно избрисати {{count}} изабрана радна стабла.",
   "settings.workspaces.deleteWithoutSessions.confirm.few":
     "Овим ћете трајно избрисати {{count}} радна стабла без повезаних сесија.",
-  "session.question.pending.few": "{{count}} питања на чекању",
   "settings.workspaces.count.few": "{{count}} радна простора",
   "settings.workspaces.sessions.few": "{{count}} сесије у {{project}}",
-  "session.background.runningCount.few": "{{count}} ставке се извршавају у позадини",
   "session.queue.count.few": "{{count}} ставке у реду чекања",
-  "session.background.shell.few": "{{count}} љуске",
-  "session.background.subagent.few": "{{count}} подагента",
   "settings.about.otherContributor.few": "{{count}} друга",
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "датотека",

@@ -418,7 +418,6 @@ export const dict = {
 
   "session.question.minimize": "Minimiziraj pitanje",
   "session.question.restore": "Vrati pitanje",
-  "session.question.pending.few": "{{count}} pitanja na čekanju",
 
   "session.new.project.new": "Novi projekat",
   "session.new.project.search": "Pretraži projekte",
@@ -741,7 +740,6 @@ export const dict = {
   "session.error.incompatible.description":
     "{{server}} koristi OpenCode {{version}}, koji nije kompatibilan s ovom aplikacijom. Nadogradite server na OpenCode V2 da biste nastavili.",
   "session.background.moveInline": "Pritisnite {{keybind}} da premjestite aktivni rad u pozadinu",
-  "session.background.runningCount.few": "{{count}} stavke se izvršavaju u pozadini",
   "settings.general.row.terminalPlacement.title": "Položaj terminala",
   "settings.general.row.terminalPlacement.description": "Odaberite gdje se terminal otvara u sesijama",
   "settings.general.row.terminalPlacement.side": "Sa strane",
@@ -835,8 +833,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Podagenti",
   "settings.timeline.category.notices": "Napomene",
   "settings.timeline.category.tools": "Ostali alati",
-  "session.background.shell.few": "{{count}} ljuske",
-  "session.background.subagent.few": "{{count}} podagenta",
   "settings.about.otherContributor.few": "{{count}} druga",
   "provider.connect.error.unsupportedFields": "Ovaj obrazac za autentifikaciju sadrži nepodržana polja",
   "settings.about.writtenByNames": "Napisao {{names}}",
