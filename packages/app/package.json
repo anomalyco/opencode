@@ -82,7 +82,6 @@
     "@solidjs/router": "catalog:",
     "@tanstack/solid-query": "5.91.4",
     "@tanstack/solid-virtual": "catalog:",
-    "core-js": "3.50.0",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "qr-scanner": "1.4.2",
