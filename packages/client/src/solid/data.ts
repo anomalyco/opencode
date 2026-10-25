@@ -286,6 +286,8 @@ export function createData(config: CreateDataInput) {
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+  // Track deletions only until each in-flight metadata/family read settles.
+  const sessionReads = new Set<Set<string>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -605,6 +607,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
+    sessionReads.forEach((deleted) => deleted.add(sessionID))
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
@@ -1674,12 +1677,14 @@ export function createData(config: CreateDataInput) {
         })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
-        return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
+        const deleted = new Set<string>()
+        const read = sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
+          sessionReads.add(deleted)
           const [info, children] = await Promise.all([
             api().session.get({ sessionID }),
             options?.children ? listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }) : [],
           ])
-          const sessions = [info, ...children]
+          const sessions = [info, ...children].filter((session) => !deleted.has(session.id))
           batch(() => {
             setStore(
               "session",
@@ -1694,6 +1699,7 @@ export function createData(config: CreateDataInput) {
             }
           })
         })
+        return read.finally(() => sessionReads.delete(deleted))
       },
       invalidate(sessionID: string) {
         sync.invalidate(`session:${sessionID}`)
