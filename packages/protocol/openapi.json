@@ -14878,6 +14878,9 @@
               "background_compaction": {
                 "type": "boolean"
               },
+              "media_blob": {
+                "type": "boolean"
+              },
               "subagent_depth": {
                 "type": "integer",
                 "minimum": 0

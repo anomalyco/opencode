@@ -17,6 +17,9 @@ export type Ref = typeof Ref.Type
 /** The `blob` hash a {@link Ref} names. */
 export const refHash = (ref: Ref) => ref.slice("media:".length)
 
+/** The {@link Ref} naming a `blob` hash. */
+export const ref = (hash: string): Ref => `media:${hash}`
+
 const { data: _, ...attachment } = FileAttachment.fields
 
 /** A user file whose bytes live in `blob`. */
