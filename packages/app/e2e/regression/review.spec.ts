@@ -597,6 +597,46 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(missingTab).toHaveCount(0)
 })
 
+test("a file link scrolls its line into view in a new or open file tab", async ({ page }) => {
+  // Every other line wraps, so a line's offset cannot be computed from the line height.
+  const source = Array.from(
+    { length: 900 },
+    (_, index) => `export const value${index + 1} = "${"wrapped ".repeat(index % 2 === 0 ? 24 : 1)}"`,
+  ).join("\n")
+
+  await openSession(page, {
+    name: "LineLink",
+    fileList: () => [],
+    findFiles: () => [fileNode("C:/OpenCode/LineLink", "src/long.ts")],
+    fileContent: () => source,
+    pageMessages: () => ({
+      items: [
+        { id: "msg_prompt", type: "user", text: "Where is it?", time: { created: 1 } },
+        {
+          id: "msg_reply",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [{ type: "text", text: "See `src/long.ts:658-659`, then `src/long.ts:120`." }],
+          time: { created: 2, completed: 3 },
+        },
+      ],
+    }),
+  })
+
+  const panel = page.locator("#review-panel")
+
+  for (const link of [
+    { name: "src/long.ts:658-659", line: 658 },
+    { name: "src/long.ts:120", line: 120 },
+  ]) {
+    await page.getByText(link.name, { exact: true }).click()
+    const row = panel.locator(`[data-line="${link.line}"]`)
+    await expect(row).toHaveAttribute("data-selected-line", /.+/)
+    await expect(row).toBeInViewport()
+  }
+})
+
 /** What the image case's frame probe records on the window. */
 type ImageProbe = { problems: string[]; frames: number; running: boolean }
 
