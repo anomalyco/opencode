@@ -147,6 +147,11 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
+  readonly page: (
+    input: SessionStore.PageInput,
+  ) => Effect.Effect<Effect.Success<ReturnType<SessionStore.Interface["page"]>>, NotFoundError | MessageDecodeError>
+  readonly counts: SessionStore.Interface["counts"]
+  readonly search: SessionStore.Interface["search"]
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -413,6 +418,12 @@ const layer = Layer.effect(
         return yield* store.messages(input)
       }),
       message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
+      page: Effect.fn("Session.page")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* store.page(input)
+      }),
+      counts: store.counts,
+      search: store.search,
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
