@@ -184,12 +184,9 @@ const layer = Layer.effect(
           .where(eq(SessionMessageTable.id, messageID))
           .get()
           .pipe(Effect.orDie)
-        return row
-          ? {
-              sessionID: row.session_id,
-              message: (yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie))[0]!,
-            }
-          : undefined
+        if (!row) return undefined
+        const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
+        return message && { sessionID: row.session_id, message }
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db

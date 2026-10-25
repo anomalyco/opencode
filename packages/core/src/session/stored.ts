@@ -12,9 +12,10 @@ import { SessionMessage } from "./message.js"
  * row holds the bytes, size and dimensions; the ref names no server route.
  */
 export const Ref = Schema.String.check(Schema.isPattern(/^media:[0-9a-f]{64}$/))
+export type Ref = typeof Ref.Type
 
 /** The `blob` hash a {@link Ref} names. */
-export const refHash = (ref: string) => ref.slice("media:".length)
+export const refHash = (ref: Ref) => ref.slice("media:".length)
 
 const { data: _, ...attachment } = FileAttachment.fields
 

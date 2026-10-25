@@ -112,7 +112,7 @@ export const find = Effect.fn("SessionInbox.find")(function* (db: DatabaseServic
   const row = yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie)
   if (row === undefined) return undefined
   const [hydrated] = yield* SessionBlob.hydrateInbox(db, [row])
-  return fromRow(hydrated!)
+  return hydrated && fromRow(hydrated)
 })
 
 const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(function* (

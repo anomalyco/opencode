@@ -112,7 +112,7 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   db: DatabaseService,
   rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
 ) {
-  return yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), decodeMessageRow)
+  return yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), decodeMessageRow, { concurrency: 1 })
 })
 
 const messageEntries = Effect.fnUntraced(function* (
@@ -137,8 +137,10 @@ const messageEntries = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const decoded = yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), (row) =>
-    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+  const decoded = yield* Effect.forEach(
+    yield* SessionBlob.hydrate(db, rows),
+    (row) => decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+    { concurrency: 1 },
   )
   // A window that cannot replay leaves nothing to start from, so read from the compaction before it.
   const start = decoded[0]
@@ -192,7 +194,7 @@ const withRecentText = Effect.fnUntraced(function* (
     .all()
     .pipe(Effect.orDie)
   // The recent text names attachments by mime and name only, so their bytes are never read.
-  const kept = yield* Effect.forEach(rows, decodeStoredRow)
+  const kept = yield* Effect.forEach(rows, decodeStoredRow, { concurrency: 1 })
   const recent = kept.map(SessionRecentText.messageToText).filter(Boolean).join("\n\n")
   return [{ ...first, message: { ...compaction, metadata: { ...compaction.metadata, recent } } }, ...entries.slice(1)]
 })
@@ -266,7 +268,7 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
     .orderBy(asc(SessionMessageTable.seq))
     .get()
     .pipe(Effect.orDie)
-  return typeof row?.text === "string" ? { id: row.id, text: row.text } : undefined
+  return row && Schema.is(Schema.String)(row.text) ? { id: row.id, text: row.text } : undefined
 })
 
 export * as SessionHistory from "./history.js"
