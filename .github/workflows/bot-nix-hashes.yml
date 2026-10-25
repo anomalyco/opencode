@@ -1,4 +1,4 @@
-name: nix-hashes
+name: bot-nix-hashes
 
 permissions:
   contents: write
@@ -16,7 +16,7 @@ on:
       - "nix/node_modules.nix"
       - "nix/scripts/**"
       - "patches/**"
-      - ".github/workflows/nix-hashes.yml"
+      - ".github/workflows/bot-nix-hashes.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -1,10 +1,10 @@
-name: storybook
+name: check-storybook
 
 on:
   push:
     branches: [dev]
     paths:
-      - ".github/workflows/storybook.yml"
+      - ".github/workflows/check-storybook.yml"
       - "package.json"
       - "bun.lock"
       - "packages/storybook/**"
@@ -14,7 +14,7 @@ on:
     branches: [dev]
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - ".github/workflows/storybook.yml"
+      - ".github/workflows/check-storybook.yml"
       - "package.json"
       - "bun.lock"
       - "packages/storybook/**"

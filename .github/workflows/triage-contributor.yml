@@ -1,4 +1,4 @@
-name: pr-management
+name: triage-contributor
 
 on:
   pull_request_target:
