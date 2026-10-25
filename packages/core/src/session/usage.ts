@@ -1,6 +1,6 @@
 export * as SessionUsage from "./usage.js"
 
-import type { Usage } from "@opencode/ai"
+import type { Usage } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { Model } from "@opencode/schema/model"

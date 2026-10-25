@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../src/index.js"
+import { Image, ImageClient, Media } from "../src/effect.js"
 import {
   BlackForestLabs,
   Fal,

@@ -51,6 +51,7 @@ import m48 from "./migration/20261007190000_azure_cli_external_credential.js"
 import m49 from "./migration/20261010180456_project_time_archived.js"
 import m50 from "./migration/20261024002554_session_allowance.js"
 import m51 from "./migration/20261024175301_drop_session_allowance.js"
+import m52 from "./migration/20261025123711_blob.js"
 
 export const migrations = [
   m00,
@@ -105,4 +106,5 @@ export const migrations = [
   m49,
   m50,
   m51,
+  m52,
 ] satisfies DatabaseMigration.Migration[]

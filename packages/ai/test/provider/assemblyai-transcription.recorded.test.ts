@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Transcription } from "../../src/index.js"
+import { Transcription } from "../../src/effect.js"
 import { AssemblyAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording } from "./transcription-recording.js"

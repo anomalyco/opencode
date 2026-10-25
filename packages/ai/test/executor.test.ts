@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Socket } from "effect/socket"
-import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError, isRetryable } from "../src/index.js"
+import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError, isRetryable } from "../src/effect.js"
 import {
   LLMClient,
   RequestExecutor,

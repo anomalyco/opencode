@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/index.js"
+import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"

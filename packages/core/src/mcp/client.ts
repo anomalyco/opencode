@@ -124,6 +124,8 @@ export interface ElicitationHandler {
 export interface Connection {
   /** True when the connection negotiated revision 2026-07-28 or later; false is the initialize handshake. */
   readonly modern: boolean
+  /** Display title from `serverInfo.title`, when the server provides one. */
+  readonly title: string | undefined
   readonly instructions: string | undefined
   readonly tools: () => Effect.Effect<Tool[], Error>
   readonly prompts: () => Effect.Effect<Prompt[], Error>
@@ -385,6 +387,7 @@ export const connect = Effect.fnUntraced(function* (
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
       modern: client.getProtocolEra() === "modern",
+      title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
       tools: () =>
         advertised("tools")

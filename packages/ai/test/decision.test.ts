@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Decision, DecisionClient, Media } from "../src/index.js"
+import { Decision, DecisionClient, Media } from "../src/effect.js"
 import {
   Baseten,
   CloudflareWorkersAI,

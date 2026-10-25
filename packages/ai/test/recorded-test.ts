@@ -1,6 +1,6 @@
 import { HttpRecorder } from "@opencode/http-recorder"
 import { NodeSocket } from "@effect/platform-node"
-import { Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { Socket } from "effect/socket"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -86,10 +86,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         ...recorderOptions?.metadata,
         ...metadata,
       }
-      if (recording) {
-        if (process.env.CI !== undefined) throw new Error("Unset CI before recording cassettes")
-        HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
-      }
+      if (recording && process.env.CI !== undefined) throw new Error("Unset CI before recording cassettes")
       const requestExecutor = RequestExecutor.layer.pipe(
         Layer.provide(
           HttpRecorder.layerFetch(cassette, {
@@ -104,7 +101,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         directory: FIXTURES_DIR,
         metadata: recorderMetadata,
       }).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
-      return Layer.mergeAll(
+      const layer = Layer.mergeAll(
         requestExecutor,
         LLMClient.layer.pipe(Layer.provide(requestExecutor)),
         ImageClient.layer.pipe(Layer.provide(requestExecutor)),
@@ -113,6 +110,14 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         TranscriptionClient.layer.pipe(Layer.provide(requestExecutor)),
         DecisionClient.layer.pipe(Layer.provide(requestExecutor)),
         webSocket,
+      )
+      if (!recording) return layer
+      // Remove the cassette when the test runs, not when it is registered, so tests filtered out by `-t` keep theirs.
+      return Layer.unwrap(
+        Effect.sync(() => {
+          HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
+          return layer
+        }),
       )
     },
   })

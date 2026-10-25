@@ -11,7 +11,7 @@ import {
   ToolDefinition,
   Usage,
   Media,
-} from "../../src/index.js"
+} from "../../src/effect.js"
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
@@ -240,6 +240,17 @@ describe("Anthropic Messages route", () => {
         cache_control: { type: "ephemeral" },
         output_config: { effort: "low" },
       })
+    }),
+  )
+
+  it.effect("sends fast mode speed with its beta header", () =>
+    Effect.gen(function* () {
+      const fast = LLMRequest.update(request, { providerOptions: { speed: "fast" } })
+      const compiled = yield* compileRequest(fast)
+      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, fast)
+
+      expect(compiled.body.speed).toBe("fast")
+      expect(prepared.request.headers["anthropic-beta"]).toBe("interleaved-thinking-2025-05-14,fast-mode-2026-02-01")
     }),
   )
 

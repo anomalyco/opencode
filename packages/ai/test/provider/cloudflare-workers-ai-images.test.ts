@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../../src/index.js"
+import { Image, ImageClient, Media } from "../../src/effect.js"
 import { CloudflareWorkersAI } from "../../src/providers.js"
 import { ProviderConfigurationError } from "../../src/schema/index.js"
 import { it } from "../lib/effect.js"

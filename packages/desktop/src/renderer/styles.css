@@ -12,6 +12,7 @@
   [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"],
   .toast-v2 [data-close-button],
   [data-slot="segmented-control-v2-item"],
+  [data-component="line-comment-v2"][data-variant="display"][data-clickable],
   [data-slot="line-comment-v2-overflow"],
   [data-slot="line-comment-v2-mention-item"],
   [data-slot="text-input-v2-icon-button"],

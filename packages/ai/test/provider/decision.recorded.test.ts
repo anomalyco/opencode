@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Decision, type DecisionModel, type DecisionOptions } from "../../src/index.js"
+import { Decision, type DecisionModel, type DecisionOptions } from "../../src/effect.js"
 import {
   Baseten,
   CloudflareAIGateway,

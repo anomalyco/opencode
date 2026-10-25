@@ -13,6 +13,7 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -32,6 +33,7 @@ type MessageEvent = Exclude<
 >
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
+const encodeStoredUser = Schema.encodeSync(SessionStored.User)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -398,9 +400,12 @@ function run(db: DatabaseService, event: MessageEvent) {
   })
 }
 
-function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Info) {
-  const encoded = encodeMessage(message)
-  const { id: _, type, ...data } = encoded
+function insertMessage(
+  db: DatabaseService,
+  event: SessionEvent.DurableEvent,
+  message: SessionMessage.Info | SessionStored.User,
+) {
+  const { id: _, type, ...data } = message.type === "user" ? encodeStoredUser(message) : encodeMessage(message)
   return db
     .insert(SessionMessageTable)
     .values({
@@ -643,30 +648,27 @@ const layer = Layer.effectDiscard(
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
         })
-        if (input.type === "compaction" || input.type === "move") return
-        yield* insertMessage(
-          db,
-          event,
-          input.type === "user"
-            ? {
-                id: input.id,
-                type: "user",
-                metadata: input.payload.metadata,
-                text: input.payload.text,
-                files: input.payload.files,
-                agents: input.payload.agents,
-                skills: input.payload.skills,
-                time: { created: DateTime.makeUnsafe(event.created) },
-              }
-            : {
-                id: input.id,
-                type: "synthetic",
-                text: input.payload.text,
-                description: input.payload.description,
-                metadata: input.payload.metadata,
-                time: { created: DateTime.makeUnsafe(event.created) },
-              },
-        )
+        const time = { created: DateTime.makeUnsafe(event.created) }
+        if (input.type === "user")
+          yield* insertMessage(db, event, {
+            id: input.id,
+            type: "user",
+            metadata: input.payload.metadata,
+            text: input.payload.text,
+            files: input.payload.files,
+            agents: input.payload.agents,
+            skills: input.payload.skills,
+            time,
+          })
+        if (input.type === "synthetic")
+          yield* insertMessage(db, event, {
+            id: input.id,
+            type: "synthetic",
+            text: input.payload.text,
+            description: input.payload.description,
+            metadata: input.payload.metadata,
+            time,
+          })
       }),
     )
     yield* bus.project(SessionEvent.InboxEnqueued, (event) =>

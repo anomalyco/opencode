@@ -5,7 +5,7 @@ import {
   DecisionModel,
   type DecisionRequestInput,
   type DecisionModelRoute,
-} from "../src/index.js"
+} from "../src/effect.js"
 import type { Service } from "../src/decision-client.js"
 import { Baseten, OpenAI, OpenCode, OpenRouter, TypeSafeAI } from "../src/providers.js"
 

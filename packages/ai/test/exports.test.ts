@@ -19,7 +19,7 @@ import {
   TranscriptionClient,
   Video,
   VideoClient,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {

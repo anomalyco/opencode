@@ -25,6 +25,7 @@ import {
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
+import { resolveParallelToolCalls } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -190,6 +191,11 @@ export const bodyFields = {
   store: Schema.optional(Schema.Boolean),
   prompt_cache_key: Schema.optional(Schema.String),
   reasoning_effort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
+  verbosity: Schema.optional(OpenResponsesOptions.TextVerbositySchema),
+  service_tier: Schema.optional(OpenResponsesOptions.ServiceTierSchema),
+  parallel_tool_calls: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  safety_identifier: Schema.optional(Schema.String),
   tool_stream: Schema.optional(Schema.Boolean),
   max_completion_tokens: Schema.optional(Schema.Number),
   max_tokens: Schema.optional(Schema.Number),
@@ -755,8 +761,10 @@ const detectZaiToolStream = (provider: string, baseURL: string | undefined, mode
   return true
 }
 
-const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
+const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTools: boolean) => {
   const options = OpenResponsesOptions.resolve(request)
+  // OpenAI rejects `parallel_tool_calls` unless tools are present.
+  const parallelToolCalls = hasActiveTools ? resolveParallelToolCalls(request, options) : undefined
   // Default off: strict providers 400 on unknown body fields, so only send
   // the key where compatibility explicitly allows it. Header-based affinity
   // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
@@ -766,6 +774,11 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
     ...(supportsStore ? { store: options.store ?? false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+    ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),
+    ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
+    ...(parallelToolCalls !== undefined ? { parallel_tool_calls: parallelToolCalls } : {}),
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+    ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
   }
 }
 
@@ -816,7 +829,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     presence_penalty: generation?.presencePenalty,
     seed: generation?.seed,
     stop: generation?.stop,
-    ...lowerOptions(request, supportsStore),
+    ...lowerOptions(request, supportsStore, hasActiveTools),
   }
 })
 
@@ -1184,7 +1197,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         finishedToolIds: finalizedToolIds,
         toolCallEvents: finished?.events ?? state.toolCallEvents,
         usage,
-        finishReason,
+        finishReason: state.finishReason ?? finishReason,
         lifecycle,
         reasoningField,
         reasoningTextObserved,

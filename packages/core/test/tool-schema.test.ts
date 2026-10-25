@@ -193,50 +193,7 @@ test("Effect tool schemas resolve escaped definition names", () => {
   expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
 })
 
-test("repeat steps reuse converted schemas instead of rebuilding them", () => {
-  const builds: Array<string> = []
-  const portable = {
-    "~standard": {
-      version: 1,
-      vendor: "test",
-      validate: (value: unknown) => ({ value }),
-      jsonSchema: {
-        input: () => {
-          builds.push("input")
-          return { type: "object" }
-        },
-        output: () => {
-          builds.push("output")
-          return { type: "string" }
-        },
-      },
-    },
-  }
-  const effect: Info = {
-    name: "effect",
-    description: "Effect tool",
-    input: Schema.Struct({ value: Schema.String }),
-    output: Schema.Struct({ ok: Schema.Boolean }),
-    execute: () => Effect.succeed({ output: { ok: true } }),
-  }
-  const step = () => [
-    // Snapshots recreate some tools, such as CodeMode's, around the same schemas each step.
-    definition({ ...effect }),
-    definition({ ...effect, name: "portable", input: portable, output: portable }),
-  ]
-
-  const first = step()
-  const before = builds.length
-  const second = step()
-
-  expect(builds.length).toBe(before)
-  second.forEach((item, index) => {
-    expect(item.inputSchema).toBe(first[index].inputSchema)
-    expect(item.outputSchema).toBe(first[index].outputSchema)
-  })
-})
-
-test("cached definitions serialize byte-identically to freshly built ones", () => {
+test("definitions keep their pinned serialization", () => {
   const Item = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Item" })
   const tool: Info = {
     name: "pinned.tool",
@@ -249,7 +206,7 @@ test("cached definitions serialize byte-identically to freshly built ones", () =
     output: Schema.Struct({}).annotate({ description: "Nothing" }),
     execute: () => Effect.succeed({ content: "unused" }),
   }
-  // Serialized by the uncached implementation; key order matters for provider prompt caches.
+  // Key order matters for provider prompt caches.
   const expected =
     '{"type":"tool","name":"mcp_server_pinned_tool","description":"Pinned","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0},"items":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}}},"required":["items"],"additionalProperties":false},"outputSchema":{"not":{"type":"null"},"description":"Nothing"}}'
 

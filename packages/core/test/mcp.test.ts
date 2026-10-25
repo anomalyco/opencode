@@ -139,7 +139,7 @@ function resourceServer(
       // still carry the previous session id are then unknown to the new transport.
       const server = () => {
         const protocol = new Server(
-          { name: "mcp-resources", version: "1.0.0" },
+          { name: "mcp-resources", title: "MCP Resources", version: "1.0.0" },
           {
             capabilities: {
               tools: {},
@@ -1148,8 +1148,9 @@ test("reconnects and retries a tool call after the MCP session expires", async (
           expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 1 }, { n: 2 }])
           expect(server.state.initializations).toBe(2)
           expect(server.state.sessions).toHaveLength(2)
-          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toEqual({
-            status: "connected",
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")).toMatchObject({
+            status: { status: "connected" },
+            title: "MCP Resources",
           })
         }).pipe(Effect.provide(resourceMcpLayer(server.url)))
       }),
@@ -1175,6 +1176,7 @@ describe.each([
           )
 
           expect(connection.modern).toBe(era === "modern")
+          expect(connection.title).toBe("MCP Resources")
           expect(connection.instructions).toBe("Use the resources tools.")
           expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["echo"])
           expect((yield* connection.prompts()).map((prompt) => prompt.name)).toEqual(["greet"])

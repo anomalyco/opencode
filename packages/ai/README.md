@@ -2,9 +2,32 @@
 
 Schema-first APIs for text, images, video, speech, and transcription, built with Effect.
 
+`@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
+and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
+
+```ts
+import { AI } from "@opencode/ai"
+import { OpenAI } from "@opencode/ai/providers"
+
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
+
+const ai = AI.make()
+const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
+const response = await ai.llm.generate(input)
+console.log(response.text)
+const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
+await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
+for await (const event of ai.llm.stream(ai.llm.request(input))) {
+  // LLMEvent
+}
+await ai.dispose()
+```
+
+The Effect API lives at `@opencode/ai/effect`. Its methods return `Effect` or `Stream`:
+
 ```ts
 import { Effect } from "effect"
-import { AIClient, LLM } from "@opencode/ai"
+import { AIClient, LLM } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -64,7 +87,7 @@ provider's image route from the model and returns `Media.Asset`s with lazily dec
 
 ```ts
 import { NodeFileSystem } from "@effect/platform-node"
-import { Image, Media } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai/effect"
 
 const image = Effect.gen(function* () {
   const response = yield* Image.generate({
@@ -96,30 +119,13 @@ const logged = RequestExecutor.middleware((request, next) =>
 const everything = AIClient.layerWith(logged) // or AI.make({ layer: logged })
 ```
 
-Prefer promises? `@opencode/ai/promise` exposes the same LLM and media APIs over one managed runtime, plus asset
-helpers; `ai.file` and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
-
-```ts
-import { AI } from "@opencode/ai/promise"
-
-const ai = AI.make()
-const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
-const text = await ai.llm.generate(input)
-const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
-for await (const event of ai.llm.stream(ai.llm.request(input))) {
-  // LLMEvent
-}
-await ai.dispose()
-```
-
 ## Venice AI
 
 `Venice` provides native Chat Completions with streaming tools and reasoning. `model` and `chat`
 select the same API; credentials default to `VENICE_API_KEY`.
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { Venice } from "@opencode/ai/providers"
 import { Effect } from "effect"
 
@@ -155,7 +161,7 @@ values, or a `score` on ordered levels, each with the probability of every optio
 
 ```ts
 import { Effect } from "effect"
-import { Decision, DecisionClient, Media } from "@opencode/ai"
+import { Decision, DecisionClient, Media } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const program = Decision.generate({
@@ -223,7 +229,7 @@ Chat Completions (`.model` or `.chat`), Anthropic-compatible Messages (`.message
 Responses (`.responses`). These routes use HTTP/SSE.
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { Alibaba } from "@opencode/ai/providers"
 
 const alibaba = Alibaba.configure({
@@ -302,7 +308,7 @@ pass through. Results are URLs that Model Studio keeps for 24 hours. A complete 
 the existing `.image(...)` selector provides image generation.
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { ZAI, ZAICodingPlan } from "@opencode/ai/providers"
 
 const zai = ZAI.configure({ apiKey: process.env.ZAI_API_KEY })
@@ -368,7 +374,7 @@ Package entrypoints are `@opencode/ai/providers/zai`, `zai/chat`, `zai-coding-pl
 Moonshot defaults to Chat Completions, with Messages and Responses selectors for Kimi K3:
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { Moonshot } from "@opencode/ai/providers"
 
 const moonshot = Moonshot.configure({ apiKey: process.env.MOONSHOT_API_KEY })
@@ -430,7 +436,7 @@ MiniMax defaults to its Messages API and reads `MINIMAX_API_KEY` when `apiKey` i
 
 ```ts
 import { Effect } from "effect"
-import { AIClient, LLM } from "@opencode/ai"
+import { AIClient, LLM } from "@opencode/ai/effect"
 import { MiniMax } from "@opencode/ai/providers"
 
 const minimax = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY })
@@ -507,7 +513,7 @@ citations or separate result blocks. Retain `response.message` for either API's 
 Use `Image.generate` for one-off generation or editing:
 
 ```ts
-import { Image, Media } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai/effect"
 
 const generation = Image.generate({
   model: meta.image("muse-image-1.0"),
@@ -543,7 +549,7 @@ selected model. `aspect` is a ratio such as `"16:9"`; `resolution` is a size tie
 at that ratio, `"2K"` about 2048×2048). Exact sizes, seeds, masks, and output formats are provider options:
 
 ```ts
-import { Image, Media } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -729,7 +735,7 @@ and emits `image-partial` events before each final `image`; `Image.generate` kee
 
 ```ts
 import { Stream } from "effect"
-import { ImageEvent } from "@opencode/ai"
+import { ImageEvent } from "@opencode/ai/effect"
 
 const previews = Image.stream({
   model: openai.image("gpt-image-2"),
@@ -813,7 +819,7 @@ Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`, `re
 under `providerOptions`, inferred from the selected model.
 
 ```ts
-import { Video } from "@opencode/ai"
+import { Video } from "@opencode/ai/effect"
 import { Google, Runway } from "@opencode/ai/providers"
 
 const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY })
@@ -885,7 +891,7 @@ aborting rejects the Promise or throws from the `for await` loop with `signal.re
 unless `abort(reason)` passed one), while `break` stops a stream without throwing.
 
 ```ts
-import { ai } from "@opencode/ai/promise"
+import { ai } from "@opencode/ai"
 
 const generation = await ai.video.start({ model, prompt })
 for await (const event of generation.events({ poll: { interval: 10_000 } })) console.log(event.type)
@@ -902,7 +908,7 @@ selectors on the `OpenAI`, `Google` (Gemini TTS), `ElevenLabs`, `Cartesia`, and 
 before any network call; provider-native controls live under `providerOptions`, inferred from the selected model.
 
 ```ts
-import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai"
+import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai/effect"
 import { ElevenLabs, OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -967,7 +973,7 @@ Provider notes:
 The promise client mirrors the Effect API; `ai.speech.stream` is an `AsyncIterable`.
 
 ```ts
-import { ai } from "@opencode/ai/promise"
+import { ai } from "@opencode/ai"
 
 const response = await ai.speech.generate({ model, text: "Hello from OpenCode.", voice: "coral" })
 await ai.write(response.audio, "hello.mp3")
@@ -989,7 +995,7 @@ any network call; a route may return more than asked.
 
 ```ts
 import { Console, Effect, Stream } from "effect"
-import { Media, Transcription, TranscriptionEvent } from "@opencode/ai"
+import { Media, Transcription, TranscriptionEvent } from "@opencode/ai/effect"
 import { AssemblyAI, Deepgram, OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -1050,6 +1056,8 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 
 ## Public API
 
+Everything below is exported from `@opencode/ai/effect` unless noted.
+
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
@@ -1063,7 +1071,7 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 - **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
 - **`Transcription.request` / `generate` / `stream` / `start` / `resume`** — speech-to-text over inline, streaming, and queued routes; `TranscriptionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, and `transcription` as Promise / `AsyncIterable` APIs, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
+- **`@opencode/ai`** (Promise root) — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, and `transcription` as Promise / `AsyncIterable` APIs, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
 
 ## Testing
 
@@ -1188,7 +1196,7 @@ Enable OpenAI compaction with typed provider options:
 
 ```ts
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai"
+import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const request = LLM.request({
@@ -1211,7 +1219,7 @@ const continued = Effect.gen(function* () {
 A compaction part has `provider` and exactly one representation: `encrypted` for Responses, or `text` for Anthropic. Responses also preserves the optional checkpoint `id`. These fields survive message serialization without becoming visible assistant text. Sending a checkpoint to another provider or an incompatible API fails rather than silently losing context.
 
 ```ts
-import { CompactionPart, ProviderID } from "@opencode/ai"
+import { CompactionPart, ProviderID } from "@opencode/ai/effect"
 
 CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_123", encrypted: "..." })
 CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "Summary of the conversation..." })
@@ -1431,7 +1439,7 @@ Compose a route with `Route.make({ protocol, endpoint, auth, framing, ... })`. T
 
 ## Effect
 
-This package is built on Effect. Public methods return `Effect` or `Stream`; provide `AIClient.layer` (or `AIClient.layerWith(executor)`) for every modality, then import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
+This package is built on Effect. Public methods in `@opencode/ai/effect` return `Effect` or `Stream`; provide `AIClient.layer` (or `AIClient.layerWith(executor)`) for every modality, then import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
 
 ## See also
 

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
-import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { LLM, LLMEvent, Message } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
@@ -70,6 +70,30 @@ describe("xAI Responses route", () => {
 
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("sends top_k and omits unsupported penalties", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Hello",
+          generation: { topK: 20, presencePenalty: 0.5, frequencyPenalty: 0.5 },
+        }),
+      )
+
+      expect(prepared.body.top_k).toBe(20)
+      expect(prepared.body.presence_penalty).toBeUndefined()
+      expect(prepared.body.frequency_penalty).toBeUndefined()
+    }),
+  )
+
+  it.effect("sends min_p from provider options", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello", providerOptions: { minP: 0.1 } }))
+
+      expect(prepared.body.min_p).toBe(0.1)
     }),
   )
 

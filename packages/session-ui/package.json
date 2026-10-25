@@ -77,8 +77,8 @@
     "effect": "catalog:",
     "dompurify": "3.4.14",
     "marked": "catalog:",
-    "mermaid": "11.17.2",
     "motion": "12.34.5",
+    "pele": "1.7.0",
     "remend": "catalog:",
     "solid-js": "catalog:",
     "strip-ansi": "7.1.2"

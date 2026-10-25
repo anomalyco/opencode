@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LLM, Message, ToolCallPart } from "../../src/effect.js"
 import { GoogleVertexInteractions } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { Auth } from "../../src/route/auth.js"

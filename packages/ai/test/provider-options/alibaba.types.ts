@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 
 const provider = Alibaba.configure({ region: "ap-southeast-1" })
