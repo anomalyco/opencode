@@ -1069,8 +1069,19 @@ export const estimateContext = (context: SessionContext.Loaded) => {
   return prompt.measured + prompt.estimated
 }
 
+// A step asks for its prompt size up to four times (auto check, precompute, request sizing); a context never changes.
+const estimates = new WeakMap<SessionContext.Loaded, { readonly measured: number; readonly estimated: number }>()
+
 /** The prompt size: `measured` is what the provider reported at the latest response, `estimated` is the text since. */
 export const estimatePrompt = (context: SessionContext.Loaded) => {
+  const cached = estimates.get(context)
+  if (cached) return cached
+  const estimate = measurePrompt(context)
+  estimates.set(context, estimate)
+  return estimate
+}
+
+const measurePrompt = (context: SessionContext.Loaded) => {
   const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
   const anchor = context.messages[anchorIndex]
   const base = transcript(context, context.messages.slice(Math.max(0, anchorIndex)))
