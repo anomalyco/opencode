@@ -122,6 +122,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions input",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.notifications.errors.title",
     target: "settings-notifications-errors",
     section: "settings.general.section.notifications",

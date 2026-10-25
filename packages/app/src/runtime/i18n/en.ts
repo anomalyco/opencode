@@ -496,6 +496,7 @@ export const dict = {
   "error.chain.configInvalidWithMessage": "Config file at {{path}} is invalid: {{message}}",
 
   "notification.permission.title": "Permission required",
+  "notification.session.question.title": "Input needed",
 
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
@@ -721,6 +722,24 @@ export const dict = {
   "settings.appearance.row.tabs.horizontal": "Horizontal",
   "settings.appearance.row.tabs.vertical": "Vertical",
   "settings.notifications.description": "Choose when to receive notifications and hear sounds",
+
+  "settings.notifications.push.title": "Background push",
+  "settings.notifications.push.hint":
+    "Your browser will ask for notification permission. On iPhone and iPad, add OpenCode to the Home Screen first; Safari tabs cannot receive push. On Android, Chrome or Edge can ask directly.",
+  "settings.notifications.push.server": "Server",
+  "settings.notifications.push.serverDescription": "Choose the server that sends notifications to this browser.",
+  "settings.notifications.push.toggle": "Push notifications",
+  "settings.notifications.push.toggleDescription": "Receive notifications while the app is closed.",
+  "settings.notifications.push.enabled": "Push notifications are on for this device.",
+  "settings.notifications.push.disabled": "Push notifications are off. Turn on the switch to allow them.",
+  "settings.notifications.push.updating": "Updating push subscription…",
+  "settings.notifications.push.insecure": "Push needs HTTPS or localhost.",
+  "settings.notifications.push.install": "On iPhone and iPad, add OpenCode to the Home Screen first.",
+  "settings.notifications.push.unsupported": "This browser does not support Web Push.",
+  "settings.notifications.push.denied": "Notification permission is blocked in browser settings.",
+  "settings.notifications.push.serverUnsupported": "This server does not support push notifications.",
+  "settings.notifications.push.subscription": "The push subscription could not be created.",
+  "settings.notifications.push.failed": "Push setup failed. Try again.",
   "settings.shortcuts.description": "Customize shortcuts for common actions",
   "settings.servers.description": "Manage server connections",
   "settings.server.description": "Manage this server’s connection and preferences",
@@ -900,6 +919,8 @@ export const dict = {
     "Show system notification when the agent is complete or needs attention",
   "settings.general.notifications.permissions.title": "Permissions",
   "settings.general.notifications.permissions.description": "Show system notification when a permission is required",
+  "settings.general.notifications.questions.title": "Questions",
+  "settings.general.notifications.questions.description": "Show system notification when the agent needs input",
   "settings.general.notifications.errors.title": "Errors",
   "settings.general.notifications.errors.description": "Show system notification when an error occurs",
 

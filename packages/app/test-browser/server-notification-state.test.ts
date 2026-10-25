@@ -44,8 +44,10 @@ beforeAll(async () => {
   mock.module("@/settings/model", () => ({
     ...real.settings,
     useSettings: () => ({
+      ready: () => false,
       sounds: { agentEnabled: () => false, errorsEnabled: () => false },
-      notifications: { agent: () => true, errors: () => true },
+      notifications: { agent: () => true, permissions: () => true, questions: () => true, errors: () => true },
+      permissions: { autoApproves: () => false },
     }),
   }))
   mock.module("@/runtime/i18n/language", () => ({

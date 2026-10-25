@@ -151,6 +151,7 @@ const workspacesSchema = Persistence.struct({
 const notificationsSchema = Persistence.struct({
   agent: Schema.Boolean,
   permissions: Schema.Boolean,
+  questions: Schema.Boolean,
   errors: Schema.Boolean,
 })
 
@@ -288,7 +289,7 @@ export const defaultSettings: Settings = {
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
-  notifications: { agent: true, permissions: true, errors: false },
+  notifications: { agent: true, permissions: true, questions: true, errors: false },
   sounds: {
     agentEnabled: true,
     agent: "staplebops-01",
@@ -477,6 +478,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         permissions: withFallback(() => store.notifications?.permissions, defaultSettings.notifications.permissions),
         setPermissions(value: boolean) {
           setStore("notifications", "permissions", value)
+        },
+        questions: withFallback(() => store.notifications?.questions, defaultSettings.notifications.questions),
+        setQuestions(value: boolean) {
+          setStore("notifications", "questions", value)
         },
         errors: withFallback(() => store.notifications?.errors, defaultSettings.notifications.errors),
         setErrors(value: boolean) {

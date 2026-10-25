@@ -108,7 +108,7 @@ describe("settings schema", () => {
       keybinds: {},
       permissions: { autoApprove: false, autoApproveProjects: {} },
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
-      notifications: { agent: true, permissions: true, errors: false },
+      notifications: { agent: true, permissions: true, questions: true, errors: false },
       sounds: {
         agentEnabled: true,
         agent: "staplebops-01",
@@ -153,7 +153,7 @@ describe("settings schema", () => {
     expect(settings.permissions).toEqual({ autoApprove: true, autoApproveProjects: { on: true, off: false } })
     expect(settings.workspaces).toEqual({ defaultDestination: "new", lastUsed: { good: "workspace" } })
     expect(settings.keybinds).toEqual({ good: "ctrl+k" })
-    expect(settings.notifications).toEqual({ agent: false, permissions: true, errors: true })
+    expect(settings.notifications).toEqual({ agent: false, permissions: true, questions: true, errors: true })
     expect(settings.sounds).toMatchObject({ agent: "custom", agentEnabled: false, permissions: "staplebops-02" })
     expect(decode(encode(settings))).toEqual(settings)
   })

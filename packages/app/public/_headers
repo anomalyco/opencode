@@ -23,6 +23,14 @@
   Content-Type: application/javascript
   Cache-Control: no-cache
 
+/push-sw.js
+  Content-Type: application/javascript
+  Cache-Control: no-cache
+
+/notification.js
+  Content-Type: application/javascript
+  Cache-Control: no-cache
+
 /registerSW.js
   Content-Type: application/javascript
   Cache-Control: no-cache
