@@ -20,8 +20,6 @@ export const HASH_PATTERN = /^[0-9a-f]{64}$/
  * The ref names no server route; clients that opt in see a fetchable path only in the response projection.
  */
 export const REF_SCHEME = "media:"
-// Written only by early builds of this feature; still read, never written.
-const LEGACY_REF_PREFIX = "/api/media/"
 
 export const ref = (hash: string) => `${REF_SCHEME}${hash}`
 
@@ -50,11 +48,7 @@ type StoredToolFile = {
 }
 
 export const hashFromUri = (uri: string | undefined) => {
-  const hash = uri?.startsWith(REF_SCHEME)
-    ? uri.slice(REF_SCHEME.length)
-    : uri?.startsWith(LEGACY_REF_PREFIX)
-      ? uri.slice(LEGACY_REF_PREFIX.length)
-      : undefined
+  const hash = uri?.startsWith(REF_SCHEME) ? uri.slice(REF_SCHEME.length) : undefined
   return hash !== undefined && HASH_PATTERN.test(hash) ? hash : undefined
 }
 

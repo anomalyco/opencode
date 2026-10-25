@@ -1000,7 +1000,7 @@ describe("SessionProjector", () => {
     }),
   )
 
-  it.effect("hydrates media:<hash> refs (and legacy /api/media/<hash> refs) on message and inbox reads", () =>
+  it.effect("hydrates media:<hash> refs on message and inbox reads", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
@@ -1011,8 +1011,8 @@ describe("SessionProjector", () => {
       const base64 = rawBytes.toString("base64")
       const hash = "a".repeat(64)
       const uri = `media:${hash}`
-      // Rows written by early builds carry the old URL form; reads still resolve it.
-      const legacyUri = `/api/media/${hash}`
+      // Only media:<hash> is a ref; a plain path that looks like a media URL is left alone.
+      const pathUri = `/api/media/${hash}`
 
       yield* db
         .insert(BlobTable)
@@ -1065,7 +1065,8 @@ describe("SessionProjector", () => {
                     status: "completed",
                     input: { path: "spec.pdf" },
                     content: [
-                      { type: "file", uri: legacyUri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "spec.pdf" },
+                      { type: "file", uri, mime: "application/pdf", bytes: rawBytes.byteLength, name: "spec.pdf" },
+                      { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
                     ] as any,
                   },
                   time: { created: 2, ran: 2, completed: 2 },
@@ -1110,7 +1111,10 @@ describe("SessionProjector", () => {
             type: "tool",
             state: {
               status: "completed",
-              content: [{ type: "file", uri: `data:application/pdf;base64,${base64}`, mime: "application/pdf", name: "spec.pdf" }],
+              content: [
+                { type: "file", uri: `data:application/pdf;base64,${base64}`, mime: "application/pdf", name: "spec.pdf" },
+                { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
+              ],
             },
           },
         ],
@@ -1183,7 +1187,7 @@ describe("SessionProjector", () => {
                   state: {
                     status: "completed",
                     input: { path: "shot.png" },
-                    content: [{ type: "file", uri: `/api/media/${hash}`, mime: "image/png", bytes: 10 }] as any,
+                    content: [{ type: "file", uri: `media:${hash}`, mime: "image/png", bytes: 10 }] as any,
                   },
                   time: { created: 2, ran: 2, completed: 2 },
                 },
