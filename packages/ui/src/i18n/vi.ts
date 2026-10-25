@@ -232,7 +232,7 @@ export const dict: Record<string, string> = {
   "ui.promptInput.dropFiles.pdf": "Thả tệp PDF hoặc tệp để thêm",
   "ui.promptInput.dropFiles.imagePdf": "Thả hình ảnh, tệp PDF hoặc tệp để thêm",
   "ui.promptInput.exitShell": "Thoát",
-  "ui.sessionTimeline.notice.agentChanged": "Đã đổi tác tử",
+  "ui.sessionTimeline.notice.agentChanged": "Đã đổi tác nhân",
 
   "ui.sessionTurn.retry.attemptWaiting.one": "Hãy thử {{attempt}} - thử lại sau {{count}} giây",
   "ui.sessionTurn.retry.attemptWaiting.other": "Hãy thử {{attempt}} - thử lại sau {{count}} giây",
