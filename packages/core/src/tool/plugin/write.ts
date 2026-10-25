@@ -77,7 +77,7 @@ export const Plugin = {
               const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
               yield* permission.assert({
                 action: "edit",
-                resources: [target.resource],
+                resources: target.ruleResources,
                 save: ["*"],
                 metadata: { files: [preview] },
                 sessionID: context.sessionID,

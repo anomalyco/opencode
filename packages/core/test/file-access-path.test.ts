@@ -110,7 +110,7 @@ describe("FileAccess.resolve", () => {
     ),
   )
 
-  it.live("resolves a prospective target below an external symlink lexically", () =>
+  it.live("resolves a prospective target below an external symlink against the real directory", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         if (process.platform === "win32") return
@@ -120,9 +120,45 @@ describe("FileAccess.resolve", () => {
         const target = yield* access.resolve({ path: path.join("escape", "new.txt") })
         expect(target).toMatchObject({
           absolute: path.join(directory, "escape", "new.txt"),
-          resource: "escape/new.txt",
         })
+        expect(target.externalDirectory).toMatchObject({
+          directory: outside.path,
+          resource: path.join(outside.path, "*").replaceAll("\\", "/"),
+        })
+        expect(target.ruleResources).toContain(path.join(outside.path, "new.txt").replaceAll("\\", "/"))
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("treats an in-project link to an outside directory as external", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const outside = yield* tmpdirScoped()
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(outside.path, "notes.txt"), "x")
+          await fs.symlink(outside.path, path.join(directory, "linked"))
+        })
+        const access = yield* FileAccess.Service
+        const target = yield* access.resolve({ path: path.join("linked", "notes.txt") })
+        expect(target.externalDirectory).toMatchObject({ directory: outside.path })
+        expect(target.ruleResources).toContain(path.join(outside.path, "notes.txt").replaceAll("\\", "/"))
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("keeps a new file under a linked directory internal with both rule resources", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "actual"))
+          await fs.symlink(path.join(directory, "actual"), path.join(directory, "linked"))
+        })
+        const access = yield* FileAccess.Service
+        const target = yield* access.resolve({ path: path.join("linked", "new.txt") })
         expect(target.externalDirectory).toBeUndefined()
+        expect(target.ruleResources).toEqual(["linked/new.txt", "actual/new.txt"])
       }).pipe(provide(directory)),
     ),
   )

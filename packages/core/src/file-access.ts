@@ -34,6 +34,8 @@ export interface Target {
   readonly absolute: AbsolutePath
   /** Location-relative for internal paths, absolute for external paths. */
   readonly resource: string
+  /** The resources permission rules match: the written path and its symlink-resolved real path. */
+  readonly ruleResources: readonly string[]
   readonly externalDirectory?: ExternalDirectoryAuthorization
 }
 
@@ -90,16 +92,49 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
+    // Resolve the boundaries once, at layer construction: a project opened through a symlink
+    // (opencode run keeps $PWD; macOS /tmp → /private/tmp) must still count as internal when
+    // the resolved target paths are compared against it.
+    const realDirectory = yield* fs.resolve(location.directory)
+    const worktree = path.resolve(location.project.directory)
+    const realWorktree = yield* fs.resolve(worktree)
+
+    /**
+     * Resolve symlinks in the longest existing prefix of `absolute`, keeping the not-yet-existing
+     * tail lexical, so a link cannot change which file the permission rules are matched against.
+     */
+    const resolveReal = Effect.fn("FileAccess.resolveReal")(function* (absolute: string) {
+      const missing: string[] = []
+      let current = absolute
+      while (true) {
+        // Any stat error counts as missing, not just NotFound: a parent that is still a file
+        // fails with ENOTDIR, and a prospective `parent/child.txt` must keep resolving.
+        const stat = yield* fs
+          .stat(current)
+          .pipe(Effect.catchTag(["PlatformError"], () => Effect.undefined))
+        if (stat) break
+        const parent = path.dirname(current)
+        if (parent === current) break
+        missing.unshift(path.basename(current))
+        current = parent
+      }
+      const real = yield* fs.resolve(current)
+      return missing.length === 0 ? real : path.join(real, ...missing)
+    })
+
     const resolve = Effect.fn("FileAccess.resolve")(function* (input: ResolveInput) {
       const absolute = AbsolutePath.make(resolvePath(location.directory, input.path))
-      const worktree = path.resolve(location.project.directory)
+      const real = yield* resolveReal(absolute)
       const internal =
-        FSUtil.contains(location.directory, absolute) ||
-        (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
+        FSUtil.contains(realDirectory, real) ||
+        (realWorktree !== path.parse(realWorktree).root && FSUtil.contains(realWorktree, real))
       if (internal) {
+        const resource = slash(path.relative(location.directory, absolute) || ".")
+        const realResource = slash(path.relative(realDirectory, real) || ".")
         return {
           absolute,
-          resource: slash(path.relative(location.directory, absolute) || "."),
+          resource,
+          ruleResources: Array.dedupe([resource, realResource]),
         } satisfies Target
       }
       const type =
@@ -107,12 +142,13 @@ const layer = Layer.effect(
           ? "Directory"
           : input.kind === "file"
             ? "File"
-            : (yield* fs.stat(absolute).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined)))
+            : (yield* fs.stat(real).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined)))
                 ?.type
-      const directory = AbsolutePath.make(type === "Directory" ? absolute : path.dirname(absolute))
+      const directory = AbsolutePath.make(type === "Directory" ? real : path.dirname(real))
       return {
         absolute,
         resource: slash(absolute),
+        ruleResources: Array.dedupe([slash(absolute), slash(real)]),
         externalDirectory: {
           action: "external_directory",
           directory,
@@ -153,7 +189,7 @@ const layer = Layer.effect(
       if (!sibling) yield* authorizeExternal([target], context)
       yield* permission.assert({
         action: "read",
-        resources: [target.resource],
+        resources: target.ruleResources,
         save: ["*"],
         ...invocation(context),
       })

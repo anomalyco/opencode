@@ -69,6 +69,23 @@ describe("FileAccess.authorizeRead", () => {
     }).pipe(provide(requests))
   })
 
+  it.live("matches read rules against the real path through a symlink", () => {
+    const requests: Permission.AssertInput[] = []
+    return Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const access = yield* FileAccess.Service
+      const location = yield* Location.Service
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(location.directory, "real"))
+        await fs.writeFile(path.join(location.directory, "real", "file.txt"), "x")
+        await fs.symlink(path.join(location.directory, "real"), path.join(location.directory, "link"))
+      })
+      const target = yield* access.authorizeRead(path.join("link", "file.txt"), invocation)
+      expect(target.externalDirectory).toBeUndefined()
+      expect(requests).toMatchObject([{ action: "read", resources: ["link/file.txt", "real/file.txt"] }])
+    }).pipe(provide(requests))
+  })
+
   it.live("authorizes an external directory before the file's read rules", () => {
     const requests: Permission.AssertInput[] = []
     return Effect.gen(function* () {
