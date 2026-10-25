@@ -223,7 +223,7 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
               return (
                 <div {...row} data-option-key={item().name} data-status={status()?.status}>
                   <span class="mcp-dialog-lead">
-                    <span class="mcp-dialog-dot" data-status={status()?.status} aria-hidden="true" />
+                    <span class="mcp-status-dot" data-status={status()?.status} aria-hidden="true" />
                     <TruncatedText text={item().name} class="mcp-dialog-name" />
                   </span>
                   <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>

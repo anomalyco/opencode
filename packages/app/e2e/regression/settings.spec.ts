@@ -673,7 +673,7 @@ test.describe("pages open before slow data", () => {
     await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
   })
 
-  test("extensions separate MCP status from details, sign-in, and switch controls", async ({ page, context }) => {
+  test("extensions show MCP status dots with sign-in, error, and switch controls", async ({ page, context }) => {
     const error = "Connection closed: MCP server process exited with code 1"
     const signIns: string[] = []
     await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
@@ -697,23 +697,24 @@ test.describe("pages open before slow data", () => {
 
     await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
     await settings.getByRole("tab", { name: "MCPs", exact: true }).click()
+    // As in the MCPs dialog, a dot shows each status and the words stay for assistive technology.
     await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
-    await expect(settings.getByRole("switch")).toHaveCount(2)
-    await expect(settings.getByText("Connected", { exact: true })).toBeVisible()
-    await expect(settings.getByText("Disabled", { exact: true })).toBeVisible()
-    await expect(settings.getByText("Failed", { exact: true })).toBeVisible()
+    await expect(settings.getByRole("switch", { name: "demo-mcp" })).toHaveAccessibleDescription("Connected")
+    await expect(settings.getByRole("switch", { name: "disabled-mcp" })).toHaveAccessibleDescription("Disabled")
+    await expect(settings.getByRole("switch", { name: "blender" })).toHaveAccessibleDescription("Failed")
+    await expect(settings.getByRole("switch")).toHaveCount(3)
 
     const popup = page.waitForEvent("popup")
     const signIn = settings.getByRole("button", { name: "Sign in to stripe", exact: true })
-    await expect(signIn).toHaveAttribute("data-component", "button-v2")
+    await expect(signIn).toHaveAttribute("data-variant", "ghost-muted")
     await expect(signIn.locator("svg")).toHaveCount(0)
     await signIn.click()
     await expect(await popup).toHaveURL("https://auth.example.test/authorize")
     expect(signIns).toEqual(["stripe-oauth"])
 
-    const action = settings.getByRole("button", { name: "Details for blender", exact: true })
-    await expect(action).toHaveText("Details")
-    await expect(action).toHaveAttribute("data-component", "button-v2")
+    const action = settings.getByRole("button", { name: "View error for blender", exact: true })
+    await expect(action).toHaveText("View error")
+    await expect(action).toHaveAttribute("data-variant", "ghost-muted")
     await action.click()
     const details = page.getByRole("dialog", { name: "blender", exact: true })
     await expect(details).toHaveAccessibleDescription("Connection failed")

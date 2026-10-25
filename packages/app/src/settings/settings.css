@@ -2160,6 +2160,19 @@
   gap: 16px;
 }
 
+/* The MCP status dot takes the icon's 16px slot, so names line up with the plugin and skill rows. */
+.settings-mcp-status {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+}
+
+.settings-mcp-row[data-status="disabled"] .settings-extension-name {
+  color: var(--v2-text-text-muted);
+}
+
 .settings-extension-lead {
   display: flex;
   flex: 1;
