@@ -1,8 +1,9 @@
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode/ui/theme/types"
+import { desktopZoomLevels } from "@opencode/app/desktop-menu"
 import { nativeTheme } from "electron"
 import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
-import { BACKGROUND_COLOR_KEY } from "../storage/keys"
+import { BACKGROUND_COLOR_KEY, ZOOM_LEVEL_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 
 // Frame defaults shared by the early window (created on ready, before the renderer exists) and the
@@ -27,6 +28,13 @@ export function storedBackgroundColor() {
   const dark = tone() === "dark"
 
   return resolveThemeVariant(dark ? oc2Theme.dark : oc2Theme.light, dark)["background-base"]
+}
+
+// The zoom level chosen in settings or with Zoom In and Zoom Out, or 100% when none was saved.
+export function storedZoomLevel() {
+  const stored = getStore().get(ZOOM_LEVEL_KEY)
+
+  return desktopZoomLevels.find((level) => level === stored) ?? 1
 }
 
 export function titlebarOverlay(mode: "light" | "dark" = tone(), zoom = 1) {

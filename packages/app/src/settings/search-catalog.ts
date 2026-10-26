@@ -138,6 +138,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "appearance",
+    label: "settings.appearance.row.zoom.title",
+    target: "settings-zoom",
+    keywords: "scale size text font larger bigger accessibility",
+    available: "desktop",
+  },
+  {
+    tab: "appearance",
     label: "settings.appearance.row.reduceMotion.title",
     target: "settings-reduce-motion",
     keywords: "animation accessibility",

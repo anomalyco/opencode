@@ -6,7 +6,7 @@ import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { storedBackgroundColor, titlebarOverlay } from "./defaults"
+import { storedBackgroundColor, storedZoomLevel, titlebarOverlay } from "./defaults"
 import { registerRendererProtocol } from "./protocol"
 import { loadWindow } from "./scheme"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
@@ -39,6 +39,7 @@ export function createEarlyWindow() {
   const root = path.dirname(fileURLToPath(import.meta.url))
   const file = path.join(app.getPath("userData"), windowStateFile(id))
   const state = resolveWindowState(readWindowState(file), { width: 1280, height: 800 }, displays)
+  const zoom = storedZoomLevel()
   const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "../../resources/icons")
 
   const win = new BrowserWindow({
@@ -52,12 +53,14 @@ export function createEarlyWindow() {
     icon: path.join(icons, `icon.${process.platform === "win32" ? "ico" : "png"}`),
     backgroundColor: storedBackgroundColor(),
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 14, y: 14 } } : {}),
-    ...(process.platform === "win32" ? { frame: false, titleBarStyle: "hidden" as const, titleBarOverlay: titlebarOverlay() } : {}),
+    ...(process.platform === "win32" ? { frame: false, titleBarStyle: "hidden" as const, titleBarOverlay: titlebarOverlay(undefined, zoom) } : {}),
     webPreferences: {
       preload: path.join(root, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // The renderer boots in this window, so it starts at the saved zoom instead of jumping to it later.
+      zoomFactor: zoom,
       additionalArguments: windowArguments(id),
     },
   })

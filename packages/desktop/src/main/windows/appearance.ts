@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
+import type { DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
 import {
@@ -9,9 +10,9 @@ import {
 } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import type { DesktopPaths } from "../paths"
-import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
+import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY, ZOOM_LEVEL_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { storedBackgroundColor, titlebarOverlay, tone } from "./defaults"
+import { storedBackgroundColor, storedZoomLevel, titlebarOverlay, tone } from "./defaults"
 
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 
@@ -40,7 +41,7 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
       ? {
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
+          titleBarOverlay: overlay({ mode }, storedZoomLevel()),
         }
       : {}),
     webPreferences: {
@@ -104,7 +105,7 @@ export function setPinchZoomEnabled(enabled: boolean) {
     pinchZoomEnabled.set(win, enabled)
     emitIpcEvent(win.webContents, new WindowPinchZoomChanged({ enabled }))
 
-    if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    if (!enabled) win.webContents.setZoomFactor(storedZoomLevel())
     updateZoom(win)
   })
 }
@@ -113,14 +114,19 @@ export function getPinchZoomEnabled() {
   return getStore().get(PINCH_ZOOM_ENABLED_KEY) === true
 }
 
-export function setZoomFactor(win: BrowserWindow, factor: number) {
-  win.webContents.setZoomFactor(clampZoom(factor))
-  updateZoom(win)
+// Saves the level and applies it to every window. A pinch zooms one window without saving.
+export function setZoomLevel(level: DesktopZoomLevel) {
+  if (storedZoomLevel() !== level) getStore().set(ZOOM_LEVEL_KEY, level)
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.webContents.setZoomFactor(level)
+    updateZoom(win)
+  })
 }
 
 export function wireZoom(win: BrowserWindow) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
-  win.webContents.setZoomFactor(1)
+  win.webContents.setZoomFactor(storedZoomLevel())
+  updateTitlebar(win)
   win.webContents.on("zoom-changed", (event, direction) => {
     event.preventDefault()
 
@@ -132,7 +138,7 @@ export function wireZoom(win: BrowserWindow) {
       return
     }
 
-    if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    win.webContents.setZoomFactor(storedZoomLevel())
     updateZoom(win)
   })
 }
@@ -175,5 +181,8 @@ function clampZoom(value: number) {
 
 function updateZoom(win: BrowserWindow) {
   updateTitlebar(win)
-  emitIpcEvent(win.webContents, new WindowZoomChanged({ factor: win.webContents.getZoomFactor() }))
+  emitIpcEvent(
+    win.webContents,
+    new WindowZoomChanged({ factor: win.webContents.getZoomFactor(), level: storedZoomLevel() }),
+  )
 }
