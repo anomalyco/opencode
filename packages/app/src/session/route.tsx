@@ -214,7 +214,16 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 // Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
 function SessionDocumentTitle(props: { sessionID: () => string }) {
   const data = useData()
-  const title = () => data.session.get(props.sessionID())?.title
+  const title = createMemo(() => {
+    const value = data.session.get(props.sessionID())?.title
 
-  return <Show when={!isFallbackTitle(title()) && title()}>{(value) => <Title>{`${value()} · OpenCode`}</Title>}</Show>
+    return isFallbackTitle(value) ? undefined : value
+  })
+
+  // Keyed: <Title> reads its text inside a meta effect, which would hit a stale Show accessor once the session is deleted.
+  return (
+    <Show when={title()} keyed>
+      {(value) => <Title>{`${value} · OpenCode`}</Title>}
+    </Show>
+  )
 }
