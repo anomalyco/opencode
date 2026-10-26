@@ -242,7 +242,7 @@ test.each([
 const SVG = `<svg viewBox="0 0 240 72"><rect width="40" height="8" fill="currentColor"><animate attributeName="width" values="40;80;40" dur="3s" repeatCount="indefinite"/></rect></svg>`
 
 const withVisual = (svg: string) =>
-  `### What does this PR do?\n\nIt grows.\n\n### Visual\n\n\`\`\`svg\n${svg}\n\`\`\`\n\n### Checklist`
+  `### What does this PR do?\n\nIt grows.\n\n<!-- visual\n${svg}\n-->\n\n### Checklist`
 
 test("rebuilds a visual with its namespace, and a still without its animation", () => {
   expect(BetaNotes.visual(withVisual(SVG))).toEqual({
@@ -251,10 +251,18 @@ test("rebuilds a visual with its namespace, and a still without its animation", 
   })
 })
 
+test("reads the visual from a ```svg block under ### Visual, where pull requests before the comment put it", () => {
+  expect(
+    BetaNotes.visual(
+      `### What does this PR do?\n\nIt grows.\n\n### Visual\n\n\`\`\`svg\n${SVG}\n\`\`\`\n\n### Checklist`,
+    ),
+  ).toEqual(BetaNotes.visual(withVisual(SVG)))
+})
+
 test("drops scripts, foreign objects, images, handlers, outside links and SMIL that animates a link", () => {
   const rebuilt = BetaNotes.visual(
     withVisual(
-      `<svg onload="alert(1)"><!-- note --><script>alert(1)</script><foreignObject><div/></foreignObject><image href="https://example.com/a.png"/><use xlink:href="https://example.com/a.svg#x"/><use xlink:href="#x"/><rect onclick="x()"/><animate attributeName="href" values="https://example.com"/><set attributeName="xlink:href" to="https://example.com"/></svg>`,
+      `<svg onload="alert(1)"><script>alert(1)</script><foreignObject><div/></foreignObject><image href="https://example.com/a.png"/><use xlink:href="https://example.com/a.svg#x"/><use xlink:href="#x"/><rect onclick="x()"/><animate attributeName="href" values="https://example.com"/><set attributeName="xlink:href" to="https://example.com"/></svg>`,
     ),
   )
 
@@ -275,7 +283,9 @@ test("drops a still's keyframes and animations, even important or inline ones", 
 })
 
 test.each([
-  ["no Visual section", "### What does this PR do?\n\n```svg\n<svg></svg>\n```"],
+  ["no visual comment or Visual section", "### What does this PR do?\n\n```svg\n<svg></svg>\n```"],
+  ["an XML comment, which ends the visual comment early", withVisual("<svg><!-- note --><rect/></svg>")],
+  ["the template's empty visual comment", "### What does this PR do?\n\nIt grows.\n\n<!-- visual\n-->"],
   ["a root that is not an svg", withVisual("<div><svg></svg></div>")],
   ["more than one svg root", withVisual("<svg></svg><svg></svg>")],
   ["a doctype", withVisual('<!DOCTYPE svg [<!ENTITY x "y">]><svg></svg>')],
@@ -294,5 +304,6 @@ test.each([
 })
 
 test("keeps the visual's code out of the description", () => {
+  expect(BetaNotes.describe(`<!-- visual\n${SVG}\n-->\n\nIt grows.`, "grow")).toBe("It grows.")
   expect(BetaNotes.describe(`\`\`\`svg\n${SVG}\n\`\`\`\n\nIt grows.`, "grow")).toBe("It grows.")
 })

@@ -1,4 +1,4 @@
-// A pull request's "### Visual" SVG, rebuilt from an allowlist for the What's new in beta dialog, which shows it only
+// A pull request's visual SVG, rebuilt from an allowlist for the What's new in beta dialog, which shows it only
 // as an <img>. The input is parsed as XML and serialized again from scratch: exactly one <svg> root, known shape,
 // paint and animation elements and attributes only, references to the document itself only, and no CSS escapes.
 export * as BetaVisual from "./beta-visual"

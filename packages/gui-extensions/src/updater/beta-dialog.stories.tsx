@@ -23,7 +23,7 @@ const people = {
   wren: { name: "Wren Abernathy", login: "wren", avatar: avatar(265) },
 } satisfies Record<string, Author>
 
-// Example visuals as a build embeds them from a pull request's "### Visual": animated, and the still for reduced motion.
+// Example visuals as a build embeds them from a pull request's visual comment: animated, and the still for reduced motion.
 const visuals = {
   dock: {
     animated:

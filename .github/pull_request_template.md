@@ -17,12 +17,9 @@ Please provide a description of the issue, the changes you made to fix it, and w
 
 ### How did you verify your code works?
 
-### Visual
-
-_Optional, for user-facing changes: a small looping animated SVG (240×72) of the change, shown in the desktop app's "What's new in beta". Replace the block below or delete this section._
-
-```svg
-```
+<!-- Optional, for user-facing changes: a small looping animated SVG (240×72) of the change, shown in the desktop app's "What's new in beta". Paste it inside the visual comment below, where it stays hidden from the rendered PR. -->
+<!-- visual
+-->
 
 ### Screenshots / recordings
 

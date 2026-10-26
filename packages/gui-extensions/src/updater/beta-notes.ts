@@ -42,7 +42,7 @@ export type BetaNote = {
   readonly summary: string
   /** A sentence or two from the pull request about what it does, read out for its visual. */
   readonly description?: string
-  /** A small looping SVG of the change, from the pull request's "### Visual", sanitized at build time. */
+  /** A small looping SVG of the change, from the pull request's visual comment, sanitized at build time. */
   readonly visual?: { readonly animated: string; readonly still: string }
   readonly pr?: { readonly number: number; readonly url: string }
   /** Who made it, with GitHub's public avatar when the build could ask GitHub. */

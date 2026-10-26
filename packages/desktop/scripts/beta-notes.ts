@@ -20,7 +20,7 @@ export type BetaNote = {
   author?: { name: string; login?: string; avatar?: string }
   /** A sentence or two from the pull request's description of what it does. */
   description?: string
-  /** The pull request's "### Visual": a small looping SVG of the change, rebuilt, and its still for reduced motion. */
+  /** The pull request's visual: a small looping SVG of the change, rebuilt, and its still for reduced motion. */
   visual?: { animated: string; still: string }
 }
 
@@ -181,10 +181,22 @@ export function describe(body: string, summary: string) {
 }
 
 /**
- * The ```svg block under a pull request's "### Visual" heading, rebuilt from an allowlist (beta-visual.ts) as an
- * animated and a still copy. The dialog only ever shows it as an image, where scripts never run.
+ * The SVG in a pull request's `<!-- visual ... -->` comment, which GitHub doesn't render, rebuilt from an allowlist
+ * (beta-visual.ts) as an animated and a still copy. The dialog only ever shows it as an image, where scripts never run.
+ * Pull requests from before the comment put it in a ```svg block under a "### Visual" heading, which is still read.
  */
 export function visual(body: string) {
+  const comment = body.match(/<!--\s*visual\b([\s\S]*?)-->/i)?.[1]?.trim()
+
+  // An XML comment in the SVG ends the visual comment at its own `-->`, which would leave part of the drawing.
+  if (comment?.includes("<!--")) return undefined
+
+  const svg = comment || legacyVisual(body)
+
+  return svg ? BetaVisual.sanitize(svg) : undefined
+}
+
+function legacyVisual(body: string) {
   const lines = body.split(/\r?\n/)
   const start = lines.findIndex((line) => /^#{1,6}\s+visual\b/i.test(line.trim()))
 
@@ -192,9 +204,8 @@ export function visual(body: string) {
 
   const rest = lines.slice(start + 1)
   const end = rest.findIndex((line) => /^#{1,6}\s/.test(line.trim()))
-  const block = (end === -1 ? rest : rest.slice(0, end)).join("\n").match(/```svg[^\n]*\n([\s\S]*?)\n\s*```/)?.[1]
 
-  return block ? BetaVisual.sanitize(block) : undefined
+  return (end === -1 ? rest : rest.slice(0, end)).join("\n").match(/```svg[^\n]*\n([\s\S]*?)\n\s*```/)?.[1]
 }
 
 /** Lines of the PR template that say nothing about the change, whether a heading, a label or a filler answer. */
