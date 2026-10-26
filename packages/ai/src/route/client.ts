@@ -471,7 +471,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                       Effect.map(([next, output]) => {
                         state = next
                         return request.includeRaw && isProviderFrame(frame)
-                          ? [LLMEvent.raw({ data: rawFrame(frame) }), ...output]
+                          ? [LLMEvent.raw({ data: execution.raw?.(frame) ?? rawFrame(frame) }), ...output]
                           : output
                       }),
                       Effect.mapError(frameError(frame, event)),
