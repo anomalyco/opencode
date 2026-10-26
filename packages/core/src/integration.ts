@@ -731,21 +731,24 @@ const layer = Layer.effect(
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
           if (credential.value.type !== "oauth") return credential.value
+          const refresh = state
+            .get()
+            .integrations.get(credential.integrationID)
+            ?.implementations.get(credential.value.methodID)?.refresh
+          const expiring = (value: Credential.OAuth) =>
+            Clock.currentTimeMillis.pipe(
+              Effect.map((now) => value.expires <= now + Duration.toMillis(Duration.minutes(5))),
+            )
+          if (!refresh || !(yield* expiring(credential.value))) return credential.value
           return yield* authorize(
             credentials.lock(
               credential.id,
               Effect.gen(function* () {
-                // Another Location may have refreshed while this caller was reading the credential.
+                // Another Location may have refreshed while this caller waited.
                 const current = yield* credentials.get(credential.id)
                 if (!current || current.value.type !== "oauth") return undefined
-                const implementation = state
-                  .get()
-                  .integrations.get(current.integrationID)
-                  ?.implementations.get(current.value.methodID)
-                if (!implementation?.refresh) return current.value
-                const now = yield* Clock.currentTimeMillis
-                if (current.value.expires > now + Duration.toMillis(Duration.minutes(5))) return current.value
-                const value = yield* implementation.refresh(current.value).pipe(Effect.timeout("30 seconds"))
+                if (!(yield* expiring(current.value))) return current.value
+                const value = yield* refresh(current.value).pipe(Effect.timeout("30 seconds"))
                 yield* credentials.update(current.id, { value })
                 return value
               }),
