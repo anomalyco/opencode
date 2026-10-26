@@ -46,7 +46,7 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "electron": "44.9.1",
+    "electron": "45.0.0",
     "electron-builder": "26.15.7",
     "electron-vite": "6.0.0-beta.1",
     "htmlparser2": "8.0.2",

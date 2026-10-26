@@ -59,7 +59,7 @@
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",
     "devtools-protocol": "0.0.1687809",
-    "electron": "44.9.1",
+    "electron": "45.0.0",
     "electron-updater": "6.8.9",
     "lighthouse": "13.4.1",
     "vite": "catalog:"
