@@ -107,8 +107,13 @@ const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, bud
 const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
   messages.findLastIndex((m) => m.role === role)
 
+type CacheablePart = Exclude<ContentPart, { readonly type: "compaction" | "effort" }>
+
+const isCacheablePart = (part: ContentPart): part is CacheablePart =>
+  part.type !== "compaction" && part.type !== "effort"
+
 // Mark the last text part of `messages[index]`. If no text part exists, mark
-// the last content part regardless of type — that's the breakpoint position
+// the last cacheable content part — that's the breakpoint position
 // in tool-result-only messages too.
 const markMessageAt = (
   messages: ReadonlyArray<Message>,
@@ -120,11 +125,11 @@ const markMessageAt = (
   const target = messages[index]!
   if (target.content.length === 0) return messages
   const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
-  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.length - 1
-  const existing = target.content[markAt]!
-  if (("cache" in existing && existing.cache) || budget.remaining === 0) return messages
+  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.findLastIndex(isCacheablePart)
+  const existing = target.content[markAt]
+  if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const nextContent = target.content.map((part, i) => (i === markAt ? ({ ...part, cache: hint } as ContentPart) : part))
+  const nextContent = target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part))
   const next = new Message({ ...target, content: nextContent })
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
@@ -164,7 +169,7 @@ const countHints = (request: LLMRequest) =>
     (count, message) =>
       count +
       message.content.reduce(
-        (contentCount, part) => contentCount + ("cache" in part && part.cache !== undefined ? 1 : 0),
+        (contentCount, part) => contentCount + (isCacheablePart(part) && part.cache !== undefined ? 1 : 0),
         0,
       ),
     0,

@@ -57,7 +57,7 @@ description: تهيئة مزوّد LLM والنموذج.
 }
 ```
 
-المعرّف الكامل هنا يكون بالشكل `provider_id/model_id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](https://opencode.ai/v2/docs/console/) فستستخدم `opencode/gpt-5.1-codex` لنموذج GPT 5.1 Codex.
+المعرّف الكامل هنا يكون بالشكل `provider_id/model_id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](https://opencode.ai/v2/docs/console/) فستستخدم `opencode/gpt-6.1-sol` لنموذج GPT-6.1 Sol.
 
 إذا كنت قد هيّأت [مزوّداً مخصّصاً](/docs/providers#custom)، فإن `provider_id` هو المفتاح الموجود ضمن قسم `provider` في إعداداتك، و`model_id` هو المفتاح الموجود ضمن `provider.models`.
 
@@ -73,7 +73,7 @@ description: تهيئة مزوّد LLM والنموذج.
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -85,7 +85,7 @@ description: تهيئة مزوّد LLM والنموذج.
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -99,7 +99,7 @@ description: تهيئة مزوّد LLM والنموذج.
 }
 ```
 
-هنا نقوم بضبط إعدادات عامة لنموذجين مدمجين: `gpt-5` عند الوصول إليه عبر مزوّد `openai`، و`claude-sonnet-4-20250514` عند الوصول إليه عبر مزوّد `anthropic`.
+هنا نقوم بضبط إعدادات عامة لنموذجين مدمجين: `gpt-6.1-sol` عند الوصول إليه عبر مزوّد `openai`، و`claude-sonnet-5-5` عند الوصول إليه عبر مزوّد `anthropic`.
 يمكن العثور على أسماء المزوّدين والنماذج المدمجة على [Models.dev](https://models.dev).
 
 يمكنك أيضاً ضبط هذه الخيارات لأي وكلاء تستخدمهم. تتجاوز إعدادات الوكيل أي خيارات عامة هنا. [اعرف المزيد](/docs/agents/#additional).
@@ -112,7 +112,7 @@ description: تهيئة مزوّد LLM والنموذج.
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -177,7 +177,7 @@ description: تهيئة مزوّد LLM والنموذج.
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -211,7 +211,7 @@ description: تهيئة مزوّد LLM والنموذج.
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

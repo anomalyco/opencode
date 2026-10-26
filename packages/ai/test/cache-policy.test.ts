@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../src/index.js"
+import { CacheHint, CompactionPart, LLM, Message, ProviderID, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {
@@ -524,6 +524,31 @@ describe("applyCachePolicy", () => {
       expect(body.messages[2]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
+
+  test("skips non-cacheable parts when placing message breakpoints", () => {
+    const compaction = CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "summary" })
+    const toolCall = ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} })
+
+    const mixed = LLM.request({
+      model: anthropicModel,
+      messages: [Message.assistant([toolCall, compaction])],
+      cache: { messages: "latest-assistant" },
+    })
+    const appliedMixed = applyCachePolicy(mixed)
+    expect(appliedMixed.messages[0]?.content[0]).toMatchObject({
+      type: "tool-call",
+      id: "tc_1",
+      cache: { type: "ephemeral" },
+    })
+    expect(appliedMixed.messages[0]?.content[1]).toEqual(compaction)
+
+    const compactionOnly = LLM.request({
+      model: anthropicModel,
+      messages: [Message.assistant([compaction])],
+      cache: { messages: "latest-assistant" },
+    })
+    expect(applyCachePolicy(compactionOnly)).toBe(compactionOnly)
+  })
 
   test("returns the same request reference when policy is a no-op (pure function)", () => {
     const request = LLM.request({

@@ -1,6 +1,6 @@
 export * as SessionPrompt from "./prompt.js"
 
-import { Base64, FileAttachment, Prompt } from "@opencode/schema/prompt"
+import { Base64, FileAttachment } from "@opencode/schema/prompt"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import type { Session } from "@opencode/schema/session"
@@ -10,7 +10,6 @@ import { Effect } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Image } from "../image.js"
-import { Instance } from "../instance/service.js"
 import { Mime } from "../mime.js"
 import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
@@ -32,62 +31,56 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
   input: Input
 }) {
   const fs = yield* FSUtil.Service
-  const instances = yield* Instance.Service
-
-  return yield* Effect.gen(function* () {
-    yield* Plugin.awaitActivation
-    const hooks = yield* PluginHooks.Service
-    const event = yield* hooks.trigger("session", "prompt", {
-      sessionID: request.session.id,
-      messageID: request.messageID,
-      prompt: structuredClone({
-        text: request.input.text,
-        files: request.input.files?.slice(),
-        agents: request.input.agents?.slice(),
-        skills: request.input.skills?.slice(),
+  yield* Plugin.awaitActivation
+  const hooks = yield* PluginHooks.Service
+  const event = yield* hooks.trigger("session", "prompt", {
+    sessionID: request.session.id,
+    messageID: request.messageID,
+    prompt: structuredClone({
+      text: request.input.text,
+      files: request.input.files?.slice(),
+      agents: request.input.agents?.slice(),
+      skills: request.input.skills?.slice(),
+    }),
+    metadata: structuredClone(request.input.metadata),
+    delivery: request.input.delivery ?? "steer",
+  })
+  const input = event.prompt
+  const files = input.files
+    ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 })
+    : undefined
+  const requested = input.skills
+  const selected = yield* Effect.gen(function* () {
+    if (!requested?.length) return undefined
+    const skillService = yield* Skill.Service
+    const prepared = new Map<Skill.ID, Skill.Name>()
+    return yield* Effect.forEach(requested, (attachment) =>
+      Effect.gen(function* () {
+        const name = prepared.get(attachment.id)
+        if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
+        const skill = yield* skillService.get(attachment.id)
+        if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
+        prepared.set(skill.id, skill.name)
+        return {
+          id: skill.id,
+          name: skill.name,
+          text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
+          mention: attachment.mention,
+        }
       }),
-      metadata: structuredClone(request.input.metadata),
-      delivery: request.input.delivery ?? "steer",
-    })
-    const input = event.prompt
-    const files = input.files
-      ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 })
-      : undefined
-    const requested = input.skills
-    const selected = yield* Effect.gen(function* () {
-      if (!requested?.length) return undefined
-      const skillService = yield* Skill.Service
-      const prepared = new Map<Skill.ID, Skill.Name>()
-      return yield* Effect.forEach(requested, (attachment) =>
-        Effect.gen(function* () {
-          const name = prepared.get(attachment.id)
-          if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
-          const skill = yield* skillService.get(attachment.id)
-          if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
-          prepared.set(skill.id, skill.name)
-          return {
-            id: skill.id,
-            name: skill.name,
-            text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
-            mention: attachment.mention,
-          }
-        }),
-      )
-    })
-    return {
-      type: "user",
-      payload: SessionInbox.UserPayload.make({
-        ...Prompt.make({
-          text: input.text,
-          agents: input.agents,
-          files,
-          skills: selected?.length ? selected : undefined,
-        }),
-        metadata: event.metadata,
-      }),
-      delivery: SessionInbox.Delivery.make(event.delivery),
-    } satisfies SessionInbox.Item
-  }).pipe(instances.provide(request.session))
+    )
+  })
+  return {
+    type: "user",
+    payload: SessionInbox.UserPayload.make({
+      text: input.text,
+      agents: input.agents,
+      files,
+      skills: selected?.length ? selected : undefined,
+      metadata: event.metadata,
+    }),
+    delivery: event.delivery,
+  } satisfies SessionInbox.Item
 })
 
 const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (

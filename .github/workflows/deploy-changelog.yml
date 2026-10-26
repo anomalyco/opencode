@@ -27,7 +27,7 @@ jobs:
 
       - name: Typecheck
         working-directory: services/changelog
-        run: bun typecheck
+        run: bun run typecheck:tsc
 
       - name: Test
         working-directory: services/changelog

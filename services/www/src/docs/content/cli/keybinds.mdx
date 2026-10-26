@@ -76,7 +76,7 @@ Use an object for event behavior:
 }
 ```
 
-Unknown command IDs are rejected.
+Unknown command IDs are ignored.
 
 ## Application
 
@@ -97,6 +97,7 @@ Unknown command IDs are rejected.
 | `opencode.settings`        | `none`                    | Open settings                       |
 | `server.pair`              | `none`                    | Pair device                         |
 | `service.restart`          | `none`                    | Restart service                     |
+| `location.reload`          | `none`                    | Reload configuration                |
 
 ## Mini
 
@@ -128,44 +129,49 @@ Right-click a file in the sidebar or its diff heading for **Mark complete** (or 
 
 The shifted `diff.help` alternatives support terminals that report the Shift modifier when you press `?`.
 
-| ID                      | Default             | Description                              |
-| ----------------------- | ------------------- | ---------------------------------------- |
-| `diff.open`             | `none`              | Open diff viewer                         |
-| `diff.close`            | `escape,q`          | Close diff viewer                        |
-| `diff.down`             | `j,down`            | Move diff viewer down                    |
-| `diff.up`               | `k,up`              | Move diff viewer up                      |
-| `diff.page.down`        | `pagedown,ctrl+f`   | Page diff viewer down                    |
-| `diff.page.up`          | `pageup,ctrl+b`     | Page diff viewer up                      |
-| `diff.half_page.down`   | `ctrl+d`            | Scroll diff viewer down half a page      |
-| `diff.half_page.up`     | `ctrl+u`            | Scroll diff viewer up half a page        |
-| `diff.first`            | `gg,home`           | Go to the start of the diff              |
-| `diff.last`             | `shift+g,end`       | Go to the end of the diff                |
-| `diff.next_hunk`        | `]`                 | Jump to next diff hunk                   |
-| `diff.previous_hunk`    | `[`                 | Jump to previous diff hunk               |
-| `diff.next_file`        | `n,alt+down`        | Jump to next diff file                   |
-| `diff.previous_file`    | `p,alt+up`          | Jump to previous diff file               |
-| `diff.toggle_file_tree` | `b`                 | Toggle diff viewer file tree             |
-| `diff.single_patch`     | `s`                 | Toggle single patch view                 |
-| `diff.switch_source`    | `d`                 | Choose the diff review scope             |
-| `diff.toggle_view`      | `v`                 | Toggle diff viewer split or unified view |
-| `diff.mark_reviewed`    | `m`                 | Toggle selected diff file reviewed       |
-| `diff.help`             | `?,shift+?,shift+/` | Show more diff viewer shortcuts          |
+| ID                       | Default             | Description                              |
+| ------------------------ | ------------------- | ---------------------------------------- |
+| `diff.open`              | `none`              | Open diff viewer                         |
+| `diff.close`             | `escape,q`          | Close diff viewer                        |
+| `diff.down`              | `j,down`            | Move diff viewer down                    |
+| `diff.up`                | `k,up`              | Move diff viewer up                      |
+| `diff.page.down`         | `pagedown,ctrl+f`   | Page diff viewer down                    |
+| `diff.page.up`           | `pageup,ctrl+b`     | Page diff viewer up                      |
+| `diff.half_page.down`    | `ctrl+d`            | Scroll diff viewer down half a page      |
+| `diff.half_page.up`      | `ctrl+u`            | Scroll diff viewer up half a page        |
+| `diff.first`             | `gg,home`           | Go to the start of the diff              |
+| `diff.last`              | `shift+g,end`       | Go to the end of the diff                |
+| `diff.next_hunk`         | `]`                 | Jump to next diff hunk                   |
+| `diff.previous_hunk`     | `[`                 | Jump to previous diff hunk               |
+| `diff.next_file`         | `n,alt+down`        | Jump to next diff file                   |
+| `diff.previous_file`     | `p,alt+up`          | Jump to previous diff file               |
+| `diff.toggle_file_tree`  | `b`                 | Toggle diff viewer file tree             |
+| `diff.single_patch`      | `s`                 | Toggle single patch view                 |
+| `diff.switch_source`     | `d`                 | Choose the diff review scope             |
+| `diff.toggle_view`       | `v`                 | Toggle diff viewer split or unified view |
+| `diff.toggle_fullscreen` | `f`                 | Toggle diff viewer full screen           |
+| `diff.mark_reviewed`     | `m`                 | Toggle selected diff file reviewed       |
+| `diff.help`              | `?,shift+?,shift+/` | Show more diff viewer shortcuts          |
 
 The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, and `diff.switch_focus` configuration entries are still accepted, but no longer register shortcuts.
 
 ## Appearance And Navigation
 
-| ID                         | Default     | Description                              |
-| -------------------------- | ----------- | ---------------------------------------- |
-| `prompt.editor`            | `<leader>e` | Open external editor                     |
-| `theme.switch`             | `none`      | List available themes                    |
-| `theme.switch_mode`        | `none`      | Switch between light and dark theme mode |
-| `theme.mode.lock`          | `none`      | Lock or unlock theme mode                |
-| `session.sidebar.toggle`   | `<leader>b` | Toggle sidebar                           |
-| `terminal.toggle`          | `<leader>t` | Toggle terminal pane                     |
-| `session.toggle.scrollbar` | `none`      | Toggle session scrollbar                 |
-| `opencode.status`          | `<leader>s` | View status                              |
-| `opencode.debug`           | `none`      | View debug info                          |
+| ID                         | Default         | Description                              |
+| -------------------------- | --------------- | ---------------------------------------- |
+| `prompt.editor`            | `<leader>e`     | Open external editor                     |
+| `theme.switch`             | `none`          | List available themes                    |
+| `theme.switch_mode`        | `none`          | Switch between light and dark theme mode |
+| `theme.mode.lock`          | `none`          | Lock or unlock theme mode                |
+| `session.sidebar.toggle`   | `<leader>b`     | Toggle sidebar                           |
+| `pane.focus.left`          | `<leader>left`  | Focus session pane                       |
+| `pane.focus.right`         | `<leader>right` | Focus right pane                         |
+| `terminal.select`          | `<leader>down`  | Select terminal                          |
+| `terminal.toggle`          | `<leader>t`     | Toggle terminal pane                     |
+| `terminal.close`           | `<leader>up`    | Close terminal pane                      |
+| `session.toggle.scrollbar` | `none`          | Toggle session scrollbar                 |
+| `opencode.status`          | `<leader>s`     | View status                              |
+| `opencode.debug`           | `none`          | View debug info                          |
 
 ## Sessions
 
@@ -173,6 +179,7 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | ------------------------------------- | ----------------------- | ---------------------------------------- |
 | `session.export`                      | `<leader>x`             | Export session to editor                 |
 | `session.copy`                        | `none`                  | Copy session transcript                  |
+| `session.copy.id`                     | `none`                  | Copy session ID                          |
 | `session.move`                        | `none`                  | Move session                             |
 | `session.new`                         | `<leader>n`             | Create a new session                     |
 | `session.list`                        | `<leader>l`             | List all sessions                        |
@@ -198,6 +205,7 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `queued_prompt.undo`                  | `ctrl+u`                | Undo queued prompt                       |
 | `queued_prompt.delete`                | `ctrl+d`                | Delete queued prompt                     |
 | `session.toggle.exploration_grouping` | `none`                  | Toggle related tool call grouping        |
+| `session.verbosity.cycle`             | `none`                  | Cycle transcript verbosity               |
 | `session.child.first`                 | `down`                  | Toggle subagent picker                   |
 | `session.child.next`                  | `right`                 | Go to next child session                 |
 | `session.child.previous`              | `left`                  | Go to previous child session             |
@@ -230,12 +238,14 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `stash.delete`                 | `ctrl+d`    | Delete stash entry                   |
 | `model.dialog.provider`        | `ctrl+a`    | Open provider list from model dialog |
 | `model.dialog.favorite`        | `ctrl+f`    | Toggle model favorite status         |
+| `model.dialog.usage`           | `ctrl+u`    | Open usage limits from model dialog  |
 | `model.list`                   | `<leader>m` | List available models                |
 | `model.cycle_recent`           | `f2`        | Next recently used model             |
 | `model.cycle_recent_reverse`   | `shift+f2`  | Previous recently used model         |
 | `model.cycle_favorite`         | `none`      | Next favorite model                  |
 | `model.cycle_favorite_reverse` | `none`      | Previous favorite model              |
 | `mcp.list`                     | `none`      | List MCP servers                     |
+| `usage.show`                   | `none`      | View usage limits                    |
 | `provider.connect`             | `none`      | Connect integration                  |
 | `agent.list`                   | `<leader>a` | List agents                          |
 | `agent.cycle`                  | `shift+tab` | Next agent                           |
@@ -335,6 +345,9 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `composer.shell.down`         | `down`   | Next shell           |
 | `composer.shell.select`       | `return` | View shell output    |
 | `composer.shell.kill`         | `ctrl+d` | Kill shell command   |
+| `composer.terminal.up`        | `up,k`   | Previous terminal    |
+| `composer.terminal.down`      | `down,j` | Next terminal        |
+| `composer.terminal.select`    | `return` | Select terminal      |
 
 Select a running command in the **Shell** tab and press **Enter**, or click it, to view captured stdout and stderr.
 Use **↑/↓**, **Page Up/Down**, or **Home** to scroll, **End** to follow new output, and **Esc** to return without stopping the command.
@@ -352,6 +365,8 @@ The viewer shows recent output and stays open after exit; output redirected to a
 | `dialog.select.end`            | `end`         | Move to last dialog item            |
 | `dialog.select.submit`         | `return`      | Submit selected dialog item         |
 | `dialog.prompt.submit`         | `return`      | Submit dialog prompt                |
+| `dialog.integration.rename`    | `ctrl+r`      | Rename integration account          |
+| `dialog.integration.delete`    | `ctrl+d`      | Delete integration account          |
 | `dialog.worktree.generate`     | `tab`         | Generate worktree name              |
 | `dialog.move_session.new`      | `ctrl+a`      | New worktree                        |
 | `dialog.move_session.move`     | `ctrl+m`      | Move session to worktree            |
@@ -365,6 +380,7 @@ The viewer shows recent output and stays open after exit; output redirected to a
 | `permission.prompt.fullscreen` | `ctrl+f`      | Toggle permission prompt fullscreen |
 | `plugins.toggle`               | `return`      | Toggle plugin                       |
 | `dialog.mcp.toggle`            | `space`       | Toggle MCP server                   |
+| `dialog.plugins.error`         | `space`       | View plugin error                   |
 | `dialog.plugins.update`        | `ctrl+u`      | Update plugin from plugin dialog    |
 | `dialog.plugins.check`         | `ctrl+r`      | Check for plugin updates            |
 

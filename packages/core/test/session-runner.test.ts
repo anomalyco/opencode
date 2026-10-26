@@ -15,7 +15,7 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/route/client"
@@ -215,6 +215,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     systemRemoved: false,
     systemUnavailable: false,
     systemLoadHook: Effect.void,
+    activationHook: Effect.void,
     skillBaselines: new Map<Agent.ID, string>(),
     authorizations: new Array<Tool.Context>(),
     executions: new Array<string>(),
@@ -422,7 +423,7 @@ const layer = Layer.unwrap(
       Permission.node.replace(permission),
       Config.node.replace(config),
       PluginSupervisor.node.replace(Layer.empty),
-      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.suspend(() => state.activationHook) })),
       SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
@@ -1843,7 +1844,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.db
       .update(SessionTable)
-      .set({ agent: "reviewer" })
+      .set({ agent: Agent.ID.make("reviewer") })
       .where(eq(SessionTable.id, sessionID))
       .run()
       .pipe(Effect.orDie)
@@ -1863,7 +1864,7 @@ describe("SessionRunnerLLM", () => {
   scenario("fails before the model request when the selected agent is unavailable", function* (s) {
     yield* s.db
       .update(SessionTable)
-      .set({ agent: "explore" })
+      .set({ agent: Agent.ID.make("explore") })
       .where(eq(SessionTable.id, sessionID))
       .run()
       .pipe(Effect.orDie)
@@ -2664,6 +2665,26 @@ describe("SessionRunnerLLM", () => {
     }
   }
 
+  scenario("waits for plugin activation before each step and tool call", function* (s) {
+    const waits: Array<[number, number]> = []
+    s.activationHook = Effect.sync(() => {
+      waits.push([s.requests.length, s.executions.length])
+    })
+    yield* s.llm.push(
+      TestLLM.tool("call-activation", "echo", { text: "echo" }),
+      TestLLM.text("Done", "text-after-activation"),
+    )
+    yield* s.runPrompt("Question")
+
+    // Model requests and tool executions seen at each wait: drain entry, step 1, the tool call, step 2.
+    expect(waits).toEqual([
+      [0, 0],
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ])
+  })
+
   scenario("restarts compaction drafts after transient failures and unsuccessful finishes", function* (s) {
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-failure-history"))
     yield* s.runPrompt("Earlier question")
@@ -2829,7 +2850,7 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
-  scenario("stops after three smaller compaction inputs overflow", function* (s) {
+  scenario("stops after four smaller compaction inputs overflow", function* (s) {
     // Large enough that the conversation, not the system prompt, is most of the request.
     const filler = "context ".repeat(1_000)
     yield* s.llm.push(...Array.from({ length: 8 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
@@ -2843,17 +2864,18 @@ describe("SessionRunnerLLM", () => {
       Stream.fail(
         new AIError({ reason: new InvalidRequestError({ message: "Too long", classification: "context-overflow" }) }),
       )
-    yield* s.llm.push(overflow(), overflow(), overflow(), overflow())
+    yield* s.llm.push(overflow(), overflow(), overflow(), overflow(), overflow())
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
-    expect(s.requests).toHaveLength(4)
+    expect(s.requests).toHaveLength(5)
     expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
+    expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
     yield* s.llm.push(TestLLM.text("Continued", "continued"))
     yield* s.runPrompt("Continue")
-    expect(userTexts(s.requests[4])).toContain(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[5])).toContain(`Request 0: ${filler}`)
   })
 
   scenario("resends compaction as text after payload too large, then shrinks later rejections", function* (s) {
@@ -2873,12 +2895,12 @@ describe("SessionRunnerLLM", () => {
     )
     s.currentModel = unknownContextModel
     s.requests.length = 0
-    yield* s.llm.push(...Array.from({ length: 5 }, () => Stream.fail(payloadTooLarge())))
+    yield* s.llm.push(...Array.from({ length: 6 }, () => Stream.fail(payloadTooLarge())))
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
     // The first rejection resends everything as text, which carries no media; later ones shrink like "too long".
-    expect(s.requests).toHaveLength(5)
+    expect(s.requests).toHaveLength(6)
     expect(s.requests[0]?.messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
     expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
     expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
@@ -2886,10 +2908,11 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
+    expect(userTexts(s.requests[5])[0].length).toBeLessThan(userTexts(s.requests[4])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
   })
 
-  scenario("resends whole history as text after payload too large when it cannot be shortened", function* (s) {
+  scenario("shortens the only exchange's user text when it does not fit", function* (s) {
     const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     yield* s.session.prompt({
       sessionID,
@@ -2901,16 +2924,15 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
     s.currentModel = testModel("smaller-history", { context: 7_000, output: 1_000 })
     s.requests.length = 0
-    yield* s.llm.push(Stream.fail(payloadTooLarge()), TestLLM.text("## Objective\n- Recovered", "summary"))
+    yield* s.llm.push(TestLLM.text("## Objective\n- Recovered", "summary"))
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
-    // Even the latest exchange is over the estimated limit, so the first send is unchanged and the second keeps it all.
-    expect(s.requests).toHaveLength(2)
-    expect(s.requests[0]?.messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
-    expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
-    expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
-    expect(userTexts(s.requests[1])[0]).toContain(`Request 0: ${"x".repeat(40_000)}`)
+    // The only exchange is over the estimated limit, so its text is cut to its start and end rather than sent whole.
+    expect(s.requests).toHaveLength(1)
+    expect(s.requests[0]?.messages.every((message) => message.role === "user")).toBeTrue()
+    expect(userTexts(s.requests[0])[0]).toContain("characters omitted")
+    expect(userTexts(s.requests[0])[0]).not.toContain("x".repeat(2_001))
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
   })
 
@@ -2952,14 +2974,14 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.runPrompt("Continue")
 
-    // The history fits the model's window by estimate, but the provider just rejected it, so older exchanges go.
+    // The history fits the model's window by estimate, but the provider just rejected it, so older exchanges are cut.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("older exchanges omitted")
-    expect(userTexts(s.requests[1])[0]).not.toContain("Request 0:")
+    expect(userTexts(s.requests[1])[0]).toContain("characters omitted")
+    expect(userTexts(s.requests[1])[0]).not.toContain(`Request 0: ${filler}`)
     expect(userTexts(s.requests[1])[0]).toContain("Request 3:")
   })
 
-  scenario("serializes history and omits media after a summary input overflow", function* (s) {
+  scenario("serializes history without tools or media after a summary input overflow", function* (s) {
     const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     yield* s.session.prompt({
       sessionID,
@@ -2995,20 +3017,61 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
     expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
     expect(userTexts(s.requests[1])[0]).toContain("[Tool result]:")
-    expect(userTexts(s.requests[1])[0]).toContain(`${"x".repeat(1_250)}\n[truncated]`)
-    expect(userTexts(s.requests[1])[0]).not.toContain("x".repeat(1_251))
+    // Tool output is only cut when the transcript would not fit whole.
+    expect(userTexts(s.requests[1])[0]).toContain("x".repeat(5_000))
     expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
-    expect(s.requests[1]?.tools).toEqual(s.requests[0]?.tools)
+    expect(s.requests[1]?.tools).toEqual([])
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
+  })
+
+  scenario("drops tool output in serialized compaction history before omitting exchanges", function* (s) {
+    const service = yield* SessionCompaction.Service
+    yield* service.transform((editor) => editor.configure({ buffer: 3_000 }))
+    s.currentModel = testModel("large-history", { context: 1_000_000, output: 32_000 })
+    yield* s.llm.push(
+      ...Array.from({ length: 2 }, (_, index) =>
+        TestLLM.stop(
+          ...Array.from({ length: 12 }, (_, call) => [
+            LLMEvent.toolCall({
+              id: `hosted-${index}-${call}`,
+              name: "web_search",
+              input: { query: "q" },
+              providerExecuted: true,
+            }),
+            LLMEvent.toolResult({
+              id: `hosted-${index}-${call}`,
+              name: "web_search",
+              result: { type: "text", value: "x".repeat(2_000) },
+              providerExecuted: true,
+            }),
+          ]).flat(),
+          LLMEvent.textStart({ id: `answer-${index}` }),
+          LLMEvent.textDelta({ id: `answer-${index}`, text: `Answer ${index}` }),
+          LLMEvent.textEnd({ id: `answer-${index}` }),
+        ),
+      ),
+    )
+    yield* Effect.forEach([0, 1], (index) => s.runPrompt(`Request ${index}`))
+    s.currentModel = testModel("smaller-history", { context: 7_000, output: 1_000 })
+    s.requests.length = 0
+    yield* s.llm.push(TestLLM.text("## Objective\n- Recovered", "summary"))
+    yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(1)
+    expect(userTexts(s.requests[0])[0]).toContain("Request 0")
+    // The oldest exchange loses its tool outputs rather than being dropped.
+    expect(userTexts(s.requests[0])[0]).toContain("[Tool result omitted]")
+    expect(userTexts(s.requests[0])[0]).not.toMatch(/older exchanges? omitted/)
   })
 
   scenario("fits serialized compaction history by omitting oldest exchanges", function* (s) {
     const service = yield* SessionCompaction.Service
     yield* service.transform((editor) => editor.configure({ buffer: 3_000 }))
     s.currentModel = testModel("large-history", { context: 1_000_000, output: 32_000 })
-    yield* s.llm.push(...Array.from({ length: 4 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
+    yield* s.llm.push(...Array.from({ length: 16 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
     yield* Effect.forEach(
-      Array.from({ length: 4 }, (_, index) => index),
+      Array.from({ length: 16 }, (_, index) => index),
       (index) => s.runPrompt(`Request ${index}: ${"x".repeat(8_000)}`),
     )
     s.currentModel = testModel("smaller-history", { context: 7_000, output: 1_000 })
@@ -3017,13 +3080,12 @@ describe("SessionRunnerLLM", () => {
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
+    // Even cut to the user's text, the older exchanges do not all fit, so the oldest are omitted.
     expect(s.requests).toHaveLength(1)
     expect(userTexts(s.requests[0])[0]).toContain("older exchanges omitted")
     expect(userTexts(s.requests[0])[0]).not.toContain("Request 0:")
-    expect(userTexts(s.requests[0])[0]).not.toContain("Request 1:")
-    // The latest exchange is the retained tail, so shrinking drops only exchanges before it.
-    expect(userTexts(s.requests[0])[0]).toContain("Request 2:")
-    expect(userTexts(s.requests[0])[0]).not.toContain("Request 3:")
+    // The newest exchanges are the retained tail, so shrinking drops only exchanges before them.
+    expect(userTexts(s.requests[0])[0]).not.toContain("Request 15:")
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       status: "completed",
       summary: "## Objective\n- Recovered",

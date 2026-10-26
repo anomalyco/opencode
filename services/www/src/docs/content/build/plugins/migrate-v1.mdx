@@ -28,7 +28,7 @@ Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object
   "plugins": [
     "opencode-example-plugin",
     {
-      "package": "./plugin/local.ts",
+      "package": "./plugin/local",
       "options": { "enabled": true }
     }
   ]
@@ -36,6 +36,8 @@ Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object
 ```
 
 V2 discovers local plugins from both `.opencode/plugin/` and `.opencode/plugins/`; use `.opencode/plugins/` for V2 files.
+Configured local paths must name directories. For the example above, move the ported implementation to
+`./plugin/local/index.ts`; a configured `./plugin/local.ts` file is skipped with a warning in the log.
 Keep supporting modules beside the plugin when moving it. Local plugins and package plugins use the same implementation
 API.
 
@@ -180,7 +182,9 @@ V2 separates prompt admission, model-visible context, semantic model options, an
 layer your plugin needs.
 
 ```ts title="V1"
-export const RequestPlugin = async () => ({
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () => ({
   "chat.params": async (_input, output) => {
     output.temperature = 0.2
     output.maxOutputTokens = 8_000

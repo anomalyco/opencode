@@ -60,7 +60,7 @@ const route = Route.make({
   providerMetadataKey: "vertex",
   protocol,
   endpoint: Endpoint.path(({ request }) => {
-    const model = String(request.model.id)
+    const model = request.model.id
     return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
   }),
   auth: Auth.none,
@@ -84,7 +84,7 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
     ...rest
   } = input
   const apiKey = GoogleVertexShared.apiKey(input)
-  const endpointModel = String(modelID).startsWith("endpoints/")
+  const endpointModel = modelID.startsWith("endpoints/")
   if (apiKey !== undefined && endpointModel)
     throw new ProviderConfigurationError({
       provider: id,

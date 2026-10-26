@@ -66,8 +66,8 @@ export const dict = {
   "command.agent.cycle.description": "Switch to the next agent",
   "command.agent.cycle.reverse": "Cycle agent backwards",
   "command.agent.cycle.reverse.description": "Switch to the previous agent",
-  "command.model.variant.cycle": "Cycle thinking effort",
-  "command.model.variant.cycle.description": "Switch to the next effort level",
+  "command.model.variant.cycle": "Cycle model variant",
+  "command.model.variant.cycle.description": "Switch to the next model variant",
   "command.prompt.mode.shell": "Shell",
   "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Auto-accept permissions",
@@ -568,6 +568,7 @@ export const dict = {
 
   "session.question.progress": "{{current}} of {{total}} questions",
   "session.question.title": "Question",
+  "session.elicitation.selectPlaceholder": "Select an option",
   "session.websearch.title": "Third-party web search",
   "session.websearch.description": "Select the search provider agents use to search the web",
   "session.websearch.provider": "Search provider",

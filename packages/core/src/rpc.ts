@@ -97,7 +97,7 @@ const layer = Layer.effect(
             const data = (yield* encode(event.schema, args[1])) as Readonly<Record<string, unknown>>
             return yield* bus
               .publish(registered.definition, data, {
-                location: Location.Ref.make({ directory: ref.directory, workspaceID: ref.workspaceID }),
+                location: ref,
               })
               .pipe(Effect.asVoid)
           }),
@@ -284,6 +284,6 @@ const logicalEvent = Effect.fn("Rpc.logicalEvent")(function* <
     ...payload,
     type: eventType(definition, name),
     data,
-    location: Location.Ref.make({ directory: ref.directory, workspaceID: ref.workspaceID }),
+    location: ref,
   } as Rpc.EventPayload<D, Name>
 })

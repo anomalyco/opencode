@@ -2,7 +2,7 @@ export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { basename, dirname, join } from "path"
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
@@ -105,12 +105,6 @@ export const Plugin = {
                 Effect.catch(() => Effect.void),
                 Effect.catchDefect(() => Effect.void),
               )
-              if (
-                result.content.type === "file" &&
-                result.content.encoding === "base64" &&
-                !ReadToolFileSystem.MEDIA_MIMES.has(result.content.mime)
-              )
-                return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource: result.target.resource }))
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({

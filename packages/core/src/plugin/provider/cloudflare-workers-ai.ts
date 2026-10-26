@@ -2,7 +2,6 @@ import { Effect } from "effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
 import { Provider } from "../../provider.js"
-import { iife } from "../../util/iife.js"
 import { configuredSettings } from "./configured.js"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
@@ -11,18 +10,18 @@ export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare.workers.ai",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const form = iife(() => {
-      if (typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})) return
-      return Form.Fields.make([
-        {
-          type: "string",
-          key: "accountId",
-          title: "Enter your Cloudflare Account ID",
-          placeholder: "e.g. 1234567890abcdef1234567890abcdef",
-          required: true,
-        },
-      ])
-    })
+    const form =
+      typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
+        ? undefined
+        : Form.Fields.make([
+            {
+              type: "string",
+              key: "accountId",
+              title: "Enter your Cloudflare Account ID",
+              placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+              required: true,
+            },
+          ])
     yield* ctx.integration.transform((editor) => {
       editor.method.update({
         integrationID: providerID,

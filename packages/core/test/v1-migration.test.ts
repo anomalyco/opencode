@@ -8,13 +8,19 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionTable } from "@opencode/core/session/sql"
 import { Project } from "@opencode/core/project"
+import { Agent } from "@opencode/schema/agent"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import type { SqlClient } from "effect/sql/SqlClient"
 import { tmpdir } from "./fixture/tmpdir"
+import { initRepo } from "./fixture/git"
+import fs from "fs/promises"
 import path from "path"
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
@@ -661,7 +667,7 @@ describe("V1Migration.transformSession", () => {
     const compact = user("msg_000000000027aaaaaaaaaaaaaa", {}, 3)
     const summary = assistant("msg_000000000028aaaaaaaaaaaaaa", compact.id, { summary: true }, 4)
     const existing = session({
-      agent: "existing",
+      agent: Agent.ID.make("existing"),
       model: { id: "existing-model", providerID: "existing-provider", variant: "existing" },
     })
     const result = transform(
@@ -680,7 +686,7 @@ describe("V1Migration.transformSession", () => {
       metadata: { recent: "[User]: question\n\n[Assistant]: answer" },
     })
     expect(result.messages[2].data).not.toHaveProperty("recent")
-    expect(result.session.agent).toBe("existing")
+    expect(result.session.agent).toBe(Agent.ID.make("existing"))
     expect(result.session.model).toEqual(existing.model)
   })
 
@@ -722,7 +728,7 @@ describe("V1Migration.transformSession", () => {
       },
     ])
     expect(result.session).toEqual({
-      agent: "review",
+      agent: Agent.ID.make("review"),
       model: { id: "m2", providerID: "p2", variant: "default" },
       cost: 7,
       tokens_input: 8,
@@ -877,13 +883,21 @@ describe("V1Migration database workflow", () => {
     `)
   })
 
-  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope>) =>
+  const database = <A, E>(
+    effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope | Project.Service | FSUtil.Service>,
+  ) =>
     run(
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* DatabaseMigration.apply(db)
         yield* createLegacyTables(db)
-        return yield* effect.pipe(Effect.provideService(Database.Service, { db }))
+        return yield* effect.pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
+              Database.node.replace(Layer.succeed(Database.Service, { db })),
+            ]),
+          ),
+        )
       }),
     )
 
@@ -1241,6 +1255,66 @@ describe("V1Migration database workflow", () => {
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
           value: '{"phase":"completed"}',
         })
+      }),
+    )
+  })
+
+  test("attributes V1 global sessions to the V2 project of their directory", async () => {
+    await using tmp = await tmpdir()
+    const plain = path.join(tmp.path, "plain")
+    const nested = path.join(plain, "nested")
+    const repo = path.join(tmp.path, "repo")
+    const missing = path.join(tmp.path, "missing")
+    await fs.mkdir(nested, { recursive: true })
+    await fs.mkdir(path.join(repo, "pkg", "a"), { recursive: true })
+    await initRepo(repo)
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        const projects = yield* Project.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/', 1, 2, '[]')`,
+        )
+        yield* Effect.forEach(
+          [
+            { id: "ses_plain", project: "global", directory: plain },
+            { id: "ses_nested", project: "global", directory: nested },
+            { id: "ses_repo", project: "global", directory: path.join(repo, "pkg", "a") },
+            { id: "ses_missing", project: "global", directory: missing },
+            { id: "ses_orphan", project: "missing-project", directory: plain },
+            { id: "ses_imported", project: "global", directory: plain },
+          ],
+          (input) =>
+            db.run(sql`
+              INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+              VALUES (${input.id}, ${input.project}, ${input.id}, ${input.directory}, 'Test', '1', 1, 2)
+            `),
+        )
+        yield* db.run(sql`
+          INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_imported', 'global', 'ses_imported', ${plain}, 'Kept', '1', 1, 2)
+        `)
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        // New owners take their recency from the V1 session instead of the import time.
+        expect(
+          yield* db.all(sql`SELECT time_active FROM project WHERE id NOT IN ('global', 'missing-project')`),
+        ).toEqual([{ time_active: 2 }, { time_active: 2 }, { time_active: 2 }])
+        // Resolve after the import, since runtime resolution persists the projects it finds.
+        const owners = {
+          plain: yield* projects.resolve(AbsolutePath.make(plain)),
+          nested: yield* projects.resolve(AbsolutePath.make(nested)),
+          repo: yield* projects.resolve(AbsolutePath.make(repo)),
+        }
+        expect(owners.repo.vcs?.type).toBe("git")
+        expect(yield* db.all(sql`SELECT id, project_id, path, title FROM session_v2 ORDER BY id`)).toEqual([
+          { id: "ses_imported", project_id: "global", path: null, title: "Kept" },
+          { id: "ses_missing", project_id: "global", path: null, title: "Test" },
+          { id: "ses_nested", project_id: owners.nested.id, path: "", title: "Test" },
+          { id: "ses_orphan", project_id: owners.plain.id, path: "", title: "Test" },
+          { id: "ses_plain", project_id: owners.plain.id, path: "", title: "Test" },
+          { id: "ses_repo", project_id: owners.repo.id, path: "pkg/a", title: "Test" },
+        ])
       }),
     )
   })

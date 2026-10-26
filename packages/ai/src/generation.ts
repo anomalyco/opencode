@@ -202,6 +202,6 @@ const timeoutError = (id: string, timeout: Duration.Duration) =>
   new AIError({
     reason: new TimeoutError({
       message: `Generation ${id} did not finish within ${Duration.format(timeout)}`,
-      timeoutMs: Duration.toMillis(timeout),
+      timeoutMs: Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.ceil(Duration.toMillis(timeout)))),
     }),
   })

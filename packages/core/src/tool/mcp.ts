@@ -1,8 +1,8 @@
 export * as McpTool from "./mcp.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
-import { Context, Effect, Fiber, type JsonSchema, Layer, PubSub, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { extension } from "mime-types"
 import { Bus } from "../bus.js"
@@ -13,6 +13,8 @@ import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 import { ReadToolFileSystem } from "./read-filesystem.js"
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 /**
  * Registry namespace and permission action names for MCP tools.
@@ -94,11 +96,8 @@ export const layer = Layer.effect(
                       if (result.structured !== undefined) return result.structured
                       if (text === "") return null
                       // Agents assume JSON returned as text is already an object, so parse it when the server declares no schema.
-                      if (tool.outputSchema === undefined && (text.startsWith("{") || text.startsWith("["))) {
-                        try {
-                          return JSON.parse(text)
-                        } catch {}
-                      }
+                      if (tool.outputSchema === undefined && (text.startsWith("{") || text.startsWith("[")))
+                        return Option.getOrElse(decodeJson(text), () => text)
                       return text
                     }
                     return {

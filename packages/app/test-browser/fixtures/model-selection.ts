@@ -7,7 +7,8 @@ import type { ModelKey } from "@/providers/models/selection"
 import { ServerScope } from "@/runtime/server/scope"
 
 // Bun does not compile Solid JSX. Compile the real context provider with the
-// same presets as Vite instead of replacing LocalProvider's implementation.
+// same presets as Vite, along with every TSX module it loads, instead of
+// replacing LocalProvider's implementation.
 const require = createRequire(import.meta.url)
 
 const solid = createRequire(require.resolve("vite-plugin-solid"))
@@ -17,7 +18,7 @@ const { transformSync } = solid("@babel/core")
 Bun.plugin({
   name: "selection-solid-context",
   setup(build) {
-    build.onLoad({ filter: /[\\/]ui[\\/]src[\\/]context[\\/]helper\.tsx$/ }, async (args) => ({
+    build.onLoad({ filter: /\.tsx$/ }, async (args) => ({
       contents: transformSync(await Bun.file(args.path).text(), {
         filename: args.path,
         presets: [solid.resolve("babel-preset-solid"), solid.resolve("@babel/preset-typescript")],

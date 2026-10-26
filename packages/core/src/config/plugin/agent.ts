@@ -26,10 +26,11 @@ const legacySources = [
 const sourceDirectories = ["agent", "agents", "mode", "modes"] as const
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
-const decodeConfig = Schema.decodeUnknownOption(Info)
 type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof ReadTool.name | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
+// Fields only V2 understands. A file that uses any of them is read as V2, whatever else it contains.
+const nativeKeys = ["permissions", "request", "system", "disabled"]
 
 export const Plugin = define({
   id: "opencode.config.agent",
@@ -43,7 +44,7 @@ export const Plugin = define({
       const files = yield* discover(fs, entry.path)
       return yield* Effect.forEach(files, (file) =>
         fs.readFileStringSafe(file.filepath).pipe(
-          Effect.map((content) => (content ? decode(file, content) : undefined)),
+          Effect.flatMap((content) => (content ? decode(file, content) : Effect.succeed(undefined))),
           Effect.orElseSucceed(() => undefined),
         ),
       ).pipe(Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)))
@@ -174,7 +175,10 @@ function discover(fs: FSUtil.Interface, directory: string) {
   )
 }
 
-function decode(file: { directory: string; filepath: string; primary: boolean }, content: string) {
+const decode = Effect.fnUntraced(function* (
+  file: { directory: string; filepath: string; primary: boolean },
+  content: string,
+) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) return
   const name = path
@@ -183,7 +187,11 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/^(agent|agents|mode|modes)\//, "")
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
-  const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
+  const keys = Object.keys(markdown.data)
+  const unsupported = keys.filter((key) => !agentKeys.has(key))
+  const legacy = unsupported.length > 0 && !keys.some((key) => nativeKeys.includes(key))
+  if (!legacy && unsupported.length > 0)
+    yield* Effect.logWarning("ignored unsupported agent fields", { path: file.filepath, fields: unsupported })
   // Join legacy model + variant without sending native request/permissions through migration.
   // Embedded and structured native selections, and a variant without a model, stay unchanged.
   const data =
@@ -202,11 +210,8 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
       )
     : Option.getOrUndefined(decodeAgent({ ...data, system: body }, { errors: "all" }))
   if (!agent) return
-  const info = Option.getOrUndefined(
-    decodeConfig({
-      agents: { [name]: file.primary ? { ...agent, mode: "primary" } : agent },
-    }),
-  )
-  if (!info) return
+  const info = Info.make({
+    agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
+  })
   return new Document({ type: "document", path: AbsolutePath.make(file.filepath), info })
-}
+})

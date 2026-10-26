@@ -30,9 +30,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
 
   return yield* Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
-    const original = input.session.revert?.snapshot
-      ? Snapshot.ID.make(input.session.revert.snapshot)
-      : yield* snapshot.capture()
+    const original = input.session.revert?.snapshot ?? (yield* snapshot.capture())
     const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
     const restore = new Map<RelativePath, Snapshot.ID>()
     if (original) {
@@ -63,7 +61,7 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
   yield* Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
     if (!session.revert) return
-    const original = session.revert.snapshot ? Snapshot.ID.make(session.revert.snapshot) : undefined
+    const original = session.revert.snapshot
     if (original)
       yield* snapshot.restore({
         files: new Map((session.revert.files ?? []).map((file) => [RelativePath.make(file.file), original])),
@@ -108,7 +106,7 @@ const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["
     const message = SessionHistory.decodeMessageRowSync(row)
     if (message.type !== "assistant" || !message.snapshot?.start) continue
     for (const file of message.snapshot.files ?? [])
-      if (!files.has(file)) files.set(file, Snapshot.ID.make(message.snapshot.start))
+      if (!files.has(file)) files.set(file, message.snapshot.start)
   }
   return files
 })

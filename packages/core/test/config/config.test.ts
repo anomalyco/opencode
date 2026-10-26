@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigProvider } from "@opencode/schema/config/provider"
@@ -26,6 +27,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { WellKnown } from "@opencode/core/wellknown"
 import { KV } from "@opencode/core/kv"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
+import { Wildcard } from "@opencode/core/util/wildcard"
 import { Integration } from "@opencode/schema/integration"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { location } from "../fixture/location"
@@ -416,6 +418,145 @@ describe("Config", () => {
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
                   file: explicit,
                   content: JSON.stringify({ shell: "content" }),
+                }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("layers integration documents below remote and user config and reloads when they change", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const named = (name: string) => ({ providers: { remote: { name } } })
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify(named("global")))
+            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify(named("project")))
+          })
+          const integrationID = Integration.ID.make("https://example.com")
+          const credentialNode = makeGlobalNode({
+            service: Credential.Service,
+            layer: Layer.mock(Credential.Service)({
+              list: () =>
+                Effect.succeed([
+                  new Credential.Info({
+                    id: Credential.ID.create(),
+                    integrationID,
+                    label: "default",
+                    value: Credential.Key.make({ type: "key", key: "secret" }),
+                  }),
+                ]),
+            }),
+            deps: [],
+          })
+          const entry: WellKnown.Entry = {
+            origin: "https://example.com",
+            integrationID,
+            manifest: { auth: { command: ["login"], env: "TOKEN" } },
+          }
+          const wellknownNode = makeGlobalNode({
+            service: WellKnown.Service,
+            layer: Layer.mock(WellKnown.Service)({
+              entries: () => Effect.succeed([entry]),
+              snapshot: () => [entry],
+              resolve: () => Effect.succeed([named("wellknown")]),
+            }),
+            deps: [],
+          })
+          const names = (entries: readonly Entry[]) =>
+            entries.flatMap((entry) => (entry.type === "document" ? [entry.info.providers?.remote?.name] : []))
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            const updated = Effect.fnUntraced(function* (change: Effect.Effect<void>) {
+              const event = yield* bus
+                .subscribe(Event.Updated)
+                .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+              yield* change
+              expect(yield* Fiber.join(event)).toHaveLength(1)
+              return names(yield* config.entries())
+            })
+            const integration = Integration.ID.make("opencode")
+            expect(names(yield* config.entries())).toEqual(["wellknown", "global", "project"])
+            expect(
+              yield* updated(
+                config.integration!(
+                  integration,
+                  ConfigIntegration.make({
+                    integrationID: integration,
+                    connection: { type: "env", name: "OPENCODE_API_KEY" },
+                    info: decodeInfo(named("console")),
+                  }),
+                ),
+              ),
+            ).toEqual(["console", "wellknown", "global", "project"])
+            expect(yield* updated(config.integration!(integration, undefined))).toEqual([
+              "wellknown",
+              "global",
+              "project",
+            ])
+          }).pipe(
+            Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
+          )
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("ranks integration policies below managed policies and above user and project policies", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const system = path.join(tmp.path, "system")
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const shell = (resource: string, effect: "allow" | "deny") => ({ action: "tool.use", resource, effect })
+        const write = (directory: string, policies: unknown[]) =>
+          fs
+            .mkdir(directory, { recursive: true })
+            .then(() => fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ policies })))
+        return Effect.promise(() =>
+          Promise.all([
+            write(system, [shell("shell:rm*", "deny")]),
+            write(global, [shell("shell:*", "allow")]),
+            write(project, [shell("shell:*", "allow")]),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const integration = Integration.ID.make("opencode")
+              yield* config.integration!(
+                integration,
+                ConfigIntegration.make({
+                  integrationID: integration,
+                  connection: { type: "env", name: "OPENCODE_API_KEY" },
+                  organization: "Acme",
+                  info: decodeInfo({ policies: [shell("shell:rm*", "allow"), shell("shell:*", "deny")] }),
+                }),
+              )
+              const statements = ManagedPolicy.statements(yield* config.entries(), { statements: [] })
+              const deciding = (resource: string) =>
+                statements.findLast(
+                  (policy) => policy.action === "tool.use" && Wildcard.match(resource, policy.resource),
+                )
+              expect(deciding("shell:rm -rf")).toMatchObject({
+                effect: "deny",
+                message: "Blocked by configuration policy",
+              })
+              expect(deciding("shell:ls")).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
+                  system,
                 }),
               ),
             ),
@@ -1237,6 +1378,7 @@ describe("Config", () => {
           task: "ask",
           bash: { "git status": "allow", "*": "deny" },
           write: "deny",
+          apply_patch: "deny",
           read: "allow",
         },
       }).permissions,
@@ -1244,6 +1386,7 @@ describe("Config", () => {
       { action: "subagent", resource: "*", effect: "ask" },
       { action: "shell", resource: "git status", effect: "allow" },
       { action: "shell", resource: "*", effect: "deny" },
+      { action: "edit", resource: "*", effect: "deny" },
       { action: "edit", resource: "*", effect: "deny" },
       { action: "read", resource: "*", effect: "allow" },
     ])

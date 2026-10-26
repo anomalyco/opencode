@@ -1,5 +1,6 @@
 import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { SessionElicitationDock } from "@/session/requests/session-elicitation-dock"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
 import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
@@ -7,7 +8,13 @@ import type { SessionComposerRegionController } from "./session-composer-region-
 
 type SessionComposerRegionState = Pick<
   SessionComposerRegionController["state"],
-  "questionRequest" | "websearch" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
+  | "questionRequest"
+  | "elicitationRequest"
+  | "websearch"
+  | "permissionRequest"
+  | "permissionResponding"
+  | "decide"
+  | "blocked"
 >
 
 export type SessionComposerRegionViewController = Pick<
@@ -41,6 +48,14 @@ export function SessionComposerRegion(props: {
           {(request) => (
             <div>
               <SessionQuestionDock request={request} onSubmit={controller.onResponseSubmit} />
+            </div>
+          )}
+        </Show>
+
+        <Show when={controller.state.elicitationRequest()} keyed>
+          {(request) => (
+            <div>
+              <SessionElicitationDock request={request} onSubmit={controller.onResponseSubmit} />
             </div>
           )}
         </Show>

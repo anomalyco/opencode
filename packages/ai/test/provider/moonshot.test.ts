@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { Auth, LLM, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/index.js"
+import { Auth, LLM, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
 import { Moonshot } from "../../src/providers.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"

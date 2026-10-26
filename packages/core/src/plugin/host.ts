@@ -146,8 +146,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
       transform: (callback) =>
         agents.transform((editor) => {
           callback({
-            list: () => mutable(editor.list()),
-            get: (id) => mutable(editor.get(Agent.ID.make(id))),
+            list: editor.list,
+            get: (id) => editor.get(Agent.ID.make(id)),
             default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
             update: (id, update) => editor.update(Agent.ID.make(id), update),
             remove: (id) => editor.remove(Agent.ID.make(id)),
@@ -368,8 +368,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
       transform: (callback) =>
         integration.transform((editor) => {
           callback({
-            list: () => mutable(editor.list()),
-            get: (id) => mutable(editor.get(Integration.ID.make(id))),
+            list: editor.list,
+            get: (id) => editor.get(Integration.ID.make(id)),
             update: (id, update) => editor.update(Integration.ID.make(id), update),
             remove: (id) => editor.remove(Integration.ID.make(id)),
             method: {

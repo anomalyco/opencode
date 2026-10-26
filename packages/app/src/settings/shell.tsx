@@ -419,7 +419,11 @@ function RootSettings() {
               />
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
-              <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+              <SettingsExtensions
+                directory={sourceServer() === server ? sourceDirectory() : undefined}
+                subtab={surface.view().subtab}
+                onSubtab={(value) => surface.subtab(value)}
+              />
             </Tabs.Content>
           </SettingsServerDataScope>
         )}
@@ -519,7 +523,11 @@ function ServerSettings(props: { entry: SettingsServer }) {
               />
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
-              <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+              <SettingsExtensions
+                directory={activeDirectory()}
+                subtab={surface.view().subtab}
+                onSubtab={(value) => surface.subtab(value)}
+              />
             </Tabs.Content>
           </SettingsServerDataScope>
         )}

@@ -40,6 +40,20 @@ export function createSessionRequestModel() {
     return sessionFormRequest(data.session.list(), data.session.form.list, params.id)
   })
 
+  // MCP elicitations are owned by the Location rather than a Session, so they are listed per Location.
+  const location = createMemo(() => {
+    const id = params.id
+
+    return id ? data.session.get(id)?.location : undefined
+  })
+
+  createEffect(() => {
+    const ref = location()
+
+    if (!ref || serverSDK.connection.status() !== "connected") return
+    void data.session.form.sync("global", ref).catch(() => undefined)
+  })
+
   const websearch = createWebSearchRequest({
     owner: () => params.id,
     connected: () => serverSDK.connection.status() === "connected",
@@ -68,6 +82,19 @@ export function createSessionRequestModel() {
     return form?.metadata?.kind === "question" ? form : undefined
   })
 
+  const elicitationRequest = createMemo(() => {
+    if (websearch.request() || questionRequest()) return
+    const form = formRequest()
+
+    if (form?.metadata?.kind === "mcp-elicitation") return form
+
+    const ref = location()
+
+    if (!ref) return
+
+    return data.session.form.list("global", ref)?.find((item) => item.metadata?.kind === "mcp-elicitation")
+  })
+
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     const id = params.id
 
@@ -83,7 +110,7 @@ export function createSessionRequestModel() {
 
     if (!id) return false
 
-    return !!permissionRequest() || !!questionRequest() || !!websearch.request()
+    return !!permissionRequest() || !!questionRequest() || !!elicitationRequest() || !!websearch.request()
   })
 
   const primary = () => {
@@ -160,6 +187,7 @@ export function createSessionRequestModel() {
   return {
     blocked,
     questionRequest,
+    elicitationRequest,
     websearch,
     permissionRequest,
     permissionResponding,

@@ -121,11 +121,26 @@ test("inactive session attention dots share the close control without marking th
   await expectPath(page, sessionHref(a.id))
 })
 
+test("the browser title names the open session and resets after leaving it", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  await expect(page).toHaveTitle(`${a.title} · OpenCode`)
+
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  await tabB.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(page).toHaveTitle(`${b.title} · OpenCode`)
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(page).toHaveTitle("OpenCode")
+})
+
 test("a tab does not reopen its title editor while a rename is saving", async ({ page }) => {
   await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
   await page.goto(sessionHref(a.id))
   const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
-  const editor = page.locator('[data-slot="tab-title"][contenteditable="true"]')
+  const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
   await expect(title).toHaveText(a.title)
   const save = await holdRoute(page, (url) => url.pathname === `/api/session/${a.id}`, { method: "PATCH" })
 

@@ -24,6 +24,13 @@ const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "opencode
 
 const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
 
+// rpmbuild adds /usr/lib/.build-id links for every ELF file. The bundled Electron
+// binaries are byte-identical across apps on the same Electron version, so those
+// links collide with other Electron RPMs (Slack, Unity Hub, ...) and rpm/zypper
+// refuse to install or update. They only serve debuginfo lookup, so skip them.
+// fpm only accepts flags before the first src=dest mapping, so keep this first.
+const rpmNoBuildIdLinksFpm = "--rpm-rpmbuild-define=_build_id_links none"
+
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
 
@@ -68,6 +75,19 @@ const APP_IDS = {
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 } as const
+
+// libappimage (used by AppImageLauncher) resolves the .desktop entry inside an
+// AppImage by globbing `*.desktop` at the squashfs root. If the main
+// executable itself ends in `.desktop` (prod appId `ai.opencode.desktop`), the
+// ELF binary matches the glob and is parsed as a desktop entry, so
+// integration fails with `Malformed desktop entry: Unexpected char '\x7f' at 0`
+// (0x7F is the first byte of the ELF magic).
+// https://github.com/anomalyco/opencode/issues/51867
+// Strip a trailing `.desktop` so the executable can never collide with the
+// desktop-entry glob. Beta/dev appIds end in `.beta`/`.dev` and are unaffected.
+function linuxExecutableName(appId: string): string {
+  return appId.replace(/\.desktop$/, "")
+}
 
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
@@ -198,7 +218,11 @@ const getBase = (appId: string): Configuration => {
     linux: {
       icon: `resources/icons`,
       category: "Development",
-      executableName: appId,
+      executableName: linuxExecutableName(appId),
+      // Derive the installed `.desktop` filename from `desktopName`
+      // (`ai.opencode.desktop.desktop` for prod) instead of `executableName`,
+      // so window association is unaffected by the executable rename above.
+      syncDesktopName: true,
       desktop: {
         entry: {
           // Match the installed .desktop file and hicolor icon basename so
@@ -223,7 +247,7 @@ export function getConfig() {
         appId,
         productName: "OpenCode Dev",
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-dev", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
       }
     }
 
@@ -239,7 +263,7 @@ export function getConfig() {
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-beta", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
       }
     }
 
@@ -255,7 +279,7 @@ export function getConfig() {
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "opencode", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }

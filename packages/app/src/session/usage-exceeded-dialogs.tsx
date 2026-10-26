@@ -7,6 +7,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { useSessionLayout } from "./session-layout"
 import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
+import { GoUpsellHero } from "@/providers/connect/go-upsell-hero"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
@@ -128,6 +129,7 @@ export function useUsageExceededDialogs(input?: {
         }
         actionLabel={t("dialog.usageExceeded.freeTier.actionLabel")}
         link={GO_URL}
+        hero={<GoUpsellHero />}
         onClose={(dontShowAgain) => {
           if (dontShowAgain) setGoUpsellState(GO_UPSELL_FREE_TIER_DONT_SHOW, Date.now())
           else {

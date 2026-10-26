@@ -71,6 +71,7 @@ import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
+import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
@@ -88,7 +89,6 @@ import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
-import { sessionEpilogue } from "../../util/presentation"
 import { useConfig, useNewDesigns } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
@@ -157,7 +157,7 @@ export function Session(props: {
   onTerminalPicker?: (show: (() => void) | undefined) => void
   width?: number
 }) {
-  const setEpilogue = useEpilogue()
+  const epilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
     await mkdir(path.dirname(file), { recursive: true })
@@ -196,9 +196,9 @@ export function Session(props: {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+    epilogue.session({ title, sessionID: session()?.id })
   })
-  onCleanup(() => setEpilogue())
+  onCleanup(() => epilogue.session())
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
@@ -636,6 +636,7 @@ export function Session(props: {
     { initial: {} },
   )
   const handledFreeLimits = new Set<string>()
+  useUsageAlerts(() => route.sessionID)
   let sessionDisposed = false
   onCleanup(() => {
     sessionDisposed = true
@@ -2028,19 +2029,22 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   )
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   const freeLimit = createMemo(() => props.message.error?.type === "provider.free-limit")
+  const limitNotice = useLimitNotice(() => props.message)
   return (
     <>
       <Show when={props.message.error && !interrupted() && !props.message.retry}>
-        <Show
-          when={freeLimit()}
+        <Switch
           fallback={
             <box paddingLeft={3}>
               <text fg={theme.text.feedback.error.base}>Error: {errorMessage(props.message.error)}</text>
             </box>
           }
         >
-          <FreeLimitNotice message={props.message} />
-        </Show>
+          <Match when={freeLimit()}>
+            <FreeLimitNotice message={props.message} />
+          </Match>
+          <Match when={limitNotice()}>{(notice) => <UsageLimitNotice notice={notice()} />}</Match>
+        </Switch>
       </Show>
       <AssistantRetry retry={props.message.retry} />
       <box paddingLeft={3} marginTop={props.message.retry || (props.message.error && !interrupted()) ? 1 : 0}>
@@ -2731,7 +2735,7 @@ type ToolProps = {
 }
 function GenericTool(props: ToolProps) {
   const theme = useTheme()
-  const output = createMemo(() => props.output?.trim() ?? "")
+  const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const input = createMemo(() => Object.entries(props.input))
   const [expanded, setExpanded] = createSignal(false)
   const expandable = createMemo(() => input().length > 0 || output().length > 0)
@@ -2817,7 +2821,7 @@ function InlineTool(props: {
   const permission = useToolPermission(() => props.part)
 
   const error = createMemo(() =>
-    !props.running && props.part.state.status === "error" ? props.part.state.error.message : undefined,
+    !props.running && props.part.state.status === "error" ? stripAnsi(props.part.state.error.message) : undefined,
   )
 
   const denied = createMemo(
@@ -2897,8 +2901,8 @@ function BlockTool(props: BlockToolProps) {
   const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
-  const error = createMemo(
-    () => props.error ?? (props.part?.state.status === "error" ? props.part.state.error.message : undefined),
+  const error = createMemo(() =>
+    stripAnsi(props.error ?? (props.part?.state.status === "error" ? props.part.state.error.message : "")),
   )
   const permission = useToolPermission(() => props.part)
   return (

@@ -4,11 +4,8 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
-      - ci
       - dev
       - beta
-      - fix/npm-native-binary-install
-      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
@@ -42,6 +39,8 @@ jobs:
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'anomalyco/opencode'
+    # Versioned releases wait for approval in the release environment, which only allows dev.
+    environment: ${{ (inputs.bump || inputs.version) && 'release' || '' }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
@@ -85,7 +84,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
 
       - name: Setup git committer
         id: committer
@@ -107,7 +106,7 @@ jobs:
         id: build
         run: ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
-          BUN_COMPILE_RELEASE: bun-v1.4.2
+          BUN_COMPILE_RELEASE: bun-v1.4.4
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           OPENCODE_RELEASE_NOTES: ${{ (github.ref_name == 'dev' && inputs.release_notes) || '' }}
@@ -548,6 +547,8 @@ jobs:
       - build-electron
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Versioned and beta releases wait for approval in the release environment; dev previews do not.
+    environment: ${{ needs.version.outputs.release && 'release' || '' }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -664,6 +665,7 @@ jobs:
       - publish
     if: ${{ !cancelled() && github.repository == 'anomalyco/opencode' && github.ref_name == 'dev' && needs.version.outputs.release && needs.publish.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: release
     steps:
       # Unlike dev, V2 publishes a tag rather than a GitHub Release event.
       - name: Announce V2 release in Discord
