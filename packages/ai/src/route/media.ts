@@ -1,5 +1,5 @@
 import { Duration, Effect, Schedule, Schema, Stream } from "effect"
-import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/http"
 import { Auth, type AuthInput } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import { RequestExecutorService, type Interface } from "./executor-service.js"

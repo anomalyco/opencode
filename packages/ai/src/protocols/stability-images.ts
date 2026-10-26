@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/http"
 import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -39,7 +39,10 @@ export type StabilityStylePreset = OpenString<
   | "tile-texture"
 >
 
+/** Native form fields; `aspect` lowers to `aspect_ratio`. */
 export type StabilityImageOptions = {
+  readonly seed?: number
+  readonly output_format?: OpenString<"jpeg" | "png" | "webp">
   readonly negative_prompt?: string
   readonly style_preset?: StabilityStylePreset
   readonly strength?: number
@@ -48,6 +51,8 @@ export type StabilityImageOptions = {
 
 /** Creative upscale options; the one `images` source is the image to upscale. */
 export type StabilityUpscaleOptions = {
+  readonly seed?: number
+  readonly output_format?: OpenString<"jpeg" | "png" | "webp">
   readonly negative_prompt?: string
   readonly style_preset?: StabilityStylePreset
   readonly creativity?: number
@@ -82,7 +87,7 @@ const endpoint = (model: string) => (model.startsWith("sd3") ? "sd3" : model)
 
 const RESERVED_FORM_FIELDS = new Set(["image", "prompt", "mode", "model"])
 
-const form = Effect.fn("StabilityImages.form")(function* (
+const form = Effect.fnUntraced(function* (
   identity: MediaProtocol.Identity,
   fields: Record<string, unknown>,
   native: Record<string, unknown> | undefined,
@@ -109,9 +114,7 @@ const fromRequest = Effect.fn("StabilityImages.fromRequest")(function* (request:
     route,
     {
       prompt: request.prompt,
-      aspect_ratio: request.aspectRatio,
-      seed: request.seed,
-      output_format: request.format,
+      aspect_ratio: request.aspect,
       model: target === "sd3" ? request.model.id : undefined,
       mode: target === "sd3" && edit ? "image-to-image" : undefined,
     },
@@ -125,7 +128,7 @@ const fromUpscaleRequest = Effect.fn("StabilityImages.fromUpscaleRequest")(funct
     return yield* ProviderShared.invalidRequest(`${upscaleRoute.name} upscale requires the source image in images`)
   return yield* form(
     upscaleRoute,
-    { prompt: request.prompt, seed: request.seed, output_format: request.format },
+    { prompt: request.prompt },
     mergeJsonRecords(request.providerOptions, request.http?.body),
     request.images,
   )
@@ -185,14 +188,14 @@ const decodeUpscaleResult = Effect.fn("StabilityImages.decodeUpscaleResult")(fun
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["size", "mask"],
+  unsupported: ["resolution"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })
 
 export const upscaleProtocol = MediaProtocol.queued<UpscaleRequest, ImageResponse, Token>(upscaleRoute, {
   token: Token,
-  unsupported: ["n", "size", "aspectRatio", "mask"],
+  unsupported: ["n", "aspect", "resolution"],
   start: { body: { from: fromUpscaleRequest }, decode: decodeStart },
   status: { path: (token) => `${RESULTS_PATH}/${token.id}`, decode: decodeStatus },
   result: { path: (token) => `${RESULTS_PATH}/${token.id}`, decode: decodeUpscaleResult },

@@ -1,6 +1,7 @@
 {
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
+    "noUnusedLocals": true,
     "types": ["bun"]
   }
 }

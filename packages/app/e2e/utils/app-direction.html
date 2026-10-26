@@ -14,7 +14,12 @@
     <script type="module">
       import { mount } from "./app-direction.fixture.tsx"
       const query = new URLSearchParams(location.search)
-      mount({ server: query.get("server"), route: query.get("route"), direction: query.get("direction") })
+      mount({
+        server: query.get("server"),
+        route: query.get("route"),
+        direction: query.get("direction"),
+        held: query.has("held"),
+      })
     </script>
   </body>
 </html>

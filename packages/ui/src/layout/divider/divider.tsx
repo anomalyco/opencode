@@ -5,6 +5,7 @@ export interface DividerProps extends ComponentProps<"div"> {}
 
 export function Divider(props: DividerProps) {
   const [local, rest] = splitProps(props, ["class", "classList"])
+
   return (
     <div
       {...rest}

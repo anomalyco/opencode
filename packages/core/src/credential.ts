@@ -1,12 +1,14 @@
 export * as Credential from "./credential.js"
 
 import { asc, desc, eq } from "drizzle-orm"
-import { Cause, Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Fiber, Layer, Schema } from "effect"
 import { Credential } from "@opencode/schema/credential"
+import { CredentialLegacy } from "@opencode/schema/credential-legacy"
 import { Integration } from "@opencode/schema/integration"
 import { Database } from "./database/database.js"
 import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { CredentialTable } from "./credential/sql.js"
 import { ErrorSummary } from "./util/error-summary.js"
 
@@ -18,6 +20,9 @@ export type OAuth = Credential.OAuth
 
 export const Key = Credential.Key
 export type Key = Credential.Key
+
+export const External = Credential.External
+export type External = Credential.External
 
 export const Value = Credential.Value
 export type Value = Credential.Value
@@ -38,11 +43,21 @@ export interface Interface {
   readonly list: (integrationID: Integration.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  /** Creates a credential for an integration and returns the new record. */
+  /** Concurrent callers for the same credential share the running operation's result, including failures. */
+  readonly lock: (
+    id: ID,
+    operation: Effect.Effect<OAuth | undefined, unknown>,
+  ) => Effect.Effect<OAuth | undefined, unknown>
+  /**
+   * Creates a credential for an integration and returns the new record. The new credential becomes the
+   * integration's selection unless `activate` is false and the integration already has a credential.
+   */
   readonly create: (input: {
+    readonly id?: ID
     readonly integrationID: Integration.ID
     readonly value: Value
     readonly label?: string
+    readonly activate?: boolean
   }) => Effect.Effect<Info>
   /** Selects a stored credential for its integration. */
   readonly activate: (id: ID) => Effect.Effect<void>
@@ -59,7 +74,11 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
-    const decode = Schema.decodeUnknownSync(Value)
+    const flock = yield* EffectFlock.Service
+    const scope = yield* Effect.scope
+    const pending = new Map<ID, Fiber.Fiber<OAuth | undefined, unknown>>()
+    // Rows written before v2.1 may carry the old key credential shape.
+    const decode = Schema.decodeUnknownSync(CredentialLegacy.Value)
     const stored = (row: typeof CredentialTable.$inferSelect) => {
       if (!row.integration_id) return
       return new Info({
@@ -76,6 +95,23 @@ const layer = Layer.effect(
       })
 
     return Service.of({
+      lock: Effect.fn("Credential.lock")((id, operation) =>
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const current = pending.get(id)
+            if (current) return yield* restore(Fiber.join(current))
+            // The global scope owns the operation, not the first Session or Location waiting for it.
+            // The file lock extends this to other processes sharing the database.
+            const fiber = yield* operation.pipe(
+              flock.withLock(`credential-refresh:${id}`),
+              Effect.ensuring(Effect.sync(() => pending.delete(id))),
+              Effect.forkIn(scope),
+            )
+            pending.set(id, fiber)
+            return yield* restore(Fiber.join(fiber))
+          }),
+        ),
+      ),
       all: Effect.fn("Credential.all")(() =>
         db
           .select()
@@ -99,19 +135,30 @@ const layer = Layer.effect(
       }),
       create: Effect.fn("Credential.create")(function* (input) {
         const credential = new Info({
-          id: ID.create(),
+          id: input.id ?? ID.create(),
           integrationID: input.integrationID,
           label: input.label ?? "default",
           value: input.value,
         })
-        yield* db
+        const activated = yield* db
           .transaction((tx) =>
             Effect.gen(function* () {
-              yield* tx
-                .update(CredentialTable)
-                .set({ active: false })
+              const current = yield* tx
+                .select({ id: CredentialTable.id, active: CredentialTable.active })
+                .from(CredentialTable)
                 .where(eq(CredentialTable.integration_id, credential.integrationID))
-                .run()
+                .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created), desc(CredentialTable.id))
+                .get()
+              const activate = input.activate !== false || !current
+              if (activate)
+                yield* tx
+                  .update(CredentialTable)
+                  .set({ active: false })
+                  .where(eq(CredentialTable.integration_id, credential.integrationID))
+                  .run()
+              // Legacy rows have no active flag and the newest one is selected, so pin it before inserting a newer row.
+              if (!activate && current && !current.active)
+                yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, current.id)).run()
               yield* tx
                 .insert(CredentialTable)
                 .values({
@@ -119,9 +166,10 @@ const layer = Layer.effect(
                   integration_id: credential.integrationID,
                   label: credential.label,
                   value: credential.value,
-                  active: true,
+                  active: activate,
                 })
                 .run()
+              return activate
             }),
           )
           .pipe(
@@ -138,13 +186,15 @@ const layer = Layer.effect(
           credentialID: credential.id,
           integrationID: credential.integrationID,
           type: credential.value.type,
+          active: activated,
         })
         yield* bus.publish(Event.Updated, {}, { global: true })
-        yield* bus.publish(
-          Event.Switched,
-          { integrationID: credential.integrationID, credentialID: credential.id },
-          { global: true },
-        )
+        if (activated)
+          yield* bus.publish(
+            Event.Switched,
+            { integrationID: credential.integrationID, credentialID: credential.id },
+            { global: true },
+          )
         return credential
       }),
       activate: Effect.fn("Credential.activate")(function* (id) {
@@ -303,4 +353,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node, EffectFlock.node] })

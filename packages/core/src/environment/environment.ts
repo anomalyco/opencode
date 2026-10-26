@@ -1,7 +1,7 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import type { Files } from "./files.js"
 import { makeFiles } from "./index.js"
 import { makeLocalDriver } from "./local.js"

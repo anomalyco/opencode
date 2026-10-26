@@ -16,14 +16,21 @@ export function readSessionTabsRemovedDetail(event: Event): SessionTabsRemovedDe
   if (!(event instanceof CustomEvent)) return undefined
 
   const detail: unknown = event.detail
+
   if (!detail || typeof detail !== "object") return undefined
+
   if (!("directory" in detail)) return undefined
+
   if (!("sessionIDs" in detail)) return undefined
+
   if (!("server" in detail) || typeof detail.server !== "string") return undefined
+
   if (typeof detail.directory !== "string") return undefined
+
   if (!Array.isArray(detail.sessionIDs)) return undefined
 
   const sessionIDs = detail.sessionIDs.filter((id): id is string => typeof id === "string")
+
   if (sessionIDs.length === 0) return undefined
 
   return {

@@ -33,6 +33,7 @@ describe("current tool state", () => {
   test("preserves running input and metadata", () => {
     const input = { command: "bun test src/timeline" }
     const metadata = { background: true, output: "Running timeline tests..." }
+
     const tool = {
       type: "tool",
       id: "tool_running",

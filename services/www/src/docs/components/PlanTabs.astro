@@ -1,0 +1,103 @@
+---
+interface Props {
+  id: string
+  label: string
+  syncKey: string
+}
+
+const plans = [
+  { id: "go", label: "Go" },
+  { id: "go-plus", label: "Go Plus" },
+] as const
+---
+
+<div class="docs-plan-tabs" data-plan-tabs data-sync-key={Astro.props.syncKey}>
+  <div class="docs-plan-tabs-list" role="tablist" aria-label={Astro.props.label}>
+    {
+      plans.map((plan, index) => (
+        <button
+          type="button"
+          role="tab"
+          id={`${Astro.props.id}-tab-${plan.id}`}
+          aria-controls={`${Astro.props.id}-panel-${plan.id}`}
+          aria-selected={index === 0 ? "true" : "false"}
+          tabindex={index === 0 ? 0 : -1}
+          data-plan-tab={plan.id}
+        >
+          {plan.label}
+        </button>
+      ))
+    }
+  </div>
+  {
+    plans.map((plan, index) => (
+      <div
+        role="tabpanel"
+        id={`${Astro.props.id}-panel-${plan.id}`}
+        aria-labelledby={`${Astro.props.id}-tab-${plan.id}`}
+        hidden={index !== 0}
+        data-plan-panel={plan.id}
+      >
+        <slot name={plan.id} />
+      </div>
+    ))
+  }
+</div>
+
+<script>
+  const selectPlan = (tabs: HTMLElement, plan: string) => {
+    tabs.querySelectorAll<HTMLButtonElement>("[data-plan-tab]").forEach((button) => {
+      const selected = button.dataset.planTab === plan
+      button.setAttribute("aria-selected", String(selected))
+      button.tabIndex = selected ? 0 : -1
+    })
+    tabs.querySelectorAll<HTMLElement>("[data-plan-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.planPanel !== plan
+    })
+  }
+
+  const selectSyncedPlan = (source: HTMLElement, plan: string) => {
+    const syncKey = source.dataset.syncKey
+    if (!syncKey) return
+    document.querySelectorAll<HTMLElement>("[data-plan-tabs]").forEach((tabs) => {
+      if (tabs.dataset.syncKey === syncKey) selectPlan(tabs, plan)
+    })
+    localStorage.setItem(`docs-plan-tabs:${syncKey}`, plan)
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-plan-tabs]").forEach((tabs) => {
+    const syncKey = tabs.dataset.syncKey
+    const plan = syncKey ? localStorage.getItem(`docs-plan-tabs:${syncKey}`) : undefined
+    if (plan) selectPlan(tabs, plan)
+  })
+
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return
+    const button = event.target.closest<HTMLButtonElement>("[data-plan-tab]")
+    const tabs = button?.closest<HTMLElement>("[data-plan-tabs]")
+    if (!button || !tabs || !button.dataset.planTab) return
+    selectSyncedPlan(tabs, button.dataset.planTab)
+  })
+
+  document.addEventListener("keydown", (event) => {
+    if (!(event.target instanceof HTMLButtonElement) || !event.target.matches("[data-plan-tab]")) return
+    const tabs = event.target.closest<HTMLElement>("[data-plan-tabs]")
+    if (!tabs) return
+    const buttons = [...tabs.querySelectorAll<HTMLButtonElement>("[data-plan-tab]")]
+    const selected = buttons.indexOf(event.target)
+    const next =
+      event.key === "Home"
+        ? buttons[0]
+        : event.key === "End"
+          ? buttons.at(-1)
+          : event.key === "ArrowRight"
+            ? buttons[(selected + 1) % buttons.length]
+            : event.key === "ArrowLeft"
+              ? buttons[(selected - 1 + buttons.length) % buttons.length]
+              : undefined
+    if (!next?.dataset.planTab) return
+    event.preventDefault()
+    selectSyncedPlan(tabs, next.dataset.planTab)
+    next.focus()
+  })
+</script>

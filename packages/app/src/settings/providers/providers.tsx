@@ -2,25 +2,29 @@ import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { OpenCodeLogo } from "@/providers/opencode-logo"
 import { showToast } from "@/shell/notifications/toast"
 import { popularProviders, useProviders } from "@/providers/catalog/providers"
 import { consoleProviderGroup } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
-import { createEffect, createMemo, type Component, For, Show } from "solid-js"
+import { createEffect, createMemo, type Component, For, type JSX, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
-import { CONSOLE_INTEGRATION, CONSOLE_PROVIDERS } from "@/providers/connect/controller"
+import { formatServerError } from "@/runtime/server/errors"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/controller"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { SettingsList } from "@/settings/list"
 import { activeProviderAccount, providerAccounts, type ProviderAccount } from "./accounts"
+import { AccountNameInput } from "./account-name"
+import { useProviderAccountActions } from "./account-actions"
 import "@/settings/settings.css"
 
 type ProviderSource = "env" | "api" | "account" | "config" | "custom"
+
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
 const PROVIDER_NOTES = [
@@ -37,34 +41,45 @@ const PROVIDER_NOTES = [
 export const SettingsProviders: Component<{
   directory: string | undefined
   onSelectProvider?: (providerID: string) => void
+  headerAction?: JSX.Element
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
-  const data = useData()
   const providers = useProviders(() => props.directory)
   const integrations = useIntegrations(() => props.directory)
   const providerConnect = useProviderConnectController()
-  const [state, setState] = createStore({
-    disconnecting: {} as Record<string, "removing" | "removed" | "absent" | undefined>,
+  const accountActions = useProviderAccountActions(() => props.directory)
+
+  const [state, setState] = createStore<{
+    disconnecting: Record<string, "removing" | "removed" | "absent" | undefined>
+    consoleExpanded: boolean
+    credentialID?: string
+    renaming?: string
+    held?: ProviderItem[]
+  }>({
+    disconnecting: {},
     consoleExpanded: false,
-    connecting: false,
-    credentialID: undefined as string | undefined,
   })
+
   const updateDisconnecting = (ids: string[], status: "removing" | "removed" | "absent" | undefined) =>
     setState("disconnecting", (current) => ({
       ...current,
       ...Object.fromEntries(ids.map((id) => [id, status])),
     }))
+
   // Console-managed providers (`opencode-go`, `console-*`) connect through the `opencode`
   // integration, so the lookup must follow `integrationID` rather than the provider id.
   const integration = (item: ProviderItem) => {
     const id = item.integrationID ?? item.id
+
     return integrations.list().find((entry) => entry.id === id)
   }
 
   const connect = (provider?: string) => {
-    setState("connecting", true)
+    // The list stays as it was while the dialog connects, so a new sign-in that briefly drops the
+    // Console workspace providers from the catalog can't flash rows behind the dialog.
+    setState("held", available())
     providerConnect.select(provider)
     void dialog.show(
       () => (
@@ -73,50 +88,40 @@ export const SettingsProviders: Component<{
           defaultLocation={props.directory === undefined}
           controller={providerConnect}
           onConnected={(providerID) => {
-            if (CONSOLE_PROVIDERS.has(providerID)) {
+            if (providerID === CONSOLE_INTEGRATION) {
               setState("disconnecting", reconcile({}))
+
               return
             }
+
             setState("disconnecting", providerID, undefined)
           }}
         />
       ),
-      () => {
-        setState("connecting", false)
-        const location = props.directory ? { directory: props.directory } : undefined
-        data.location.integration.invalidate(location)
-        data.location.provider.invalidate(location)
-        data.location.model.invalidate(location)
-        void Promise.all([
-          data.location.integration.sync(location),
-          data.location.provider.sync(location),
-          data.location.model.sync(location),
-        ]).catch(() => undefined)
-      },
+      () => void accountActions
+          .refresh()
+          .catch(() => undefined)
+          .finally(() => setState("held", undefined)),
     )
   }
 
   const available = createMemo(() => {
+    if (state.held) return state.held
     const connected = providers.connected()
     const managedConsole = consoleProviderGroup(connected)
+
     const consoleConnected = integrations
       .list()
       .find((item) => item.id === CONSOLE_INTEGRATION)
       ?.connections.some((connection) => connection.type === "credential" || connection.type === "env")
-    // Hides the free `opencode` row while a new Console grant is still loading its workspace providers.
-    const consoleTransition =
-      state.connecting &&
-      CONSOLE_PROVIDERS.has(providerConnect.selected() ?? "") &&
-      consoleConnected &&
-      managedConsole === undefined
+
     return connected
       .filter(
         (provider) =>
           provider.id !== "opencode" ||
-          (!consoleTransition &&
-            (managedConsole !== undefined ||
-              consoleConnected ||
-              Object.values(provider.models).some((model) => model.cost.input > 0))),
+          managedConsole !== undefined ||
+          consoleConnected ||
+          Object.values(provider.models).some((model) => model.cost.input > 0),
       )
       .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })
@@ -126,8 +131,10 @@ export const SettingsProviders: Component<{
     Object.entries(state.disconnecting).forEach(([id, status]) => {
       if ((status === "removing" || status === "removed") && !ids.has(id)) {
         setState("disconnecting", id, "absent")
+
         return
       }
+
       if (status === "absent" && ids.has(id)) setState("disconnecting", id, undefined)
     })
   })
@@ -138,8 +145,10 @@ export const SettingsProviders: Component<{
 
   const displayed = createMemo(() => {
     const group = consoleGroup()
+
     if (!group) return connected()
     const grouped = new Set(group.providers.filter((item) => item.id !== group.root.id).map((item) => item.id))
+
     return connected().filter((item) => !grouped.has(item.id))
   })
 
@@ -150,14 +159,18 @@ export const SettingsProviders: Component<{
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
     // integration list arrives the row is still the models.dev Zen provider, so dedupe it as before.
     const account = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
+
     const items = providers
       .popular()
       .filter((p) => {
         if (p.id !== CONSOLE_INTEGRATION || !account) return !connectedIDs.has(p.id)
+
         return account.connections.find((connection) => connection.type === "credential")?.method !== "oauth"
       })
       .slice()
+
     items.sort((a, b) => popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id))
+
     return items
   })
 
@@ -167,29 +180,43 @@ export const SettingsProviders: Component<{
   const source = (item: ProviderItem): ProviderSource | undefined => {
     const current = integration(item)
     const credential = current?.connections.find((connection) => connection.type === "credential")
+
     if (credential) return credential.method === "oauth" ? "account" : "api"
+
     if (current?.connections.some((connection) => connection.type === "env")) return "env"
+
     if (current) return "config"
+
     if (!("source" in item)) return
     const value = item.source
+
     if (value === "env" || value === "api" || value === "config" || value === "custom") return value
+
     return
   }
 
   const type = (item: ProviderItem) => {
     const current = source(item)
+
     if (current === "env") return language.t("settings.providers.tag.environment")
+
     if (current === "api") return language.t("provider.connect.method.apiKey")
+
     if (current === "account") return language.t("settings.providers.tag.account")
+
     if (current === "config") return language.t("settings.providers.tag.config")
+
     if (current === "custom") return language.t("settings.providers.tag.custom")
+
     return language.t("settings.providers.tag.other")
   }
 
   const canDisconnect = (item: ProviderItem) => {
     const current = integration(item)
+
     if (current) return current.connections.some((connection) => connection.type === "credential")
     const currentSource = source(item)
+
     return currentSource !== "env" && currentSource !== "config"
   }
 
@@ -207,13 +234,16 @@ export const SettingsProviders: Component<{
       .get({ integrationID: item.integrationID ?? item.id, location })
       .then(async (integration) => {
         const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+
         if (credentials.length === 0) {
           showToast({
             title: language.t("common.requestFailed"),
             description: language.t("provider.disconnect.toast.noCredentials.description", { provider: name }),
           })
+
           return
         }
+
         await Promise.all(
           credentials.map((credential) => serverSdk.api.credential.remove({ credentialID: credential.id })),
         )
@@ -225,9 +255,9 @@ export const SettingsProviders: Component<{
           description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
         })
       })
-      .catch((err: unknown) => {
+      .catch((err) => {
         updateDisconnecting(ids, undefined)
-        const message = err instanceof Error ? err.message : String(err)
+        const message = formatServerError(err, language.t)
         showToast({
           title: language.t("common.requestFailed"),
           description: language.tDynamic("provider.disconnect.toast.failed.description", message, { provider: name }),
@@ -235,129 +265,129 @@ export const SettingsProviders: Component<{
       })
   }
 
-  const refreshAccounts = async () => {
-    const location = props.directory ? { directory: props.directory } : undefined
-    data.location.integration.invalidate(location)
-    data.location.provider.invalidate(location)
-    data.location.model.invalidate(location)
-    await Promise.all([
-      data.location.integration.sync(location),
-      data.location.provider.sync(location),
-      data.location.model.sync(location),
-    ])
-  }
-
-  const accountError = (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    showToast({ title: language.t("common.requestFailed"), description: message })
-  }
-
   const activate = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
     if (activeProviderAccount(integration(provider))?.id === account.id) return
-    setState("credentialID", account.id)
-    await serverSdk.api.credential
-      .activate({ credentialID: account.id })
-      .then(refreshAccounts)
-      .then(() =>
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("settings.providers.account.switched.title", { provider: providerName }),
-          description: language.t("settings.providers.account.switched.description", { account: account.label }),
-        }),
-      )
-      .catch(accountError)
-      .finally(() => setState("credentialID", undefined))
+    setState({ credentialID: account.id, held: available() })
+    await accountActions.activate({ integrationID: provider.integrationID ?? provider.id, provider: providerName, account })
+    setState({ credentialID: undefined, held: undefined })
   }
 
   const remove = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
-    const final = providerAccounts(integration(provider)).length === 1
-    setState("credentialID", account.id)
-    await serverSdk.api.credential
-      .remove({ credentialID: account.id })
-      .then(refreshAccounts)
-      .then(() =>
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t(
-            final ? "provider.disconnect.toast.disconnected.title" : "settings.providers.account.removed.title",
-            final ? { provider: providerName } : { account: account.label },
-          ),
-          description: language.t(
-            final
-              ? "provider.disconnect.toast.disconnected.description"
-              : "settings.providers.account.removed.description",
-            { provider: providerName },
-          ),
-        }),
-      )
-      .catch(accountError)
-      .finally(() => setState("credentialID", undefined))
+    setState({ credentialID: account.id, held: available() })
+    await accountActions.remove({
+      integrationID: provider.integrationID ?? provider.id,
+      provider: providerName,
+      account,
+      final: providerAccounts(integration(provider)).length === 1,
+    })
+    setState({ credentialID: undefined, held: undefined })
   }
 
   function AccountMenu(menuProps: { provider: ProviderItem; name?: string }) {
     const accounts = () => providerAccounts(integration(menuProps.provider))
     const active = () => activeProviderAccount(integration(menuProps.provider))
     const name = () => menuProps.name ?? menuProps.provider.name
+    const renaming = () => accounts().find((account) => account.id === state.renaming)
 
     return (
-      <Menu placement="bottom-end" gutter={6}>
-        <Menu.Trigger
-          as={Button}
-          size="normal"
-          variant="ghost-muted"
-          class="settings-provider-account-trigger"
-          aria-label={language.t("settings.providers.account.manage", { provider: name() })}
-        >
-          <span>{active()?.label}</span>
-          <Icon name="chevron-down" size="small" />
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
-            <Menu.Group>
-              <Menu.GroupLabel>{language.t("settings.providers.account.group")}</Menu.GroupLabel>
-              <Menu.RadioGroup
-                class="settings-provider-account-list"
-                value={active()?.id}
-                onChange={(credentialID) => {
-                  const account = accounts().find((item) => item.id === credentialID)
-                  if (account) void activate(menuProps.provider, name(), account)
+      <Show
+        when={renaming()}
+        fallback={
+          <AccountMenuTrigger provider={menuProps.provider} name={name()} accounts={accounts()} active={active()} />
+        }
+      >
+        {(account) => (
+          <AccountNameInput
+            value={account().label}
+            class="settings-provider-account-input"
+            onSave={(label) => accountActions.rename(account(), label)}
+            onClose={() => setState("renaming", undefined)}
+          />
+        )}
+      </Show>
+    )
+  }
+
+  function AccountMenuTrigger(menuProps: {
+    provider: ProviderItem
+    name: string
+    accounts: ProviderAccount[]
+    active: ProviderAccount | undefined
+  }) {
+    const accounts = () => menuProps.accounts
+    const active = () => menuProps.active
+    const name = () => menuProps.name
+
+    return (
+      <div class="settings-provider-account-actions">
+        <Menu placement="bottom-end" gutter={6}>
+          <Menu.Trigger
+            as={Button}
+            size="normal"
+            variant="ghost-muted"
+            class="settings-provider-account-trigger"
+            aria-label={language.t("settings.providers.account.manage", { provider: name() })}
+          >
+            <span>{active()?.label}</span>
+            <Icon name="chevron-down" size="small" />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
+              <Menu.Group>
+                <Menu.GroupLabel>{language.t("settings.providers.account.group")}</Menu.GroupLabel>
+                <Menu.RadioGroup
+                  class="settings-provider-account-list"
+                  value={active()?.id}
+                  onChange={(credentialID) => {
+                    const account = accounts().find((item) => item.id === credentialID)
+
+                    if (account) void activate(menuProps.provider, name(), account)
+                  }}
+                >
+                  <For each={accounts()}>
+                    {(account) => (
+                      <Menu.RadioItem value={account.id} closeOnSelect disabled={state.credentialID !== undefined}>
+                        <span class="settings-provider-account-label">{account.label}</span>
+                      </Menu.RadioItem>
+                    )}
+                  </For>
+                </Menu.RadioGroup>
+              </Menu.Group>
+              <Menu.Separator />
+              <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
+                <Icon name="plus" size="small" class="shrink-0" />
+                {language.t("settings.providers.account.add")}
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+        <Menu placement="bottom-end" gutter={6}>
+          <Menu.Trigger
+            as={IconButton}
+            variant="ghost-muted"
+            size="large"
+            icon={<Icon name="outline-dots" />}
+            disabled={state.credentialID !== undefined || !active()}
+            aria-label={language.t("dialog.provider.accounts.options", { account: active()?.label ?? "" })}
+          />
+          <Menu.Portal>
+            <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
+              <Menu.Item onSelect={() => setState("renaming", active()?.id)}>
+                {language.t("common.rename")}
+              </Menu.Item>
+              <Menu.Item
+                onSelect={() => {
+                  const account = active()
+
+                  if (account) void remove(menuProps.provider, name(), account)
                 }}
               >
-                <For each={accounts()}>
-                  {(account) => (
-                    <Menu.RadioItem value={account.id} closeOnSelect disabled={state.credentialID !== undefined}>
-                      <span class="settings-provider-account-label">{account.label}</span>
-                    </Menu.RadioItem>
-                  )}
-                </For>
-              </Menu.RadioGroup>
-            </Menu.Group>
-            <Menu.Separator />
-            <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
-              {language.t("settings.providers.account.add")}
-            </Menu.Item>
-            <Menu.Sub placement="left-start">
-              <Menu.SubTrigger disabled={state.credentialID !== undefined || accounts().length === 0}>
-                {language.t("settings.providers.account.remove")}
-              </Menu.SubTrigger>
-              <Menu.SubContent class="settings-provider-account-submenu">
-                <For each={accounts()}>
-                  {(account) => (
-                    <Menu.Item
-                      badge={account.id === active()?.id ? language.t("settings.providers.account.active") : undefined}
-                      onSelect={() => void remove(menuProps.provider, name(), account)}
-                    >
-                      <span class="settings-provider-account-label">{account.label}</span>
-                    </Menu.Item>
-                  )}
-                </For>
-              </Menu.SubContent>
-            </Menu.Sub>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
+                {language.t("dialog.provider.accounts.remove")}
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </div>
     )
   }
 
@@ -365,10 +395,11 @@ export const SettingsProviders: Component<{
     <>
       <div class="settings-tab-header">
         <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.providers.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.providers.description")}</span>
           </div>
+          <div class="settings-tab-header-actions">{props.headerAction}</div>
         </div>
       </div>
 
@@ -383,6 +414,7 @@ export const SettingsProviders: Component<{
               <For each={displayed()}>
                 {(item) => {
                   const managedGroup = () => (consoleGroup()?.root.id === item.id ? consoleGroup() : undefined)
+
                   return (
                     <Show
                       when={managedGroup()}

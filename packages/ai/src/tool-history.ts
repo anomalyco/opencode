@@ -6,10 +6,17 @@ const MISSING_TOOL_RESULT = "Tool result missing"
 export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
   const normalized: Message[] = []
   const pending = new Map<string, ToolCallPart>()
+  // System updates cannot sit between a tool call and its results, so they wait until every pending call is answered.
+  const held: Message[] = []
+  const releaseHeld = () => {
+    if (pending.size > 0) return
+    normalized.push(...held)
+    held.length = 0
+  }
   const appendMissingResults = () => {
-    if (pending.size === 0) return
-    normalized.push(missingToolResults(pending.values()))
+    if (pending.size > 0) normalized.push(missingToolResults(pending.values()))
     pending.clear()
+    releaseHeld()
   }
 
   for (const message of messages) {
@@ -18,6 +25,12 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
     if (message.role === "tool") {
       const tool = normalizeToolMessage(message, pending)
       if (tool) normalized.push(tool)
+      releaseHeld()
+      continue
+    }
+
+    if (message.role === "system" && pending.size > 0) {
+      held.push(message)
       continue
     }
 
@@ -27,6 +40,7 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
       if (part.type === "tool-call" && part.providerExecuted !== true) pending.set(part.id, part)
     }
   }
+  appendMissingResults()
 
   return normalized.length === messages.length && normalized.every((message, index) => message === messages[index])
     ? messages

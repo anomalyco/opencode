@@ -60,23 +60,41 @@ const fixtures = [
   ["! scan_probe", ["scan_probe"]],
   ["time scan_probe", ["time"]],
   ["{fd}>/dev/null scan_probe", ["scan_probe"]],
+  ["case $r in a) ls | head;; esac", ["ls", "head"]],
+  ["case $r in a) ls && echo;; esac", ["ls", "echo"]],
+  ["{ find . -exec echo {} \\; ; }", ["find"]],
+  ["{ echo {a,{b,c}}; }", ["echo"]],
+  ["if true; then\\\n echo hi; fi", ["true", "echo"]],
+  ["for ((i=0; i<2; i++)) do echo hi; done", ["echo"]],
+  ['echo "$(case x in @(a)) echo hi;; esac)"', ["echo", "echo"]],
+  ["set -- 1; for x do scan_probe; done", ["set", "scan_probe"]],
+  ["'q'; x=1 a", ["q", "a"]],
+  ["cat <<E; ( true\nscan_ignored\nE\n)", ["cat", "true"]],
+  ["cat <<E; f() { true\nscan_ignored\nE\n}; f", ["cat", "true", "f"]],
+  ["cat <<E; case x in\nscan_ignored\nE\nx) scan_probe;; esac", ["cat", "scan_probe"]],
+  ["time [[ ( -f foo ) ]]", []],
+  ["time ! { echo a; echo b; }", ["echo", "echo"]],
 ] as const
 
 describe("ordinary Bash and Zsh syntax", () => {
   test.each(fixtures)("extracts actual command nodes: %s", (source, names) => {
-    const result = ShellScan.scan(source)
-    expect(result.kind).toBe("scanned")
-    if (result.kind !== "scanned") throw new Error(result.reason)
-    expect(result.commands.map((command) => command.words[0])).toEqual([...names])
+    for (const dialect of ["bash", "zsh"] as const) {
+      const result = ShellScan.scan(source, dialect)
+      expect(result.kind).toBe("scanned")
+      if (result.kind !== "scanned") throw new Error(result.reason)
+      expect(result.commands.map((command) => command.words[0])).toEqual([...names])
+    }
   })
 
   for (const shell of ["bash", "zsh"]) {
     const executable = Bun.which(shell)
     for (const [source] of fixtures) {
-      // These are Bash spellings; Zsh's fd allocation is a standalone statement.
+      // These are Bash spellings; Zsh's fd allocation is a standalone statement. Bash parses extglob
+      // patterns only when extglob is enabled.
       test.skipIf(
         !executable ||
-          (shell === "zsh" && (source.includes('$"') || source.startsWith("{fd}") || source.includes("$["))),
+          (shell === "zsh" && (source.includes('$"') || source.startsWith("{fd}") || source.includes("$["))) ||
+          (shell === "bash" && source.includes("@(")),
       )(`${shell} accepts the source grammar: ${source}`, () => {
         const result = Bun.spawnSync([
           executable ?? shell,
@@ -132,8 +150,13 @@ describe("ordinary Bash and Zsh syntax", () => {
     "cat <<EOF\nunclosed",
     "echo ${missing",
     "echo $'missing",
+    "case $r in a) ls |;; esac",
   ])("rejects incomplete syntax: %s", (source) => {
     expect(ShellScan.scan(source).kind).toBe("opaque")
+  })
+
+  test("scans a Zsh brace group closed after a redirect", () => {
+    expect(ShellScan.scan("{ a && >f }")).toMatchObject({ kind: "scanned", commands: [{ words: ["a"] }] })
   })
 
   test("preserves raw lexical spelling of ANSI-C and locale quoted words", () => {
@@ -145,7 +168,7 @@ describe("ordinary Bash and Zsh syntax", () => {
 
   test.each([
     ["coproc job { scan_probe; }", ["scan_probe"]],
-    ["printf '%s' @(one|$(scan_probe))", ["printf", "scan_probe"]],
+    ["case x in @(one|$(scan_probe))) ;; esac", ["scan_probe"]],
     ["printf '%s' $((1 + '$(scan_probe)'))", ["printf", "scan_probe"]],
     ["printf '%s' $(((1 + '$(scan_probe)')))", ["printf", "scan_probe"]],
     ['printf %s "${ scan_probe; }"', ["printf", "scan_probe"]],
@@ -239,5 +262,58 @@ describe("Bash shared heredoc delimiter grammar", () => {
     expect(execution.stdout.toString()).toBe(
       source.includes("<<<") ? "hello\ndone" : source.includes("<<EO\\\nF") ? "\ndone" : "$(scan_probe)\ndone",
     )
+  })
+})
+
+describe("Bash dialects", () => {
+  const heads = (source: string, dialect?: ShellScan.Dialect) => {
+    const result = ShellScan.scan(source, dialect)
+    return result.kind === "scanned" ? result.commands.map((command) => command.words[0]) : result.kind
+  }
+
+  test("posix reports both readings of a double parenthesis", () => {
+    expect(heads("(( x = 1 )); y", "bash")).toEqual(["y"])
+    expect(heads("(( x = 1 )); y", "zsh")).toEqual(["y"])
+    expect(heads("(( x = 1 )); y", "posix")).toEqual(["x", "y"])
+    expect(heads("(( x = 1 )); y")).toEqual(["x", "y"])
+    expect(heads("(( (1) + (2) ))", "bash")).toEqual([])
+    expect(heads("(( (1) + (2) ))", "posix")).toBe("opaque")
+  })
+
+  test.each([
+    ["true &>/dev/null next", ["true"], "opaque"],
+    ["X=$[1 + 2] next", ["next"], "opaque"],
+  ] as const)("reads Bash and Zsh syntax precisely where Dash diverges: %s", (source, precise, posix) => {
+    expect(heads(source, "bash")).toEqual([...precise])
+    expect(heads(source, "zsh")).toEqual([...precise])
+    expect(heads(source, "posix")).toEqual(posix)
+  })
+
+  test("reads a reserved word after a redirect as a Zsh keyword", () => {
+    const source = "if true; then >/dev/null fi; next"
+    expect(heads(source, "zsh")).toEqual(["true", "next"])
+    expect(heads(source, "bash")).toBe("opaque")
+    expect(heads(source, "posix")).toBe("opaque")
+  })
+
+  test("scans safe Zsh parameter flags, Zsh repeat loops, and Bash extglob arguments", () => {
+    expect(heads("print -l ${(M)files:#*.ts}", "zsh")).toEqual(["print"])
+    expect(heads("print -l ${(ps:\\n:)text}", "zsh")).toEqual(["print"])
+    expect(heads("print -r -- ${(q-)x} ${(q+)x} ${(on-)x}", "zsh")).toEqual(["print"])
+    expect(heads("repeat 3; do echo hi; done", "zsh")).toEqual(["echo"])
+    expect(heads("repeat 3; do echo hi; done", "posix")).toEqual(["echo"])
+    expect(heads("f() repeat 3; do echo hi; done", "zsh")).toEqual(["echo"])
+    expect(heads("ls @(foo|bar)", "bash")).toEqual(["ls"])
+  })
+
+  test.each([
+    ["/bin/bash", ["y"]],
+    ["/usr/local/bin/zsh", ["y"]],
+    ["/bin/sh", ["x = 1", "y"]],
+    ["/bin/dash", ["x = 1", "y"]],
+    ["/opt/bin/mksh", ["x = 1", "y"]],
+  ] as const)("derives the dialect from the shell executable: %s", async (shell, resources) => {
+    const result = await Effect.runPromise(ShellParse.scanPortable("(( x = 1 )); y", shell, "/workspace"))
+    expect(result.commands.map((command) => command.resource)).toEqual([...resources])
   })
 })

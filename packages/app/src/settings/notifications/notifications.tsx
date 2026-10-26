@@ -36,6 +36,7 @@ const SoundSetting: Component<{
 }> = (props) => {
   const language = useLanguage()
   const config = () => soundSettings[props.kind]
+
   return (
     <SettingsRow title={language.t(config().title)} description={language.t(config().description)}>
       <Select
@@ -119,6 +120,17 @@ export const SettingsNotifications: Component = () => {
             <SoundSetting kind="agent" channel={sounds.agent} />
             <SoundSetting kind="permissions" channel={sounds.permissions} />
             <SoundSetting kind="errors" channel={sounds.errors} />
+            <SettingsRow
+              title={language.t("settings.general.sounds.interface.title")}
+              description={language.t("settings.general.sounds.interface.description")}
+            >
+              <div data-action="settings-sounds-interface">
+                <Switch
+                  checked={settings.sounds.interfaceEnabled()}
+                  onChange={(checked) => settings.sounds.setInterfaceEnabled(checked)}
+                />
+              </div>
+            </SettingsRow>
           </SettingsList>
         </div>
       </div>

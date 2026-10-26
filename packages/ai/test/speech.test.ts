@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Effect, Encoding, Layer, Stream } from "effect"
-import { Speech, SpeechClient, SpeechEvent } from "../src/index.js"
+import { Effect, Layer, Stream } from "effect"
+import { Base64 } from "effect/encoding"
+import { Speech, SpeechClient, SpeechEvent } from "../src/effect.js"
 import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -47,7 +48,7 @@ describe("Speech", () => {
             JSON.stringify({
               candidates: [
                 {
-                  content: { parts: [{ inlineData: { mimeType: "audio/wav", data: Encoding.encodeBase64(bytes) } }] },
+                  content: { parts: [{ inlineData: { mimeType: "audio/wav", data: Base64.encode(bytes) } }] },
                   finishReason: "STOP",
                 },
               ],
@@ -208,6 +209,24 @@ describe("Speech", () => {
     }),
   )
 
+  it.effect("ignores unknown OpenAI speech stream events", () =>
+    Effect.gen(function* () {
+      const events = yield* collect(Speech.stream({ model: openai, text: "Hi" })).pipe(
+        Effect.provide(
+          respond(
+            sseEvents(
+              { type: "speech.audio.delta", audio: "AQI=" },
+              { type: "speech.audio.future", value: 1 },
+              { type: "speech.audio.done" },
+            ),
+            "text/event-stream",
+          ),
+        ),
+      )
+      expect(events.map((event) => event.type)).toEqual(["audio-delta", "finish"])
+    }),
+  )
+
   it.effect("surfaces Gemini speech that ended without STOP instead of returning it as complete", () =>
     Effect.gen(function* () {
       const document = (finishReason?: string) =>
@@ -244,7 +263,7 @@ describe("Speech", () => {
     Effect.gen(function* () {
       const record = (bytes: ReadonlyArray<number>, character: string, start: number) =>
         JSON.stringify({
-          audio_base64: Encoding.encodeBase64(Uint8Array.from(bytes)),
+          audio_base64: Base64.encode(Uint8Array.from(bytes)),
           alignment: {
             characters: [character],
             character_start_times_seconds: [start],

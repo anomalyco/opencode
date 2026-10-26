@@ -1,32 +1,57 @@
-import { reconcile, unwrap } from "solid-js/store"
+import { produce, reconcile, unwrap } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
-import { Effect, Option, Schema, SchemaGetter } from "effect"
+import { createMediaQuery } from "@solid-primitives/media"
+import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
+import { setNewIcons } from "@opencode/ui/icon"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type Settings = typeof settingsSchema.Type
+
 export type WorkspaceDefaultDestination = Settings["workspaces"]["defaultDestination"]
+
 export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
-export type TerminalPlacement = Settings["general"]["terminalPlacement"]
+
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
+
+export type BackgroundActivity = Settings["general"]["backgroundActivity"]
+
+export type TimelineWidth = Settings["general"]["timelineWidth"]
+
 export type TabLayout = Settings["appearance"]["tabLayout"]
+
+export type ReduceMotion = Settings["appearance"]["reduceMotion"]
+
 export type NotificationSettings = Settings["notifications"]
+
 export type SoundSettings = Settings["sounds"]
 
+// Names a project for per-project settings: project IDs are only unique within one server.
+export function projectSettingsKey(scope: ServerScope, projectID: string | undefined) {
+  return projectID ? ScopedKey.from(scope, projectID) : undefined
+}
+
 export const monoDefault = "IBM Plex Mono"
+
 export const sansDefault = "Inter"
+
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+
 const monoFallback =
   '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+
 const sansFallback = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
 const terminalFallback =
   '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const monoBase = monoFallback
+
 const sansBase = sansFallback
+
 const terminalBase = terminalFallback
 
 function input(font: string | undefined) {
@@ -35,12 +60,15 @@ function input(font: string | undefined) {
 
 function family(font: string) {
   if (/^[\w-]+$/.test(font)) return font
+
   return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
 function stack(font: string | undefined, base: string) {
   const value = font?.trim() ?? ""
+
   if (!value) return base
+
   return `${family(value)}, ${base}`
 }
 
@@ -69,17 +97,23 @@ export function terminalFontFamily(font: string | undefined) {
 }
 
 const placementSchema = Schema.Literals(["separate", "grouped", "hidden"])
+
 const detailsSchema = Schema.Literals(["collapsed", "expanded"])
+
 const activitySchema = Persistence.struct({ placement: placementSchema, details: detailsSchema })
+
 const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 
 const generalSchema = Persistence.struct({
-  autoSave: Schema.Boolean,
-  releaseNotes: Schema.Boolean,
-  showFileTree: Schema.Boolean,
-  showNavigation: Schema.Boolean,
-  showSearch: Schema.Boolean,
-  showTerminal: Schema.Boolean,
+  // Retired preferences without readers; kept so stored values still decode and round-trip.
+  autoSave: Persistence.optional(Schema.Boolean),
+  showFileTree: Persistence.optional(Schema.Boolean),
+  showTurnNavigator: Persistence.optional(Schema.Boolean),
+  // Owned by the updater extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  releaseNotes: Persistence.optional(Schema.Boolean),
+  showNavigation: Persistence.optional(Schema.Boolean),
+  showSearch: Persistence.optional(Schema.Boolean),
+  showTerminal: Persistence.optional(Schema.Boolean),
   timelineDetail: Persistence.struct({
     shell: activitySchema,
     edit: activitySchema,
@@ -87,11 +121,19 @@ const generalSchema = Persistence.struct({
     subagents: placementOnlySchema,
     notices: placementOnlySchema,
     tools: placementOnlySchema,
+    commentary: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
+  showTurnDiffs: Schema.Boolean,
+  backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
+  timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
+  // The "New icons" design experiment, off until it ships.
+  newIcons: Schema.Boolean,
+  // The "New model picker" design experiment, off until it ships.
+  newModelPicker: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
-  mobileDiffWrap: Schema.Boolean,
-  terminalPlacement: Schema.Literals(["side", "bottom"]),
+  // Owned by the review extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  mobileDiffWrap: Persistence.optional(Schema.Boolean),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
 })
 
@@ -100,11 +142,19 @@ const appearanceSchema = Persistence.struct({
   mono: Schema.String,
   sans: Schema.String,
   terminal: Schema.String,
-  tabLayout: Schema.Literals(["horizontal", "vertical"]),
+  // "inbox" is experimental: the vertical layout with a server-wide session inbox in place of tabs.
+  tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
+  sidebarOpen: Persistence.optional(Schema.Boolean),
+  reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
 
 const permissionsSchema = Persistence.struct({
+  // The default for every project.
   autoApprove: Schema.Boolean,
+  // Projects that override the default, keyed by server scope and project ID. Absent projects use the default.
+  autoApproveProjects: Persistence.record(
+    Schema.Boolean.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
+  ),
 })
 
 const workspacesSchema = Persistence.struct({
@@ -127,11 +177,15 @@ const soundsSchema = Persistence.struct({
   permissions: Schema.String,
   errorsEnabled: Schema.Boolean,
   errors: Schema.String,
+  interfaceEnabled: Schema.optional(Schema.Boolean),
 })
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
-  sessionSummary: Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  // Owned by the details extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  sessionSummary: Schema.optional(
+    Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  ),
   appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   permissions: permissionsSchema,
@@ -143,7 +197,7 @@ export const settingsSchema = Persistence.struct({
 function storedTimelineCategory(category: TimelineCategory) {
   return Persistence.optional(
     Schema.Union([
-      Schema.Struct({
+      Persistence.legacy({
         placement: Persistence.optional(placementSchema),
         details: Persistence.optional(detailsSchema),
       }),
@@ -151,7 +205,8 @@ function storedTimelineCategory(category: TimelineCategory) {
     ]).pipe(
       Schema.decode({
         decode: SchemaGetter.transform((value) => {
-          if (typeof value !== "string") return value
+          if (!Predicate.isString(value)) return value
+
           return {
             placement:
               value === "hidden"
@@ -177,6 +232,7 @@ function storedTimelineCategory(category: TimelineCategory) {
 function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" | null | undefined) {
   if (value === undefined || value === null) return
   const expanded = value === true || value === "full"
+
   return {
     placement: value === "hidden" ? "hidden" : expanded ? "separate" : "grouped",
     details: expanded ? "expanded" : "collapsed",
@@ -185,13 +241,13 @@ function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" |
 
 export const settingsPersistence = Persistence.migrate(
   settingsSchema,
-  Schema.Struct({
+  Persistence.legacy({
     general: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         // Keep invalid explicit values distinct from absent values so legacy preferences cannot replace them.
         timelineDetail: Schema.optional(
           Schema.NullOr(
-            Schema.Struct({
+            Persistence.legacy({
               shell: storedTimelineCategory("shell"),
               edit: storedTimelineCategory("edit"),
               thinking: storedTimelineCategory("thinking"),
@@ -213,7 +269,9 @@ export const settingsPersistence = Persistence.migrate(
     Schema.decode({
       decode: SchemaGetter.transform((value) => {
         const general = value.general
+
         if (!general || general.timelineDetail !== undefined) return value
+
         return {
           ...value,
           general: {
@@ -235,25 +293,21 @@ export const settingsPersistence = Persistence.migrate(
 
 export const defaultSettings: Settings = {
   general: {
-    autoSave: true,
-    releaseNotes: true,
-    showFileTree: false,
-    showNavigation: false,
-    showSearch: false,
-    showTerminal: false,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
+    showTurnDiffs: false,
+    backgroundActivity: "left",
+    timelineWidth: "comfortable",
+    newIcons: false,
+    newModelPicker: false,
     mobileTitlebarPosition: "top",
-    mobileDiffWrap: true,
-    terminalPlacement: "side",
     followUpBehavior: "steer",
   },
-  sessionSummary: { projectExpanded: true, serverExpanded: true },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
   keybinds: {},
-  permissions: { autoApprove: false },
+  permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
-  notifications: { agent: true, permissions: true, errors: false },
+  notifications: { agent: false, permissions: true, errors: false },
   sounds: {
     agentEnabled: true,
     agent: "staplebops-01",
@@ -261,6 +315,7 @@ export const defaultSettings: Settings = {
     permissions: "staplebops-02",
     errorsEnabled: true,
     errors: "nope-03",
+    interfaceEnabled: true,
   },
 }
 
@@ -273,12 +328,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
-    const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
-    const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
+
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
@@ -290,36 +345,42 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)
     })
 
+    const newIcons = withFallback(() => store.general?.newIcons, defaultSettings.general.newIcons)
+    createEffect(() => setNewIcons(newIcons()))
+
+    const reduceMotion = withFallback(() => store.appearance?.reduceMotion, defaultSettings.appearance.reduceMotion)
+    const systemReducedMotion = createMediaQuery("(prefers-reduced-motion: reduce)")
+
+    // Motion styles key off this attribute instead of the media query so the setting can override the system.
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      const reduce = reduceMotion() === "system" ? systemReducedMotion() : reduceMotion() === "on"
+      document.documentElement.dataset.motion = reduce ? "reduce" : "full"
+    })
+
+    const timelineWidth = withFallback(() => store.general?.timelineWidth, defaultSettings.general.timelineWidth)
+
+    // The session column's width token keys off this attribute, so every surface sharing it follows the setting.
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      document.documentElement.dataset.timelineWidth = timelineWidth()
+    })
+
+    const autoApproveDefault = withFallback(
+      () => store.permissions?.autoApprove,
+      defaultSettings.permissions.autoApprove,
+    )
+
+    // A project's explicit choice, or undefined when it uses the default.
+    const autoApproveOverride = (project: ScopedKey | undefined) =>
+      project ? store.permissions?.autoApproveProjects?.[project] : undefined
+
     return {
       ready,
       get current() {
         return store
       },
       general: {
-        autoSave: withFallback(() => store.general?.autoSave, defaultSettings.general.autoSave),
-        setAutoSave(value: boolean) {
-          setStore("general", "autoSave", value)
-        },
-        releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
-        setReleaseNotes(value: boolean) {
-          setStore("general", "releaseNotes", value)
-        },
-        showFileTree,
-        setShowFileTree(value: boolean) {
-          setStore("general", "showFileTree", value)
-        },
-        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
-        setShowNavigation(value: boolean) {
-          setStore("general", "showNavigation", value)
-        },
-        showSearch,
-        setShowSearch(value: boolean) {
-          setStore("general", "showSearch", value)
-        },
-        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
-        setShowTerminal(value: boolean) {
-          setStore("general", "showTerminal", value)
-        },
         timelineDetail: withFallback(() => store.general?.timelineDetail, defaultSettings.general.timelineDetail),
         setTimelineDetail(value: TimelineDetail) {
           setStore("general", "timelineDetail", structuredClone(unwrap(value)))
@@ -328,6 +389,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
         },
+        showTurnDiffs: withFallback(() => store.general?.showTurnDiffs, defaultSettings.general.showTurnDiffs),
+        setShowTurnDiffs(value: boolean) {
+          setStore("general", "showTurnDiffs", value)
+        },
+        backgroundActivity: withFallback(
+          () => store.general?.backgroundActivity,
+          defaultSettings.general.backgroundActivity,
+        ),
+        setBackgroundActivity(value: BackgroundActivity) {
+          setStore("general", "backgroundActivity", value)
+        },
+        timelineWidth,
+        setTimelineWidth(value: TimelineWidth) {
+          setStore("general", "timelineWidth", value)
+        },
+        newIcons,
+        setNewIcons(value: boolean) {
+          setStore("general", "newIcons", value)
+        },
+        newModelPicker: withFallback(() => store.general?.newModelPicker, defaultSettings.general.newModelPicker),
+        setNewModelPicker(value: boolean) {
+          setStore("general", "newModelPicker", value)
+        },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,
           defaultSettings.general.mobileTitlebarPosition,
@@ -335,41 +419,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
         },
-        mobileDiffWrap: withFallback(() => store.general?.mobileDiffWrap, defaultSettings.general.mobileDiffWrap),
-        setMobileDiffWrap(value: boolean) {
-          setStore("general", "mobileDiffWrap", value)
-        },
-        terminalPlacement: withFallback(
-          () => store.general?.terminalPlacement,
-          defaultSettings.general.terminalPlacement,
-        ),
-        setTerminalPlacement(value: TerminalPlacement) {
-          setStore("general", "terminalPlacement", value)
-        },
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
         },
       },
-      sessionSummary: {
-        projectExpanded: withFallback(
-          () => store.sessionSummary?.projectExpanded,
-          defaultSettings.sessionSummary.projectExpanded,
-        ),
-        serverExpanded: withFallback(
-          () => store.sessionSummary?.serverExpanded,
-          defaultSettings.sessionSummary.serverExpanded,
-        ),
-        setProjectExpanded(value: boolean) {
-          setStore("sessionSummary", "projectExpanded", value)
-        },
-        setServerExpanded(value: boolean) {
-          setStore("sessionSummary", "serverExpanded", value)
-        },
-      },
       visibility: {
-        fileTree: showFileTree,
-        search: showSearch,
         customAgents: showCustomAgents,
       },
       appearance: {
@@ -393,6 +448,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
         },
+        sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
+        setSidebarOpen(value: boolean) {
+          setStore("appearance", "sidebarOpen", value)
+        },
+        reduceMotion,
+        setReduceMotion(value: ReduceMotion) {
+          setStore("appearance", "reduceMotion", value)
+        },
       },
       keybinds: {
         get: (action: string) => store.keybinds?.[action],
@@ -400,21 +463,42 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("keybinds", action, keybind)
         },
         reset(action: string) {
-          setStore("keybinds", (current) => {
-            if (!Object.prototype.hasOwnProperty.call(current, action)) return current
-            const next = { ...current }
-            delete next[action]
-            return next
-          })
+          // A returned object would merge into the stored one, keeping the key; delete it on the store itself.
+          setStore(
+            "keybinds",
+            produce((draft) => {
+              delete draft[action]
+            }),
+          )
         },
         resetAll() {
           setStore("keybinds", reconcile({}))
         },
       },
       permissions: {
-        autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
-        setAutoApprove(value: boolean) {
+        autoApproveDefault,
+        setAutoApproveDefault(value: boolean) {
           setStore("permissions", "autoApprove", value)
+        },
+        autoApproveOverride,
+        // Undefined makes the project use the default again.
+        setAutoApproveOverride(project: ScopedKey, value: boolean | undefined) {
+          const projects = { ...store.permissions?.autoApproveProjects }
+
+          if (value === undefined) delete projects[project]
+          else projects[project] = value
+          setStore("permissions", "autoApproveProjects", reconcile(projects))
+        },
+        // Whether a project's requests are approved without asking.
+        autoApproves: (project: ScopedKey | undefined) => autoApproveOverride(project) ?? autoApproveDefault(),
+        // Whether any request on the server may be approved without asking.
+        autoApprovesOnServer(scope: ServerScope) {
+          if (autoApproveDefault()) return true
+          const prefix = ScopedKey.prefix(scope)
+
+          return Object.entries(store.permissions?.autoApproveProjects ?? {}).some(
+            ([key, value]) => value && key.startsWith(prefix),
+          )
         },
       },
       workspaces: {
@@ -481,6 +565,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
+        },
+        interfaceEnabled: withFallback(
+          () => store.sounds?.interfaceEnabled,
+          defaultSettings.sounds.interfaceEnabled ?? true,
+        ),
+        setInterfaceEnabled(value: boolean) {
+          setStore("sounds", "interfaceEnabled", value)
         },
       },
     }

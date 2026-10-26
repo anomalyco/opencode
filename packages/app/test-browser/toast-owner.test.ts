@@ -44,9 +44,11 @@ describe("showToast", () => {
   test("creates no reactive computations at call time", () => {
     const [tick, setTick] = createSignal(0)
     let reads = 0
+
     const icon = (() => {
       reads++
       tick()
+
       return undefined
     }) as unknown as JSX.Element
 

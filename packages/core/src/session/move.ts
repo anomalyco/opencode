@@ -91,7 +91,8 @@ const layer = Layer.effect(
       yield* locations.contextEffect(destination.location).pipe(
         Effect.scoped,
         Effect.catchCause((cause) => {
-          if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+          if (Cause.hasInterruptsOnly(cause))
+            return Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
           return Effect.logWarning("session move destination unavailable", { directory, cause }).pipe(
             Effect.andThen(Effect.fail(new DestinationUnavailableError({ directory }))),
           )
@@ -106,7 +107,11 @@ const layer = Layer.effect(
       return yield* SessionRunner.Service.pipe(
         instances.provide(session),
         Effect.as(false),
-        Effect.catchCause((cause) => (Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.succeed(true))),
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+            : Effect.succeed(true),
+        ),
       )
     })
 

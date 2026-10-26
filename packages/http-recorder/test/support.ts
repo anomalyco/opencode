@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node-shared"
 import { Cause, Effect, Exit } from "effect"
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpBody, HttpClient, HttpClientRequest } from "effect/http"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

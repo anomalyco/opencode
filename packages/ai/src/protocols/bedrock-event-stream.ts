@@ -1,6 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
-import { Effect, Encoding, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
+import { Base64 } from "effect/encoding"
 import { AIError, AIErrorReason, InvalidProviderOutputError } from "../schema/index.js"
 import { Framing } from "../route/framing.js"
 import { ProviderShared } from "./shared.js"
@@ -21,6 +22,9 @@ interface FrameBufferState {
 }
 
 const initialFrameBuffer: FrameBufferState = { buffer: new Uint8Array(0), offset: 0 }
+
+export const Frame = Schema.StructWithRest(Schema.Struct({ rawBody: Schema.String }), [ProviderShared.JsonObject])
+export type Frame = typeof Frame.Type
 
 type FrameInput = { readonly _tag: "Chunk"; readonly bytes: Uint8Array } | { readonly _tag: "End" }
 
@@ -47,14 +51,14 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
             route,
             classification: "incomplete-stream",
             message: `Incomplete Bedrock Converse event-stream frame: ${remaining.length} buffered bytes remain at end of stream`,
-            body: Encoding.encodeBase64(remaining),
+            body: Base64.encode(remaining),
           }),
         })
       return [state, []] as const
     }
 
     let cursor = appendChunk(state, input.bytes)
-    const out: object[] = []
+    const out: Frame[] = []
     while (cursor.buffer.length - cursor.offset >= 4) {
       const view = cursor.buffer.subarray(cursor.offset)
       const totalLength = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(0, false)
@@ -68,7 +72,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
             `Failed to decode Bedrock Converse event-stream frame: ${
               error instanceof Error ? error.message : String(error)
             }`,
-            Encoding.encodeBase64(view.subarray(0, totalLength)),
+            Base64.encode(view.subarray(0, totalLength)),
             error,
           ),
       })
@@ -99,7 +103,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
       // before handing the object to the chunk schema. JSON decode goes
       // through the shared Schema-driven codec to satisfy the package rule
       // against ad-hoc `JSON.parse` calls.
-      const parsed = (yield* ProviderShared.parseJson(
+      const parsed = yield* ProviderShared.parseJson(
         route,
         payload,
         "Failed to parse Bedrock Converse event-stream payload",
@@ -110,12 +114,12 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
               reason: AIErrorReason.make({ ...error.reason, message: error.message, cause: error.reason.cause, body }),
             }),
         ),
-      )) as Record<string, unknown>
-      delete parsed.p
+      )
+      if (!ProviderShared.isRecord(parsed))
+        return yield* ProviderShared.eventError(route, "Failed to parse Bedrock Converse event-stream payload", body)
+      const { p: _, ...event } = parsed
       out.push({
-        ...(messageType === "exception"
-          ? { exception: { type: eventType, details: parsed } }
-          : { [eventType]: parsed }),
+        ...(messageType === "exception" ? { exception: { type: eventType, details: event } } : { [eventType]: event }),
         rawBody: body,
       })
     }
@@ -128,9 +132,9 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
  * under its `:event-type` header so the chunk schema can match the JSON
  * payload directly.
  */
-export const framing = (route: string): Framing.Definition<object> => ({
+export const framing = (route: string): Framing.Definition<Frame> => ({
   id: "aws-event-stream",
-  body: (frame) => ("rawBody" in frame && typeof frame.rawBody === "string" ? frame.rawBody : undefined),
+  body: (frame) => frame.rawBody,
   frame: (bytes) =>
     bytes.pipe(
       Stream.map((bytes): FrameInput => ({ _tag: "Chunk", bytes })),

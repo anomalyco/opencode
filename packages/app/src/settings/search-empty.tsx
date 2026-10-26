@@ -9,22 +9,28 @@ export function SettingsSearchEmpty(props: { query: string }) {
   let container: HTMLDivElement | undefined
   let measure: HTMLSpanElement | undefined
   const text = (query: string) => language.t("settings.search.empty.query", { query })
+
   const update = () => {
     if (!container || !measure) return
     const style = getComputedStyle(container)
     measure.textContent = language.t("settings.search.empty", { query: "" })
+
     // Measure the available query space independently of its current truncated text.
     const width =
       container.clientWidth -
       parseFloat(style.paddingInlineStart) -
       parseFloat(style.paddingInlineEnd) -
       measure.getBoundingClientRect().width
+
     const fits = (query: string) => {
       measure!.textContent = text(query)
+
       return measure!.getBoundingClientRect().width <= width
     }
+
     if (fits(props.query)) {
       setState("query", props.query)
+
       return
     }
 
@@ -32,16 +38,21 @@ export function SettingsSearchEmpty(props: { query: string }) {
       new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(props.query),
       (item) => item.segment,
     )
+
     let start = 0
     let end = characters.length
+
     while (start < end) {
       const middle = Math.ceil((start + end) / 2)
+
       if (fits(`${characters.slice(0, middle).join("").trimEnd()}…`)) {
         start = middle
         continue
       }
+
       end = middle - 1
     }
+
     setState("query", `${characters.slice(0, start).join("").trimEnd()}…`)
   }
 

@@ -1,28 +1,75 @@
 import type {
   ModelRef,
   SessionMessageAssistant,
+  SessionMessageIdle,
   SessionMessageInfo,
   SessionMessageShell,
   SessionMessageUser,
   SessionStatus,
 } from "@opencode/client/promise"
-import { Option, Schema } from "effect"
+import { Effect, Option, Predicate, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"
+import {
+  currentContentDefaultOpen,
+  currentToolFailed,
+  currentToolGroupedRead,
+  currentToolHasLoadedFiles,
+} from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
-import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
 export type ReasoningMode = "hidden" | "compact" | "full"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
-type Entry = { type: "assistant"; message: SessionMessageAssistant } | { type: "notice"; message: Notice }
+
+type FailedIdle = SessionMessageIdle & {
+  outcome: "failed"
+  error: NonNullable<SessionMessageIdle["error"]>
+}
+
+type Entry =
+  | { type: "assistant"; message: SessionMessageAssistant }
+  | { type: "notice"; message: Notice }
+  | { type: "idle"; message: FailedIdle }
+  | { type: "diff"; message: SessionMessageIdle; from: string; files: string[] }
+
 type Content = SessionMessageAssistant["content"][number]
+
 type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
+
 type PriorGroup = { index: number; row: GroupRow }
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+const decodeString = Schema.decodeUnknownOption(Schema.String)
+
+// A field of the wrong type decodes as absent, so one bad field does not discard its neighbours.
+function lenient<S extends Schema.Top>(schema: S) {
+  return Schema.optionalKey(schema.pipe(Schema.catchDecoding(() => Effect.succeedNone)))
+}
+
+const decodeLocalAgent = Schema.decodeUnknownOption(Schema.Struct({ agent: Schema.String }))
+
+const decodeLocalModel = Schema.decodeUnknownOption(
+  Schema.Struct({
+    model: Schema.Struct({
+      id: lenient(Schema.String),
+      modelID: lenient(Schema.String),
+      providerID: Schema.String,
+      variant: lenient(Schema.String),
+    }),
+  }),
+)
+
+const decodeErrorEnvelope = Schema.decodeUnknownOption(
+  Schema.Struct({ error: Schema.optionalKey(Schema.Unknown), message: lenient(Schema.String) }),
+)
+
+const decodeErrorDetails = Schema.decodeUnknownOption(
+  Schema.Struct({ type: lenient(Schema.String), message: lenient(Schema.String), code: lenient(Schema.String) }),
+)
 
 export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
@@ -31,22 +78,28 @@ export type TimelineProjectionInput = {
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   timelineDetail?: TimelineDetail
-  pendingUserMessageIDs?: ReadonlySet<string>
+  pendingInputIDs?: ReadonlySet<string>
+  queuedCompactionIDs?: readonly string[]
+  turnDiffs?: boolean
   previousRows?: TimelineRow.TimelineRow[]
 }
 
 export function createTimelineProjection(input: TimelineProjectionInput) {
   const sessionMessageByID = new Map(input.sessionMessages.map((message) => [message.id, message] as const))
+
   const projection = Timeline.constructSessionMessageRows(
     input.sessionMessages,
     input.reasoningMode !== "hidden",
     input.status,
-    input.pendingUserMessageIDs,
+    input.pendingInputIDs,
     input.shellToolDefaultOpen ?? false,
     input.editToolDefaultOpen ?? false,
     undefined,
     input.timelineDetail,
+    input.queuedCompactionIDs,
+    input.turnDiffs,
   )
+
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
   const messageRowIndex = new Map<string, number>()
@@ -56,7 +109,8 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
   rows.forEach((row, index) => {
     if (!messageRowIndex.has(row.userMessageID)) messageRowIndex.set(row.userMessageID, index)
     messageLastRowIndex.set(row.userMessageID, index)
-    if (row._tag === "AssistantPart") lastAssistantGroupKey.set(row.userMessageID, row.group.key)
+
+    if (Predicate.isTagged(row, "AssistantPart")) lastAssistantGroupKey.set(row.userMessageID, row.group.key)
   })
 
   return {
@@ -80,13 +134,18 @@ export function createReactiveTimelineProjection(input: {
   shellToolDefaultOpen?: Accessor<boolean>
   editToolDefaultOpen?: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
-  pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
+  pendingInputIDs?: Accessor<ReadonlySet<string>>
+  queuedCompactionIDs?: Accessor<readonly string[]>
+  /** Summarize each finished turn's changed files after it. */
+  turnDiffs?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
   )
+
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
+
   // Row structure depends on the empty/non-empty boundary, not each text delta.
   // Keep the original content objects so row renderers still read live text.
   const textParts = mapArray(
@@ -98,13 +157,15 @@ export function createReactiveTimelineProjection(input: {
         ),
     (content) => [content, createMemo(() => !!content.text.trim())] as const,
   )
+
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
+
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
       input.sessionMessages(),
       input.reasoningMode() !== "hidden",
       input.status(),
-      input.pendingUserMessageIDs?.(),
+      input.pendingInputIDs?.(),
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
       (content, showReasoning, detail) =>
@@ -113,31 +174,42 @@ export function createReactiveTimelineProjection(input: {
           : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
             textVisible().get(content)!(),
       input.timelineDetail?.(),
+      input.queuedCompactionIDs?.(),
+      input.turnDiffs?.(),
     ),
   )
+
   const activeMessageID = createMemo(() => projection().activeMessageID)
+
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
     reuseTimelineRows(previous, projection().rows),
   )
+
   const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row] as const)))
+
   const messageRowIndex = createMemo(() => {
     const result = new Map<string, number>()
     rows().forEach((row, index) => {
       if (result.has(row.userMessageID)) return
       result.set(row.userMessageID, index)
     })
+
     return result
   })
+
   const messageLastRowIndex = createMemo(() => {
     const result = new Map<string, number>()
     rows().forEach((row, index) => result.set(row.userMessageID, index))
+
     return result
   })
+
   const lastAssistantGroupKey = createMemo(() => {
     const result = new Map<string, string>()
     rows().forEach((row) => {
-      if (row._tag === "AssistantPart") result.set(row.userMessageID, row.group.key)
+      if (Predicate.isTagged(row, "AssistantPart")) result.set(row.userMessageID, row.group.key)
     })
+
     return result
   })
 
@@ -160,11 +232,13 @@ export namespace Timeline {
     messages: SessionMessageInfo[],
     showReasoning: boolean,
     status: SessionStatus,
-    pendingUserMessageIDs?: ReadonlySet<string>,
+    pendingInputIDs?: ReadonlySet<string>,
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
     isRenderable = renderable,
     detail?: TimelineDetail,
+    queuedCompactionIDs: readonly string[] = [],
+    turnDiffs = false,
   ) {
     type Turn = {
       id: string
@@ -178,63 +252,150 @@ export namespace Timeline {
     const turnByUserID = new Map<string, Turn>()
     const leading: Notice[] = []
     let current: Turn | undefined
+    // Everything since the last idle marker is one turn, including prompts steered in meanwhile.
+    let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
     messages.forEach((message) => {
       if (isNotice(message)) {
         if (current) current.entries.push({ type: "notice", message })
+
         if (!current) leading.push(message)
+
         return
       }
+
       if (message.type === "shell") {
         const turn: Turn = { id: message.id, time: message.time, shell: message, entries: [] }
         turns.push(turn)
         current = turn
+
         return
       }
+
       if (message.type === "user") {
         if (turnByUserID.has(message.id)) return
         const turn: Turn = { id: message.id, time: message.time, user: message, entries: [] }
         turns.push(turn)
         turnByUserID.set(message.id, turn)
         current = turn
+
+        // Undelivered input has not joined the turn yet.
+        if (!pendingInputIDs?.has(message.id))
+          execution = { opener: execution?.opener ?? message.id, turn, files: execution?.files ?? new Set() }
+
         return
       }
+
+      if (message.type === "idle") {
+        appendIdle(message)
+
+        // The summary follows the turn's last prompt, after any failure the marker reports.
+        // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
+        if (turnDiffs && execution?.files.size)
+          execution.turn.entries.push({
+            type: "diff",
+            message,
+            from: execution.opener,
+            files: [...execution.files].sort(),
+          })
+        execution = undefined
+
+        return
+      }
+
       if (message.type !== "assistant") return
+      message.snapshot?.files?.forEach((file) => execution?.files.add(file))
       const existing = current?.user ? current : undefined
+
       if (existing?.user) {
         existing.entries.push({ type: "assistant", message })
         current = existing
+
         return
       }
+
       if (current && !current.user && !current.shell) {
         current.entries.push({ type: "assistant", message })
+
         return
       }
+
       const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message }] }
       turns.push(turn)
       current = turn
     })
 
-    const activeMessageID = turns.findLast((turn) => !pendingUserMessageIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
-    const visibleNotice = (message: Notice) =>
-      !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
+    function appendIdle(message: SessionMessageIdle) {
+      if (!isFailedIdle(message)) return
+      const last = current?.entries.at(-1)
+
+      if (
+        last?.type === "notice" &&
+        last.message.type === "compaction" &&
+        last.message.status === "failed" &&
+        !isInterrupted(last.message.error)
+      )
+        return
+
+      const lastStep = current?.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
+
+      if (lastStep?.type === "assistant" && lastStep.message.error && !isInterrupted(lastStep.message.error)) return
+
+      if (current && !current.shell) {
+        current.entries.push({ type: "idle", message })
+
+        return
+      }
+
+      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "idle", message }] }
+      turns.push(turn)
+      current = turn
+    }
+
+    const activeMessageID =
+      turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
+        ?.id ?? turns.at(-1)?.id
+
+    const commentary = new Set(
+      detail && detail.commentary.placement !== "separate"
+        ? turns.flatMap((turn) =>
+            turnCommentary(turn.entries, turn.id !== activeMessageID || status.type === "idle", (content) =>
+              isRenderable(content, showReasoning, detail),
+            ),
+          )
+        : [],
+    )
+
+    const visible = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
+      !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
+      isRenderable(content, showReasoning, detail)
+
+    const visibleNotice = (message: Notice) => !detail || timelineNoticePlacement(message, detail) !== "hidden"
+
     const visibleTurns = detail
       ? turns.filter((turn) => {
           if (turn.user) return true
+
           if (turn.shell && (detail.shell.placement !== "hidden" || shellFailed(turn.shell))) return true
+
           return turn.entries.some((entry) =>
             entry.type === "notice"
               ? visibleNotice(entry.message)
-              : !!entry.message.error ||
+              : entry.type === "idle" ||
+                entry.type === "diff" ||
+                !!entry.message.error ||
                 !!entry.message.retry ||
-                entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
+                entry.message.content.some((content) => visible(content, showReasoning, detail)),
           )
         })
       : turns
+
     const rows: TimelineRow.TimelineRow[] = [
-      ...leading
-        .filter(visibleNotice)
-        .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })),
+      ...leading.flatMap((message) =>
+        visibleNotice(message)
+          ? [new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })]
+          : [],
+      ),
       ...visibleTurns.flatMap((turn, index) => {
         if (turn.shell)
           return [
@@ -248,6 +409,7 @@ export namespace Timeline {
                 : [],
             ),
           ]
+
         return constructMessageRows(
           turn.user,
           turn.id,
@@ -258,11 +420,33 @@ export namespace Timeline {
           turn.id === activeMessageID,
           shellToolDefaultOpen,
           editToolDefaultOpen,
-          isRenderable,
+          visible,
           detail,
+          commentary,
         )
       }),
     ]
+
+    // Like the TUI, a queued compaction waits after the active turn and ahead of every undelivered input:
+    // steers, which own turns, and synthetic notices, which ride at the end of the active one.
+    const pendingAt = rows.findIndex(
+      (row) =>
+        pendingInputIDs?.has(row.userMessageID) ||
+        (Predicate.isTagged(row, "Notice") && pendingInputIDs?.has(row.messageID)),
+    )
+
+    rows.splice(
+      pendingAt < 0 ? rows.length : pendingAt,
+      0,
+      // Live status ends the work the model has seen, so it stays above everything still waiting for delivery.
+      ...(status.type !== "idle" && activeMessageID && (pendingAt >= 0 || queuedCompactionIDs.length > 0)
+        ? [new TimelineRow.Activity({ userMessageID: activeMessageID })]
+        : []),
+      ...queuedCompactionIDs.map(
+        (inboxID) => new TimelineRow.CompactionQueued({ userMessageID: activeMessageID ?? inboxID, inboxID }),
+      ),
+    )
+
     return {
       activeMessageID,
       rows: detail
@@ -270,9 +454,14 @@ export namespace Timeline {
             rows,
             detail,
             new Set(
-              messages
-                .filter((message) => message.type === "compaction" || message.type === "model-switched")
-                .map((message) => message.id),
+              messages.flatMap((message) =>
+                message.type === "compaction" ||
+                message.type === "model-switched" ||
+                message.type === "location-switched" ||
+                (message.type === "synthetic" && timelineNoticePlacement(message, detail) === "separate")
+                  ? [message.id]
+                  : [],
+              ),
             ),
           )
         : rows,
@@ -291,28 +480,37 @@ export namespace Timeline {
     editToolDefaultOpen = false,
     isRenderable = renderable,
     detail?: TimelineDetail,
+    commentary: ReadonlySet<Content> = new Set(),
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
     const lastAssistant = assistantMessages.at(-1)
+    const lastStep = entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const lastContent = lastAssistant?.content.at(-1)
-    const thinking =
-      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
+
+    const working =
       isActive &&
       status.type === "busy" &&
+      lastStep?.type === "assistant" &&
       lastAssistant?.time.completed === undefined &&
       !lastAssistant?.error &&
-      !lastAssistant?.retry &&
+      !lastAssistant?.retry
+
+    const thinking =
+      working &&
+      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
+
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
 
     let assistantGroupIndex = 0
     let previousAssistantTool = false
+
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
@@ -324,12 +522,14 @@ export namespace Timeline {
           )
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
+
       const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))
       const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
       const after = interruptedAt < 0 ? [] : refs.filter((ref) => ref.messageIndex > interruptedAt)
+
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, detail).forEach((group) => {
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -346,6 +546,7 @@ export namespace Timeline {
       }
 
       appendGroups(before)
+
       if (interruptedAt >= 0) {
         if (!compaction && detail?.notices.placement !== "hidden")
           rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
@@ -353,10 +554,27 @@ export namespace Timeline {
       }
 
       if (messages.at(-1) !== lastAssistant) return
+
+      // The live reasoning row closes its own step, so notices that arrive meanwhile follow it.
+      if (thinking && lastAssistant)
+        rows.push(
+          new TimelineRow.Thinking({
+            userMessageID: turnID,
+            ref: { messageID: lastAssistant.id, partID: contentEntries(lastAssistant).at(-1)!.id },
+          }),
+        )
+
+      if (lastStep?.type !== "assistant") return
+
       if (isActive && lastAssistant?.retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
       else if (lastAssistant?.error && !isInterrupted(lastAssistant.error))
         rows.push(
-          new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(lastAssistant.error.message) }),
+          new TimelineRow.Error({
+            userMessageID: turnID,
+            text: unwrapErrorMessage(lastAssistant.error.message),
+            ...freeLimit(lastAssistant),
+            ...budgetLimit(lastAssistant),
+          }),
         )
     }
 
@@ -365,9 +583,38 @@ export namespace Timeline {
       switch (entry.type) {
         case "assistant":
           assistantSegment.push(entry.message)
+
+          return
+        case "idle":
+          appendAssistantSegment(assistantSegment)
+          assistantSegment = []
+
+          if (entry === lastStep)
+            rows.push(
+              new TimelineRow.Error({
+                userMessageID: turnID,
+                text: unwrapErrorMessage(entry.message.error.message),
+                ...freeLimit(entry.message),
+                ...budgetLimit(entry.message),
+              }),
+            )
+
+          return
+        case "diff":
+          appendAssistantSegment(assistantSegment)
+          assistantSegment = []
+          rows.push(
+            new TimelineRow.TurnDiff({
+              userMessageID: turnID,
+              messageID: entry.message.id,
+              from: entry.from,
+              files: entry.files,
+            }),
+          )
+
           return
         case "notice":
-          if (detail?.notices.placement === "hidden" && !timelineNoticeRequired(entry.message)) return
+          if (detail && timelineNoticePlacement(entry.message, detail) === "hidden") return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -375,29 +622,23 @@ export namespace Timeline {
     })
     appendAssistantSegment(assistantSegment)
 
-    if (thinking && lastAssistant) {
-      rows.push(
-        new TimelineRow.Thinking({
-          userMessageID: turnID,
-          ref: { messageID: lastAssistant.id, partID: contentEntries(lastAssistant).at(-1)!.id },
-        }),
-      )
-    }
-
     return rows
   }
 
   export function resolveContent(message: SessionMessageInfo | undefined, partID: string): Content | undefined {
     if (message?.type !== "assistant") return undefined
     const ordinals = { text: 0, reasoning: 0 }
+
     for (const content of message.content) {
       const id = content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`
+
       if (id === partID) return content
     }
   }
 
   export function contentEntries(message: SessionMessageAssistant) {
     const ordinals = { text: 0, reasoning: 0 }
+
     return message.content.map((content) => ({
       id: content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`,
       content,
@@ -405,8 +646,48 @@ export namespace Timeline {
   }
 }
 
+const MAX_RETRY_AFTER_MS = 7 * 86_400_000
+
+function freeLimit(
+  message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },
+) {
+  if (message.error?.type !== "provider.free-limit") return {}
+  const delay = message.error.retryAfterMs
+  const base = message.time.completed ?? message.time.created
+
+  if (
+    delay === undefined ||
+    !Number.isFinite(delay) ||
+    delay < 0 ||
+    delay > MAX_RETRY_AFTER_MS ||
+    !Number.isFinite(base) ||
+    Number.isNaN(new Date(base + delay).getTime())
+  )
+    return { kind: "free-limit" as const }
+
+  return {
+    kind: "free-limit" as const,
+    resetAt: base + delay,
+  }
+}
+
+// OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.
+function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
+  const type = message.error?.type
+  if (type !== "provider.budget-limit" && type !== "provider.model-budget-limit") return {}
+  const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(message.error?.response?.body ?? "")?.[1] ?? "")
+  return {
+    kind: type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const),
+    ...(Number.isNaN(at) ? {} : { resetAt: at }),
+  }
+}
+
 function isInterrupted(error: SessionMessageAssistant["error"]) {
   return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
+}
+
+function isFailedIdle(message: SessionMessageInfo): message is FailedIdle {
+  return message.type === "idle" && message.outcome === "failed" && !!message.error
 }
 
 function shellFailed(message: SessionMessageShell) {
@@ -415,17 +696,41 @@ function shellFailed(message: SessionMessageShell) {
   )
 }
 
+// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
+// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
+// without an answer keeps its last text, so an interrupted turn still ends with something to read.
+function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
+  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
+  const lastTool = contents.findLastIndex((content) => content.type === "tool")
+
+  const commentary = contents.filter(
+    (content, index) =>
+      content.type === "text" &&
+      (content.native?.phase === "commentary" || (content.native?.phase !== "final_answer" && index < lastTool)),
+  )
+
+  const texts = contents.filter((content) => content.type === "text" && visible(content))
+
+  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
+
+  return commentary.filter((content) => content !== texts.at(-1))
+}
+
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
   return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
     const previous = result.at(-1)
+    // Live status renders nothing while other feedback shows, so a group below it spaces from the content above it.
+    const above = Predicate.isTagged(previous, "Activity") ? result.at(-2) : previous
+
     const current =
-      ((row._tag === "Notice" && detail.notices.placement === "grouped") ||
-        (row._tag === "Shell" && detail.shell.placement === "grouped")) &&
+      ((Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped") ||
+        (Predicate.isTagged(row, "Shell") && detail.shell.placement === "grouped")) &&
       !separate.has(row.messageID)
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
-            previousAssistantPart: previous?._tag === "AssistantPart",
-            spacing: previous?._tag === "AssistantPart" ? "tool" : undefined,
+            previousAssistantPart: Predicate.isTagged(above, "AssistantPart"),
+            spacing:
+              Predicate.isTagged(above, "AssistantPart") || Predicate.isTagged(above, "Error") ? "tool" : undefined,
             group: {
               type: "context",
               key: `message:${row.messageID}`,
@@ -433,10 +738,11 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
             },
           })
         : row
+
     if (
-      previous?._tag === "AssistantPart" &&
+      Predicate.isTagged(previous, "AssistantPart") &&
       previous.group.type === "context" &&
-      current._tag === "AssistantPart" &&
+      Predicate.isTagged(current, "AssistantPart") &&
       current.group.type === "context" &&
       previous.userMessageID === current.userMessageID
     ) {
@@ -444,9 +750,12 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
         ...previous,
         group: { ...previous.group, refs: [...previous.group.refs, ...current.group.refs] },
       })
+
       return result
     }
+
     result.push(current)
+
     return result
   }, [])
 }
@@ -456,23 +765,29 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
   const groupByPart = new Map<string, PriorGroup>()
   previous.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type === "part") return
+    if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "part") return
     row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(ref), { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type === "part") return
+    if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "part") return
     const key = TimelineRow.key(row)
+
     if (byKey.has(key) && !reserved.has(key)) reserved.set(key, index)
   })
   const claimed = new Set<string>()
+
   const next = rows.map((input, index) => {
     const row = stabilizeGroupKey(groupByPart, reserved, input, index, claimed)
     const existing = byKey.get(TimelineRow.key(row))
+
     if (!existing) return row
+
     return TimelineRow.equals(existing, row) ? existing : row
   })
+
   if (previous.length === next.length && previous.every((row, index) => row === next[index])) return previous
+
   return next
 }
 
@@ -484,40 +799,32 @@ function indexUserContext(messages: SessionMessageInfo[]) {
 
   messages.forEach((message) => {
     if (message.type === "agent-switched") agent = message.agent
+
     if (message.type === "model-switched") model = message.model
+
     if (message.type === "user") {
       userID = message.id
-      const metadata = message.metadata
-      const localAgent = typeof metadata?.agent === "string" ? metadata.agent : agent
-      const localModel = metadata?.model
-      const localModelID =
-        localModel && typeof localModel === "object" && !Array.isArray(localModel)
-          ? typeof localModel.id === "string"
-            ? localModel.id
-            : typeof localModel.modelID === "string"
-              ? localModel.modelID
-              : undefined
-          : undefined
+      const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
+      const localModelID = localModel?.id ?? localModel?.modelID
+
       result.set(message.id, {
-        agent: localAgent,
+        agent: Option.match(decodeLocalAgent(message.metadata), {
+          onNone: () => agent,
+          onSome: (local) => local.agent,
+        }),
         model:
-          localModel &&
-          typeof localModel === "object" &&
-          !Array.isArray(localModel) &&
-          localModelID &&
-          typeof localModel.providerID === "string"
-            ? {
-                id: localModelID,
-                providerID: localModel.providerID,
-                variant: typeof localModel.variant === "string" ? localModel.variant : undefined,
-              }
+          localModel && localModelID
+            ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
             : model,
       })
     }
+
     if (message.type === "shell") userID = undefined
+
     if (message.type !== "assistant") return
     agent = message.agent
     model = message.model
+
     if (userID) result.set(userID, { agent, model })
   })
 
@@ -530,14 +837,20 @@ function indexAssistantMessages(messages: SessionMessageInfo[]) {
 
   messages.forEach((message) => {
     if (message.type === "user") userID = message.id
+
     if (message.type === "shell") userID = undefined
+
     if (message.type !== "assistant") return
+
     if (!userID) userID = message.id
     const existing = result.get(userID)
+
     if (existing) {
       existing.push(message)
+
       return
     }
+
     result.set(userID, [message])
   })
 
@@ -551,20 +864,28 @@ function stabilizeGroupKey(
   rowIndex: number,
   claimed: Set<string>,
 ) {
-  if (row._tag !== "AssistantPart" || row.group.type === "part") return row
+  if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "part") return row
+
   const existing = row.group.refs.reduce<PriorGroup | undefined>((result, ref) => {
     const candidate = groupByPart.get(groupPartKey(ref))
+
     if (!candidate) return result
     const key = TimelineRow.key(candidate.row)
+
     if (claimed.has(key)) return result
     const owner = reserved.get(key)
+
     if (owner !== undefined && owner !== rowIndex) return result
+
     return !result || candidate.index < result.index ? candidate : result
   }, undefined)
+
   if (!existing) return row
   const key = TimelineRow.key(existing.row)
   claimed.add(key)
+
   if (row.group.key === existing.row.group.key) return row
+
   return new TimelineRow.AssistantPart({
     userMessageID: row.userMessageID,
     previousAssistantPart: row.previousAssistantPart,
@@ -581,12 +902,18 @@ function groupPartKey(ref: PartRef) {
 
 function renderable(content: Content, showReasoning: boolean, detail?: TimelineDetail) {
   if (content.type === "text") return !!content.text.trim()
+
   if (content.type === "reasoning")
     return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
+
   if (detail && currentToolFailed(content)) return true
+
   if (content.name === "todowrite") return false
+
   if (content.name === "question") return content.state.status !== "streaming" && content.state.status !== "running"
+
   if (detail && detail[timelineCategory(content)!].placement === "hidden") return false
+
   return true
 }
 
@@ -594,23 +921,29 @@ function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
+
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
+
     if (!first) return
+
     if (!current.tools && !detail) {
       groups.push(
         ...current.refs.map((ref) => ({ type: "part" as const, key: `part:${ref.messageID}:${ref.partID}`, ref })),
       )
       adjacent = undefined
+
       return
     }
+
     groups.push({
-      type: current.type === "context" ? "context" : "file",
+      type: current.type,
       key:
         current.type !== "context"
           ? `part:${first.messageID}:${first.partID}`
@@ -621,27 +954,24 @@ function groupContent(
   }
 
   items.forEach((item) => {
-    const type =
-      item.content.type === "tool"
-        ? toolGroupType(
-            item.content,
-            shellToolDefaultOpen,
-            editToolDefaultOpen,
-            adjacent?.type === "context" && adjacent.tools,
-            detail,
-          )
-        : item.content.type === "reasoning"
-          ? detail && detail.thinking.placement !== "grouped"
-            ? undefined
-            : "context"
-          : undefined
+    const type = contentGroupType(
+      item.content,
+      shellToolDefaultOpen,
+      editToolDefaultOpen,
+      adjacent?.type === "context" && adjacent.tools,
+      commentary,
+      detail,
+    )
+
     if (type) {
       if (adjacent?.type !== type) flush()
       adjacent ??= { type, refs: [], tools: false }
       adjacent.tools ||= item.content.type === "tool"
       adjacent.refs.push({ messageID: item.messageID, partID: item.partID })
+
       return
     }
+
     flush()
     groups.push({
       type: "part",
@@ -650,7 +980,23 @@ function groupContent(
     })
   })
   flush()
+
   return groups
+}
+
+function contentGroupType(
+  content: Content,
+  shellExpanded: boolean,
+  editExpanded: boolean,
+  hasContextGroup: boolean,
+  commentary: ReadonlySet<Content>,
+  detail?: TimelineDetail,
+) {
+  if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
+
+  if (content.type === "text") return commentary.has(content) ? "context" : undefined
+
+  return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
 }
 
 function toolGroupType(
@@ -663,18 +1009,29 @@ function toolGroupType(
   if (detail) {
     if (content.name === "question" && !currentToolFailed(content)) return undefined
     const category = timelineCategory(content)!
+
     if (detail[category].placement === "grouped") return "context"
+
+    if (currentToolGroupedRead(content)) return "read"
+
     if (currentToolFailed(content)) return undefined
+
     if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
+
     return undefined
   }
+
   if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
+
   if (content.state.status === "error") {
     if ((content.name === "shell" || content.name === "execute") && shellExpanded) return undefined
+
     if ((content.name === "edit" || content.name === "write" || content.name === "patch") && editExpanded)
       return undefined
+
     return "context"
   }
+
   if (
     !hasContextGroup &&
     (content.state.status !== "completed" ||
@@ -682,37 +1039,42 @@ function toolGroupType(
     (content.name === "shell" || content.name === "execute" || content.name === "subagent")
   )
     return undefined
+
   if (currentContentDefaultOpen(content, shellExpanded, editExpanded) !== true) return "context"
+
   if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
+
   return undefined
 }
 
 export function reasoningHeading(text: string): string | undefined {
   const markdown = text.replace(/\r\n?/g, "\n")
-  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
-  if (html?.[1]) {
-    const value = cleanHeading(html[1].replace(/<[^>]+>/g, " "))
-    if (value) return value
-  }
+  const html = lastHeading(markdown, /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (value) => value.replace(/<[^>]+>/g, " "))
+  const atx = lastHeading(markdown, /^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/gm)
+  const setext = lastHeading(markdown, /^([^\n]+)\n(?:=+|-+)\s*$/gm)
+  const strong = lastHeading(markdown, /^\s*(?:\*\*((?:(?!\*\*).)+)\*\*|__((?:(?!__).)+)__)\s*$/gm)
 
-  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
-  if (atx?.[1]) {
-    const value = cleanHeading(atx[1])
-    if (value) return value
-  }
+  const latest = [html, atx, strong].reduce<HeadingMatch | undefined>(
+    (best, current) => (!best || (current && current.index >= best.index) ? current : best),
+    undefined,
+  )
 
-  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
-  if (setext?.[1]) {
-    const value = cleanHeading(setext[1])
-    if (value) return value
-  }
+  return (latest ?? setext)?.value
+}
 
-  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
-  if (strong?.[1]) {
-    const value = cleanHeading(strong[1])
-    if (value) return value
-  }
-  return undefined
+type HeadingMatch = { index: number; value: string }
+
+function lastHeading(
+  markdown: string,
+  pattern: RegExp,
+  transform?: (value: string) => string,
+): HeadingMatch | undefined {
+  return Array.from(markdown.matchAll(pattern)).reduce<HeadingMatch | undefined>((best, match) => {
+    const raw = match[1] ?? match[2] ?? ""
+    const value = cleanHeading(transform ? transform(raw) : raw)
+
+    return value ? { index: match.index, value } : best
+  }, undefined)
 }
 
 function cleanHeading(value: string) {
@@ -726,45 +1088,41 @@ function cleanHeading(value: string) {
 export function unwrapErrorMessage(message: string) {
   const text = message.replace(/^Error:\s*/, "").trim()
   const parse = (value: string) => Option.getOrUndefined(decodeJson(value))
+
+  // A JSON string that itself holds JSON is unwrapped once.
   const read = (value: string) => {
     const first = parse(value)
-    if (typeof first !== "string") return first
-    return parse(first.trim())
+
+    return Option.match(decodeString(first), { onNone: () => first, onSome: (inner) => parse(inner.trim()) })
   }
 
-  let json = read(text)
-  if (json === undefined) {
-    const start = text.indexOf("{")
-    const end = text.lastIndexOf("}")
-    if (start !== -1 && end > start) json = read(text.slice(start, end + 1))
-  }
-  if (!record(json)) return message
+  const whole = read(text)
+  const start = text.indexOf("{")
+  const end = text.lastIndexOf("}")
+  const json = whole === undefined && start !== -1 && end > start ? read(text.slice(start, end + 1)) : whole
+  const envelope = Option.getOrUndefined(decodeErrorEnvelope(json))
 
-  const error = record(json.error) ? json.error : undefined
-  if (error) {
-    const type = typeof error.type === "string" ? error.type : undefined
-    const detail = typeof error.message === "string" ? error.message : undefined
-    if (type && detail) return `${type}: ${detail}`
-    if (detail) return detail
-    if (type) return type
-    const code = typeof error.code === "string" ? error.code : undefined
-    if (code) return code
-  }
+  if (!envelope) return message
+  const error = Option.getOrUndefined(decodeErrorDetails(envelope.error))
 
-  const detail = typeof json.message === "string" ? json.message : undefined
-  if (detail) return detail
-  const reason = typeof json.error === "string" ? json.error : undefined
-  if (reason) return reason
-  return message
-}
+  if (error?.type && error.message) return `${error.type}: ${error.message}`
 
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
+  if (error?.message) return error.message
+
+  if (error?.type) return error.type
+
+  if (error?.code) return error.code
+
+  if (envelope.message) return envelope.message
+
+  return Option.getOrUndefined(decodeString(envelope.error)) || message
 }
 
 function isNotice(message: SessionMessageInfo): message is Notice {
   if (message.type === "user" || message.type === "assistant" || message.type === "shell" || message.type === "idle")
     return false
+
   if (message.type !== "synthetic") return true
+
   return !!message.description?.trim() || timelineNoticeRequired(message)
 }

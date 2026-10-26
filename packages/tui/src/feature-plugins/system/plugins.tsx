@@ -23,11 +23,7 @@ type Entry =
       readonly error?: string
     }
 
-export function PluginsDialog(props: {
-  context: Plugin.Context
-  plugins: ReturnType<typeof usePlugin>
-  server?: () => readonly PluginInfo[]
-}) {
+export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnType<typeof usePlugin> }) {
   const dialog = useDialog()
   const [locked, setLocked] = createSignal(false)
   const [checking, setChecking] = createSignal(false)
@@ -36,7 +32,7 @@ export function PluginsDialog(props: {
   const [showInternal, setShowInternal] = createSignal(false)
   const [pending, setPending] = createSignal<readonly string[]>([])
   const [server, { refetch, mutate }] = createResource(
-    () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
+    () => props.context.location ?? props.context.data.location.default(),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
   onMount(() => dialog.setSize("large"))
@@ -69,7 +65,7 @@ export function PluginsDialog(props: {
         status: plugin.status,
         error: plugin.status === "failed" ? plugin.error : undefined,
       }))
-    const serverEntries: Entry[] = (props.server?.() ?? server() ?? []).map((plugin) => ({
+    const serverEntries: Entry[] = (server() ?? []).map((plugin) => ({
       key: `server:${plugin.id ?? source(plugin, props.context)}`,
       runtime: "server" as const,
       internal: plugin.source.type === "builtin",
@@ -200,7 +196,12 @@ export function PluginsDialog(props: {
                 },
               },
             ]}
-            footerHints={[{ title: "ctrl+a", label: `${showInternal() ? "hide" : "show"} internal` }]}
+            footerHints={[
+              ...(pluginError(focusedEntry()) && !focusedTui()
+                ? [{ title: "view error", label: "enter", group: "primary" as const }]
+                : []),
+              { title: `${showInternal() ? "hide" : "show"} internal`, label: "ctrl+a" },
+            ]}
             onMove={(option) => setFocused(option.value)}
             onSelect={(option) => {
               const entry = entries().find((entry) => entry.key === option.value)
@@ -247,16 +248,6 @@ export function PluginsDialog(props: {
                 onTrigger: (option) => update(entries().find((entry) => entry.key === option.value)),
               },
             ]}
-            footer={
-              <Show when={pluginError(focusedEntry()) && !focusedTui()}>
-                <text>
-                  <span style={{ fg: props.context.theme.text.base }}>
-                    <b>enter</b>
-                  </span>
-                  <span style={{ fg: props.context.theme.text.muted }}> view error</span>
-                </text>
-              </Show>
-            }
           />
         }
       >

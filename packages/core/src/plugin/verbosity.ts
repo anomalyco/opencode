@@ -13,7 +13,11 @@ const direct = new Set([
   "@opencode/ai/providers/azure",
   "@opencode/ai/providers/azure/responses",
 ])
-const gateways = new Set(["@opencode/ai/providers/cloudflare-ai-gateway", Provider.aisdk("@ai-sdk/gateway")])
+const gateways = new Set([
+  "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/vercel-ai-gateway",
+  Provider.aisdk("@ai-sdk/gateway"),
+])
 
 export const Plugin = define({
   id: "opencode.prompt.verbosity",

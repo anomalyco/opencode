@@ -1,5 +1,6 @@
 export * as Variant from "./variant.js"
 
+import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 
@@ -7,6 +8,18 @@ export type Support =
   | { readonly type: "effort"; readonly values?: readonly string[] }
   | { readonly type: "toggle" }
   | { readonly type: "budget_tokens"; readonly min?: number; readonly max?: number }
+
+/** Reasoning controls in models.dev v2's shape, where `default` is the provider default rather than a variant. */
+export function supports(reasoning: ConfigProvider.Reasoning): readonly Support[] {
+  if (!reasoning.supported) return []
+  return [
+    ...(reasoning.toggle ? [{ type: "toggle" as const }] : []),
+    ...(reasoning.effort
+      ? [{ type: "effort" as const, values: reasoning.effort.filter((value) => value !== "default") }]
+      : []),
+    ...(reasoning.budget ? [{ type: "budget_tokens" as const, ...reasoning.budget }] : []),
+  ]
+}
 
 type Variants = Model.Info["variants"]
 type Overlay = Omit<Variants[number], "id">
@@ -79,6 +92,17 @@ const openaiChat: Protocol = (_, support) => {
   return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
 }
 
+// Vertex MaaS models switch thinking through the chat template. DeepSeek names the flag `thinking`; the
+// others (GLM, Gemma) use `enable_thinking`.
+const vertexChat: Protocol = (model, support) => {
+  if (support.type !== "toggle") return openaiChat(model, support)
+  const key = modelID(model).toLowerCase().includes("deepseek") ? "thinking" : "enable_thinking"
+  return toggle(
+    { body: { chat_template_kwargs: { [key]: false } } },
+    { body: { chat_template_kwargs: { [key]: true } } },
+  )
+}
+
 const openaiResponses: Protocol = (_, support) => {
   if (support.type !== "effort") return []
   return efforts(support.values ?? ["none", "minimal", ...EFFORTS, "xhigh"], responsesEffort)
@@ -87,6 +111,18 @@ const openaiResponses: Protocol = (_, support) => {
 const responsesEffort = (effort: string): Overlay => ({
   settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ENCRYPTED_REASONING },
 })
+
+const openResponses: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, responsesEffort)
+}
+
+const googleInteractions: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, (effort) => ({
+    settings: { thinkingLevel: effort, thinkingSummaries: "auto" },
+  }))
+}
 
 const cloudflareAIGateway: Protocol = (model, support) => {
   const id = modelID(model)
@@ -155,6 +191,25 @@ const nvidiaChat: Protocol = (model, support) => {
   }
 }
 
+// Workers AI ignores or rejects `reasoning_effort: "none"` on most models. Kimi's chat template reads
+// `thinking`; the others read `enable_thinking`, so both are sent.
+const workersAITemplate = (thinking: boolean): Overlay => ({
+  body: { chat_template_kwargs: { enable_thinking: thinking, thinking } },
+})
+
+const workersAIChat: Protocol = (_, support) => {
+  switch (support.type) {
+    case "effort":
+      return efforts(support.values ?? EFFORTS, (effort) =>
+        effort === "none" ? workersAITemplate(false) : { settings: { reasoningEffort: effort } },
+      )
+    case "toggle":
+      return toggle(workersAITemplate(false), workersAITemplate(true))
+    case "budget_tokens":
+      return []
+  }
+}
+
 const basetenTemplate = (enable_thinking: boolean): Overlay => ({
   body: { chat_template_args: { enable_thinking } },
 })
@@ -194,6 +249,14 @@ const deepinfraChat: Protocol = (model, support) => {
 const openaiCompatible: Protocol = (model, support) => {
   if (model.providerID === "nvidia") return nvidiaChat(model, support)
   return openaiChat(model, support)
+}
+
+const veniceChat: Protocol = (_, support) => {
+  if (support.type === "effort")
+    return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
+  if (support.type === "toggle")
+    return toggle({ settings: { reasoning: { enabled: false } } }, { settings: { reasoning: { enabled: true } } })
+  return []
 }
 
 const moonshotChat: Protocol = (model, support) => {
@@ -268,10 +331,12 @@ const anthropicMessages: Protocol = (model, support) => {
       const thinking = opus45 ? manualThinking(model) : { settings: { thinking: ADAPTIVE_THINKING } }
       if (!thinking) return []
       const defaults = info.major === 4 && info.minor === 6 ? [...EFFORTS, "max"] : [...EFFORTS, "xhigh", "max"]
-      const values = support.values ?? defaults
-      return efforts(values, (effort) => ({
-        settings: { ...thinking.settings, effort },
-      }))
+      const values = (support.values ?? defaults).filter((effort) => !info.always || effort !== "none")
+      return efforts(values, (effort) =>
+        effort === "none"
+          ? { settings: { thinking: { type: "disabled" } } }
+          : { settings: { ...thinking.settings, effort } },
+      )
     }
     case "toggle": {
       if (info.always) return []
@@ -407,22 +472,6 @@ const bedrockConverse: Protocol = (model, support) => {
   }
 }
 
-const alibabaAISDK: Protocol = (model, support) => {
-  switch (support.type) {
-    case "effort":
-      return []
-    case "toggle":
-      return toggle({ settings: { enableThinking: false } }, { settings: { enableThinking: true } })
-    case "budget_tokens":
-      return budgets(
-        model,
-        support,
-        (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }),
-        ALIBABA_THINKING_BUDGET_MAX,
-      )
-  }
-}
-
 const cohere: Protocol = (model, support) => {
   switch (support.type) {
     case "effort":
@@ -434,47 +483,33 @@ const cohere: Protocol = (model, support) => {
   }
 }
 
-const bedrockAISDK: Protocol = (model, support) => {
-  const claude = modelID(model).includes("anthropic")
+const vercelGateway: Protocol = (model, support) => {
+  const id = modelID(model)
+  if (id.startsWith("openai/gpt-")) return openaiResponses(model, support)
+  if (id.startsWith("spacexai/grok-")) return openResponses(model, support)
+  return vercelMessages(model, support)
+}
+
+const vercelResponses: Protocol = (model, support) =>
+  modelID(model).startsWith("openai/gpt-") ? openaiResponses(model, support) : openResponses(model, support)
+
+const vercelMessages: Protocol = (model, support) =>
+  modelID(model).startsWith("anthropic/") ? anthropicMessages(model, support) : vercelChat(model, support)
+
+const vercelChat: Protocol = (model, support) => {
   switch (support.type) {
     case "effort":
-      return efforts(support.values ?? EFFORTS, (effort) => ({
-        settings: claude
-          ? {
-              reasoningConfig: {
-                ...(claudeInfo(model).manual ? {} : ADAPTIVE_THINKING),
-                maxReasoningEffort: effort,
-              },
-            }
-          : { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } },
-      }))
+      return openaiChat(model, support)
     case "toggle":
-      return claude
-        ? toggle(
-            { settings: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
-            { settings: { additionalModelRequestFields: { thinking: ADAPTIVE_THINKING } } },
-          )
-        : toggle(
-            { settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } } },
-            { settings: { additionalModelRequestFields: { reasoningConfig: { type: "enabled" } } } },
-          )
+      return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "adaptive" } } })
     case "budget_tokens":
       return budgets(
         model,
         support,
-        (tokens) => ({ settings: { reasoningConfig: { type: "enabled", budgetTokens: tokens } } }),
-        claude ? ANTHROPIC_OUTPUT_TOKEN_MAX : model.limit.output,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        modelID(model).startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
       )
   }
-}
-
-const vercelGateway: Protocol = (model, support) => {
-  const prefix = modelID(model).split("/")[0]
-  if (prefix === "anthropic") return anthropicMessages(model, support)
-  if (prefix === "google") return gemini(model, support)
-  if (prefix === "amazon") return bedrockAISDK(model, support)
-  if (prefix === "alibaba") return alibabaAISDK(model, support)
-  return support.type === "effort" ? openaiChat(model, support) : openrouter(model, support)
 }
 
 const sapAICore: Protocol = (model, support) => {
@@ -531,53 +566,125 @@ const sapAICore: Protocol = (model, support) => {
   }
 }
 
+// gitlab-ai-provider reads `providerOptions.gitlab.thinking` (Anthropic) and
+// `providerOptions.gitlab.reasoningEffort` (OpenAI Chat and Responses). Its adaptive
+// thinking config carries the effort inline and always requests summarized display.
+const gitlabAnthropic: Protocol = (model, support) => {
+  const info = claudeInfo(model)
+  const disabled: Overlay = { settings: { thinking: { type: "disabled" } } }
+  const adaptive = (effort: string): Overlay => ({ settings: { thinking: { type: "adaptive", effort } } })
+  switch (support.type) {
+    case "effort": {
+      if (info.manual) return gitlabAnthropic(model, { type: "budget_tokens", min: 1024 })
+      const defaults = info.major === 4 && info.minor === 6 ? [...EFFORTS, "max"] : [...EFFORTS, "xhigh", "max"]
+      return efforts(support.values ?? defaults, (effort) => (effort === "none" ? disabled : adaptive(effort)))
+    }
+    case "toggle": {
+      if (info.always) return []
+      const thinking = info.manual ? manualThinking(model) : adaptive("high")
+      if (!thinking) return []
+      return toggle(disabled, thinking)
+    }
+    case "budget_tokens":
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        ANTHROPIC_OUTPUT_TOKEN_MAX,
+      )
+  }
+}
+
+const gitlab: Protocol = (model, support) => {
+  const id = modelID(model).toLowerCase()
+  if (id.startsWith("duo-workflow")) return []
+  if (claudeInfo(model).family) return gitlabAnthropic(model, support)
+  if (id.includes("gpt") || id.includes("codex")) return openaiChat(model, support)
+  return []
+}
+
 const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai": openaiResponses,
+  "@opencode/ai/providers/openai/responses": openaiResponses,
+  "@opencode/ai/providers/azure": openaiResponses,
   "@opencode/ai/providers/azure/responses": openaiResponses,
-  "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiResponses,
+  "@opencode/ai/providers/amazon-bedrock/mantle": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/responses": openaiResponses,
+  "@opencode/ai/providers/amazon-bedrock-mantle": openaiResponses,
   "@opencode/ai/providers/alibaba/responses": openaiResponses,
+  "@opencode/ai/providers/meta": openaiResponses,
   "@opencode/ai/providers/meta/responses": openaiResponses,
   "@opencode/ai/providers/minimax/responses": openaiResponses,
   "@opencode/ai/providers/moonshot/responses": openaiResponses,
   "@opencode/ai/providers/zai-coding-plan/responses": openaiResponses,
 
+  "@opencode/ai/providers/openai-compatible/responses": openResponses,
+  "@opencode/ai/providers/openai-compatible-responses": openResponses,
+  "@opencode/ai/providers/google-vertex/responses": openResponses,
+  "@opencode/ai/providers/google-vertex-responses": openResponses,
+  "@opencode/ai/providers/xai": openResponses,
+
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
-  "@opencode/ai/providers/google-vertex/chat": openaiChat,
+  "@opencode/ai/providers/openai/chat": openaiChat,
+  "@opencode/ai/providers/azure/chat": openaiChat,
+  "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiChat,
+  "@opencode/ai/providers/google-vertex/chat": vertexChat,
+  "@opencode/ai/providers/google-vertex-chat": vertexChat,
+  "@opencode/ai/providers/alibaba": alibabaChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
-  "@opencode/ai/providers/cloudflare-workers-ai": openaiChat,
+  "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
+  "@opencode/ai/providers/cohere/chat": openaiChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
+  "@opencode/ai/providers/digitalocean": openaiChat,
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,
   "@opencode/ai/providers/minimax/chat": openaiChat,
   "@opencode/ai/providers/mistral": openaiChat,
+  "@opencode/ai/providers/google-vertex/mistral": openaiChat,
+  "@opencode/ai/providers/google-vertex-mistral": openaiChat,
+  "@opencode/ai/providers/moonshot": moonshotChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
-  "@opencode/ai/providers/xai": openaiChat,
+  "@opencode/ai/providers/venice": veniceChat,
+  "@opencode/ai/providers/zai": zaiChat,
   "@opencode/ai/providers/zai/chat": zaiChat,
+  "@opencode/ai/providers/zai-coding-plan": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
+  "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
+  "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
+  "@opencode/ai/providers/google-vertex-messages": anthropicMessages,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,
   "@opencode/ai/providers/meta/messages": anthropicMessages,
+  "@opencode/ai/providers/minimax": minimaxMessages,
   "@opencode/ai/providers/minimax/messages": minimaxMessages,
   "@opencode/ai/providers/moonshot/messages": moonshotMessages,
   "@opencode/ai/providers/zai-coding-plan/messages": zaiMessages,
 
   "@opencode/ai/providers/google": gemini,
   "@opencode/ai/providers/google-vertex": gemini,
+  "@opencode/ai/providers/google-vertex/gemini": gemini,
+  "@opencode/ai/providers/google/interactions": googleInteractions,
+  "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
+  "@opencode/ai/providers/google-vertex-interactions": googleInteractions,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
+  "@opencode/ai/providers/cohere": cohere,
   "@opencode/ai/providers/openrouter": openrouter,
 
-  [Provider.aisdk("venice-ai-sdk-provider")]: openaiChat,
+  [Provider.aisdk("venice-ai-sdk-provider")]: veniceChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
+  "@opencode/ai/providers/vercel-ai-gateway": vercelGateway,
+  "@opencode/ai/providers/vercel-ai-gateway/chat": vercelChat,
+  "@opencode/ai/providers/vercel-ai-gateway/messages": vercelMessages,
+  "@opencode/ai/providers/vercel-ai-gateway/responses": vercelResponses,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
-  [Provider.aisdk("@ai-sdk/cohere")]: cohere,
+  [Provider.aisdk("gitlab-ai-provider")]: gitlab,
 }

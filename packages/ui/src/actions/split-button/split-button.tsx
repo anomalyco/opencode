@@ -3,6 +3,7 @@ import "./split-button.css"
 
 export function SplitButton(props: ParentProps<ComponentProps<"div">>) {
   const [split, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <div
       data-component="split-button-v2"
@@ -19,6 +20,7 @@ export function SplitButton(props: ParentProps<ComponentProps<"div">>) {
 
 export function SplitButtonAction(props: ComponentProps<"button">) {
   const [split, rest] = splitProps(props, ["class", "classList"])
+
   return (
     <button
       type="button"
@@ -34,6 +36,7 @@ export function SplitButtonAction(props: ComponentProps<"button">) {
 
 export function SplitButtonMenuTrigger(props: ComponentProps<"button">) {
   const [split, rest] = splitProps(props, ["class", "classList"])
+
   return (
     <button
       type="button"

@@ -71,6 +71,7 @@ test("reports bottom anchor loss but permits movement while scrolled away", () =
     ]),
     { preserveBottomAnchor: true },
   )
+
   const away = analyzeVisualStability(
     trace([
       { at: 0, regions: { changing: region() }, viewport: viewport(80) },
@@ -147,6 +148,7 @@ test("reports visible anchor movement while allowing virtual scrollbar movement"
     ]),
     { fixed: ["anchor"] },
   )
+
   expect(moved.some((issue) => issue.includes("anchor moved 12px in the viewport"))).toBe(true)
 })
 
@@ -319,6 +321,7 @@ test("preserves typed region names while mapping definitions", () => {
     changing: { selector: "[data-changing]" },
     following: { selector: "[data-following]", closest: "[data-row]" },
   })
+
   const selectors = mapVisualRegions(regions, (region) => region.selector)
 
   expect(selectors).toEqual({ changing: "[data-changing]", following: "[data-following]" })
@@ -331,10 +334,12 @@ test("evaluates the typed invariant algebra over explicit observations", () => {
     changing: { selector: "[data-changing]" },
     following: { selector: "[data-following]" },
   })
+
   const invariants = [
     { type: "required", regions: ["changing"] },
     { type: "flow", regions: ["changing", "following"] },
   ] satisfies VisualInvariant<keyof typeof regions>[]
+
   // @ts-expect-error Plans reject names that are not in the region definition.
   const invalid = { type: "required", regions: ["missing"] } satisfies VisualInvariant<keyof typeof regions>
   const plan = visualPlan(regions, invariants, { perMarker: true })

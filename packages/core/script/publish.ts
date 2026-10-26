@@ -24,7 +24,7 @@ if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode ==
 }
 
 try {
-  await $`bun run typecheck`
+  await $`bun run typecheck:tsc`
   await $`bun run build`
   pkg.exports = Object.fromEntries(
     Object.entries(pkg.exports).map(([key, value]) => {

@@ -2,7 +2,7 @@ export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { basename, dirname, join } from "path"
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
@@ -88,15 +88,16 @@ export const Plugin = {
                 if (result.target.externalDirectory !== undefined) return
                 const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(location.directory)
-                // up() searches its stop directory, so the Location-root AGENTS.md (already
-                // supplied by core initial instructions) is dropped by the dirname filter.
+                // The Location and its ancestors are already supplied by initial instructions,
+                // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
                   targets: [FILENAME],
                   start: result.content.type === "list-page" ? resolved : dirname(resolved),
                   stop: root,
+                  type: "file",
                 })
                 const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                  (file) => dirname(file) !== root,
+                  (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
                 )
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
@@ -104,12 +105,6 @@ export const Plugin = {
                 Effect.catch(() => Effect.void),
                 Effect.catchDefect(() => Effect.void),
               )
-              if (
-                result.content.type === "file" &&
-                result.content.encoding === "base64" &&
-                !ReadToolFileSystem.MEDIA_MIMES.has(result.content.mime)
-              )
-                return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource: result.target.resource }))
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({

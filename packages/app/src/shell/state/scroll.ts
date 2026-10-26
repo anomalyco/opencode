@@ -21,10 +21,12 @@ export function createScrollPersistence(opts: Options) {
 
   function clone(input?: ScrollMap) {
     const out: ScrollMap = {}
+
     if (!input) return out
 
     for (const key of Object.keys(input)) {
       const pos = input[key]
+
       if (!pos) continue
       out[key] = { x: pos.x, y: pos.y }
     }
@@ -35,23 +37,28 @@ export function createScrollPersistence(opts: Options) {
   function seed(sessionKey: string) {
     const next = clone(opts.getSnapshot(sessionKey))
     const current = cache[sessionKey]
+
     if (!current) {
       setCache(sessionKey, next)
+
       return
     }
 
     if (Object.keys(current).length > 0) return
+
     if (Object.keys(next).length === 0) return
     setCache(sessionKey, next)
   }
 
   function scroll(sessionKey: string, tab: string) {
     seed(sessionKey)
+
     return cache[sessionKey]?.[tab] ?? opts.getSnapshot(sessionKey)?.[tab]
   }
 
   function schedule(sessionKey: string) {
     const prev = timers.get(sessionKey)
+
     if (prev) clearTimeout(prev)
     timers.set(
       sessionKey,
@@ -63,6 +70,7 @@ export function createScrollPersistence(opts: Options) {
     seed(sessionKey)
 
     const prev = cache[sessionKey]?.[tab]
+
     if (prev?.x === pos.x && prev?.y === pos.y) return
 
     setCache(sessionKey, tab, { x: pos.x, y: pos.y })
@@ -72,6 +80,7 @@ export function createScrollPersistence(opts: Options) {
 
   function flush(sessionKey: string) {
     const timer = timers.get(sessionKey)
+
     if (timer) clearTimeout(timer)
     timers.delete(sessionKey)
 
@@ -83,6 +92,7 @@ export function createScrollPersistence(opts: Options) {
 
   function flushAll() {
     const keys = Array.from(dirty)
+
     if (keys.length === 0) return
 
     for (const key of keys) {
@@ -95,6 +105,7 @@ export function createScrollPersistence(opts: Options) {
 
     for (const key of keys) {
       const timer = timers.get(key)
+
       if (timer) clearTimeout(timer)
       timers.delete(key)
       dirty.delete(key)

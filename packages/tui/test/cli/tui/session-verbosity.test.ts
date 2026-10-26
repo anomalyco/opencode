@@ -180,11 +180,10 @@ test("activity summary counts finished work by category", () => {
   expect(activitySummary(items, 2)).toEqual({
     label: "2 commands, 2 edits, 1 thought, 1 read, 1 tool, 2 instructions",
     active: false,
-    failed: false,
   })
 })
 
-test("running work is active but not counted, and failures are reported", () => {
+test("running work is active but not counted, and failed tools are counted", () => {
   const open = { ...assistant("a", []), time: { created: 1 } }
   const summary = activitySummary(
     [
@@ -195,7 +194,7 @@ test("running work is active but not counted, and failures are reported", () => 
     ],
     0,
   )
-  expect(summary).toEqual({ label: "1 read, 1 tool", active: true, failed: true })
+  expect(summary).toEqual({ label: "1 read, 1 tool", active: true })
 })
 
 test("execute counts its finished nested calls instead of itself", () => {
@@ -219,7 +218,6 @@ test("execute counts its finished nested calls instead of itself", () => {
   expect(activitySummary([{ message, part: execute }], 0)).toEqual({
     label: "2 reads, 1 tool",
     active: false,
-    failed: true,
   })
 })
 
@@ -257,8 +255,8 @@ test("a thought still streaming counts as finished once a later row closes its g
     { message: open, part: { type: "reasoning" as const, text: "Planning", time: { created: 1 } } },
     { message: open, part: tool("r1", "read") },
   ]
-  expect(activitySummary(items, 0)).toEqual({ label: "1 read", active: true, failed: false })
-  expect(activitySummary(items, 0, true)).toEqual({ label: "1 thought, 1 read", active: false, failed: false })
+  expect(activitySummary(items, 0)).toEqual({ label: "1 read", active: true })
+  expect(activitySummary(items, 0, true)).toEqual({ label: "1 thought, 1 read", active: false })
 })
 
 test("until something finishes, the label is the first running item's status", () => {
@@ -271,7 +269,6 @@ test("until something finishes, the label is the first running item's status", (
   expect(summarizeActivity(activity, () => open, [], false)).toEqual({
     label: "Running edit…",
     active: true,
-    failed: false,
   })
 })
 

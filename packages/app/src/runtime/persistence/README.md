@@ -52,7 +52,7 @@ migration rules remain explicit in their schemas.
 ## Writes
 
 The setter returned by `persisted()` only marks the store dirty (`persist.ts`). The store is
-serialized once per save window (`persistSaveDelay`), on owner cleanup, and when the page
+serialized once per save window (100 ms), on owner cleanup, and when the page
 hides, and the write is skipped when the serialized form did not change. Reactive observers
 therefore see every mutation immediately and a burst of setter calls costs one encode. Call
 `flushPersisted()` when a test or a shutdown path needs the write to have happened; the
@@ -68,7 +68,7 @@ On desktop, `platform.storage(name)` returns a `NamespaceStorage` (`namespace.ts
 in-memory truth for one storage namespace, modelled on VS Code's `Storage` class. The
 namespace is loaded from the host once, reads are Map lookups from then on, and writes
 update the cache immediately while being batched into one host round trip per flush
-window (`namespaceFlushDelay`). `flush()` hands the batch to the driver synchronously, so a
+window (100 ms). `flush()` hands the batch to the driver synchronously, so a
 flush on page hide is on the wire before the page goes away; the desktop platform flushes
 every namespace before the IPC runtime is disposed and whenever the window is hidden. Each
 local write carries a sequence number that is kept until the host accepts that exact write;
@@ -89,10 +89,12 @@ distinctions such as an absent current field identifying an older format. It
 returns a candidate in the current encoded shape; the current schema then owns
 recovery and validation.
 
-The migration reader preserves excess properties so a migration can describe
-only the fields it observes without dropping unrelated saved preferences. The
-current schema strips fields outside its contract. Writes use only the current
-schema's encoder, never the legacy reader's encoder.
+Plain structs strip fields they do not list, so build every struct level of a
+migration reader, including structs nested in unions or nullable values, with
+`Persistence.legacy(fields)`. It keeps the fields the reader does not name, so a
+migration can describe only the fields it observes without dropping unrelated
+saved preferences. The current schema strips fields outside its contract. Writes
+use only the current schema's encoder, never the legacy reader's encoder.
 
 `Persistence.withInitial(schemaOrMigration, initial)` exposes the same initialized
 codec for focused tests. Test canonical encoding and decode/encode/decode stability

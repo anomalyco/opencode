@@ -33,8 +33,6 @@ export default Runtime.handler(
       target: Option.getOrUndefined(input.target),
       method: Option.getOrUndefined(input.method),
       answer: input.answer,
-      server: Option.getOrUndefined(input.server),
-      standalone: input.standalone,
     }).pipe(handlePromptErrors),
   ),
 )
@@ -43,13 +41,11 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
   target?: string
   method?: string
   answer?: ReadonlyArray<string>
-  server?: string
-  standalone: boolean
 }) {
   if (!input.target)
     yield* requireInteractive("Pass an integration ID or name when running without an interactive terminal")
   intro("Connect an integration")
-  const client = yield* createClient({ server: input.server, standalone: input.standalone })
+  const client = yield* createClient()
   const integration = yield* findIntegration(client, input.target)
   const methods = connectMethods(integration)
   if (methods.length === 0) yield* Effect.fail(new Error(`${integration.name} has no interactive login methods`))
@@ -127,7 +123,27 @@ const authenticate = Effect.fn("cli.auth.login.authenticate")(function* (
 ) {
   if (method.type === "key") return yield* keyLogin(client, integration, method, answer)
   if (method.type === "command") return yield* commandLogin(client, integration, method)
+  if (method.type === "external") return yield* externalLogin(client, integration, method, answer)
   return yield* oauthLogin(client, integration, method, answer)
+})
+
+const externalLogin = Effect.fn("cli.auth.login.external")(function* (
+  client: OpenCodeClient,
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "external" }>,
+  answer?: FormAnswer,
+) {
+  const progress = spinner()
+  progress.start("Saving credential...")
+  yield* request((signal) =>
+    client.integration.connect.external(
+      { integrationID: integration.id, methodID: method.id, answer, location },
+      { signal },
+    ),
+  ).pipe(
+    Effect.tap(() => Effect.sync(() => progress.stop(`Connected to ${integration.name}`))),
+    Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))),
+  )
 })
 
 const keyLogin = Effect.fn("cli.auth.login.key")(function* (

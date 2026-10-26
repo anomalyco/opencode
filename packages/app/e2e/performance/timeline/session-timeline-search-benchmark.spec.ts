@@ -13,6 +13,7 @@ benchmark("searches a large virtualized session and reveals the first result", a
   const query = "Historical prompt"
   const targetPartID = "msg_0000_0000_a_user:text:0"
   const expectedCounter = `1/${historyTurns}`
+
   const fixture = await setupTimelineBenchmark(page, {
     historyTurns,
     eventBatch: 1,
@@ -59,6 +60,7 @@ benchmark("searches a large virtualized session and reveals the first result", a
     .poll(() =>
       page.evaluate(() => {
         const range = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
         return range?.startContainer.parentElement?.closest<HTMLElement>("[data-timeline-part-id]")?.dataset
           .timelinePartId
       }),

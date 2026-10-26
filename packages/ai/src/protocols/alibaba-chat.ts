@@ -3,6 +3,7 @@ import { Protocol } from "../route/protocol.js"
 import type { LanguageModelCompatibility } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, ProviderShared } from "./shared.js"
+import { cacheControl } from "./utils/cache.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 
 export type ReasoningEffort = OpenResponsesOptions.ReasoningEffort
@@ -15,7 +16,7 @@ const Options = Schema.Struct({
   clearThinking: Schema.optional(Schema.Boolean),
   thinking: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"adaptive" | "disabled" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"adaptive" | "disabled">(),
     }),
   ),
   toolStream: Schema.optional(Schema.Boolean),
@@ -23,7 +24,7 @@ const Options = Schema.Struct({
   repetitionPenalty: Schema.optional(Schema.Number),
   responseFormat: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"text" | "json_object" | "json_schema" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"text" | "json_object" | "json_schema">(),
       json_schema: Schema.optional(JsonObject),
     }),
   ),
@@ -31,9 +32,7 @@ const Options = Schema.Struct({
   searchOptions: Schema.optional(
     Schema.Struct({
       forced_search: Schema.optional(Schema.Boolean),
-      search_strategy: Schema.optional(
-        Schema.declare<"turbo" | "max" | "agent" | "agent_max" | (string & {})>(Schema.is(Schema.String)),
-      ),
+      search_strategy: Schema.optional(ProviderShared.knownString<"turbo" | "max" | "agent" | "agent_max">()),
       enable_search_extension: Schema.optional(Schema.Boolean),
     }),
   ),
@@ -42,7 +41,6 @@ export type OptionsInput = typeof Options.Type
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsStore: false,
   supportsStrictMode: false,
   reasoningField: "reasoning_content",
   zaiToolStream: false,
@@ -68,7 +66,7 @@ export const protocol = Protocol.make({
     from: Effect.fn("AlibabaChat.fromRequest")(function* (req) {
       const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
       return {
-        ...(yield* OpenAIChat.protocol.body.from(req)),
+        ...(yield* OpenAIChat.fromRequest(req, { cacheControl: cacheControl() })),
         enable_thinking: opts.enableThinking,
         // Alibaba also rejects an explicit budget that is not below `max_completion_tokens`.
         thinking_budget:

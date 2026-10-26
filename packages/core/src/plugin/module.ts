@@ -11,9 +11,13 @@ import { fileURLToPath, pathToFileURL } from "url"
 import type { ConfigPluginSource } from "../config/plugin/source.js"
 import type { Generation } from "../plugin.js"
 import { PluginPromise } from "./promise.js"
+import { Config } from "../config.js"
+import { ManagedPolicy } from "../managed-policy.js"
 import { Watcher } from "../filesystem/watcher.js"
 
 export const make = Effect.fn("PluginModule.make")(function* () {
+  const config = yield* Config.Service
+  const managed = yield* ManagedPolicy.Service
   const watcher = yield* Watcher.Service
   const scope = yield* Effect.scope
   const runPromise = yield* FiberSet.makeRuntimePromise()
@@ -40,7 +44,21 @@ export const make = Effect.fn("PluginModule.make")(function* () {
     load: (
       operation: Extract<ConfigPluginSource.Operation, { type: "add" }>,
       options?: { readonly install?: boolean },
-    ) => load(operation, sources, options),
+    ) =>
+      Effect.gen(function* () {
+        const version = operation.target.lastIndexOf("@")
+        const target =
+          path.isAbsolute(operation.target) || version <= 0 ? operation.target : operation.target.slice(0, version)
+        if (
+          ManagedPolicy.decision(
+            ManagedPolicy.statements(yield* config.entries(), managed.current()),
+            "integration.use",
+            `plugin:${target}`,
+          ) === "deny"
+        )
+          return { blocked: true as const }
+        return yield* load(operation, sources, options)
+      }),
     changes: () => Stream.fromPubSub(changes),
   }
 })

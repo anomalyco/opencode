@@ -13,6 +13,7 @@ import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "../actio
 import { Icon } from "../icons/icon/icon"
 
 const blue = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200] as const
+
 const unused = new Set([1000])
 
 const section = {
@@ -157,38 +158,6 @@ function BlueReview() {
               <Icon name="chevron-down" size="small" />
             </SplitButtonMenuTrigger>
           </SplitButton>
-        </div>
-      </section>
-
-      <section style={section}>
-        <h2 style={heading}>Session message blue</h2>
-        <div
-          style={{
-            display: "grid",
-            gap: "12px",
-            padding: "16px",
-            background: "#fff",
-            border: "1px solid var(--v2-border-border-base)",
-            "border-radius": "8px",
-          }}
-        >
-          <div data-local-session>
-            <div data-component="user-message">
-              <div data-slot="user-message-text" style={{ width: "fit-content", padding: "8px 12px" }}>
-                Local-session user message
-              </div>
-            </div>
-          </div>
-          <div data-workspace-session>
-            <div data-component="user-message">
-              <div
-                data-slot="user-message-text"
-                style={{ width: "fit-content", padding: "8px 12px", "border-radius": "8px" }}
-              >
-                Workspace-session user message
-              </div>
-            </div>
-          </div>
         </div>
       </section>
     </main>

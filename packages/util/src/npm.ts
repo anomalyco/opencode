@@ -8,8 +8,6 @@ import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
-import { LayerNode } from "./effect/layer-node.js"
-import { makeRuntime } from "./effect/runtime.js"
 import { NpmConfig } from "./npm-config.js"
 
 export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()("NpmInstallFailedError", {
@@ -215,6 +213,7 @@ const layer = Layer.effect(
           ...(input.update ? { preferOnline: true, noGitRevCache: true } : {}),
           // Audit reports are unused here, but Arborist waits for them before completing an install.
           audit: false,
+          windowsHide: true,
         }
         const arborist = new Arborist({
           ...options,
@@ -372,7 +371,14 @@ const layer = Layer.effect(
       if (!installed)
         return yield* new InstallFailedError({ dir: root, cause: new Error(`Package is not installed: ${pkg}`) })
       const { manifest, resolve } = yield* Effect.promise(() => import("pacote"))
-      const options = { ...(yield* NpmConfig.load(root)), preferOnline: true, noGitRevCache: true, ignoreScripts: true }
+      const options = {
+        ...(yield* NpmConfig.load(root)),
+        preferOnline: true,
+        noGitRevCache: true,
+        ignoreScripts: true,
+        // Pacote spawns Git directly rather than through AppProcess.
+        windowsHide: true,
+      }
       const available = yield* Effect.tryPromise({
         try: async () =>
           target.type === "git" ? gitRevision(await resolve(pkg, options)) : (await manifest(pkg, options)).version,
@@ -462,28 +468,6 @@ export const node = makeGlobalNode({
   layer: layer,
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
-
-const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
-
-export async function add(...args: Parameters<Interface["add"]>) {
-  return runPromise((svc) => svc.add(...args))
-}
-
-export async function resolve(...args: Parameters<Interface["resolve"]>) {
-  return runPromise((svc) => svc.resolve(...args))
-}
-
-export async function check(...args: Parameters<Interface["check"]>) {
-  return runPromise((svc) => svc.check(...args))
-}
-
-export async function update(...args: Parameters<Interface["update"]>) {
-  return runPromise((svc) => svc.update(...args))
-}
-
-export async function which(...args: Parameters<Interface["which"]>) {
-  return runPromise((svc) => svc.which(...args))
-}
 
 function gitRevision(resolved: string | undefined) {
   return resolved?.match(/#([a-f0-9]{40}|[a-f0-9]{64})(?=::|$)/i)?.[1]

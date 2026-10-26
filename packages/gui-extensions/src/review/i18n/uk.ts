@@ -1,0 +1,20 @@
+export default {
+  "tab.title": "Огляд",
+  "tab.count.one": "{{count}} файл змінено",
+  "tab.count.few": "{{count}} файли змінено",
+  "tab.count.many": "{{count}} файлів змінено",
+  "tab.count.other": "{{count}} файла змінено",
+  "mobile.title.one": "Зміна",
+  "mobile.title.few": "Зміни",
+  "mobile.title.many": "Змін",
+  "mobile.title.other": "Зміни",
+  "empty.git": "Ще немає незафіксованих змін",
+  "empty.branch": "Ще немає змін у гілці",
+  "git.title": "Створити Git-репозиторій",
+  "git.description": "Відстежуйте, переглядайте та скасовуйте зміни в цьому проєкті",
+  loadingChanges: "Завантаження змін…",
+  noChanges: "Немає змін",
+  "settings.wrapLines.title": "Переносити рядки",
+  "settings.wrapLines.description":
+    "Переносити довгі рядки в мобільні відмінності замість прокручування по горизонталі",
+}

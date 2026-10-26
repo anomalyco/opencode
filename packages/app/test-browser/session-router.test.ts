@@ -23,6 +23,7 @@ test("session ownership follows navigation, back, forward, replacement, and rout
       captured.push(ownership.capture())
     })
     onCleanup(() => cleaned.push("session"))
+
     return label
   }
 

@@ -1,5 +1,6 @@
 import { DropdownMenu } from "@kobalte/core/dropdown-menu"
 import { ContextMenu } from "@kobalte/core/context-menu"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import {
   createContext,
   Show,
@@ -41,13 +42,19 @@ const CheckMark: Component = () => (
 
 export type MenuAppearance = "standard" | "compact"
 
-const MenuAppearanceContext = createContext<{ appearance: Accessor<MenuAppearance> }>({
+const MenuAppearanceContext = createContext<{
+  appearance: Accessor<MenuAppearance>
+  pointerOpened: () => boolean
+}>({
   appearance: (): MenuAppearance => "compact",
+  pointerOpened: () => false,
 })
 
 function useMenuContext() {
   const ctx = useContext(MenuAppearanceContext)
+
   if (!ctx) throw new Error("Menu components must be used inside Menu or Menu.Context")
+
   return ctx
 }
 
@@ -76,6 +83,7 @@ export interface MenuItemProps extends ComponentProps<typeof DropdownMenu.Item> 
 function MenuItem(props: ParentProps<MenuItemProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.Item
       {...r}
@@ -98,6 +106,7 @@ export interface MenuCheckboxItemProps extends ComponentProps<typeof DropdownMen
 function MenuCheckboxItem(props: ParentProps<MenuCheckboxItemProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.CheckboxItem
       {...r}
@@ -128,6 +137,7 @@ export interface MenuRadioItemProps extends ComponentProps<typeof DropdownMenu.R
 function MenuRadioItem(props: ParentProps<MenuRadioItemProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.RadioItem
       {...r}
@@ -178,6 +188,7 @@ function MenuSub(props: MenuSubProps) {
 function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.SubTrigger
       {...r}
@@ -195,6 +206,7 @@ function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
 function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.SubContent
       {...r}
@@ -208,6 +220,7 @@ function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
 function MenuGroupLabel(props: ComponentProps<typeof DropdownMenu.GroupLabel>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.GroupLabel
       {...r}
@@ -221,6 +234,7 @@ function MenuGroupLabel(props: ComponentProps<typeof DropdownMenu.GroupLabel>) {
 function MenuSeparator(props: ComponentProps<typeof DropdownMenu.Separator>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.Separator
       {...r}
@@ -233,10 +247,28 @@ function MenuSeparator(props: ComponentProps<typeof DropdownMenu.Separator>) {
 
 function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
   const ctx = useMenuContext()
-  const [s, r] = splitProps(props, ["class", "classList"])
+  const [s, r] = splitProps(props, ["class", "classList", "onCloseAutoFocus"])
+
+  // A menu returns focus to its trigger when it closes. Closing with Escape counts as keyboard use, so Chromium would
+  // ring a trigger the pointer opened; restore focus without the ring and keep it for keyboard opens.
+  const onCloseAutoFocus = (event: Event) => {
+    s.onCloseAutoFocus?.(event)
+
+    if (event.defaultPrevented || !ctx.pointerOpened()) return
+    event.preventDefault()
+    const active = document.activeElement
+
+    // An outside press already moved focus where it belongs.
+    if (active && active !== document.body && !active.closest('[role="menu"]')) return
+    const labelledby = event.target instanceof Element ? event.target.getAttribute("aria-labelledby") : null
+    const trigger = labelledby ? document.getElementById(labelledby) : null
+    trigger?.focus({ preventScroll: true, focusVisible: false })
+  }
+
   return (
     <DropdownMenu.Content
       {...r}
+      onCloseAutoFocus={onCloseAutoFocus}
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
@@ -249,11 +281,26 @@ export interface MenuProps extends ComponentProps<typeof DropdownMenu> {
 }
 
 function MenuRoot(props: MenuProps) {
-  const [local, rest] = splitProps(props, ["appearance", "children"])
+  const [local, rest] = splitProps(props, ["appearance", "children", "onOpenChange"])
   const appearance = () => local.appearance ?? "compact"
+  let pointer = false
+  let pointerOpened = false
+
+  // Capture runs before the trigger's own handlers, so the last input is what opened the menu.
+  makeEventListener(window, "pointerdown", () => (pointer = true), { capture: true })
+  makeEventListener(window, "keydown", () => (pointer = false), { capture: true })
+
   return (
-    <MenuAppearanceContext.Provider value={{ appearance }}>
-      <DropdownMenu {...rest}>{local.children}</DropdownMenu>
+    <MenuAppearanceContext.Provider value={{ appearance, pointerOpened: () => pointerOpened }}>
+      <DropdownMenu
+        {...rest}
+        onOpenChange={(open) => {
+          if (open) pointerOpened = pointer
+          local.onOpenChange?.(open)
+        }}
+      >
+        {local.children}
+      </DropdownMenu>
     </MenuAppearanceContext.Provider>
   )
 }
@@ -265,8 +312,9 @@ export interface MenuContextProps extends ComponentProps<typeof ContextMenu> {
 function MenuContextRoot(props: MenuContextProps) {
   const [local, rest] = splitProps(props, ["appearance", "children"])
   const appearance = () => local.appearance ?? "compact"
+
   return (
-    <MenuAppearanceContext.Provider value={{ appearance }}>
+    <MenuAppearanceContext.Provider value={{ appearance, pointerOpened: () => false }}>
       <ContextMenu {...rest}>{local.children}</ContextMenu>
     </MenuAppearanceContext.Provider>
   )
@@ -275,6 +323,7 @@ function MenuContextRoot(props: MenuContextProps) {
 function MenuContextContent(props: ComponentProps<typeof ContextMenu.Content>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <ContextMenu.Content
       {...r}

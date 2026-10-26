@@ -80,6 +80,7 @@ export const WithCopyButton = {
 export const Controlled = {
   render: () => {
     const [value, setValue] = createSignal("Controlled value")
+
     return (
       <div style={{ display: "grid", gap: "12px" }}>
         <TextInput value={value()} onInput={(e) => setValue(e.currentTarget.value)} placeholder="Type here…" />

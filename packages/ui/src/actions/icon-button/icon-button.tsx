@@ -14,6 +14,7 @@ export interface IconButtonProps
 
 export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
   const [local, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList", "state"])
+
   return (
     <Root
       {...rest}

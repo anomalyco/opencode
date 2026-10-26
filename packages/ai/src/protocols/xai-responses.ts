@@ -31,19 +31,30 @@ const XAIResponsesHostedToolItem = Schema.Union([
   ),
 ])
 
-const XAIResponsesBody = Schema.Struct({
-  ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, XAIResponsesHostedToolItem])),
-  stream: Schema.Literal(true),
+const Options = Schema.Struct({
+  minP: Schema.optional(Schema.Number),
+})
+export type OptionsInput = typeof Options.Type
+
+const Body = Schema.Struct({
+  ...OpenResponses.OpenResponsesBody.fields,
+  top_k: Schema.optional(Schema.Number),
+  min_p: Schema.optional(Schema.Number),
 })
 
 const adapter = {
   id: ADAPTER,
   name: NAME,
+  lowerMedia: ({ part, media }) => {
+    if (part.media.kind !== "video") return undefined
+    const filename = part.filename ?? "file"
+    const url = ProviderShared.mediaUrl(part.media)
+    if (url) return { type: "input_file", filename, file_url: url }
+    return media && { type: "input_file", filename, file_data: media.dataUrl }
+  },
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)
     return yield* ProviderShared.unsupportedOperation({
@@ -53,7 +64,16 @@ const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LL
       message:
         "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
     })
-  return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
+  const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
+  const body = yield* OpenResponses.fromRequestWithAdapter(request, adapter)
+  // xAI Responses does not support penalties (they are ignored), but does support top_k.
+  return {
+    ...body,
+    presence_penalty: undefined,
+    frequency_penalty: undefined,
+    top_k: request.generation?.topK,
+    min_p: options.minP,
+  }
 })
 
 const HOSTED_TOOLS = {
@@ -83,7 +103,7 @@ const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
 export const protocol = Protocol.make({
   id: ADAPTER,
   body: {
-    schema: XAIResponsesBody,
+    schema: Body,
     from: fromRequest,
   },
   stream: {

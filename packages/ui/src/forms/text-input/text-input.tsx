@@ -6,6 +6,8 @@ import "./text-input.css"
 export interface TextInputProps extends Omit<ComponentProps<"input">, "type"> {
   /** Icon or adornment shown before the field value. */
   leadingIcon?: JSX.Element
+  /** Actions after the field value, such as icon buttons. */
+  trailing?: JSX.Element
   /** Show the trailing copy action. */
   showCopyButton?: boolean
   /** Show the trailing clear action. */
@@ -29,10 +31,12 @@ export interface TextInputProps extends Omit<ComponentProps<"input">, "type"> {
 
 export function TextInput(props: TextInputProps) {
   const i18n = useI18n()
+
   const [local, inputProps] = splitProps(props, [
     "class",
     "classList",
     "leadingIcon",
+    "trailing",
     "showCopyButton",
     "showClearButton",
     "clearIcon",
@@ -89,13 +93,18 @@ export function TextInput(props: TextInputProps) {
           onClick={(event) => {
             if (local.showClearButton) {
               local.onClearClick?.(event)
+
               return
             }
+
             local.onCopyClick?.(event)
           }}
         >
           <Icon name={local.showClearButton ? (local.clearIcon ?? "xmark-small") : "copy"} />
         </button>
+      </Show>
+      <Show when={local.trailing}>
+        <div data-slot="text-input-v2-trailing">{local.trailing}</div>
       </Show>
     </div>
   )

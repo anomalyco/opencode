@@ -193,21 +193,22 @@ function monoText(value: string): string {
 }
 
 export function monoSnapshot(event: CliRendererExternalOutputEvent): void {
-  const buffers = event.snapshot.buffers
-  const chars = buffers.char
-  for (let index = 0; index < chars.length; index += 1) {
-    const point = chars[index]
-    if (point <= 0x7f) continue
-    const offset = index * 4
-    event.snapshot.setCell(
-      index % event.snapshot.width,
-      Math.floor(index / event.snapshot.width),
-      monoCell(point),
-      RGBA.fromArray(buffers.fg.subarray(offset, offset + 4)),
-      RGBA.fromArray(buffers.bg.subarray(offset, offset + 4)),
-      buffers.attributes[index],
-    )
-  }
+  event.snapshot.withBuffers((buffers) => {
+    const chars = buffers.char
+    for (let index = 0; index < chars.length; index += 1) {
+      const point = chars[index]
+      if (point <= 0x7f) continue
+      const offset = index * 4
+      event.snapshot.setCell(
+        index % event.snapshot.width,
+        Math.floor(index / event.snapshot.width),
+        monoCell(point),
+        RGBA.fromArray(buffers.fg.subarray(offset, offset + 4)),
+        RGBA.fromArray(buffers.bg.subarray(offset, offset + 4)),
+        buffers.attributes[index],
+      )
+    }
+  })
 }
 
 function monoCell(point: number): string {
@@ -252,12 +253,4 @@ export function monoTruncate(value: string, width: number, mono: boolean): strin
   if (!mono || value.length <= width) return value
   if (width <= 3) return ".".repeat(Math.max(0, width))
   return value.slice(0, width - 3) + "..."
-}
-
-export function monoTruncateMiddle(value: string, width: number, mono: boolean): string {
-  if (!mono || value.length <= width) return value
-  if (width <= 3) return ".".repeat(Math.max(0, width))
-  const available = width - 3
-  const left = Math.ceil(available / 2)
-  return value.slice(0, left) + "..." + value.slice(value.length - (available - left))
 }

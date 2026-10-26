@@ -9,7 +9,7 @@ import {
   resolveComparisonFamily,
 } from "../lib/comparison-pages"
 import { baseUrl } from "../lib/language"
-import { loadModelCatalog } from "./model-catalog"
+import { catalogModelPath, findModelCatalogEntry, loadModelCatalog } from "./model-catalog"
 
 type SitemapEntry = {
   path: string
@@ -55,7 +55,25 @@ export async function GET() {
       ]
     }),
   )
-  const entries = uniqueSitemapEntries([{ path: "/data/compare", lastmod }, ...familyComparisons, ...modelComparisons])
+  const labPages = catalog.labs.map((lab) => ({
+    path: `/data/${lab.id}`,
+    lastmod: sitemapDate(stats?.updatedAt, ...lab.models.map((model) => model.lastUpdated ?? model.releaseDate)),
+  }))
+  // Skip entries whose URL resolves to another model, such as stats aliases.
+  const modelPages = [...catalog.models, ...(catalog.aliases ?? [])]
+    .filter((model) => findModelCatalogEntry(catalog, model.slug, model.lab)?.id === model.id)
+    .map((model) => ({
+      path: catalogModelPath(model),
+      lastmod: sitemapDate(stats?.updatedAt, model.lastUpdated ?? model.releaseDate),
+    }))
+  const entries = uniqueSitemapEntries([
+    { path: "/data/", lastmod: sitemapDate(stats?.updatedAt) },
+    { path: "/data/compare", lastmod },
+    ...labPages,
+    ...modelPages,
+    ...familyComparisons,
+    ...modelComparisons,
+  ])
 
   return new Response(sitemapXml(entries), {
     headers: {

@@ -42,6 +42,28 @@ describe("session target resolver", () => {
     })
   })
 
+  test("creates a missing explicit Session with its ID", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError" })
+    spyOn(client.location, "get").mockResolvedValue(location("/project"))
+    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_chosen", "/project"))
+
+    const target = await resolveSessionTarget({ client, session: "ses_chosen", prepare })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ id: "ses_chosen" }))
+    expect(target).toMatchObject({ session: { id: "ses_chosen" }, resume: false })
+  })
+
+  test("does not create a missing explicit Session to fork", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError" })
+    const create = spyOn(client.session, "create")
+
+    await expect(resolveSessionTarget({ client, session: "ses_chosen", fork: true, prepare })).rejects.toThrow(
+      "Session not found",
+    )
+    expect(create).not.toHaveBeenCalled()
+  })
+
   test("paginates to continue the exact directory", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     spyOn(client.location, "get").mockResolvedValue(location("/project"))

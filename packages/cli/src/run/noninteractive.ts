@@ -54,7 +54,7 @@ type ToolState = StartedPart & {
   input: Record<string, JsonValue>
   raw?: string
   provider?: unknown
-  providerState?: SessionMessageAssistantTool["providerState"]
+  native?: SessionMessageAssistantTool["native"]
   metadata: Record<string, JsonValue>
   content: ToolContent[]
 }
@@ -66,6 +66,12 @@ type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 // session. An exclusive local process may treat them as this run's blockers; an
 // attached client must not cancel input that may belong to another session.
 const GLOBAL_FORM_SESSION_ID = "global"
+
+const QUESTION_CANCELLED_FEEDBACK =
+  "This non-interactive run cannot ask the user questions, so the question was cancelled. Continue without an answer; make reasonable assumptions and state them."
+
+const PERMISSION_REJECTED_FEEDBACK =
+  "This non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action."
 
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
@@ -132,9 +138,34 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
-  const replyPermission = async (request: { id: string; action: string; resources: ReadonlyArray<string> }) => {
+  // Subagents run in child sessions; their asks and questions belong to this run too. Other
+  // sessions on a shared server (e.g. the TUI's) must be left alone.
+  const owned = new Map<string, Promise<boolean>>([[input.sessionID, Promise.resolve(true)]])
+  const ownsSession = (sessionID: string): Promise<boolean> => {
+    const known = owned.get(sessionID)
+    if (known) return known
+    const result =
+      sessionID === GLOBAL_FORM_SESSION_ID
+        ? Promise.resolve(false)
+        : input.client.session
+            .get({ sessionID })
+            .then((session) => (session.parentID ? ownsSession(session.parentID) : false))
+            .catch(() => false)
+    owned.set(sessionID, result)
+    return result
+  }
+
+  const replyPermission = async (request: {
+    id: string
+    sessionID: string
+    action: string
+    resources: ReadonlyArray<string>
+  }) => {
+    // Nobody can approve here. Outside V1 compatibility, reject with feedback so the tool fails
+    // as ordinary model-visible output and the model continues without the action.
+    const continuing = !input.auto && input.compatibility !== "v1"
     if (!input.auto) {
-      permissionRejected = true
+      if (!continuing) permissionRejected = true
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
         UI.Style.TEXT_NORMAL +
@@ -143,26 +174,36 @@ export async function runNonInteractivePrompt(input: Input) {
     }
     await input.client.permission
       .reply({
-        sessionID: input.sessionID,
+        sessionID: request.sessionID,
         requestID: request.id,
         decision: input.auto ? "once" : "reject",
+        ...(continuing ? { message: PERMISSION_REJECTED_FEEDBACK } : {}),
       })
       .catch(() => {})
-    if (!input.auto) {
+    if (!input.auto && !continuing) {
       await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     }
   }
 
-  const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID">) => {
+  const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID" | "metadata">) => {
+    // Nobody can answer a question here. Outside V1 compatibility, cancel it with a message so the
+    // question tool fails as ordinary model-visible output and the model continues without an answer.
+    const continuing = request.metadata?.kind === "question" && input.compatibility !== "v1"
     try {
       await input.client.session.form.cancel(
-        { sessionID: request.sessionID, formID: request.id },
+        {
+          sessionID: request.sessionID,
+          formID: request.id,
+          ...(continuing ? { message: QUESTION_CANCELLED_FEEDBACK } : {}),
+        },
         ...formRequestOptions(request.sessionID === GLOBAL_FORM_SESSION_ID ? input.location : undefined),
       )
     } catch (error) {
       if (!formAlreadySettled(error)) throw error
     }
+    if (continuing) return
     formCancelled = true
+    if (input.compatibility !== "v1") process.exitCode = 1
   }
 
   const consume = async () => {
@@ -177,14 +218,14 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       const event = next.value
 
-      if (event.type === "permission.asked" && submitted && event.data.sessionID === input.sessionID) {
+      if (event.type === "permission.asked" && submitted && (await ownsSession(event.data.sessionID))) {
         await replyPermission(event.data)
         continue
       }
       if (
         event.type === "form.created" &&
         submitted &&
-        (event.data.form.sessionID === input.sessionID ||
+        ((await ownsSession(event.data.form.sessionID)) ||
           (!input.attached &&
             event.data.form.sessionID === GLOBAL_FORM_SESSION_ID &&
             sameLocation(event.location, input.location)))
@@ -290,7 +331,7 @@ export async function runNonInteractivePrompt(input: Input) {
           messageID: event.data.assistantMessageID,
           type: "reasoning",
           text: event.data.text,
-          metadata: event.data.state,
+          metadata: event.data.native,
           time: { start: started?.timestamp ?? time, end: time },
         }
         renderedReasoning.set(key, event.data.text)
@@ -332,8 +373,8 @@ export async function runNonInteractivePrompt(input: Input) {
           tool: current?.tool ?? "tool",
           input: event.data.input,
           raw: current?.raw,
-          provider: { executed: event.data.executed, state: event.data.state },
-          providerState: event.data.state,
+          provider: { executed: event.data.executed, state: event.data.native },
+          native: event.data.native,
           metadata: {},
           content: [],
         })
@@ -354,8 +395,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
-          providerState: current.providerState,
-          providerResultState: event.data.resultState,
+          native: event.data.native ? { ...current.native, ...event.data.native } : current.native,
           state: {
             status: "completed",
             input: current.input,
@@ -380,7 +420,7 @@ export async function runNonInteractivePrompt(input: Input) {
               metadata: event.data.metadata,
               content: event.data.content,
               providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.resultState },
+              providerResult: { executed: event.data.executed, state: event.data.native },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -402,8 +442,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
-          providerState: current.providerState,
-          providerResultState: event.data.resultState,
+          native: event.data.native ? { ...current.native, ...event.data.native } : current.native,
           state: {
             status: "error",
             input: current.input,
@@ -426,7 +465,7 @@ export async function runNonInteractivePrompt(input: Input) {
             error,
             metadata: {
               providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.resultState },
+              providerResult: { executed: event.data.executed, state: event.data.native },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -493,7 +532,8 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.execution.interrupted") {
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
-        if (event.data.reason !== "user" && !emittedError) {
+        // A declined tool call ends the step with an interruption; it was already reported above.
+        if (event.data.reason !== "user" && !emittedError && !permissionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
           const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
@@ -564,7 +604,7 @@ export async function runNonInteractivePrompt(input: Input) {
             messageID: message.id,
             type: "reasoning",
             text,
-            metadata: item.state,
+            metadata: item.native,
             time: { start: message.time.created, end: timestamp },
           }
           renderedReasoning.set(key, item.text)
@@ -620,7 +660,9 @@ export async function runNonInteractivePrompt(input: Input) {
         UI.error(item.state.error.message)
       }
 
-      if (message.error && !emittedError) {
+      // A declined tool call ends its step with an interrupted-step error that is
+      // only a consequence of our own rejection; it was already reported above.
+      if (message.error && !emittedError && !permissionRejected && !formCancelled) {
         emittedError = true
         process.exitCode = 1
         if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)

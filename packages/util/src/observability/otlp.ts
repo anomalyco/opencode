@@ -1,5 +1,5 @@
 import { Effect, Layer, Scope } from "effect"
-import { OtlpLogger } from "effect/unstable/observability"
+import { OtlpLogger } from "effect/observability"
 import { runID } from "./shared.js"
 
 export interface Options {

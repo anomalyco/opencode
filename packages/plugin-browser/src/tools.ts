@@ -2,13 +2,15 @@ export * as BrowserTools from "./tools.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Encoding, Result, Schema } from "effect"
+import { Effect, Result, Schema } from "effect"
+import { Base64 } from "effect/encoding"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
 import { Browser } from "./rpc.js"
+import { BrowserSkill } from "./skill.js"
 
 export const register = Effect.fn("BrowserTools.register")(function* (
-  ctx: Pick<Context, "tool" | "location">,
+  ctx: Pick<Context, "tool" | "skill" | "location">,
   connection: BrowserConnection.Connection,
 ) {
   const execute = Effect.fn("BrowserTools.execute")(function* (
@@ -30,6 +32,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     return yield* exportResult(output, response.files)
   })
 
+  yield* ctx.skill.transform((editor) => editor.add(BrowserSkill.info))
   yield* ctx.tool
     .transform((editor) => {
       editor.namespace({
@@ -104,7 +107,7 @@ function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, f
           .filter((file) => file.mime.startsWith("image/"))
           .map((file) => ({
             type: "file" as const,
-            uri: `data:${file.mime};base64,${Encoding.encodeBase64(file.data)}`,
+            uri: `data:${file.mime};base64,${Base64.encode(file.data)}`,
             mime: file.mime,
             name: file.name,
           })),

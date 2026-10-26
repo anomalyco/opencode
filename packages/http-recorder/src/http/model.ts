@@ -1,5 +1,4 @@
 import { Schema } from "effect"
-import type { RequestSnapshot } from "../api.js"
 
 export const RequestSnapshotSchema = Schema.Struct({
   method: Schema.String,

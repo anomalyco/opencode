@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import {
   LLM,
   LLMRequest,
@@ -9,7 +9,7 @@ import {
   ToolDefinition,
   ToolNamespace,
   mergeProviderOptions,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"

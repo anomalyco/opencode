@@ -32,8 +32,19 @@ type Data = {
     [sessionID: string]: FileDiffInfo[]
   }
   session_diff_preload?: {
-    [sessionID: string]: PreloadMultiFileDiffResult<unknown>[]
+    [sessionID: string]: PreloadMultiFileDiffResult<unknown, undefined>[]
   }
+}
+
+/** Names a finished turn by its Session and the user message that opened it. */
+export type TurnDiffInput = { sessionID: string; from: string }
+
+/** The host's cache of the files each finished turn changed. */
+export type TurnDiffSource = {
+  /** The turn's diffs, or undefined until they load. */
+  get: (input: TurnDiffInput) => readonly FileDiffInfo[] | undefined
+  /** Starts loading the turn's diffs unless they are cached or already loading. */
+  load: (input: TurnDiffInput) => void
 }
 
 export type NavigateToSessionFn = (sessionID: string) => void
@@ -46,10 +57,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     sessionID?: string
+    /** Whether message meta names the agent; the app follows its Show agent setting. Defaults to true. */
+    agents?: boolean
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
+    turnDiff?: TurnDiffSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
+    backgroundCompaction?: boolean
   }) => {
     return {
       get store() {
@@ -61,10 +77,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       get sessionID() {
         return props.sessionID
       },
+      get agents() {
+        return props.agents ?? true
+      },
+      get backgroundCompaction() {
+        return props.backgroundCompaction === true
+      },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
+      turnDiff: props.turnDiff,
     }
   },
 })

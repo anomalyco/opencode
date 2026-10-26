@@ -2,19 +2,25 @@ import { Effect, FileSystem, Option } from "effect"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { brotliDecompressSync } from "node:zlib"
+import { AppArchive } from "./app-archive"
 import { OPENCODE_LOCAL } from "./version"
 
 export type AssetMap = Readonly<Record<string, string | Uint8Array>>
-type EncodedAssetMap = Readonly<Record<string, string>>
+/** Each asset's brotli-compressed bytes, when the build embedded them. */
+export type BrotliMap = Readonly<Record<string, Uint8Array>>
 
 export const load = Effect.fn("cli.app-assets.load")(function* () {
-  const embedded = yield* Effect.tryPromise(() => import("virtual:opencode-app-assets")).pipe(Effect.option)
-  if (Option.isSome(embedded) && (Object.keys(embedded.value.default).length > 0 || !OPENCODE_LOCAL))
-    return lazy(embedded.value.default, (key) =>
-      brotliDecompressSync(Buffer.from(embedded.value.default[key]!, "base64")),
-    )
+  const embedded = yield* Effect.tryPromise(() => import("virtual:opencode-app-assets")).pipe(
+    Effect.map((module) => AppArchive.decode(module.default())),
+    Effect.option,
+  )
+  if (Option.isSome(embedded) && (Object.keys(embedded.value).length > 0 || !OPENCODE_LOCAL))
+    return {
+      files: lazy(embedded.value, (key) => brotliDecompressSync(embedded.value[key]!)),
+      brotli: embedded.value,
+    }
   if (!OPENCODE_LOCAL) return yield* Effect.fail(new Error("Web UI assets are missing from the CLI build"))
-  return yield* sourceAssets()
+  return { files: yield* sourceAssets(), brotli: undefined }
 })
 
 const sourceAssets = Effect.fnUntraced(function* () {
@@ -35,7 +41,7 @@ const sourceAssets = Effect.fnUntraced(function* () {
   return lazy(assets, (key) => readFileSync(assets[key]!))
 })
 
-function lazy(assets: EncodedAssetMap, load: (key: string) => Uint8Array): AssetMap {
+function lazy(assets: Readonly<Record<string, unknown>>, load: (key: string) => Uint8Array): AssetMap {
   // Immutable browser caching makes retaining decompressed copies in the server unnecessary.
   return new Proxy(
     {},

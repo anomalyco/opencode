@@ -18,7 +18,15 @@ import {
   type ToolResultPart,
 } from "../schema/index.js"
 import type { Media } from "../media.js"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import {
+  JsonObject,
+  lenient,
+  optionalArray,
+  optionalNull,
+  optionalNullish,
+  ProviderShared,
+  withUntypedFrames,
+} from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -52,7 +60,7 @@ const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
   video_url: Schema.String,
 })
-const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
+const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile, OpenResponsesInputVideo])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
 
@@ -168,10 +176,20 @@ export const ConfigurationUpdate = Schema.Struct({
   type: Schema.Literal("configuration_update"),
   reasoning: Schema.Struct({ effort: OpenResponsesOptions.ReasoningEffort }),
 })
-type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+export type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+
+export const HostedToolReplay = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    id: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedToolReplayItem = Schema.Schema.Type<typeof HostedToolReplay>
 
 export const InputItem = Schema.Union([
   CompactionItem,
+  ConfigurationUpdate,
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
@@ -204,24 +222,9 @@ export const InputItem = Schema.Union([
     output: OpenResponsesFunctionCallOutput,
   }),
   HostedToolItem,
+  HostedToolReplay,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
-export type HostedToolReplayItem = {
-  readonly type: string
-  readonly id: string
-  readonly [key: string]: unknown
-}
-type LoweredInputItem =
-  | OpenResponsesInputItem
-  | HostedToolReplayItem
-  | ConfigurationUpdate
-  | {
-      readonly type: "message"
-      readonly id?: string
-      readonly role: "assistant"
-      readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
-      readonly phase?: MessagePhase | null
-    }
 
 // Mutable counterpart of the schema reasoning item so `lowerMessages` can fold
 // multiple streamed summary parts into the same item before flushing.
@@ -238,6 +241,14 @@ export const Tool = Schema.Struct({
   parameters: JsonObject,
   strict: Schema.optional(Schema.Boolean),
 })
+
+export const HostedTool = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedTool = Schema.Schema.Type<typeof HostedTool>
 
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
@@ -257,7 +268,7 @@ export const coreFields = {
   model: Schema.String,
   input: Schema.Array(InputItem),
   instructions: Schema.optional(Schema.String),
-  tools: optionalArray(Tool),
+  tools: optionalArray(Schema.Union([Tool, HostedTool])),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -292,24 +303,32 @@ export const coreFields = {
   frequency_penalty: Schema.optional(Schema.Number),
 }
 
-const OpenResponsesBody = Schema.Struct({
+export const OpenResponsesBody = Schema.Struct({
   ...coreFields,
   stream: Schema.Literal(true),
 })
 export type OpenResponsesBody = Schema.Schema.Type<typeof OpenResponsesBody>
 
-export const OpenResponsesUsage = Schema.Struct({
-  input_tokens: Schema.optional(Schema.Number),
-  input_tokens_details: optionalNull(
-    Schema.Struct({
-      cached_tokens: Schema.optional(Schema.Number),
-      cache_write_tokens: Schema.optional(Schema.Number),
-    }),
-  ),
-  output_tokens: Schema.optional(Schema.Number),
-  output_tokens_details: optionalNull(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) })),
-  total_tokens: Schema.optional(Schema.Number),
-})
+export const OpenResponsesUsage = Schema.StructWithRest(
+  Schema.Struct({
+    input_tokens: lenient(Schema.Number),
+    input_tokens_details: optionalNull(
+      Schema.StructWithRest(
+        Schema.Struct({
+          cached_tokens: lenient(Schema.Number),
+          cache_write_tokens: lenient(Schema.Number),
+        }),
+        [JsonObject],
+      ),
+    ),
+    output_tokens: lenient(Schema.Number),
+    output_tokens_details: optionalNull(
+      Schema.StructWithRest(Schema.Struct({ reasoning_tokens: lenient(Schema.Number) }), [JsonObject]),
+    ),
+    total_tokens: lenient(Schema.Number),
+  }),
+  [JsonObject],
+)
 type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
 
 // The spec requires `id` on every output item, but some gateways drop it from
@@ -320,11 +339,11 @@ type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
 export const StreamItem = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
-    id: Schema.optional(Schema.String),
-    call_id: Schema.optional(Schema.String),
-    name: Schema.optional(Schema.String),
-    namespace: Schema.optional(Schema.String),
-    arguments: Schema.optional(Schema.String),
+    id: optionalNullish(Schema.String),
+    call_id: optionalNullish(Schema.String),
+    name: optionalNullish(Schema.String),
+    namespace: optionalNullish(Schema.String),
+    arguments: optionalNullish(Schema.String),
     encrypted_content: optionalNull(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -340,24 +359,25 @@ export type OutputItem = StreamItem & { readonly id: string }
 const asText = (value: unknown) =>
   typeof value === "string" && value.length > 0 ? value : typeof value === "number" ? String(value) : undefined
 
-export const Event = Schema.StructWithRest(
+const TypedEvent = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
-    delta: Schema.optional(Schema.String),
-    arguments: Schema.optional(Schema.String),
-    text: Schema.optional(Schema.String),
+    delta: optionalNullish(Schema.String),
+    arguments: optionalNullish(Schema.String),
+    text: optionalNullish(Schema.String),
+    // Kept strict: item-scoped events always carry an id, so null means a broken stream.
     item_id: Schema.optional(Schema.String),
-    output_index: Schema.optional(Schema.Number),
-    summary_index: Schema.optional(Schema.Number),
+    output_index: optionalNullish(Schema.Number),
+    summary_index: optionalNullish(Schema.Number),
     // OutputItemAdded/Done permit a null item in the Open Responses OpenAPI schema.
     item: optionalNull(StreamItem),
-    response: Schema.optional(
+    response: optionalNullish(
       Schema.StructWithRest(
         Schema.Struct({
-          id: Schema.optional(Schema.String),
+          id: optionalNullish(Schema.String),
           service_tier: optionalNull(Schema.String),
-          incomplete_details: optionalNull(Schema.Struct({ reason: Schema.optional(Schema.String) })),
-          output: Schema.optional(Schema.Array(StreamItem)),
+          incomplete_details: optionalNull(Schema.Struct({ reason: optionalNullish(Schema.String) })),
+          output: optionalNullish(Schema.Array(StreamItem)),
           usage: optionalNull(OpenResponsesUsage),
           error: Schema.optional(Schema.Unknown),
         }),
@@ -372,34 +392,17 @@ export const Event = Schema.StructWithRest(
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
+export const Event = withUntypedFrames(TypedEvent)
 export type Event = Schema.Schema.Type<typeof Event>
 export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
 
-const decodeEventValue = Schema.decodeUnknownEffect(Event)
-const decodeFrame = Schema.decodeUnknownEffect(ProviderShared.Json)
-
-/**
- * Decodes one WebSocket frame. Some providers and gateways answer a rejected `response.create` with a bare
- * `{ "error": ... }` envelope and no event type; that reads as an error event so it classifies instead of
- * failing decoding.
- */
-export const decodeChannelEvent = (frame: string) =>
-  decodeFrame(frame).pipe(
-    Effect.flatMap((value) =>
-      decodeEventValue(
-        ProviderShared.isRecord(value) && value.type === undefined && value.error != null
-          ? { ...value, type: "error" }
-          : value,
-      ),
-    ),
-  )
+/** Decodes one WebSocket frame. */
+export const decodeChannelEvent = Schema.decodeUnknownEffect(Protocol.jsonEvent(Event))
 
 export interface ProviderAdapter {
   readonly id: string
   readonly name: string
-  readonly nativeTool?: (
-    native: NonNullable<ToolDefinition["native"]>,
-  ) => Effect.Effect<{ readonly type: string }, AIError>
+  readonly nativeTool?: (native: NonNullable<ToolDefinition["native"]>) => Effect.Effect<HostedTool, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
@@ -441,7 +444,7 @@ interface ReasoningStreamItem {
 // =============================================================================
 // Request Lowering
 // =============================================================================
-export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protocolName: string, tool: ToolDefinition) {
+export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool: ToolDefinition) {
   if (tool.native !== undefined)
     return yield* ProviderShared.invalidRequest(`${protocolName} does not support provider-native tool ${tool.name}`)
   return {
@@ -455,8 +458,10 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protoco
 })
 
 export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, adapter: ProviderAdapter) =>
-  Effect.forEach(tools, (tool) =>
-    tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
+  Effect.forEach(
+    tools,
+    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool> | HostedTool, AIError> =>
+      tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
   )
 
 export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -471,7 +476,7 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
 // provider-defined and does not necessarily identify the item's semantic type.
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
+  if (!metadata || typeof metadata.itemId !== "string") return undefined
   const separator = metadata.itemId.indexOf("_")
   return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
@@ -490,12 +495,13 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata)) return undefined
+  if (!metadata) return undefined
   const id = itemID(part.providerMetadata, providerMetadataKey)
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
+  if (part.text.length === 0 && !encryptedContent) return undefined
   return {
     type: "reasoning",
     ...(id === undefined ? {} : { id }),
@@ -504,24 +510,20 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
   }
 }
 
-const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
-  part: MediaPart,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-  target: "message" | "tool-result",
-) {
+const decodeImageDetail = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))
+const decodeMessageMetadata = ProviderShared.validateWith(Schema.decodeUnknownEffect(MessageMetadata))
+
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
   const media = part.media.inline()
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
-  const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
-    part.providerMetadata?.[metadataKey(request.model)]?.detail,
-  )
+  const rawDetail = part.providerMetadata?.[metadataKey(request.model)]?.detail
+  const detail = rawDetail === undefined ? undefined : yield* decodeImageDetail(rawDetail)
   const mime = part.media.mediaType.toLowerCase()
   const url = ProviderShared.mediaUrl(part.media)
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
   if (part.media.kind !== "image") {
-    if (target === "tool-result" && part.media.kind === "video")
-      return { type: "input_video" as const, video_url: location }
+    if (part.media.kind === "video") return { type: "input_video" as const, video_url: location }
     return {
       type: "input_file" as const,
       filename: part.filename ?? (mime === "application/pdf" ? "document.pdf" : "file"),
@@ -542,15 +544,8 @@ const lowerUserContent = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  if (part.type === "media") return yield* lowerMedia(part, request, adapter)
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
-})
-
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
-  const lowered = yield* lowerMedia(part, request, adapter, "message")
-  if (lowered.type === "input_video")
-    return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
-  return lowered
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -561,16 +556,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
-})
-
-const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
-  item: Content,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter)
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
@@ -588,17 +574,16 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
+const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const input: LoweredInputItem[] = []
+  const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
 
   for (const message of request.messages) {
-    const metadata = yield* ProviderShared.validateWith(
-      Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
-    )(message.providerMetadata?.[providerMetadataKey])
+    const rawMetadata = message.providerMetadata?.[providerMetadataKey]
+    const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
       const update = effortUpdate(message)
       if (update) {
@@ -712,7 +697,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
           input.push({
             type: "message",
             role: "user",
-            content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
+            content: yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter)),
           })
           continue
         }
@@ -722,7 +707,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
           input.push({
             type: "message",
             role: "user",
-            content: [yield* lowerMessageMedia(part, request, adapter)],
+            content: [yield* lowerMedia(part, request, adapter)],
           })
           continue
         }
@@ -752,7 +737,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   return input
 })
 
-export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(function* (
+export const lowerConversation = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
@@ -767,7 +752,7 @@ export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(fu
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
-  const parallelToolCalls = resolveParallelToolCalls(request)
+  const parallelToolCalls = resolveParallelToolCalls(request, options)
   return {
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
@@ -795,15 +780,15 @@ export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOpti
   }
 }
 
-export const resolveParallelToolCalls = (request: LLMRequest) => {
-  const configured = OpenResponsesOptions.resolve(request).parallelToolCalls
+export const resolveParallelToolCalls = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
+  const configured = options.parallelToolCalls
   if (configured !== undefined) return configured
   const disabled = request.toolChoice?.disableParallelToolUse
   return disabled === undefined ? undefined : !disabled
 }
 
-export const allowedToolChoice = (request: LLMRequest) => {
-  const allowed = OpenResponsesOptions.resolve(request).allowedTools
+export const allowedToolChoice = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
+  const allowed = options.allowedTools
   if (!allowed) return undefined
   return {
     type: "allowed_tools" as const,
@@ -817,21 +802,18 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   adapter: ProviderAdapter,
 ) {
   const projected = ProviderShared.flattenToolRequest(request)
+  const options = OpenResponsesOptions.resolve(request)
   return {
     ...(yield* lowerConversation(projected.request, adapter)),
-    ...lowerGeneration(request),
+    ...lowerGeneration(request, options),
     tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
     tool_choice:
-      allowedToolChoice(request) ??
+      allowedToolChoice(request, options) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
   }
 })
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesBody))
-
-export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* decodeBody(yield* fromRequestWithAdapter(request, BASE_ADAPTER))
-})
+export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================
 // Stream Parsing
@@ -854,13 +836,14 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
+    ...ProviderShared.reportedBilling(usage),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
 
 const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
   const reason = event.response?.incomplete_details?.reason
-  if (reason === undefined || reason === null) {
+  if (reason === undefined) {
     if (hasFunctionCall) return "tool-calls"
     if (event.type === "response.incomplete") return "unknown"
     return "stop"
@@ -1018,7 +1001,7 @@ export const onReasoningDelta = (state: ParserState, event: Event, itemID: strin
 // as a single delta unless that summary index already streamed one.
 export const onReasoningDone = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item || typeof event.text !== "string") return [state, NO_EVENTS]
+  if (!item || event.text === undefined) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.deltaIndexes.has(index)) return [state, NO_EVENTS]
   return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
@@ -1143,7 +1126,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgumentsDelta")(function* (
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: Event,
 ) {
@@ -1174,7 +1157,7 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
+const onOutputItemDone = Effect.fnUntraced(function* (
   state: ParserState,
   item: NormalizedEvent["item"],
 ) {
@@ -1310,7 +1293,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
+const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   let current = state
   const events: LLMEvent[] = []
   if (event.type === "response.completed") {

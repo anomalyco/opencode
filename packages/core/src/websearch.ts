@@ -4,7 +4,7 @@ import { WebSearch } from "@opencode/schema/websearch"
 import type { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { Clock, Context, Effect, Layer, Option, Schema, Stream } from "effect"
-import { HttpClientError } from "effect/unstable/http"
+import { HttpClientError } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { KV } from "./kv.js"
@@ -99,6 +99,12 @@ const layer = Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    const providers = (data: Data) =>
+      Array.from(data.providers.values(), (provider) => ({
+        id: provider.id,
+        name: provider.name,
+      })).toSorted((a, b) => a.name.localeCompare(b.name))
+
     const state = State.create<Data, Editor>({
       initial: () => ({ providers: new Map() }),
       editor: (editor) => ({
@@ -108,7 +114,7 @@ const layer = Layer.effect(
           set: (selection) => (editor.selection = selection),
         },
       }),
-      notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(providers, () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid)),
     })
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {
@@ -162,10 +168,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       providers: Effect.fn("WebSearch.providers")(function* () {
-        return Array.from(state.get().providers.values(), (provider) => ({
-          id: provider.id,
-          name: provider.name,
-        })).toSorted((a, b) => a.name.localeCompare(b.name))
+        return providers(state.get())
       }),
       default: Effect.fn("WebSearch.defaultInfo")(function* () {
         const provider = yield* defaultProvider(yield* selection())

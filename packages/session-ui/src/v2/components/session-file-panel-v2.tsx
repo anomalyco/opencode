@@ -3,13 +3,22 @@ import "./session-review-v2.css"
 
 export function SessionFilePanelV2(props: {
   sidebar?: JSX.Element
+  sidebarToggle?: JSX.Element
+  sidebarToggleGap?: 2 | 10
+  sidebarCollapsed?: boolean
   toolbar: boolean
   toolbarStart?: JSX.Element
   toolbarEnd?: JSX.Element
   children?: JSX.Element
 }) {
   return (
-    <div data-component="session-review-v2">
+    <div
+      data-component="session-review-v2"
+      data-sidebar-toggle={props.sidebarToggle ? "" : undefined}
+      data-sidebar-toggle-gap={props.sidebarToggleGap}
+      data-sidebar-collapsed={props.sidebarCollapsed ? "" : undefined}
+    >
+      <div data-slot="session-review-v2-sidebar-toggle">{props.sidebarToggle}</div>
       <div data-slot="session-review-v2-body">
         {props.sidebar}
         <div data-slot="session-review-v2-preview">

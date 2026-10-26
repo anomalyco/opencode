@@ -4,44 +4,52 @@ import { Effect } from "effect"
 import { DesktopLogging, scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { safeWindowURL } from "./state"
-import { makeUnresponsiveSampler } from "./unresponsive"
+import { unresponsiveSampler } from "./unresponsive"
 
-export const makeWindowRecovery = Effect.gen(function* () {
+export const windowRecovery = Effect.gen(function* () {
   const context = yield* Effect.context()
   const runFork = Effect.runForkWith(context)
   const runPromise = Effect.runPromiseWith(context)
   const logging = yield* DesktopLogging.Service
-  const createUnresponsiveSampler = yield* makeUnresponsiveSampler
+  const createUnresponsiveSampler = yield* unresponsiveSampler
 
   function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: () => void) {
     let showing = false
     const sampler = createUnresponsiveSampler(win, name)
 
     type RecoveryAction = "relaunch" | "export-logs" | "keep-waiting" | "quit"
+
     const handle = async (action: RecoveryAction | undefined, wait: boolean) => {
       if (action === "export-logs") {
         const sampling = sampler.stopAndFlush()
         await runPromise(logging.exportDebug).catch((error) =>
           runFork(Effect.logError("failed to export debug logs", { error })),
         )
+
         if (wait && sampling) sampler.start()
+
         return true
       }
+
       if (action === "relaunch") {
         sampler.stopAndFlush()
         relaunch()
+
         return false
       }
+
       if (action === "quit") {
         sampler.stopAndFlush()
         app.quit()
       }
+
       return false
     }
 
     const show = async (message: string, detail: string, wait: boolean) => {
       if (showing || win.isDestroyed()) return
       showing = true
+
       try {
         while (!win.isDestroyed()) {
           const actions: { id: RecoveryAction; label: string }[] = wait
@@ -55,6 +63,7 @@ export const makeWindowRecovery = Effect.gen(function* () {
                 { id: "export-logs", label: nativeT("desktop.recovery.action.exportLogs") },
                 { id: "quit", label: nativeT("desktop.recovery.action.quit") },
               ]
+
           const result = await dialog.showMessageBox(win, {
             type: "warning",
             buttons: actions.map((action) => action.label),
@@ -63,7 +72,9 @@ export const makeWindowRecovery = Effect.gen(function* () {
             message,
             detail,
           })
+
           if (await handle(actions[result.response]?.id, wait)) continue
+
           return
         }
       } finally {
@@ -92,6 +103,7 @@ export const makeWindowRecovery = Effect.gen(function* () {
           }),
         ),
       )
+
       if (!isMainFrame || errorCode === -3) return
       void show(
         nativeT("desktop.recovery.loadFailed"),

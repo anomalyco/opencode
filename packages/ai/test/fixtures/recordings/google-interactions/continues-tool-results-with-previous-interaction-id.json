@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:google-interactions",
+      "provider:google",
+      "protocol:google-interactions"
+    ],
+    "name": "google-interactions/continues-tool-results-with-previous-interaction-id",
+    "recordedAt": "2026-10-03T18:10:17.900Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/interactions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3.8-flash\",\"input\":[{\"type\":\"user_input\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]}],\"stream\":true,\"store\":true,\"system_instruction\":\"Use get_weather for weather questions. Answer concisely after receiving the result.\",\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"generation_config\":{\"max_output_tokens\":2048,\"thinking_level\":\"low\",\"tool_choice\":\"any\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: interaction.created\ndata: {\"interaction\":{\"id\":\"v1_ChdCMFhCYXRqeURhVDdxdHNQNWJLTXNBURIXQjBYQmF0anlEYVQ3cXRzUDViS01zQVE\",\"object\":\"interaction\",\"model\":\"gemini-3.8-flash\"},\"event_type\":\"interaction.created\"}\n\nevent: interaction.status_update\ndata: {\"interaction_id\":\"v1_ChdCMFhCYXRqeURhVDdxdHNQNWJLTXNBURIXQjBYQmF0anlEYVQ3cXRzUDViS01zQVE\",\"status\":\"in_progress\",\"event_type\":\"interaction.status_update\"}\n\nevent: step.start\ndata: {\"index\":0,\"step\":{\"type\":\"thought\"},\"event_type\":\"step.start\"}\n\nevent: step.delta\ndata: {\"index\":0,\"delta\":{\"signature\":\"EoACCv0BAWkUfRMR9cx79IeL9V4HvDAHann4OEdOjz7FebGRwlCFGJHqLGG1lG1d+9xzzyPXN0d60gjMwbeix1bE4cCckDeMV0vAkOfR/epPhvmcfI+vWK1nURu+3UcgUBQ9on4VlZFcnOg7SoihuvxuQB4qqT65EAyqi8ybd3P8NB+V/FNcTBvMmJuNNCNxI5KgwsHjdT+xLdssTieljIG3H99rSz3/Nv90dYEJIr0WsQ1a3ZevpD6gPts/8Id/Z92zQ3aq4LAr47rdItCVF5h63Lchi9QFrav5LGf6lNVAOnlHIyXBrlAnVbdLsAdzlemlHY+oIWNMncL/NKayCt+qvQ==\",\"type\":\"thought_signature\"},\"event_type\":\"step.delta\"}\n\nevent: step.stop\ndata: {\"index\":0,\"event_type\":\"step.stop\"}\n\nevent: step.start\ndata: {\"index\":1,\"step\":{\"id\":\"call_326996\",\"signature\":\"AWkUfRMR9cx79IeL9V4HvDAHann4OEdOjz7FebGRwlCFGJHqLGG1lG1d+9xzzyPXN0d60gjMwbeix1bE4cCckDeMV0vAkOfR/epPhvmcfI+vWK1nURu+3UcgUBQ9on4VlZFcnOg7SoihuvxuQB4qqT65EAyqi8ybd3P8NB+V/FNcTBvMmJuNNCNxI5KgwsHjdT+xLdssTieljIG3H99rSz3/Nv90dYEJIr0WsQ1a3ZevpD6gPts/8Id/Z92zQ3aq4LAr47rdItCVF5h63Lchi9QFrav5LGf6lNVAOnlHIyXBrlAnVbdLsAdzlemlHY+oIWNMncL/NKayCt+qvQ==\",\"type\":\"function_call\",\"name\":\"get_weather\",\"arguments\":{}},\"event_type\":\"step.start\"}\n\nevent: step.delta\ndata: {\"index\":1,\"delta\":{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\",\"type\":\"arguments_delta\"},\"event_type\":\"step.delta\"}\n\nevent: step.stop\ndata: {\"index\":1,\"event_type\":\"step.stop\"}\n\nevent: interaction.completed\ndata: {\"interaction\":{\"id\":\"v1_ChdCMFhCYXRqeURhVDdxdHNQNWJLTXNBURIXQjBYQmF0anlEYVQ3cXRzUDViS01zQVE\",\"status\":\"requires_action\",\"usage\":{\"total_tokens\":114,\"total_input_tokens\":68,\"input_tokens_by_modality\":[{\"modality\":\"text\",\"tokens\":68}],\"total_cached_tokens\":0,\"total_output_tokens\":16,\"total_tool_use_tokens\":0,\"total_thought_tokens\":30,\"raw_prompt_token\":107,\"model_invocation_token_counts\":[{\"prompt_tokens_details\":[{\"modality\":\"text\",\"tokens\":107}],\"candidates_tokens_details\":[{\"modality\":\"text\",\"tokens\":22}],\"thoughts_tokens_details\":[{\"modality\":\"text\",\"tokens\":30}]}],\"non_grounding_model_invocation_token_counts\":[{\"prompt_tokens_details\":[{\"modality\":\"text\",\"tokens\":107}],\"candidates_tokens_details\":[{\"modality\":\"text\",\"tokens\":22}],\"thoughts_tokens_details\":[{\"modality\":\"text\",\"tokens\":30}]}]},\"created\":\"2026-10-03T18:10:16Z\",\"updated\":\"2026-10-03T18:10:16Z\",\"service_tier\":\"standard\",\"object\":\"interaction\",\"model\":\"gemini-3.8-flash\"},\"event_type\":\"interaction.completed\"}\n\nevent: done\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/interactions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3.8-flash\",\"input\":[{\"type\":\"function_result\",\"call_id\":\"call_326996\",\"name\":\"get_weather\",\"result\":{\"temperature\":22,\"condition\":\"sunny\"}}],\"stream\":true,\"store\":false,\"previous_interaction_id\":\"v1_ChdCMFhCYXRqeURhVDdxdHNQNWJLTXNBURIXQjBYQmF0anlEYVQ3cXRzUDViS01zQVE\",\"system_instruction\":\"Use get_weather for weather questions. Answer concisely after receiving the result.\",\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"generation_config\":{\"max_output_tokens\":2048,\"thinking_level\":\"low\",\"tool_choice\":\"none\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: interaction.created\ndata: {\"interaction\":{\"object\":\"interaction\",\"model\":\"gemini-3.8-flash\"},\"event_type\":\"interaction.created\"}\n\nevent: interaction.status_update\ndata: {\"status\":\"in_progress\",\"event_type\":\"interaction.status_update\"}\n\nevent: step.start\ndata: {\"index\":0,\"step\":{\"type\":\"thought\"},\"event_type\":\"step.start\"}\n\nevent: step.delta\ndata: {\"index\":0,\"delta\":{\"signature\":\"EmkKZwFpFH0TchP60hnCGy9QgdyJKikXfeP9DBx/BVTE92JiMUcdYnAQ7vGOt2zL8v0GQMbCshndVE0+WeHt0QXyzeeMeNFH/UQ5bxo3Vs+T3H1e6Fq3LFIjDuvYvMYMRLk44oULO1EhoCg=\",\"type\":\"thought_signature\"},\"event_type\":\"step.delta\"}\n\nevent: step.stop\ndata: {\"index\":0,\"event_type\":\"step.stop\"}\n\nevent: step.start\ndata: {\"index\":1,\"step\":{\"type\":\"model_output\"},\"event_type\":\"step.start\"}\n\nevent: step.delta\ndata: {\"index\":1,\"delta\":{\"text\":\"The weather in Paris\",\"type\":\"text\"},\"event_type\":\"step.delta\"}\n\nevent: step.delta\ndata: {\"index\":1,\"delta\":{\"text\":\" is sunny with a temperature of 22°C.\",\"type\":\"text\"},\"event_type\":\"step.delta\"}\n\nevent: step.stop\ndata: {\"index\":1,\"event_type\":\"step.stop\"}\n\nevent: interaction.completed\ndata: {\"interaction\":{\"status\":\"completed\",\"usage\":{\"total_tokens\":115,\"total_input_tokens\":99,\"input_tokens_by_modality\":[{\"modality\":\"text\",\"tokens\":99}],\"total_cached_tokens\":0,\"total_output_tokens\":16,\"total_tool_use_tokens\":0,\"total_thought_tokens\":0,\"raw_prompt_token\":134,\"model_invocation_token_counts\":[{\"prompt_tokens_details\":[{\"modality\":\"text\",\"tokens\":134}],\"candidates_tokens_details\":[{\"modality\":\"text\",\"tokens\":20}]}],\"non_grounding_model_invocation_token_counts\":[{\"prompt_tokens_details\":[{\"modality\":\"text\",\"tokens\":134}],\"candidates_tokens_details\":[{\"modality\":\"text\",\"tokens\":20}]}]},\"created\":\"2026-10-03T18:10:17Z\",\"updated\":\"2026-10-03T18:10:17Z\",\"service_tier\":\"standard\",\"object\":\"interaction\",\"model\":\"gemini-3.8-flash\"},\"event_type\":\"interaction.completed\"}\n\nevent: done\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "DELETE",
+        "url": "https://generativelanguage.googleapis.com/v1beta/interactions/v1_ChdCMFhCYXRqeURhVDdxdHNQNWJLTXNBURIXQjBYQmF0anlEYVQ3cXRzUDViS01zQVE",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{}"
+      }
+    }
+  ]
+}

@@ -1,6 +1,28 @@
-import type { Page } from "@playwright/test"
+import { expect, type Page } from "@playwright/test"
+import { SERVER } from "./app"
 
 export async function openWithDirection(page: Page, route: string, direction: "ltr" | "rtl") {
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
-  await page.goto(`/e2e/utils/app-direction.html?${new URLSearchParams({ server, route, direction })}`)
+  await page.goto(`/e2e/utils/app-direction.html?${new URLSearchParams({ server: SERVER, route, direction })}`)
+}
+
+/**
+ * Opens the app at a route as the desktop shell starts it: the window's extensions run at once, and the app interface
+ * mounts over the preloaded route only when `start` runs, as it does once the desktop's server is up. One extension
+ * stays loading until `finish` runs; commands are published meanwhile, but the routes wait.
+ */
+export async function openHeldStart(page: Page, route: string) {
+  await page.goto(
+    `/e2e/utils/app-direction.html?${new URLSearchParams({ server: SERVER, route, direction: "ltr", held: "" })}`,
+  )
+  const start = page.getByRole("button", { name: "Start app", exact: true, includeHidden: true })
+  await expect(start).toBeVisible()
+
+  return {
+    // A modal open meanwhile hides the page outside it, so the button is found and clicked past the modal.
+    start: async () => {
+      await start.dispatchEvent("click")
+      await expect(page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true })).toBeEnabled()
+    },
+    finish: () => page.getByRole("button", { name: "Finish startup", exact: true, includeHidden: true }).dispatchEvent("click"),
+  }
 }

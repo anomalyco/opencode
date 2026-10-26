@@ -18,6 +18,7 @@ export const Diagrams = {
 
 function MermaidTimeline(props: { streaming: boolean }) {
   const [completed, setCompleted] = createSignal(!props.streaming)
+
   const document = createMemo(
     (): SessionDocument => ({
       sessionID: CURRENT_SESSION_ID,
@@ -36,7 +37,7 @@ function MermaidTimeline(props: { streaming: boolean }) {
           type: "assistant",
           agent: "build",
           model: STORY_MODEL,
-          time: { created: STORY_TIME + 100, ...(completed() ? { completed: STORY_TIME + 1000 } : {}) },
+          time: { created: STORY_TIME + 100, completed: completed() ? STORY_TIME + 1000 : undefined },
           content: [
             {
               type: "text",
@@ -47,13 +48,14 @@ function MermaidTimeline(props: { streaming: boolean }) {
                 "```mermaid\nsequenceDiagram\n Client->>Server: Send prompt\n Server->>Model: Generate response\n Model-->>Client: Response\n" +
                   (completed() ? "```" : ""),
               ].join("\n\n"),
-              ...(completed() ? {} : { state: { phase: "streaming" } }),
+              native: completed() ? undefined : { phase: "streaming" },
             },
           ],
         },
       ],
     }),
   )
+
   return (
     <section class="mx-auto flex w-full max-w-[840px] flex-col gap-4 p-6">
       <button type="button" onClick={() => setCompleted((value) => !value)}>

@@ -1,13 +1,11 @@
-import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { DialogHeader, DialogLayout } from "../ui/dialog"
 import { useData } from "../context/data"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export function DialogStatus() {
   const data = useData()
   const theme = useTheme().surface("dialog")
-  const dialog = useDialog()
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])
   const color = (status: string) => {
@@ -17,15 +15,7 @@ export function DialogStatus() {
     return theme.text.muted
   }
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-          Status
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
+    <DialogLayout header={<DialogHeader title="Status" />}>
       <Show when={mcp().length > 0} fallback={<text fg={theme.text.base}>No MCP servers</text>}>
         <box>
           <text fg={theme.text.base}>
@@ -55,6 +45,6 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
-    </box>
+    </DialogLayout>
   )
 }

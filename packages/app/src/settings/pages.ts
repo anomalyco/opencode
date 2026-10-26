@@ -7,7 +7,6 @@ export const pageIcons = {
   appearance: "appearance",
   notifications: "notifications",
   shortcuts: "keyboard",
-  pairing: "server",
   projects: "folder",
   workspaces: "outline-worktree",
   providers: "providers",
@@ -15,6 +14,7 @@ export const pageIcons = {
   extensions: "extensions",
   servers: "server",
   experimental: "flask",
+  "gui-extensions": "extensions",
   about: "info",
 } as const satisfies Record<SettingsRootTab, IconProps["name"]>
 
@@ -23,7 +23,6 @@ export const pageLabels = {
   appearance: "settings.general.section.appearance",
   notifications: "settings.tab.notifications",
   shortcuts: "settings.shortcuts.title",
-  pairing: "settings.pairing.title",
   projects: "settings.tab.projects",
   workspaces: "settings.tab.workspaces",
   providers: "settings.providers.title",
@@ -31,5 +30,6 @@ export const pageLabels = {
   extensions: "settings.tab.extensions",
   servers: "settings.section.server",
   experimental: "settings.tab.experimental",
+  "gui-extensions": "settings.guiExtensions.title",
   about: "settings.tab.about",
 } as const satisfies Record<SettingsRootTab, Parameters<ReturnType<typeof useLanguage>["t"]>[0]>

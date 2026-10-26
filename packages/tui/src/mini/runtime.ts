@@ -58,7 +58,6 @@ type RunRuntimeInput = {
   reconnect?: Reconnect
   files: RunInput["files"]
   initialInput?: string
-  thinking?: boolean
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
@@ -78,7 +77,6 @@ export type RunDeferredInput = {
   variant: RunInput["variant"]
   files: RunInput["files"]
   initialInput?: string
-  thinking?: boolean
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
@@ -414,7 +412,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
   })
   await tuiConfigTask
-  const thinking = () => input.thinking ?? configState.current.thinking === "show"
+  const thinking = () => configState.current.thinking === "show"
   const footer = shell.footer
   const firstPaint = footer.idle().catch(() => {})
   const offRuntimeClose = footer.onClose(() => {
@@ -1104,7 +1102,6 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
       directory: input.directory,
       files: input.files,
       initialInput: input.initialInput,
-      thinking: input.thinking,
       replay: input.replay,
       replayLimit: input.replayLimit,
       demo: input.demo,

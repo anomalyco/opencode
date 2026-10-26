@@ -24,6 +24,12 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           const bus = yield* Bus.Service
           const config = yield* Config.Test
           const plugins = yield* Plugin.Service
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 1 }) }),
+            }),
+          ])
           yield* ConfigToolOutputPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
           expect((yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })).metadata?.truncated).toBe(
@@ -51,16 +57,6 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
           ),
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.provide(PluginTestLayer),
-      Effect.provide(
-        Config.testLayer([
-          new Document({
-            type: "document",
-            info: new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 1 }) }),
-          }),
-        ]),
-      ),
-    ),
+    ).pipe(Effect.provide(PluginTestLayer)),
   )
 })

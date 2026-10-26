@@ -9,14 +9,18 @@ test("summarizes each scenario and saves complete records in the configured outp
   const root = await mkdtemp(path.join(os.tmpdir(), "tab-switch-reporter-"))
   const output = path.join(root, "configured-output")
   const log = spyOn(console, "log").mockImplementation(() => {})
+
   try {
     const reporter = new TabSwitchReporter()
+
     const cases = Array.from(
       { length: 23 },
       (_, index) => ({ id: String(index), title: index < 20 ? "cold" : "warm" }) as TestCase,
     )
+
     const records = cases.map((_, index) => {
       const first = index < 20 ? 20 - index : [40, 0, 20][index - 20]
+
       return JSON.stringify({
         status: "passed",
         metrics: {
@@ -27,6 +31,7 @@ test("summarizes each scenario and saves complete records in the configured outp
         extra: { preserved: "\u03b1" },
       })
     })
+
     reporter.onBegin({ projects: [{ outputDir: output }] } as FullConfig, { allTests: () => cases } as Suite)
     cases.forEach((item, index) => {
       const bytes = Buffer.from(`BENCHMARK ${records[index]}\r\n`)
@@ -58,8 +63,10 @@ test("summarizes each scenario and saves complete records in the configured outp
 test("reports failures, missing records, and invalid metrics without discarding raw data", async () => {
   const output = await mkdtemp(path.join(os.tmpdir(), "tab-switch-reporter-"))
   const log = spyOn(console, "log").mockImplementation(() => {})
+
   try {
     const reporter = new TabSwitchReporter()
+
     const entries = [
       {
         status: "passed",
@@ -81,10 +88,12 @@ test("reports failures, missing records, and invalid metrics without discarding 
       { status: "failed", raw: '{"status":' },
       { status: "skipped", raw: undefined },
     ] as const
+
     const cases = Array.from(
       { length: entries.length + 2 },
       (_, index) => ({ id: String(index), title: index <= entries.length ? "cold" : "empty" }) as TestCase,
     )
+
     reporter.onBegin({ projects: [{ outputDir: output }] } as FullConfig, { allTests: () => cases } as Suite)
     entries.forEach((entry, index) => {
       reporter.onTestEnd(cases[index], {

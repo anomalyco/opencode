@@ -20,12 +20,12 @@ import {
   TransportError,
   UnknownProviderError,
   isContextOverflowFailure,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/route/client"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -170,6 +170,9 @@ it.effect("projects request settings, headers, and body overlays", () =>
       apiKey: "secret",
       thinkingConfig: { thinkingBudget: 1024 },
       compaction: { type: "native" },
+      cache: { ttl: "1h" },
+      encoding: "gzip",
+      timeout: 600_000,
       transport: "websocket",
     })
     const resolved = yield* aisdk.model({
@@ -193,8 +196,8 @@ it.effect("projects request settings, headers, and body overlays", () =>
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
-    expect(options).not.toHaveProperty("compaction")
-    expect(options).not.toHaveProperty("transport")
+    for (const key of ["compaction", "cache", "encoding", "timeout", "transport"])
+      expect(options).not.toHaveProperty(key)
   }),
 )
 
@@ -204,7 +207,9 @@ it.effect("uses only the provider timeout signal when the request signal is null
     let wrappedFetch: typeof fetch | undefined
     let requestSignal: AbortSignal | null | undefined
     yield* aisdk.hook.sdk((event) => {
-      wrappedFetch = event.options.fetch
+      if (typeof event.options.fetch === "function") {
+        wrappedFetch = event.options.fetch as typeof fetch
+      }
       event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
     })
 
@@ -776,6 +781,45 @@ it.effect("sends AI SDK requests directly when no HTTP hook middleware is attach
     expect(bodies).toHaveLength(1)
     expect(typeof bodies[0]).toBe("string")
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["upstream"])
+  }),
+)
+
+it.effect("fails with a retryable transport error when response headers time out", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const customFetch = Object.assign(
+      (_input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+        }),
+      { preconnect: fetch.preconnect },
+    )
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = createOpenAICompatible({
+        ...event.options,
+        name: String(event.options.name),
+        baseURL: String(event.options.baseURL),
+      })
+    })
+    const resolved = yield* aisdk.model(
+      model("@ai-sdk/openai-compatible", {
+        apiKey: "test",
+        baseURL: "https://example.test/v1",
+        headerTimeout: 25,
+        fetch: customFetch,
+      }),
+    )
+    const error = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+      Effect.flip,
+    )
+
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      operation: "request",
+      message: "Response headers timed out",
+    })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
   }),
 )
 

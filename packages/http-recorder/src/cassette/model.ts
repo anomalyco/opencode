@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type { CassetteMetadata, JsonValue } from "../api.js"
+import type { JsonValue } from "../api.js"
 import { HttpInteractionSchema } from "../http/model.js"
 import { WebSocketInteractionSchema } from "../websocket/model.js"
 

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { Host } from "./host.js"
+import { provides } from "./runtime.js"
 import { localSource } from "./source.js"
 import { missingPackageTarget } from "./source.package.js"
 
@@ -39,6 +40,7 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
           ? new URL(item.path, pathToFileURL(file))
           : localSource(item.path, path.dirname(file))
       if (!local) {
+        if (provides(item.path)) continue
         try {
           Bun.resolveSync(item.path, path.dirname(file))
         } catch {

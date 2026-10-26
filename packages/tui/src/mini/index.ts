@@ -1,11 +1,7 @@
 import { runInteractiveDeferredMode, type RunDeferredInput } from "./runtime"
 
 export type MiniFrontendInput = RunDeferredInput
-export type MiniFrontendResult = {
-  exitCode: number
-}
 
-export async function runMiniFrontend(input: MiniFrontendInput): Promise<MiniFrontendResult> {
+export async function runMiniFrontend(input: MiniFrontendInput): Promise<void> {
   await runInteractiveDeferredMode(input)
-  return { exitCode: 0 }
 }

@@ -1,8 +1,8 @@
 import path from "path"
 import { Context, Effect, Layer, Stream } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { ChildProcess } from "effect/unstable/process"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { HttpClient, HttpClientRequest } from "effect/http"
+import { ChildProcess } from "effect/process"
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -37,8 +37,8 @@ export namespace RipgrepBinary {
       const global = yield* Global.Service
       const findExecutable = (name: string) => which(name, undefined, global.bin)
 
-      const run = Effect.fnUntraced(function* (command: string, args: string[]) {
-        const handle = yield* spawner.spawn(ChildProcess.make(command, args, { extendEnv: true, stdin: "ignore" }))
+      const run = Effect.fnUntraced(function* (command: string, args: string[], cwd: string) {
+        const handle = yield* spawner.spawn(ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore" }))
         const [stdout, stderr, code] = yield* Effect.all(
           [
             Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -57,29 +57,21 @@ export namespace RipgrepBinary {
       ) {
         const dir = yield* fs.makeTempDirectoryScoped({ directory: global.bin, prefix: "ripgrep-" })
 
-        if (config.extension === "zip") {
-          const shell =
-            (yield* Effect.sync(() => findExecutable("powershell.exe") ?? findExecutable("pwsh.exe"))) ??
-            "powershell.exe"
-          const result = yield* run(shell, [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
-          ])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+        // Windows zips go through the bsdtar in System32 (Windows 10 1803+), not PowerShell, which policy can block.
+        // Git's GNU tar can come first on PATH and cannot read zip, so the system copy is called by path. bsdtar
+        // decodes its arguments in the ANSI code page, so it runs inside the temp dir and only sees the ASCII
+        // archive name: a profile path such as C:\Users\用户 would otherwise reach it as C:\Users\??.
+        const result = yield* config.extension === "zip"
+          ? run(
+              path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"),
+              ["-xf", path.relative(dir, archive)],
+              dir,
             )
-        }
-
-        if (config.extension === "tar.gz") {
-          const result = yield* run("tar", ["-xzf", archive, "-C", dir])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
-            )
-        }
+          : run("tar", ["-xzf", archive, "-C", dir], dir)
+        if (result.code !== 0)
+          throw new Error(
+            result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+          )
 
         const extracted = path.join(
           dir,

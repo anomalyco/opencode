@@ -8,10 +8,10 @@
 .settings-screen {
   display: flex;
   flex: 1;
-  width: calc(100% - 16px);
+  width: calc(100% - 2 * var(--shell-inline-inset, 8px));
   min-width: 0;
   min-height: 0;
-  margin-inline: 8px;
+  margin-inline: var(--shell-inline-inset, 8px);
   margin-block: var(--shell-top-inset, 8px) var(--shell-bottom-inset, 8px);
   justify-content: center;
   overflow: hidden;
@@ -31,7 +31,6 @@
 @media (max-width: 767px) {
   .settings-screen {
     --settings-mobile-inner-inset: 8px;
-    margin-block-start: var(--settings-top-inset, var(--shell-top-inset, 8px));
   }
 }
 
@@ -290,6 +289,158 @@
   text-decoration: underline;
 }
 
+.settings-about-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.settings-about-link:hover,
+.settings-about-link:focus-visible {
+  color: var(--v2-text-text-base);
+  text-decoration: underline;
+}
+
+.settings-notices-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.settings-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 0 20px 20px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-notice p {
+  margin: 0;
+}
+
+.settings-notice-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-notice-heading span {
+  color: var(--v2-text-text-faint);
+  font-weight: 440;
+}
+
+.settings-notice-heading a {
+  color: inherit;
+}
+
+.settings-notice summary {
+  cursor: pointer;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-notice pre {
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  line-height: var(--line-height-compact);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-notice details pre {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-crates {
+  padding-top: 20px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+}
+
+.settings-crates h3,
+.settings-crates h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-crates h4 {
+  margin-top: 8px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-crate {
+  line-height: var(--line-height-compact);
+}
+
+.settings-crate-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-crate-heading > span:first-child {
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading a {
+  color: var(--v2-text-text-base);
+}
+
+.settings-crate-heading > span:last-child {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading strong {
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate p {
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.settings-crates summary span {
+  margin-inline-start: 8px;
+}
+
+.settings-crates details > p {
+  margin-top: 8px;
+}
+
 .settings-back {
   display: flex;
   flex-shrink: 0;
@@ -380,6 +531,113 @@
   font-weight: 640;
   line-height: var(--line-height-base);
   color: var(--v2-text-text-base);
+}
+
+/* As tall as the title's line box, so header actions center on the title rather than on the title and description. */
+.settings-tab-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  height: var(--line-height-base);
+}
+
+.settings-tab-header-actions:not(:has(*)) {
+  display: none;
+}
+
+.settings-server-switcher[data-component="button-v2"] {
+  max-width: 240px;
+  gap: 6px;
+  padding-inline: 6px;
+}
+
+.settings-server-switcher-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-switcher-label {
+  flex-shrink: 0;
+  color: var(--v2-text-text-muted);
+  font-weight: 440;
+}
+
+.settings-server-switcher-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-switcher-chevron {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-switcher-menu[data-component="menu-v2-content"] {
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+/* One grid for every row: a 16px status or icon column, the name, then the selection check. */
+.settings-server-switcher-menu [data-component="menu-v2-item"] {
+  padding-inline-start: 8px;
+}
+
+.settings-server-switcher-option {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-switcher-status {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-server-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.settings-server-unavailable-icon {
+  margin-bottom: 4px;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-unavailable-title {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+}
+
+.settings-server-unavailable-description {
+  max-width: 360px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-server-unavailable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .settings-tab-body {
@@ -646,6 +904,11 @@
     flex-wrap: wrap;
   }
 
+  /* Wrapped below the description, the actions no longer share the title's line. */
+  .settings-tab-header-actions {
+    height: auto;
+  }
+
   .settings-tab-header-row [data-component="select-v2-root"] {
     width: 100%;
   }
@@ -793,7 +1056,7 @@
   opacity: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-provider-console-chevron {
     transition: none;
   }
@@ -887,9 +1150,15 @@
   opacity: 1;
 }
 
+.settings-provider-account-actions {
+  display: flex;
+  min-width: 0;
+  max-width: min(272px, 50%);
+  align-items: center;
+}
+
 .settings-provider-account-trigger {
   min-width: 0;
-  max-width: min(240px, 45%);
 }
 
 .settings-provider-account-trigger > span {
@@ -897,6 +1166,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-provider-account-input {
+  max-width: min(240px, 45%);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 20px;
+  color: var(--v2-text-text-base);
 }
 
 .settings-provider-account-menu[data-component="menu-v2-content"] {
@@ -909,12 +1186,6 @@
   overflow-y: auto;
 }
 
-.settings-provider-account-submenu[data-component="menu-v2-content"] {
-  width: min(260px, calc(100vw - 32px));
-  max-height: min(360px, var(--kb-popper-content-available-height));
-  overflow-y: auto;
-}
-
 .settings-provider-account-label {
   min-width: 0;
   overflow: hidden;
@@ -923,7 +1194,7 @@
 }
 
 @container settings-panel (max-width: 520px) {
-  .settings-provider-account-trigger {
+  .settings-provider-account-actions {
     max-width: 100%;
   }
 }
@@ -1072,14 +1343,6 @@
 .settings-project-card[data-menu="true"] {
   background: var(--v2-background-bg-layer-02);
 }
-.settings-tab-search-clear {
-  position: absolute;
-  top: 50%;
-  inset-inline-end: 6px;
-  z-index: 1;
-  transform: translateY(-50%);
-}
-
 .settings-models {
   gap: 12px;
 }
@@ -1163,7 +1426,11 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.provider-model-group[data-expanded]:not(:last-child) {
+  margin-block-end: 4px;
 }
 
 .settings-models-console-groups {
@@ -1181,9 +1448,11 @@
 }
 
 .provider-model-group-header {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
+  border-radius: 8px;
 }
 
 .provider-model-group-trigger {
@@ -1207,8 +1476,12 @@
   outline-offset: -2px;
 }
 
+.provider-model-group-header:has(:focus-visible) {
+  background-color: var(--v2-background-bg-layer-02);
+}
+
 @media (hover: hover) {
-  .provider-model-group-trigger:not(:disabled):hover {
+  .provider-model-group-header:hover {
     background-color: var(--v2-background-bg-layer-02);
   }
 }
@@ -1251,7 +1524,7 @@
 
 .provider-model-group-actions {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -1271,24 +1544,24 @@
   border-top: 0.5px solid var(--v2-border-border-base);
 }
 
-.provider-model-group:has(.provider-model-group-trigger:focus-visible)
+.provider-model-group:has(.provider-model-group-header :focus-visible)
   .provider-model-group-models
   > [data-component="settings-list"] {
   border-top-color: transparent;
 }
 
-.provider-model-group:has(.provider-model-group-trigger:focus-visible) {
+.provider-model-group:has(.provider-model-group-header :focus-visible) {
   outline: 0.5px solid var(--v2-border-border-muted);
   outline-offset: -0.5px;
 }
 
 @media (hover: hover) {
-  .provider-model-group:has(.provider-model-group-trigger:hover) {
+  .provider-model-group:has(.provider-model-group-header:hover) {
     outline: 0.5px solid var(--v2-border-border-muted);
     outline-offset: -0.5px;
   }
 
-  .provider-model-group:has(.provider-model-group-trigger:hover)
+  .provider-model-group:has(.provider-model-group-header:hover)
     .provider-model-group-models
     > [data-component="settings-list"] {
     border-top-color: transparent;
@@ -1299,7 +1572,7 @@
   padding-block: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-models-group-chevron svg,
   .provider-model-group-chevron {
     transition: none;
@@ -1549,7 +1822,7 @@
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-workspaces-row-motion {
     transition: none;
   }
@@ -1810,7 +2083,8 @@
 .settings-server-dialog-error {
   font-size: 11px;
   font-weight: 440;
-  line-height: 1;
+  /* Pairing errors are full sentences that wrap. */
+  line-height: var(--line-height-compact);
   color: var(--v2-state-fg-danger);
 }
 
@@ -1818,6 +2092,25 @@
   font-size: 13px;
   line-height: var(--line-height-base);
   color: var(--v2-text-text-muted);
+}
+
+.settings-server-dialog-notice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-01);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-base);
+}
+
+.settings-server-dialog-notice [data-slot="icon-svg"] {
+  flex: none;
+  margin-block: 2px;
+  color: var(--v2-icon-icon-muted);
 }
 
 .settings-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {
@@ -1834,6 +2127,7 @@
 
 .settings-extension-row {
   display: flex;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1843,6 +2137,40 @@
 
 .settings-extension-row:last-child {
   border-bottom: 0;
+}
+
+.settings-extension-trailing {
+  display: flex;
+  min-width: 60px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+}
+
+.settings-mcp-row .settings-extension-trailing {
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.settings-mcp-row {
+  gap: 16px;
+}
+
+/* The MCP status dot takes the icon's 16px slot, so names line up with the plugin and skill rows. */
+.settings-mcp-status {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+}
+
+.settings-mcp-row[data-status="disabled"] .settings-extension-name {
+  color: var(--v2-text-text-muted);
 }
 
 .settings-extension-lead {

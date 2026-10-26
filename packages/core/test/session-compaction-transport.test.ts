@@ -1,13 +1,13 @@
 import { expect } from "bun:test"
-import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai"
+import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
 import { Session } from "@opencode/schema/session"
 import { Effect, Latch, Layer, Schema } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { FetchHttpClient } from "effect/http"
+import { Socket } from "effect/socket"
 import { testEffect } from "./lib/effect"
 
 const decodeBody = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))

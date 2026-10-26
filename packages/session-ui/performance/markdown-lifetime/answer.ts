@@ -1,6 +1,7 @@
 export function completedAnswer(sections: number) {
   return `# Recovery implementation review\n\n${Array.from({ length: sections }, (_, index) => {
     const service = ["catalog", "billing", "delivery", "inventory", "accounts", "notifications"][index % 6]
+
     return [
       `## ${index + 1}. Validate the ${service} recovery boundary`,
       `The ${service} service should publish durable progress before acknowledging a request. Keep the request ID in the transaction so a retry does not create a second operation. The implementation below separates admission from delivery and makes the recovery decision explicit.`,

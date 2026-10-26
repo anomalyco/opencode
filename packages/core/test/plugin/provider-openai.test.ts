@@ -1,9 +1,9 @@
 import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
-import { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
 import { describe, expect } from "bun:test"
-import { ConfigProvider, DateTime, Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -41,10 +41,14 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
-const request = Effect.fn(function* (providerID: Provider.ID, baseURL: string) {
+const request = Effect.fn(function* (
+  providerID: Provider.ID,
+  baseURL: string,
+  sessionID = Session.ID.make("ses_test"),
+) {
   const hooks = yield* PluginHooks.Service
   const event = yield* hooks.trigger("session", "model.request", {
-    sessionID: Session.ID.make("ses_test"),
+    sessionID,
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
     kind: "primary",
@@ -69,12 +73,12 @@ describe("OpenAIPlugin", () => {
         {
           id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",
-          label: "ChatGPT Pro/Plus (browser)",
+          label: "Codex browser (legacy)",
         },
         {
           id: Integration.MethodID.make("chatgpt-headless"),
           type: "oauth",
-          label: "ChatGPT Pro/Plus (headless)",
+          label: "Codex device code (legacy)",
         },
       ])
     }),
@@ -89,7 +93,9 @@ describe("OpenAIPlugin", () => {
         catalog.update(Provider.ID.openai, (draft) => {
           draft.package = "@opencode/ai/providers/openai"
         })
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
@@ -111,9 +117,6 @@ describe("OpenAIPlugin", () => {
           model.body = { reasoning: { mode: "pro" } }
         })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6"), () => {})
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
-          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
-        })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
@@ -145,6 +148,7 @@ describe("OpenAIPlugin", () => {
       const provider = required(yield* catalog.get(Provider.ID.openai))
       expect(provider.package).toBe("@opencode/ai/providers/openai")
       expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
+      expect(provider.settings?.encoding).toBe("zstd")
       expect(provider.headers).toMatchObject({
         originator: "opencode",
         "chatgpt-account-id": "acct_123",
@@ -156,19 +160,24 @@ describe("OpenAIPlugin", () => {
       expect(custom.headers).not.toHaveProperty("originator")
       expect(proxy.baseURL).toBe("https://proxy.example/v1?region=us")
       expect(proxy.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
-      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
+      const sessions = yield* Session.Service
+      const location = yield* Location.Service
+      const parent = yield* sessions.create({ location: { directory: location.directory } })
+      const child = yield* sessions.create({ parentID: parent.id })
+      const childRequest = yield* request(Provider.ID.openai, "https://api.openai.com/v1", child.id)
+      expect(childRequest.headers).toMatchObject({ "session-id": parent.id })
+      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(eligible.cost).toEqual([])
-      expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(eligible.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5"))).enabled).toBe(false)
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.4-pro"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.4"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
-      const gpt56 = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
-      expect(gpt56.enabled).toBe(true)
-      expect(gpt56.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
@@ -206,6 +215,7 @@ describe("OpenAIPlugin", () => {
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(provider.settings?.transport).toBe("websocket")
+      expect(provider.settings?.encoding).toBeUndefined()
       expect(model.settings?.transport).toBeUndefined()
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")

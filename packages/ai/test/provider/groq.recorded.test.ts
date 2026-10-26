@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/groq"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -171,6 +171,7 @@ describe("Groq recorded", () => {
         expect(response.text).not.toContain("<think>")
         expect(response.reasoning.length).toBeGreaterThan(0)
         expect(response.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
+        expect(response.usage?.providerMetadata).toHaveProperty("groq")
         expectUsage(response)
       }),
     60_000,

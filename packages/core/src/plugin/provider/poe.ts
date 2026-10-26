@@ -1,6 +1,6 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import { Clock, Deferred, Effect, Option, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { ServerResponse } from "node:http"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"

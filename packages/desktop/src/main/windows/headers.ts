@@ -1,4 +1,5 @@
 export const documentPolicyHeader = "Document-Policy"
+
 export const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
 // The renderer lives at oc://renderer, so every server it talks to is cross-origin. Servers that
@@ -9,13 +10,16 @@ export const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-repor
 // server's exact list with `*` forced a fresh OPTIONS round trip in front of every API call.
 export function addRendererHeaders(headers: Record<string, string | string[]>, options: { document: boolean }) {
   upsertHeader(headers, "Access-Control-Allow-Origin", ["*"])
+
   if (!hasHeader(headers, "Access-Control-Allow-Headers")) {
     upsertHeader(headers, "Access-Control-Allow-Headers", ["*, authorization"])
   }
+
   if (!hasHeader(headers, "Access-Control-Max-Age")) {
     // Chromium caps preflight cache lifetime at two hours; without the header it caches for 5s.
     upsertHeader(headers, "Access-Control-Max-Age", ["7200"])
   }
+
   if (options.document) upsertHeader(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
 }
 

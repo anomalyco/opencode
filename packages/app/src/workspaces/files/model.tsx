@@ -1,52 +1,36 @@
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createComputed, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode/util/encode"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
+import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { createPathHelpers } from "./path"
-import { fileContentFromBytes } from "./artifact"
+import { artifactKind } from "@opencode/util/artifact"
+import { usePlatform } from "@/runtime/platform/platform"
+import { fileStreamUrl } from "@/runtime/server/api"
+import { fileContentFromBytes, streamedFileContent, streamedKinds } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
-  getFileContentBytesTotal,
-  getFileContentEntryCount,
   hasFileContent,
   removeFileContentBytes,
   resetFileContentLru,
-  setFileContentBytes,
   touchFileContent,
 } from "./content-cache"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
-import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
-import {
-  selectionFromLines,
-  type FileState,
-  type FileSelection,
-  type FileViewState,
-  type SelectedLineRange,
-} from "./types"
+import { selectionFromLines, type FileState, type FileSelection, type SelectedLineRange } from "./types"
 
-export type { FileSelection, SelectedLineRange, FileViewState, FileState }
+export type { FileSelection, SelectedLineRange, FileState }
+
 export { selectionFromLines }
-export {
-  evictContentLru,
-  getFileContentBytesTotal,
-  getFileContentEntryCount,
-  removeFileContentBytes,
-  resetFileContentLru,
-  setFileContentBytes,
-  touchFileContent,
-}
 
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
@@ -55,16 +39,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const sdk = useWorkspaceLocation()
     const params = useParams()
     const serverSDK = useServerSDK()
+    const platform = usePlatform()
     const language = useLanguage()
-    const layout = useLayout()
+    const extensions = useExtensionAttachment()
 
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
-    const tabs = layout.tabs(() =>
-      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(base64Encode(sdk().directory), params.id)),
-    )
 
-    const inflight = new Map<string, Promise<void>>()
+    const inflight = new Map<string, { promise: Promise<void>; silent: boolean }>()
+
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -106,21 +89,26 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     }
 
-    createEffect(() => {
-      scope()
-      inflight.clear()
-      resetFileContentLru()
-      batch(() => {
-        setStore("file", reconcile({}))
-        tree.reset()
-      })
-    })
+    // The store holds one directory's files. Drop them as soon as the directory changes, before any effect of the same
+    // update reads the new one: a file tab can load its file before a later watcher runs, and a reset after that load
+    // would discard its reply.
+    createComputed(
+      on(scope, () => {
+        inflight.clear()
+        resetFileContentLru()
+        batch(() => {
+          setStore("file", reconcile({}))
+          tree.reset()
+        })
+      }),
+    )
 
     const viewCache = createFileViewCache(serverSDK.scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
     const ensure = (file: string) => {
       if (!file) return
+
       if (store.file[file]) return
       setStore("file", file, { path: file, name: getFilename(file) })
     }
@@ -149,7 +137,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    const setLoadError = (file: string, message: string, notFound = false) => {
+    const setLoadError = (file: string, message: string, notFound = false, silent = false) => {
       if (notFound) removeFileContentBytes(file)
       setStore(
         "file",
@@ -158,11 +146,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           draft.loading = false
           draft.notFound = notFound
           draft.error = message
+
           if (!notFound) return
           draft.loaded = false
           draft.content = undefined
         }),
       )
+
+      if (silent || (notFound && extensions.files.opened().includes(file))) return
+
       showToast({
         variant: "error",
         title: language.t("toast.file.loadFailed.title"),
@@ -170,8 +162,25 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     }
 
-    const load = (input: string, options?: { force?: boolean }) => {
+    // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. A failed HEAD has no
+    // body; the full read that follows reports the server's error.
+    const read = (file: string, request: { path: string; location: { directory: string } }) => {
+      const download = () => serverSDK.api.file.read(request).then((data) => fileContentFromBytes(file, data))
+
+      const url = streamedKinds.has(artifactKind(file))
+        ? fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
+        : undefined
+
+      if (!url) return download()
+
+      return (platform.fetch ?? fetch)(url, { method: "HEAD" }).then((response) =>
+        response.ok ? streamedFileContent(file, url, response) : download(),
+      )
+    }
+
+    const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {
       const file = path.normalize(input)
+
       if (!file) return Promise.resolve()
 
       const directory = scope()
@@ -179,10 +188,17 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       ensure(file)
 
       const current = store.file[file]
+
       if (!options?.force && current?.loaded) return Promise.resolve()
 
+      const silent = Boolean(options?.silent)
       const pending = inflight.get(key)
-      if (pending) return pending
+
+      if (pending) {
+        if (!silent) pending.silent = false
+
+        return pending.promise
+      }
 
       setLoading(file)
 
@@ -191,11 +207,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const request = path.absolute(file)
         ? { path: getFilename(file), location: { directory: getDirectory(file) } }
         : { path: file, location: { directory } }
-      const promise = serverSDK.api.file
-        .read(request)
-        .then((data) => {
+
+      const entry = {
+        silent,
+        promise: Promise.resolve(),
+      }
+
+      entry.promise = read(file, request)
+        .then((content) => {
           if (scope() !== directory) return
-          const content = fileContentFromBytes(file, data)
           setLoaded(file, content)
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
@@ -206,14 +226,30 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
             file,
             formatServerError(e, language.t, language.t("error.chain.unknown")),
             isFileNotFoundError(e),
+            entry.silent,
           )
         })
         .finally(() => {
           inflight.delete(key)
         })
 
-      inflight.set(key, promise)
-      return promise
+      inflight.set(key, entry)
+
+      return entry.promise
+    }
+
+    // Lists the parent directory instead of reading the file, so checking a path a message names transfers no content.
+    const exists = (input: string) => {
+      const file = path.normalize(input)
+
+      if (!file) return Promise.resolve(false)
+
+      const parent = /[\\/]/.test(file) ? getDirectory(file) : undefined
+
+      return serverSDK.api.file.list({ path: parent, location: { directory: scope() } }).then(
+        (x) => x.data.some((entry) => entry.type === "file" && getFilename(entry.path) === getFilename(file)),
+        () => false,
+      )
     }
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
@@ -231,6 +267,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           (x) => x.data.map((entry) => path.normalize(entry.path)),
           (error) => {
             if (options?.signal?.aborted) throw error
+
             return []
           },
         )
@@ -240,9 +277,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         invalidateFromWatcher(event, {
           normalize: path.normalize,
           hasFile: (file) => Boolean(store.file[file]),
-          isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
+          isOpen: (file) => extensions.files.opened().includes(file),
           loadFile: (file) => {
-            void load(file, { force: true })
+            void load(file, { force: true, silent: true })
           },
           node: tree.node,
           isDirLoaded: tree.isLoaded,
@@ -251,6 +288,27 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           },
         })
       })
+
+      onCleanup(stop)
+    })
+
+    // The server watches a file for 24 hours from the latest request, so file tabs ask when they open or are shown,
+    // and the open tabs ask again on reconnect (a restarted server forgets its watches). Older servers lack the route.
+    const watch = (input: string) => {
+      const file = path.normalize(input)
+      if (!file || path.absolute(file)) return
+      void serverSDK.api.file.watch({ path: file, location: { directory: scope() } }).catch(() => {})
+    }
+
+    const unwatch = (input: string) => {
+      const file = path.normalize(input)
+      if (!file || path.absolute(file)) return
+      void serverSDK.api.file.unwatch({ path: file, location: { directory: scope() } }).catch(() => {})
+    }
+
+    createEffect(() => {
+      const stop = serverSDK.event.on("server.connected", () => extensions.files.opened().forEach(watch))
+
       onCleanup(stop)
     })
 
@@ -258,23 +316,30 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const file = path.normalize(input)
       const state = store.file[file]
       const content = state?.content
+
       if (!content) return state
+
       if (hasFileContent(file)) {
         touchFileContent(file)
+
         return state
       }
+
       touchFileContent(file, approxBytes(content))
+
       return state
     }
 
-    function withPath(input: string, action: (file: string) => unknown) {
+    function withPath<T>(input: string, action: (file: string) => T) {
       return action(path.normalize(input))
     }
+
     const scrollTop = (input: string) => withPath(input, (file) => view().scrollTop(file))
     const scrollLeft = (input: string) => withPath(input, (file) => view().scrollLeft(file))
     const selectedLines = (input: string) => withPath(input, (file) => view().selectedLines(file))
     const setScrollTop = (input: string, top: number) => withPath(input, (file) => view().setScrollTop(file, top))
     const setScrollLeft = (input: string, left: number) => withPath(input, (file) => view().setScrollLeft(file, left))
+
     const setSelectedLines = (input: string, range: SelectedLineRange | null) =>
       withPath(input, (file) => view().setSelectedLines(file, range))
 
@@ -286,8 +351,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       ready: () => view().ready(),
       normalize: path.normalize,
       absolute: path.absolute,
-      tab: path.tab,
-      pathFromTab: path.pathFromTab,
       tree: {
         list: tree.listDir,
         refresh: (input: string) => tree.listDir(input, { force: true }),
@@ -299,6 +362,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       get,
       notFound: (input: string) => store.file[path.normalize(input)]?.notFound ?? false,
       load,
+      watch,
+      unwatch,
+      exists,
       scrollTop,
       scrollLeft,
       setScrollTop,
@@ -307,7 +373,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setSelectedLines,
       searchFiles: (query: string, options?: { limit?: number; signal?: AbortSignal }) =>
         search(query, "false", options),
-      searchFilesAndDirectories: (query: string) => search(query, "true"),
+      searchFilesAndDirectories: (query: string, options?: { limit?: number; signal?: AbortSignal }) =>
+        search(query, "true", options),
     }
   },
 })

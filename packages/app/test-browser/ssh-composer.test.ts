@@ -7,10 +7,12 @@ import type { ComposerPersistedState } from "../src/composer/types"
 test("a disconnected composer preserves text and ignores submissions until reconnect", () => {
   createRoot((dispose) => {
     const [state, setState] = createStore({ connected: false, submissions: 0 })
+
     const store = createStore<ComposerPersistedState>({
       prompt: [{ type: "text", content: "keep my draft", start: 0, end: 13 }],
       context: { items: [] },
     })
+
     const editor = createComposerEditor({
       store,
       commands: () => [],
@@ -25,6 +27,7 @@ test("a disconnected composer preserves text and ignores submissions until recon
         },
       },
     })
+
     expect(editor.canSubmit()).toBe(false)
     editor.submit()
     expect(state.submissions).toBe(0)

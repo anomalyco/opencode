@@ -10,10 +10,7 @@ import { errorMessage } from "../../../util/error"
 const handler = Effect.fn("cli.session.list")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.list>,
 ) {
-  const server = yield* ServerConnection.resolve({
-    server: Option.getOrUndefined(input.server),
-    standalone: input.standalone,
-  })
+  const server = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
   const location = yield* Effect.tryPromise({
     try: (signal) => client.location.get({ location: { directory: process.cwd() } }, { signal }),
@@ -61,7 +58,7 @@ const handler = Effect.fn("cli.session.list")(function* (
 
   const { AppProcess } = yield* Effect.promise(() => import("@opencode/util/process"))
   const { LayerNode } = yield* Effect.promise(() => import("@opencode/util/effect/layer-node"))
-  const { ChildProcess } = yield* Effect.promise(() => import("effect/unstable/process"))
+  const { ChildProcess } = yield* Effect.promise(() => import("effect/process"))
   yield* Effect.gen(function* () {
     const processService = yield* AppProcess.Service
     const pager = yield* processService

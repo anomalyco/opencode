@@ -1,16 +1,6 @@
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import { BrowserPaneCaptureRpc, BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
-import { UpdaterStateSchema } from "./updater"
-import { WslServersEventSchema } from "./wsl"
-import { SshState } from "@opencode/app/ssh"
-
-export class SshChanged extends Schema.TaggedClass<SshChanged>()("SshChanged", { state: SshState }) {}
-
-export class BrowserPaneEvent extends Schema.TaggedClass<BrowserPaneEvent>()("BrowserPaneEvent", {
-  bindingID: Schema.String,
-  event: BrowserPaneEventSchema,
-}) {}
+import { Rpc, RpcGroup } from "effect/rpc"
+import { ExtensionInstalled, ExtensionMenubarItem, ExtensionPayload } from "./extensions"
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
   urls: Schema.Array(Schema.String),
@@ -20,16 +10,13 @@ export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggere
   id: Schema.String,
 }) {}
 
-export class UpdaterStateChanged extends Schema.TaggedClass<UpdaterStateChanged>()("UpdaterStateChanged", {
-  state: UpdaterStateSchema,
-}) {}
-
-export class WslServersChanged extends Schema.TaggedClass<WslServersChanged>()("WslServersChanged", {
-  event: WslServersEventSchema,
-}) {}
-
 export class WindowFullscreenChanged extends Schema.TaggedClass<WindowFullscreenChanged>()("WindowFullscreenChanged", {
   fullscreen: Schema.Boolean,
+}) {}
+
+// The BrowserWindow's own focus: focus moving into one of its embeds keeps it.
+export class WindowFocusChanged extends Schema.TaggedClass<WindowFocusChanged>()("WindowFocusChanged", {
+  focused: Schema.Boolean,
 }) {}
 
 export class WindowPinchZoomChanged extends Schema.TaggedClass<WindowPinchZoomChanged>()("WindowPinchZoomChanged", {
@@ -48,19 +35,49 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
   revision: Schema.Number,
 }) {}
 
+// A main extension's Ipc state for this window, already encoded with the Ipc's schema.
+export class ExtensionState extends Schema.TaggedClass<ExtensionState>()("ExtensionState", {
+  ipc: Schema.String,
+  state: ExtensionPayload,
+}) {}
+
+export class ExtensionEvent extends Schema.TaggedClass<ExtensionEvent>()("ExtensionEvent", {
+  ipc: Schema.String,
+  name: Schema.String,
+  data: ExtensionPayload,
+}) {}
+
+export class ExtensionAvailable extends Schema.TaggedClass<ExtensionAvailable>()("ExtensionAvailable", {
+  ipc: Schema.String,
+  available: Schema.Boolean,
+}) {}
+
+export class ExtensionsChanged extends Schema.TaggedClass<ExtensionsChanged>()("ExtensionsChanged", {
+  list: Schema.Array(ExtensionInstalled),
+}) {}
+
+export class ExtensionMenubarItemsChanged extends Schema.TaggedClass<ExtensionMenubarItemsChanged>()(
+  "ExtensionMenubarItemsChanged",
+  { items: Schema.Array(ExtensionMenubarItem) },
+) {}
+
 export const DesktopEvent = Schema.Union([
-  BrowserPaneEvent,
   DeepLinksOpened,
   MenuCommandTriggered,
-  UpdaterStateChanged,
-  WslServersChanged,
-  SshChanged,
   WindowFullscreenChanged,
+  WindowFocusChanged,
   WindowPinchZoomChanged,
   WindowZoomChanged,
   StorageChanged,
+  ExtensionState,
+  ExtensionEvent,
+  ExtensionAvailable,
+  ExtensionsChanged,
+  ExtensionMenubarItemsChanged,
 ])
+
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
-export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc, BrowserPaneCaptureRpc)
+
+export const EventRpcs = RpcGroup.make(DesktopEvents)

@@ -1,12 +1,14 @@
 import { Struct } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { AlibabaChat } from "../protocols/alibaba-chat.js"
+import { AlibabaImages } from "../protocols/alibaba-images.js"
 import { AlibabaMessages } from "../protocols/alibaba-messages.js"
 import { AlibabaResponses } from "../protocols/alibaba-responses.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
+import { MediaRoute } from "../route/media.js"
 import { ProviderConfigurationError, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
 
 export const id = ProviderID.make("alibaba")
@@ -22,6 +24,7 @@ export type Region =
 export type ChatOptionsInput = AlibabaChat.OptionsInput
 export type MessagesOptionsInput = AlibabaMessages.OptionsInput
 export type ResponsesOptionsInput = AlibabaResponses.OptionsInput
+export type { AlibabaImageOptions } from "../protocols/alibaba-images.js"
 
 type Location = AtLeastOne<{
   readonly region: Region
@@ -103,7 +106,9 @@ export const configure = (input: Config) => {
       })
       .model<MessagesOptionsInput>({ id, compatibility: { requireSignature: false } })
   const responses = (id: string | ModelID) => responsesRoute.with(common).model<ResponsesOptionsInput>({ id })
-  return { id, model: chat, chat, messages, responses, configure }
+  const media = MediaRoute.deployment({ ...input, baseURL: baseURL ?? `https://${host}/api/v1` }, opts.auth)
+  const image = (id: string | ModelID) => AlibabaImages.model({ ...media, id })
+  return { id, model: chat, chat, messages, responses, image, configure }
 }
 
 export const provider = { id, configure }

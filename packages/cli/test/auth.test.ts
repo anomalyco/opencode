@@ -261,6 +261,42 @@ describe("auth command", () => {
     expect(result.stdout).not.toContain("\n    at ")
   })
 
+  test("imports credentials exported before v2.1 with their form answers as metadata", async () => {
+    const created: unknown[] = []
+    using server = authServer(async (request, url) => {
+      if (url.pathname === "/api/credential" && request.method === "GET") return Response.json({ data: [] })
+      if (url.pathname === "/api/credential" && request.method === "POST") {
+        const body = await request.json()
+        created.push(body)
+        return Response.json({ data: { ...body, active: true } })
+      }
+      return new Response("Not found", { status: 404 })
+    })
+    const value = { type: "key", key: "secret", configuration: { resourceName: "answered" } }
+    const exported = [{ id: "cred_legacy", integrationID: "azure", label: "Work", active: true, value }]
+    const child = Bun.spawn(
+      [process.execPath, "run", "src/index.ts", "auth", "import", "--server", server.url.toString()],
+      {
+        cwd: path.join(import.meta.dir, ".."),
+        stdin: new Blob([JSON.stringify(exported)]),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const [stderr, exitCode] = await Promise.all([new Response(child.stderr).text(), child.exited])
+
+    expect({ exitCode, stderr: stderr.trim() }).toEqual({ exitCode: 0, stderr: "Imported 1 credential" })
+    expect(created).toEqual([
+      {
+        id: "cred_legacy",
+        integrationID: "azure",
+        label: "Work",
+        value: { type: "key", key: "secret", metadata: { resourceName: "answered" } },
+        activate: true,
+      },
+    ])
+  })
+
   test("removes a selected stored credential", async () => {
     const removed: string[] = []
     using server = authServer((request, url) => {
@@ -289,11 +325,14 @@ describe("auth command", () => {
     expect(removed).toEqual(["cred_test"])
   })
 
-  test("requires a target outside an interactive terminal", async () => {
-    const result = await cli(["auth", "login"])
+  test("requires a target outside an interactive terminal, including through acp --login", async () => {
+    const [result, acp] = await Promise.all([cli(["auth", "login"]), cli(["acp", "--login"])])
     expect(result.exitCode).toBe(1)
     expect(result.stdout).toContain("Pass an integration ID or name")
     expect(result.stdout).not.toContain("Background service failed to start")
+    expect(acp.exitCode).toBe(1)
+    expect(acp.stdout).toContain("Pass an integration ID or name when running without an interactive terminal")
+    expect(acp.stdout).not.toContain("Background service failed to start")
   })
 
   test("reports list connection failures without a stack trace", async () => {

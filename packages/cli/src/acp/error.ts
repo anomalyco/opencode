@@ -28,10 +28,20 @@ export class InvalidModeError extends Schema.TaggedError<InvalidModeError>()("AC
   mode: Schema.String,
 }) {}
 
+export class InvalidAdditionalDirectoryError extends Schema.TaggedError<InvalidAdditionalDirectoryError>()(
+  "ACPInvalidAdditionalDirectoryError",
+  { directory: Schema.String },
+) {}
+
 export class AuthRequiredError extends Schema.TaggedError<AuthRequiredError>()("ACPAuthRequiredError", {}) {}
 
 export class UnknownAuthMethodError extends Schema.TaggedError<UnknownAuthMethodError>()("ACPUnknownAuthMethodError", {
   methodId: Schema.String,
+}) {}
+
+export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("ACPInvalidRequestError", {
+  message: Schema.String,
+  field: Schema.optional(Schema.String),
 }) {}
 
 export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>()("ACPServiceFailureError", {
@@ -40,6 +50,25 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
   errorName: Schema.optional(Schema.String),
 }) {}
 
+export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
+  "ACPServerUnavailableError",
+  {},
+) {}
+
+export class CatalogNotReadyError extends Schema.TaggedError<CatalogNotReadyError>()("ACPCatalogNotReadyError", {
+  reason: Schema.Literals(["models", "agents"]),
+}) {
+  override get message() {
+    return this.reason === "models" ? "No models are available" : "No primary agents are available"
+  }
+}
+
+export class CatalogLoadError extends Schema.TaggedError<CatalogLoadError>()("ACPCatalogLoadError", {
+  cause: Schema.Defect(),
+}) {}
+
+export type CatalogError = CatalogNotReadyError | CatalogLoadError
+
 export type Error =
   | SessionNotFoundError
   | SessionDirectoryMismatchError
@@ -47,9 +76,14 @@ export type Error =
   | InvalidModelError
   | InvalidEffortError
   | InvalidModeError
+  | InvalidAdditionalDirectoryError
   | AuthRequiredError
   | UnknownAuthMethodError
+  | InvalidRequestError
   | ServiceFailureError
+  | ServerUnavailableError
+
+export type Failure = Error | RequestError | CatalogError
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
@@ -71,10 +105,17 @@ export function toRequestError(error: Error): RequestError {
       return RequestError.invalidParams({ effort: error.effort }, `effort not found: ${error.effort}`)
     case "ACPInvalidModeError":
       return RequestError.invalidParams({ mode: error.mode }, `mode not found: ${error.mode}`)
+    case "ACPInvalidAdditionalDirectoryError":
+      return RequestError.invalidParams(
+        { additionalDirectory: error.directory },
+        `additional directory must be an absolute path without glob characters: ${error.directory}`,
+      )
     case "ACPAuthRequiredError":
       return RequestError.authRequired({}, "provider authentication required")
     case "ACPUnknownAuthMethodError":
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
+    case "ACPInvalidRequestError":
+      return RequestError.invalidParams(error.field ? { field: error.field } : {}, error.message)
     case "ACPServiceFailureError":
       return RequestError.internalError(
         {
@@ -83,14 +124,16 @@ export function toRequestError(error: Error): RequestError {
         },
         error.safeMessage,
       )
+    case "ACPServerUnavailableError":
+      return RequestError.internalError({ errorName: "ServerUnavailable" }, "OpenCode server is unavailable")
   }
   const exhaustive: never = error
   return exhaustive
 }
 
-export function fromUnknown(error: unknown, service?: string) {
+export function fromUnknown(error: unknown) {
   const errorName = error instanceof Error ? error.name : undefined
-  return new ServiceFailureError({ safeMessage: "Internal service failure", service, errorName })
+  return new ServiceFailureError({ safeMessage: "Internal service failure", errorName })
 }
 
 export * as ACPError from "./error"

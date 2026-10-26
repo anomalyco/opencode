@@ -10,6 +10,25 @@ import { AbsolutePath } from "../src/schema.js"
 import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("round-trips tool.use and rejects unsupported action spellings", () => {
+    const input = {
+      experimental: {
+        policies: [
+          { action: "tool.use", resource: "shell:*", effect: "deny" },
+          { action: "tool.use", resource: "shell:git *", effect: "allow" },
+        ],
+      },
+    } as const
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    for (const action of ["permission", "tool.execute"])
+      expect(() =>
+        Schema.decodeUnknownSync(Config.Info)({
+          experimental: { policies: [{ action, resource: "*", effect: "deny" }] },
+        }),
+      ).toThrow()
+  })
+
   test("accepts directory-only worktree config and omits it when absent", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
     const input = { worktree: { directory: "../worktrees" } }
@@ -25,6 +44,23 @@ describe("Config.Entry", () => {
     expect(decoded.providers?.["console-anthropic"]?.canonical).toBe(Provider.ID.anthropic)
     expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
     expect(() => Schema.decodeUnknownSync(Config.Info)({ providers: { custom: { canonical: 1 } } })).toThrow()
+  })
+
+  test("round-trips disabled and numeric provider HTTP timeouts", () => {
+    const input = {
+      providers: { custom: { settings: { timeout: 900_000, headerTimeout: 600_000, chunkTimeout: false } } },
+    } as const
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    expect(Schema.decodeUnknownSync(Provider.Settings)(decoded.providers?.custom?.settings)).toMatchObject({
+      timeout: 900_000,
+      headerTimeout: 600_000,
+      chunkTimeout: false,
+    })
+    expect(Schema.decodeUnknownSync(Provider.Settings)({ headerTimeout: false, chunkTimeout: 600_000 })).toMatchObject({
+      headerTimeout: false,
+      chunkTimeout: 600_000,
+    })
   })
 
   test("accepts disabled, fixed, and random web search selection", () => {

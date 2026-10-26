@@ -31,27 +31,6 @@ OpenCode est open source et ne stocke aucune de vos données de code ou de conte
 
 Cela signifie que tant que vous faites appel à un fournisseur de confiance ou à une passerelle IA, vous pouvez utiliser OpenCode en toute sécurité.
 
-La seule mise en garde ici concerne la fonctionnalité facultative `/share`.
-
----
-
-#### Partager des conversations
-
-Si un utilisateur active la fonctionnalité `/share`, la conversation et les données qui y sont associées sont envoyées au service que nous utilisons pour héberger ces pages de partage sur opencode.ai.
-
-Les données sont actuellement servies via le réseau périphérique de notre CDN et sont mises en cache en périphérie, à proximité de vos utilisateurs.
-
-Nous vous recommandons de désactiver cette option pour votre essai.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "disabled"
-}
-```
-
-[En savoir plus sur le partage](/docs/share).
-
 ---
 
 ### Propriété du code

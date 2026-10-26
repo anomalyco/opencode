@@ -3,7 +3,6 @@ import type { DesktopNativeKey } from "@/runtime/i18n/desktop-native"
 export type DesktopMenuPlatform = "macos" | "windows"
 
 export type DesktopMenuAction =
-  | "app.checkForUpdates"
   | "app.installCli"
   | "app.relaunch"
   | "edit.undo"
@@ -53,7 +52,6 @@ export type DesktopMenuItem = {
   role?: DesktopMenuRole
   href?: string
   accelerator?: Partial<Record<DesktopMenuPlatform, string>>
-  enabled?: "updater"
   platforms?: DesktopMenuPlatform[]
 }
 
@@ -79,12 +77,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     platforms: ["macos"],
     items: [
       { type: "item", role: "about" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.checkForUpdates",
-        action: "app.checkForUpdates",
-        enabled: "updater",
-      },
       { type: "item", labelKey: "desktop.menu.installCli", action: "app.installCli" },
       { type: "item", labelKey: "desktop.menu.settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
       { type: "item", labelKey: "desktop.menu.reloadWebview", action: "view.reload" },
@@ -105,14 +97,8 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       {
         type: "item",
         labelKey: "desktop.menu.newSession",
-        command: "session.new",
-        accelerator: { macos: "Shift+Cmd+S" },
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.openProject",
-        command: "project.open",
-        accelerator: { macos: "Cmd+O" },
+        command: "tab.new",
+        accelerator: { macos: "Cmd+N" },
       },
       {
         type: "item",
@@ -128,7 +114,13 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         accelerator: { macos: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
       },
       { type: "separator" },
-      { type: "item", labelKey: "desktop.menu.closeWindow", action: "window.close", role: "close" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.closeWindow",
+        action: "window.close",
+        role: "close",
+        accelerator: { macos: "Shift+Cmd+W", windows: "Ctrl+Shift+W" },
+      },
     ],
   },
   {
@@ -185,14 +177,18 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "view",
     labelKey: "desktop.menu.view",
     items: [
-      { type: "item", labelKey: "desktop.menu.toggleSidebar", command: "sidebar.toggle" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.toggleSidebar",
+        command: "sidebar.toggle",
+        accelerator: { macos: "Shift+Cmd+B" },
+      },
       {
         type: "item",
         labelKey: "desktop.menu.toggleTerminal",
         command: "terminal.toggle",
         accelerator: { macos: "Ctrl+`" },
       },
-      { type: "item", labelKey: "desktop.menu.toggleFileTree", command: "fileTree.toggle" },
       { type: "separator" },
       { type: "item", labelKey: "desktop.menu.reload", action: "view.reload", role: "reload" },
       {
@@ -251,19 +247,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         command: "session.next",
         accelerator: { macos: "Option+Down" },
       },
-      { type: "separator" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.previousProject",
-        command: "project.previous",
-        accelerator: { macos: "Cmd+Option+Up" },
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.nextProject",
-        command: "project.next",
-        accelerator: { macos: "Cmd+Option+Down" },
-      },
     ],
   },
   {
@@ -301,4 +284,28 @@ export const DESKTOP_MENU: DesktopMenu[] = [
 
 export function desktopMenuVisible(item: { platforms?: DesktopMenuPlatform[] }, platform: DesktopMenuPlatform) {
   return !item.platforms || item.platforms.includes(platform)
+}
+
+/** What a GUI extension's menubar item names in `after`: a built-in item's command, action, or role. */
+export function desktopMenuKey(entry: DesktopMenuEntry) {
+  if (entry.type === "separator") return undefined
+
+  return entry.command ?? entry.action ?? entry.role
+}
+
+/** Places extension items after the entry their `after` names, or at the end of the menu. */
+export function desktopMenuWithExtensions<Entry, Extra extends { readonly id: string; readonly after?: string }>(
+  base: readonly { readonly key?: string; readonly entry: Entry }[],
+  extra: readonly Extra[],
+) {
+  const list: { readonly key?: string; readonly entry: Entry | Extra }[] = [...base]
+
+  extra.forEach((item) => {
+    const next = { key: item.id, entry: item }
+    const index = item.after ? list.findIndex((entry) => entry.key === item.after) : -1
+
+    list.splice(index < 0 ? list.length : index + 1, 0, next)
+  })
+
+  return list
 }

@@ -1,6 +1,6 @@
 export * as ShellTool from "./shell.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
@@ -15,6 +15,7 @@ import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
+import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
@@ -122,7 +123,9 @@ export const Plugin = {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
-      const portable = Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
+      const portable =
+        Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner ??
+        (shellParserWasm.bash === "" || ctx.app.channel === "local" || ctx.app.channel === "dev")
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
         access.resolve({
@@ -207,6 +210,10 @@ export const Plugin = {
                 },
                 (invocation) =>
                   Effect.gen(function* () {
+                    invocation.env.AGENT = "1"
+                    invocation.env.OPENCODE = "1"
+                    invocation.env.AI_AGENT ||= "opencode"
+                    invocation.env.OPENCODE_SESSION_ID = context.sessionID
                     finalTimeout = yield* prepare(invocation, context)
                   }),
               )

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import { HttpApiMiddleware } from "effect/http-api"
 import { InvalidRequestError } from "@opencode/protocol/errors"
 import { SchemaErrorMiddleware } from "@opencode/protocol/middleware/schema-error"
 export { SchemaErrorMiddleware } from "@opencode/protocol/middleware/schema-error"

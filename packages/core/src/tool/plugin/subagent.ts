@@ -1,6 +1,6 @@
 export * as SubagentTool from "./subagent.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect, Predicate, Schema } from "effect"
@@ -70,7 +70,7 @@ export const Plugin = {
     const config = yield* Config.Service
     const permission = yield* Permission.Service
     const models = yield* Model.Service
-    const subagents = yield* SubagentJob.make
+    const subagents = yield* SubagentJob.Service
 
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
@@ -188,7 +188,7 @@ export const Plugin = {
                   .create({
                     parentID: context.sessionID,
                     title: input.description,
-                    agent: Agent.ID.make(input.agent),
+                    agent: agent.id,
                     model,
                   })
                   .pipe(

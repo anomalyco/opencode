@@ -26,12 +26,18 @@ const native = createRequire(new URL("../../../../core/package.json", import.met
 }
 
 const sessionID = "ses_terminal_benchmark"
+
 const ptyID = "pty_terminal_benchmark"
+
 const title = "Terminal build output"
+
 const server = process.env.PLAYWRIGHT_BASE_URL!
+
 const href = `/server/${Buffer.from(server).toString("base64url")}/session/${sessionID}`
+
 const lines = Array.from({ length: 12_000 }, (_, i) => {
   const unit = ["session/history", "session/runner", "project/discovery", "tool/shell", "provider/stream"][i % 5]
+
   return `\x1b[32mPASS\x1b[0m packages/core/test/${unit}-${String(i).padStart(5, "0")}.test.ts \x1b[2m[${10 + (i % 237)}ms]\x1b[0m validates ordered output and durable recovery`
 }).join("\r\n")
 
@@ -41,6 +47,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
   benchmark(scenario, async ({ page, report }, info) => {
     const dir = await mkdtemp(path.join(process.env.TERMINAL_ARTIFACTS ?? tmpdir(), "terminal-fixture-"))
     await writeFile(path.join(dir, "build.log"), lines)
+
     const pty = native.spawn(
       "pwsh.exe",
       [
@@ -54,17 +61,21 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
       ],
       { cols: 120, rows: 24, cwd: dir },
     )
+
     const exited = new Promise<void>((resolve) => pty.onExit(resolve))
     let output = ""
     let connected = 0
     let closed = 0
     let send: ((data: string) => void) | undefined
+
     const listener = pty.onData((data) => {
       output += data
       send?.(data)
     })
+
     const sizes: { cols: number; rows: number }[] = []
     const removals: string[] = []
+
     try {
       if (process.env.TERMINAL_DRAW_PROBE) {
         await page.addInitScript(() => {
@@ -72,13 +83,17 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
           CanvasRenderingContext2D.prototype.fillText = function (...args: Parameters<typeof fill>) {
             if (this.canvas instanceof HTMLCanvasElement && this.canvas.closest('[data-component="terminal"]')) {
               window.terminalProbe.draws++
+
               if (!this.canvas.checkVisibility()) window.terminalProbe.hiddenDraws++
             }
+
             fill.apply(this, args)
           }
         })
       }
+
       const location = { directory: dir, project: { id: "proj_terminal_benchmark", directory: dir } }
+
       const data = {
         id: ptyID,
         title: "Terminal 1",
@@ -88,6 +103,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         status: "running",
         pid: pty.pid,
       }
+
       await mockOpenCodeServer(page, {
         directory: dir,
         project: {
@@ -125,10 +141,12 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
       await page.route("**/api/pty**", async (route) => {
         if (route.request().method() === "DELETE") removals.push(route.request().url())
         const body = route.request().postDataJSON()
+
         if (body?.size) {
           sizes.push(body.size)
           pty.resize(body.size.cols, body.size.rows)
         }
+
         return route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -173,27 +191,34 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
             cols: window.terminalProbe.term!.cols,
             rows: window.terminalProbe.term!.rows,
           }))
+
           return sizes.at(-1)?.cols === size.cols && sizes.at(-1)?.rows === size.rows
         })
         .toBe(true)
+
       if (scenario === "hidden-output") {
         await page.keyboard.press("Control+Backquote")
         await expect(terminal).toBeHidden()
       }
+
       const cdp = await page.context().newCDPSession(page)
       await cdp.send("Performance.enable")
       const before = await cdp.send("Performance.getMetrics")
+
       const start = await page.evaluate(() => {
         window.terminalProbe.renders = 0
         window.terminalProbe.hiddenRenders = 0
         window.terminalProbe.draws = 0
         window.terminalProbe.hiddenDraws = 0
+
         return performance.now()
       })
+
       await benchmarkDiagnostics(page).startTrace()
       // The producer is not throttled. The visible and hidden cases receive the same bytes.
       pty.write("run\r")
       await waitForText(page, "TERMINAL_WORKLOAD_DONE")
+
       const produced = await page.evaluate(
         (start) => ({
           ms: performance.now() - start,
@@ -214,12 +239,16 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         }),
         start,
       )
+
       const after = await cdp.send("Performance.getMetrics")
+
       const cpuMs =
         (after.metrics.find((x) => x.name === "TaskDuration")!.value -
           before.metrics.find((x) => x.name === "TaskDuration")!.value) *
         1000
+
       let interaction: Record<string, unknown> = {}
+
       if (scenario === "hidden-output") {
         const start = await page.evaluate(() => performance.now())
         await page.keyboard.press("Control+Backquote")
@@ -227,6 +256,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         await waitForText(page, "TERMINAL_WORKLOAD_DONE")
         interaction = { returnMs: await page.evaluate((start) => performance.now() - start, start) }
       }
+
       if (scenario === "full-scrollback-teardown") {
         // Ghostty converts the configured line limit to bytes at the initial
         // 80-column size. Resizing changes the effective retained row count.
@@ -273,6 +303,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
         pty.write("ping\r")
         await expect.poll(() => output.includes("TERMINAL_PROCESS_ALIVE")).toBe(true)
       }
+
       await benchmarkDiagnostics(page).stop()
       expect(connected).toBe(1)
       expect(removals).toEqual([])
@@ -288,6 +319,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
           scope: "Chromium renderer; not Electron total RAM or production backend IPC",
         },
       )
+
       if (scenario !== "full-scrollback-teardown") {
         // Validate input, focus, and resize after both visible and hidden output.
         await terminal.click()
@@ -303,6 +335,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
           .toBe(true)
         expect(closed).toBe(0)
       }
+
       if (process.env.TERMINAL_SCREENSHOTS && scenario !== "full-scrollback-teardown") {
         await page.screenshot({
           path: path.join(process.env.TERMINAL_SCREENSHOTS, `${scenario}-${info.repeatEachIndex}.png`),
@@ -310,6 +343,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
       }
     } finally {
       listener.dispose()
+
       try {
         await benchmarkDiagnostics(page).stop()
         // Stop fixture request handlers before killing their native resource. The
@@ -338,8 +372,10 @@ async function waitForText(page: Page, text: string) {
       page.evaluate((text) => {
         const probe = window.terminalProbe
         const term = probe?.term
+
         if (!term || probe.pending !== 0) return false
         const buffer = term.buffer.active
+
         return Array.from(
           { length: term.rows },
           (_, i) => buffer.getLine(buffer.length - term.rows + i)?.translateToString(true) ?? "",

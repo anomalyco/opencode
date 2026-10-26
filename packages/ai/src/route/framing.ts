@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { makeParser, type Event } from "effect/unstable/encoding/Sse"
+import { makeParser } from "effect/encoding/Sse"
 import { AIError, InvalidProviderOutputError } from "../schema/index.js"
 
 /**
@@ -42,43 +42,39 @@ export const sseFraming = (
     Stream.decodeText(),
     Stream.mapAccumEffect(
       () => {
-        const output: Event[] = []
+        const output: string[] = []
         return {
           output,
           parser: makeParser((event) => {
-            if (event._tag === "Event") output.push(event)
+            if (
+              event._tag === "Event" &&
+              (events === undefined || events.has(event.event)) &&
+              event.data.length > 0 &&
+              // Some OpenAI-compatible proxies serialize an empty flush as a bare
+              // `data: null`, between events or after `[DONE]`. No protocol has a
+              // null event, so it carries nothing and must not abort the stream.
+              event.data !== "null" &&
+              // Vertex AI partner models (e.g. `xai/grok-4.6`) send their SSE
+              // keepalive comment as `data: : keepalive` while reasoning.
+              event.data !== ": keepalive" &&
+              (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message"))
+            )
+              output.push(event.data)
           }),
         }
       },
-      (state, chunk) =>
-        Effect.gen(function* () {
-          const error = state.parser.feed(chunk)
-          if (error)
-            return yield* new AIError({
-              reason: new InvalidProviderOutputError({
-                route: "sse",
-                message: error.message,
-                body: chunk,
-                cause: error,
-              }),
-            })
-          return [state, state.output.splice(0)] as const
-        }),
+      (state, chunk) => {
+        const error = state.parser.feed(chunk)
+        if (!error) return Effect.succeed([state, state.output.splice(0)] as const)
+        const reason = new InvalidProviderOutputError({
+          route: "sse",
+          message: error.message,
+          body: chunk,
+          cause: error,
+        })
+        return Effect.fail(new AIError({ reason }))
+      },
     ),
-    Stream.filter(
-      (event) =>
-        (events === undefined || events.has(event.event)) &&
-        event.data.length > 0 &&
-        // Some OpenAI-compatible proxies serialize an empty flush as a bare
-        // `data: null`, between events or after `[DONE]`. No protocol has a
-        // null event, so it carries nothing and must not abort the stream.
-        event.data !== "null" &&
-        // Vertex AI partner models (e.g. `xai/grok-4.6`) send their SSE
-        // keepalive comment as `data: : keepalive` while reasoning.
-        event.data !== ": keepalive" &&
-        (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
-    ),
-    Stream.map((event) => event.data),
   )
 
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */

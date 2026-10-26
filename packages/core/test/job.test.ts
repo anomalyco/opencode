@@ -16,6 +16,7 @@ describe("Job", () => {
       const jobs = yield* Job.Service
       const latch = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        id: "job_metadata",
         type: "test",
         metadata: { durable: false },
         run: Deferred.await(latch).pipe(Effect.as("done")),
@@ -69,6 +70,7 @@ describe("Job", () => {
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const job = yield* jobs.start({
+        id: "job_failure",
         type: "test",
         run: Effect.failCause(
           Cause.combine(
@@ -158,7 +160,11 @@ describe("Job", () => {
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const latch = yield* Deferred.make<void>()
-      const job = yield* jobs.start({ type: "test", run: Deferred.await(latch).pipe(Effect.as("done")) })
+      const job = yield* jobs.start({
+        id: "job_finished",
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
       const waiting = yield* jobs
         .block({ id: job.id, sessionID: SessionSchema.ID.make("ses_parent") })
         .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
@@ -177,7 +183,11 @@ describe("Job", () => {
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const latch = yield* Deferred.make<void>()
-      const job = yield* jobs.start({ type: "test", run: Deferred.await(latch).pipe(Effect.as("done")) })
+      const job = yield* jobs.start({
+        id: "job_backgrounded",
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
       const waiting = yield* jobs
         .block({ id: job.id, sessionID: SessionSchema.ID.make("ses_parent") })
         .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
@@ -247,7 +257,12 @@ describe("Job", () => {
         shellID: "shell_background",
         command: "echo done",
       }
-      const job = yield* jobs.start({ type: "shell", recovery, run: Deferred.await(latch).pipe(Effect.as("done")) })
+      const job = yield* jobs.start({
+        id: recovery.shellID,
+        type: "shell",
+        recovery,
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
 
       expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toBeUndefined()
       const background = yield* jobs.background(job.id)
@@ -287,7 +302,12 @@ describe("Job", () => {
         agent: "explore",
         description: "Explore background recovery",
       }
-      const job = yield* jobs.start({ type: "subagent", recovery, run: Deferred.await(latch).pipe(Effect.as("done")) })
+      const job = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
       const waiting = yield* jobs
         .block({ id: job.id, sessionID: parentSessionID })
         .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
@@ -313,6 +333,7 @@ describe("Job", () => {
       const jobs = yield* Job.Service
       const latch = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        id: "shell_error",
         type: "shell",
         recovery: {
           kind: "shell",
@@ -338,6 +359,7 @@ describe("Job", () => {
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const job = yield* jobs.start({
+        id: "shell_immediate_error",
         type: "shell",
         recovery: {
           kind: "shell",
@@ -362,6 +384,7 @@ describe("Job", () => {
       const scope = yield* Scope.make()
       const previous = yield* Job.make.pipe(Scope.provide(scope))
       const job = yield* previous.start({
+        id: "shell_restart",
         type: "shell",
         recovery: {
           kind: "shell",
@@ -387,6 +410,7 @@ describe("Job", () => {
       const jobs = yield* Job.Service
       const interrupted = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        id: "ses_interrupted_child",
         type: "subagent",
         recovery: {
           kind: "subagent",
@@ -414,6 +438,7 @@ describe("Job", () => {
       const interrupted = yield* Deferred.make<void>()
       const jobs = yield* Job.make.pipe(Scope.provide(scope))
       const job = yield* jobs.start({
+        id: "job_abandoned",
         type: "test",
         run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
       })

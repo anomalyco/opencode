@@ -120,6 +120,7 @@ export const Invalid = {
 export const Controlled = {
   render: () => {
     const [value, setValue] = createSignal("")
+
     return (
       <div style={{ width: "280px" }}>
         <Field>

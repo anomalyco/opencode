@@ -1,18 +1,20 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin",
-  "version": "2.0.18",
+  "version": "2.1.4",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json"
   },
   "exports": {
     ".": "./src/promise/index.ts",
     "./effect": "./src/effect/index.ts",
     "./host": "./src/host.ts",
+    "./runtime": "./src/runtime.ts",
     "./tui": "./src/tui/index.ts",
     "./*": "./src/*.ts"
   },
@@ -33,14 +35,12 @@
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/util": "workspace:*",
-    "@standard-schema/spec": "catalog:",
-    "effect": "catalog:",
-    "zod": "catalog:"
+    "effect": "catalog:"
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
-    "@opentui/core": ">=0.5.12",
-    "@opentui/solid": ">=0.5.12",
+    "@opentui/core": ">=0.6.8",
+    "@opentui/solid": ">=0.6.8",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
@@ -67,6 +67,6 @@
     "@types/node": "catalog:",
     "solid-js": "catalog:",
     "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

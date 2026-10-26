@@ -1,19 +1,10 @@
 import type { ServerCtx } from "@/runtime/server/runtime"
 
-export function addProjects(context: ServerCtx, directories: string[]) {
-  const directory = directories[0]
-  if (!directory) return
+export async function addProjects(context: ServerCtx, directories: string[]) {
+  const projects = await Promise.all(directories.map((directory) => context.projects.add(directory)))
 
-  directories.forEach((item) => {
-    if (context.projects.list().some((project) => project.worktree === item)) return
-    const location = { directory: item }
-    void context.sdk.api.file
-      .list({ path: ".", location })
-      .then(() => context.sdk.api.location.get({ location }))
-      .then((value) => context.sync.child(item, { bootstrap: false })[1]("project", value.project.id))
-      .catch(() => undefined)
-    context.projects.open(item)
-  })
-  context.projects.touch(directory)
-  return directory
+  // Additions finish in any order; the first directory is the one the caller opens.
+  if (projects[0]) context.projects.touch(projects[0].worktree)
+
+  return projects[0]
 }

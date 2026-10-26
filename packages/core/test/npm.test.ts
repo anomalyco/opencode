@@ -279,7 +279,7 @@ describe("Npm.add", () => {
     const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       const mutableEntry = yield* npm.add(mutable)
-      const pinnedEntry = yield* npm.add(pinned)
+      yield* npm.add(pinned)
       yield* Effect.promise(async () => {
         await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
         await Bun.$`git -C ${fixture.repository} add .`

@@ -16,11 +16,14 @@ function setup() {
         ses_b: [{ id: "msg_b", type: "user", text: "Second session", time: { created: 2 } }],
       } as Record<string, SessionMessageInfo[]>,
     })
+
     const views = new Map<
       string,
       { active: () => boolean; messages: () => SessionMessageInfo[]; element: HTMLDivElement }
     >()
+
     const disposed: string[] = []
+
     const cache = createTimelineCache(
       {
         identity: {
@@ -64,16 +67,20 @@ function setup() {
         )
         views.set(id, { active, messages: source.history.messages, element })
         onCleanup(() => disposed.push(id))
+
         return element
       },
       () => state.visible,
+      (id) => state.messages[id] ?? [],
     )
+
     return { state, setState, cache, views, disposed, dispose }
   })
 }
 
 test("reuses a session view and refreshes its own history when selected again", () => {
   const input = setup()
+
   try {
     const first = input.cache()
     input.setState("id", "ses_b")
@@ -95,11 +102,36 @@ test("reuses a session view and refreshes its own history when selected again", 
   } finally {
     input.dispose()
   }
+
   expect(input.disposed.sort()).toEqual(["ses_a", "ses_b"])
+})
+
+test("disposes a detached view once its transcript is evicted, but never the selected one", async () => {
+  const input = setup()
+
+  try {
+    const first = input.cache()
+    input.setState("messages", "ses_a", [])
+    await Promise.resolve()
+    expect(input.disposed).toEqual([])
+
+    input.setState("messages", "ses_a", [{ id: "msg_a", type: "user", text: "Reloaded", time: { created: 1 } }])
+    input.setState("id", "ses_b")
+    input.cache()
+    input.setState("messages", "ses_a", [])
+    await Promise.resolve()
+    expect(input.disposed).toEqual(["ses_a"])
+
+    input.setState("id", "ses_a")
+    expect(input.cache()).not.toBe(first)
+  } finally {
+    input.dispose()
+  }
 })
 
 test("suspends a detached mobile view and reuses it when the conversation returns", () => {
   const input = setup()
+
   try {
     const first = input.cache()
     input.setState("visible", false)
@@ -114,6 +146,7 @@ test("suspends a detached mobile view and reuses it when the conversation return
 
 test("disposes views whose Location-scoped providers no longer match", () => {
   const input = setup()
+
   try {
     const first = input.cache()
     input.setState("directory", "/other")
@@ -125,11 +158,13 @@ test("disposes views whose Location-scoped providers no longer match", () => {
   } finally {
     input.dispose()
   }
+
   expect(input.disposed).toHaveLength(3)
 })
 
 test("disposes views on workspace changes while the destination is not rendered", () => {
   const input = setup()
+
   try {
     const first = input.cache()
     input.setState("visible", false)
@@ -141,6 +176,7 @@ test("disposes views on workspace changes while the destination is not rendered"
   } finally {
     input.dispose()
   }
+
   expect(input.disposed).toEqual(["ses_a", "ses_a"])
 })
 
@@ -149,12 +185,14 @@ for (const order of ["session-first", "workspace-first"] as const) {
     const input = setup()
     const render = createRoot((dispose) => ({ selected: createMemo(input.cache), dispose }))
     const visited = ["ses_a"]
+
     try {
       ;["ses_b", "ses_c", "ses_d", "ses_e", "ses_a", "ses_c", "ses_b", "ses_e", "ses_d", "ses_a"].forEach(
         (id, index) => {
           batch(() => {
             if (order === "workspace-first") input.setState("directory", `/repo/${id}`)
             input.setState("id", id)
+
             if (order === "session-first") input.setState("directory", `/repo/${id}`)
           })
           expect(input.disposed).toEqual(visited)
@@ -175,6 +213,7 @@ for (const order of ["session-first", "workspace-first"] as const) {
 
 test("evicts the least recently selected view and disposes all retained owners", () => {
   const input = setup()
+
   try {
     const first = input.cache()
     Array.from({ length: 15 }, (_, index) => `ses_${index}`).forEach((id) => {
@@ -192,5 +231,6 @@ test("evicts the least recently selected view and disposes all retained owners",
   } finally {
     input.dispose()
   }
+
   expect(input.disposed).toHaveLength(18)
 })

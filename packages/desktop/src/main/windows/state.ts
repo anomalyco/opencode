@@ -13,6 +13,7 @@ type WindowURLState = {
 export function safeWebContentsURL(webContents: WebContentsURLState) {
   try {
     if (webContents.isDestroyed()) return destroyedWindowURL
+
     return webContents.getURL()
   } catch {
     return destroyedWindowURL
@@ -22,6 +23,7 @@ export function safeWebContentsURL(webContents: WebContentsURLState) {
 export function safeWindowURL(win: WindowURLState) {
   try {
     if (win.isDestroyed()) return destroyedWindowURL
+
     return safeWebContentsURL(win.webContents)
   } catch {
     return destroyedWindowURL

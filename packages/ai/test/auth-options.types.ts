@@ -1,6 +1,6 @@
 import { Config } from "effect"
 import { Auth } from "../src/route.js"
-import type { LanguageModelFactory } from "../src/route/auth-options.js"
+import type { ProviderAuthOption } from "../src/route/auth-options.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as AmazonBedrock from "../src/providers/amazon-bedrock.js"
 import * as Anthropic from "../src/providers/anthropic.js"
@@ -14,7 +14,6 @@ import * as GoogleVertexChat from "../src/providers/google-vertex-chat.js"
 import * as GoogleVertexMessages from "../src/providers/google-vertex-messages.js"
 import * as GoogleVertexResponses from "../src/providers/google-vertex-responses.js"
 import * as OpenAI from "../src/providers/openai.js"
-import * as OpenAICompatible from "../src/providers/openai-compatible.js"
 import * as OpenRouter from "../src/providers/openrouter.js"
 import * as XAI from "../src/providers/xai.js"
 
@@ -28,9 +27,9 @@ type LanguageModel = {
 }
 
 declare const auth: Auth.Definition
-declare const optionalAuthModel: LanguageModelFactory<BaseOptions, "optional", LanguageModel>
-declare const requiredAuthModel: LanguageModelFactory<BaseOptions, "required", LanguageModel>
-const configApiKey = Config.redacted("OPENAI_API_KEY")
+declare const optionalAuthModel: (id: string, options?: BaseOptions & ProviderAuthOption<"optional">) => LanguageModel
+declare const requiredAuthModel: (id: string, options: BaseOptions & ProviderAuthOption<"required">) => LanguageModel
+const configApiKey = Config.Redacted("OPENAI_API_KEY")
 
 OpenAIChat.route.model({ id: "gpt-4.1-mini" })
 

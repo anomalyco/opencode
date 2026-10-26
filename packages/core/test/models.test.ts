@@ -1,18 +1,22 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
 import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
+import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
 import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
+import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
 const cacheKey = "models-dev:catalog"
+const metaKey = `${cacheKey}:meta`
 
 test("normalizes permissive interleaved values to compatibility", () => {
   expect(Model.compatibility("reasoning_text")).toEqual({ reasoningField: "reasoning_text" })
@@ -61,7 +65,7 @@ const fixtureSnapshot = [
         family: undefined,
         package: undefined,
         settings: { provider: "acme" },
-        capabilities: { tools: true, input: [], output: [] },
+        capabilities: { tools: true, input: [], output: [], temperature: true },
         variants: [],
         time: { released: Date.parse("2026-01-01") },
         cost: [
@@ -82,6 +86,7 @@ const fixtureSnapshot = [
       },
     ],
     environment: ["ACME_API_KEY"],
+    types: new Map(),
   },
 ] satisfies readonly ModelsDev.Snapshot[]
 
@@ -123,7 +128,7 @@ const fixture2Snapshot = [
         family: undefined,
         package: undefined,
         settings: { provider: "beta" },
-        capabilities: { tools: false, input: [], output: [] },
+        capabilities: { tools: false, input: [], output: [], temperature: false },
         variants: [],
         time: { released: Date.parse("2026-02-01") },
         cost: [
@@ -144,13 +149,15 @@ const fixture2Snapshot = [
       },
     ],
     environment: ["BETA_API_KEY"],
+    types: new Map(),
   },
 ] satisfies readonly ModelsDev.Snapshot[]
 
 interface MockState {
   body: string
   status: number
-  calls: Array<{ url: string; userAgent: string | null }>
+  etag?: string
+  calls: Array<{ url: string; userAgent: string | null; ifNoneMatch?: string }>
 }
 
 const makeMockClient = (state: Ref.Ref<MockState>) =>
@@ -158,10 +165,23 @@ const makeMockClient = (state: Ref.Ref<MockState>) =>
     Effect.gen(function* () {
       yield* Ref.update(state, (s) => ({
         ...s,
-        calls: [...s.calls, { url: request.url, userAgent: request.headers["user-agent"] ?? null }],
+        calls: [
+          ...s.calls,
+          {
+            url: request.url,
+            userAgent: request.headers["user-agent"] ?? null,
+            ifNoneMatch: request.headers["if-none-match"],
+          },
+        ],
       }))
       const s = yield* Ref.get(state)
-      return HttpClientResponse.fromWeb(request, new Response(s.body, { status: s.status }))
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(s.status === 304 ? null : s.body, {
+          status: s.status,
+          headers: s.etag ? { etag: s.etag } : {},
+        }),
+      )
     }),
   )
 
@@ -255,6 +275,23 @@ describe("ModelsDev Service", () => {
           api: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
           models: {},
         },
+        azure: {
+          id: "azure",
+          name: "Azure",
+          env: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"],
+          npm: "@ai-sdk/azure",
+          models: {
+            "gpt-5": {
+              ...fixture.acme.models["acme-1"],
+              id: "gpt-5",
+            },
+            "custom-chat": {
+              ...fixture.acme.models["acme-1"],
+              id: "custom-chat",
+              provider: { shape: "completions" },
+            },
+          },
+        },
       })
       const state = yield* Ref.make(initialState)
       const result = yield* provided(
@@ -266,6 +303,41 @@ describe("ModelsDev Service", () => {
       expect(result[0]?.models[0]?.package).toBe("@opencode/ai/providers/openai")
       expect(result[1]?.info.package).toBe("@opencode/ai/providers/cloudflare-workers-ai")
       expect(result[1]?.info.settings).toBeUndefined()
+      expect(result[2]?.info.package).toBe("@opencode/ai/providers/azure/responses")
+      expect(result[2]?.models.find((model) => model.id === "gpt-5")?.package).toBeUndefined()
+      expect(result[2]?.models.find((model) => model.id === "custom-chat")?.package).toBe(
+        "@opencode/ai/providers/azure/chat",
+      )
+    }),
+  )
+
+  it.live("keeps typed models in the snapshot with their models.dev type", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          ...fixture.acme,
+          models: {
+            ...fixture.acme.models,
+            "acme-live": {
+              ...fixture.acme.models["acme-1"],
+              id: "acme-live",
+              type: "realtime",
+              experimental: { modes: { fast: {} } },
+            },
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(acme?.models.map((model) => model.id)).toEqual(
+        ["acme-1", "acme-live", "acme-live-fast"].map((id) => Model.ID.make(id)),
+      )
+      expect(Object.fromEntries(acme?.types ?? [])).toEqual({ "acme-live": "realtime", "acme-live-fast": "realtime" })
     }),
   )
 
@@ -463,13 +535,56 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("refresh publishes Refreshed globally across locations", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, fixture, Date.now() - 10 * 60 * 1000)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          const bus = yield* Bus.Service
+          const refreshed = yield* bus
+            .subscribe(ModelsDev.Event.Refreshed)
+            .pipe(
+              Stream.take(1),
+              Stream.runCollect,
+              Effect.provideService(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make("/other-location") })),
+              ),
+              Effect.forkScoped,
+            )
+            .pipe(
+              Effect.flatMap((fiber) =>
+                Effect.gen(function* () {
+                  yield* Effect.yieldNow
+                  yield* svc.refresh(true).pipe(
+                    Effect.provideService(
+                      Location.Service,
+                      Location.Service.of(location({ directory: AbsolutePath.make("/initial-location") })),
+                    ),
+                  )
+                  return yield* Fiber.join(fiber)
+                }),
+              ),
+            )
+          expect(refreshed.length).toBe(1)
+          expect(refreshed[0]?.location).toBeUndefined()
+        }),
+      )
+    }),
+  )
+
   it.live("refresh(false) stays quiet when the fetched body matches the cached digest", () =>
     Effect.gen(function* () {
       const cache = makeCache()
       writeCache(cache, fixture, Date.now() - 10 * 60 * 1000)
-      const seeded = structuredClone(cache.values.get(cacheKey))
+      const body = cache.values.get(cacheKey)
       // The server serves a byte-identical body, so the refresh still hits
-      // the network but must not rewrite the cache or publish Refreshed.
+      // the network but must only record the check time, not publish Refreshed.
       const state = yield* Ref.make(initialState)
       yield* provided(
         state,
@@ -494,7 +609,49 @@ describe("ModelsDev Service", () => {
       )
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
-      expect(cache.values.get(cacheKey)).toEqual(seeded)
+      expect(cache.values.get(cacheKey)).toBe(body)
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture)) })
+      expect(Date.now() - (cache.values.get(metaKey) as { updatedAt: number }).updatedAt).toBeLessThan(60 * 1000)
+    }),
+  )
+
+  it.live("refresh(false) revalidates with the stored ETag and treats 304 as unchanged", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const state = yield* Ref.make<MockState>({ ...initialState, etag: 'W/"v1"' })
+      const body = yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          yield* svc.refresh(true)
+          const meta = cache.values.get(metaKey) as { updatedAt: number }
+          cache.values.set(metaKey, { ...meta, updatedAt: Date.now() - 10 * 60 * 1000 })
+          const body = cache.values.get(cacheKey)
+          yield* Ref.update(state, (s) => ({ ...s, status: 304 }))
+          const bus = yield* Bus.Service
+          const event = yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped,
+            Effect.flatMap((fiber) =>
+              Effect.gen(function* () {
+                yield* Effect.yieldNow
+                yield* svc.refresh(false)
+                return yield* Fiber.join(fiber).pipe(Effect.timeoutOption("50 millis"))
+              }),
+            ),
+          )
+          expect(event._tag).toBe("None")
+          expect(yield* svc.get()).toEqual(fixtureSnapshot)
+          return body
+        }),
+      )
+      const final = yield* Ref.get(state)
+      expect(final.calls.map((call) => call.ifNoneMatch)).toEqual([undefined, 'W/"v1"'])
+      expect(cache.values.get(cacheKey)).toBe(body)
+      expect(cache.values.get(metaKey)).toMatchObject({ etag: 'W/"v1"' })
+      expect(Date.now() - (cache.values.get(metaKey) as { updatedAt: number }).updatedAt).toBeLessThan(60 * 1000)
     }),
   )
 

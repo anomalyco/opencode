@@ -24,4 +24,5 @@ export default {
 }
 
 export const Basic = { args: { placeholder: "Type...", value: "Inline" } }
+
 export const FixedWidth = { args: { value: "80px", width: "80px" } }

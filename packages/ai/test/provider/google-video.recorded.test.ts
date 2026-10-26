@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Video } from "../../src/index.js"
+import { Video } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
@@ -25,7 +25,7 @@ describe("Google Veo recorded", () => {
           {
             model,
             prompt: "A single red balloon drifting slowly upward against a clear blue sky.",
-            aspectRatio: "16:9",
+            aspect: "16:9",
             durationSeconds: 4,
           },
           { poll: queuedPoll },

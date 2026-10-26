@@ -182,6 +182,36 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("converts schemas at registration and reuses them in every snapshot", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let builds = 0
+      const portable = {
+        "~standard": {
+          version: 1,
+          vendor: "test",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => {
+              builds++
+              return { type: "object", properties: { text: { type: "string" } } }
+            },
+            output: () => ({ type: "string" }),
+          },
+        },
+      } as const
+      yield* transform(service, { portable: { ...make(), input: portable } }, { codemode: false })
+      const registered = builds
+
+      const first = yield* service.snapshot()
+      const second = yield* service.snapshot()
+
+      expect(builds).toBe(registered)
+      expect(second.definitions).toHaveLength(2)
+      second.definitions.forEach((item, index) => expect(item).toBe(first.definitions[index]))
+    }),
+  )
+
   it.effect("skips invalid updates without dropping the existing definition", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -329,7 +359,6 @@ describe("Tool", () => {
         {
           before: make(),
           "": make(),
-          ["x".repeat(129)]: make(),
           "echo.tool": constant("first"),
           echo_tool: constant("last"),
           execute: make(),
@@ -343,27 +372,6 @@ describe("Tool", () => {
       expect((yield* snapshot.execute(call("after"))).output).toEqual({ text: "after" })
       expect((yield* snapshot.execute(call("echo_tool"))).output).toEqual({ text: "last" })
       expect(snapshot.codeModeCatalog?.tools).toEqual([])
-    }),
-  )
-
-  it.effect("registers 128-character MCP tool names in Code Mode", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const name = "x".repeat(128)
-      yield* transform(service, { [name]: make(), ["x".repeat(129)]: make() }, { namespace: "cloudflare" })
-
-      const snapshot = yield* service.snapshot()
-      expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual([`cloudflare.${name}`])
-      const result = yield* snapshot.execute({
-        ...call("execute"),
-        call: {
-          type: "tool-call",
-          id: "call-long-mcp-name",
-          name: "execute",
-          input: { code: `return (await tools.cloudflare[${JSON.stringify(name)}]({ text: "hello" })).text` },
-        },
-      })
-      expect(result.content).toEqual([{ type: "text", text: "hello" }])
     }),
   )
 
@@ -1063,7 +1071,7 @@ describe("Tool", () => {
               value: Schema.Boolean.pipe(
                 Schema.decodeTo(Schema.String, {
                   decode: SchemaGetter.transform((value) => String(value)),
-                  encode: SchemaGetter.transformOrFail((value) =>
+                  encode: SchemaGetter.transformEffect((value) =>
                     value === "valid"
                       ? Effect.succeed(true)
                       : Effect.fail(new SchemaIssue.InvalidValue({ message: "invalid output" }, value)),

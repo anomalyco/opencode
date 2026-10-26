@@ -9,38 +9,53 @@ import { SessionErrorMessage } from "./session-error"
 
 export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
   const i18n = useI18n()
+
   const retry = createMemo(() => {
     if (props.status.type !== "retry") return
+
     return props.status
   })
+
   const [seconds, setSeconds] = createSignal(0)
   createEffect(
     on(retry, (current) => {
       if (!current) return
+
       const update = () => {
         const next = retry()?.next
+
         if (!next) return
         setSeconds(Math.round((next - Date.now()) / 1000))
       }
+
       update()
       const timer = setInterval(update, 1000)
       onCleanup(() => clearInterval(timer))
     }),
   )
+
   const message = createMemo(() => {
     const current = retry()
+
     if (!current) return ""
+
     if (current.message.includes("exceeded your current quota") && current.message.includes("gemini")) {
       return i18n.t("ui.sessionTurn.retry.geminiHot")
     }
+
     if (current.message.length > 80) return current.message.slice(0, 80) + "…"
+
     return current.message
   })
+
   const info = createMemo(() => {
     const current = retry()
+
     if (!current) return ""
     const count = Math.max(0, seconds())
+
     if (count > 0) return i18n.plural("ui.sessionTurn.retry.attemptWaiting", count, { attempt: current.attempt })
+
     return i18n.t("ui.sessionTurn.retry.attemptRetryingNow", { attempt: current.attempt })
   })
 

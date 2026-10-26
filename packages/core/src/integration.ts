@@ -7,6 +7,7 @@ import {
   Context,
   Duration,
   Effect,
+  Equal,
   Exit,
   Fiber,
   Layer,
@@ -23,7 +24,7 @@ import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
 import { AppProcess } from "@opencode/util/process"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { Form } from "./form.js"
 
 export const ID = Integration.ID
@@ -43,6 +44,9 @@ export type CommandMethod = Integration.CommandMethod
 
 export const KeyMethod = Integration.KeyMethod
 export type KeyMethod = Integration.KeyMethod
+
+export const ExternalMethod = Integration.ExternalMethod
+export type ExternalMethod = Integration.ExternalMethod
 
 export const EnvMethod = Integration.EnvMethod
 export type EnvMethod = Integration.EnvMethod
@@ -81,6 +85,11 @@ export interface KeyImplementation {
   readonly method: KeyMethod
 }
 
+export interface ExternalImplementation {
+  readonly integrationID: ID
+  readonly method: ExternalMethod
+}
+
 export interface CommandImplementation {
   readonly integrationID: ID
   readonly method: CommandMethod
@@ -91,7 +100,12 @@ export interface EnvImplementation {
   readonly method: EnvMethod
 }
 
-export type Implementation = OAuthImplementation | CommandImplementation | KeyImplementation | EnvImplementation
+export type Implementation =
+  | OAuthImplementation
+  | CommandImplementation
+  | KeyImplementation
+  | ExternalImplementation
+  | EnvImplementation
 
 export const Attempt = Integration.Attempt
 export type Attempt = Integration.Attempt
@@ -133,8 +147,8 @@ export type Ref = Integration.Ref
 
 type Entry = {
   ref: Types.DeepMutable<Ref>
-  methods: Types.DeepMutable<Method>[]
-  implementations: Map<MethodID, Types.DeepMutable<OAuthImplementation>>
+  methods: Method[]
+  implementations: Map<MethodID, OAuthImplementation>
 }
 
 type Data = {
@@ -142,8 +156,8 @@ type Data = {
 }
 
 export type Editor = {
-  list: () => readonly Ref[]
-  get: (id: ID) => Ref | undefined
+  list: () => readonly Types.DeepMutable<Ref>[]
+  get: (id: ID) => Types.DeepMutable<Ref> | undefined
   update: (id: ID, update: (integration: Types.DeepMutable<Ref>) => void) => void
   remove: (id: ID) => void
   method: {
@@ -164,7 +178,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly connection: {
     /** Returns the active connection for one integration. */
     readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
-    /** Resolves a connection into usable credential material. */
+    /** Resolves a connection into credential material or an external credential-source reference. */
     readonly resolve: (
       connection: IntegrationConnection.Info,
     ) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
@@ -179,6 +193,17 @@ export interface Interface extends State.Transformable<Editor> {
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
+    /** Runs an external method and stores a reference configured by its form answers. */
+    readonly external: (input: {
+      /** Integration receiving the credential. */
+      readonly integrationID: ID
+      /** External method that defines the form and credential source. */
+      readonly methodID: MethodID
+      /** Values collected from the method's form fields. */
+      readonly answer?: Form.Answer
+      /** User-facing label for the stored credential. */
+      readonly label?: string
+    }) => Effect.Effect<void, AuthorizationError>
     /** Selects a stored credential as the active integration connection. */
     readonly activate: (credentialID: Credential.ID) => Effect.Effect<void>
     /** Updates a stored credential exposed as a connection. */
@@ -188,6 +213,12 @@ export interface Interface extends State.Transformable<Editor> {
     ) => Effect.Effect<void>
     /** Removes a stored credential connection. */
     readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
+    /** Reports or clears a runtime problem with a connection; `get` and `list` project it onto the connection. */
+    readonly status: (input: {
+      readonly integrationID: ID
+      readonly connection: IntegrationConnection.Info
+      readonly status: IntegrationConnection.Status | undefined
+    }) => Effect.Effect<void>
   }
   readonly oauth: {
     /** Starts a stateful OAuth attempt. */
@@ -279,12 +310,16 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
+    // Runtime-only: statuses describe the current process's view of a connection and are not persisted.
+    const statuses = new Map<string, IntegrationConnection.Status>()
+    const statusKey = (integrationID: ID, connection: IntegrationConnection.Info) =>
+      `${integrationID}:${IntegrationConnection.key(connection)}`
     const state = State.create<Data, Editor>({
       name: "integration",
       initial: () => ({ integrations: new Map<ID, Entry>() }),
       editor: (editor) => ({
-        list: () => Array.from(editor.integrations.values(), (entry) => entry.ref) as Ref[],
-        get: (id) => editor.integrations.get(id)?.ref as Ref | undefined,
+        list: () => Array.from(editor.integrations.values(), (entry) => entry.ref),
+        get: (id) => editor.integrations.get(id)?.ref,
         update: (id, update) => {
           const current = editor.integrations.get(id) ?? {
             ref: { id, name: id },
@@ -297,7 +332,7 @@ const layer = Layer.effect(
         },
         remove: (id) => editor.integrations.delete(id),
         method: {
-          list: (integrationID) => (editor.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
+          list: (integrationID) => editor.integrations.get(integrationID)?.methods ?? [],
           update: (implementation) => {
             const current = editor.integrations.get(implementation.integrationID) ?? {
               ref: {
@@ -305,7 +340,7 @@ const layer = Layer.effect(
                 name: implementation.integrationID,
               },
               methods: [],
-              implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
+              implementations: new Map<MethodID, OAuthImplementation>(),
             }
             if (!editor.integrations.has(implementation.integrationID)) {
               editor.integrations.set(implementation.integrationID, current)
@@ -316,15 +351,14 @@ const layer = Layer.effect(
                 return method.id === implementation.method.id
               if (method.type === "command" && implementation.method.type === "command")
                 return method.id === implementation.method.id
+              if (method.type === "external" && implementation.method.type === "external")
+                return method.id === implementation.method.id
               return true
             })
-            if (index === -1) current.methods.push(implementation.method as Types.DeepMutable<Method>)
-            else current.methods[index] = implementation.method as Types.DeepMutable<Method>
-            if (implementation.method.type === "oauth") {
-              current.implementations.set(
-                implementation.method.id,
-                implementation as Types.DeepMutable<OAuthImplementation>,
-              )
+            if (index === -1) current.methods.push(implementation.method)
+            else current.methods[index] = implementation.method
+            if ("authorize" in implementation) {
+              current.implementations.set(implementation.method.id, implementation)
             }
           },
           remove: (integrationID, method) => {
@@ -334,6 +368,7 @@ const layer = Layer.effect(
               if (candidate.type !== method.type) return false
               if (candidate.type === "oauth" && method.type === "oauth") return candidate.id === method.id
               if (candidate.type === "command" && method.type === "command") return candidate.id === method.id
+              if (candidate.type === "external" && method.type === "external") return candidate.id === method.id
               return true
             })
             if (index !== -1) current.methods.splice(index, 1)
@@ -341,7 +376,13 @@ const layer = Layer.effect(
           },
         },
       }),
-      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (data) =>
+          Array.from(data.integrations.values(), (entry) => project(entry, resolveConnections(entry, []))).toSorted(
+            (a, b) => a.name.localeCompare(b.name),
+          ),
+        () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
@@ -377,7 +418,10 @@ const layer = Layer.effect(
         name: entry.ref.name,
         ...(entry.ref.metadata === undefined ? {} : { metadata: entry.ref.metadata }),
         methods: entry.methods,
-        connections,
+        connections: connections.map((connection) => {
+          const status = statuses.get(statusKey(entry.ref.id, connection))
+          return status ? { ...connection, status } : connection
+        }),
       })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -686,17 +730,30 @@ const layer = Layer.effect(
           }
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
-          if (credential.value.type === "key") return credential.value
-          const implementation = state
+          if (credential.value.type !== "oauth") return credential.value
+          const refresh = state
             .get()
             .integrations.get(credential.integrationID)
-            ?.implementations.get(credential.value.methodID)
-          if (!implementation?.refresh) return credential.value
-          const now = yield* Clock.currentTimeMillis
-          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
-          yield* credentials.update(credential.id, { value })
-          return value
+            ?.implementations.get(credential.value.methodID)?.refresh
+          const expiring = (value: Credential.OAuth) =>
+            Clock.currentTimeMillis.pipe(
+              Effect.map((now) => value.expires <= now + Duration.toMillis(Duration.minutes(5))),
+            )
+          if (!refresh || !(yield* expiring(credential.value))) return credential.value
+          return yield* authorize(
+            credentials.lock(
+              credential.id,
+              Effect.gen(function* () {
+                // Another Location may have refreshed while this caller waited.
+                const current = yield* credentials.get(credential.id)
+                if (!current || current.value.type !== "oauth") return undefined
+                if (!(yield* expiring(current.value))) return current.value
+                const value = yield* refresh(current.value).pipe(Effect.timeout("30 seconds"))
+                yield* credentials.update(current.id, { value })
+                return value
+              }),
+            ),
+          )
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -718,7 +775,32 @@ const layer = Layer.effect(
             value: Credential.Key.make({
               type: "key",
               key: input.key,
-              ...(Object.keys(answer).length > 0 ? { configuration: answer } : {}),
+              ...(Object.keys(answer).length > 0 ? { metadata: answer } : {}),
+            }),
+          })
+        }),
+        external: Effect.fn("Integration.connection.external")(function* (input) {
+          const method = state
+            .get()
+            .integrations.get(input.integrationID)
+            ?.methods.find((method) => method.type === "external" && method.id === input.methodID)
+          if (method?.type !== "external")
+            return yield* new AuthorizationError({ cause: new Error(`External method not found: ${input.methodID}`) })
+          const answer = input.answer ?? {}
+          if (method.form) {
+            const invalid = Form.validateFields(method.form) ?? Form.validateAnswer(method.form, answer)
+            if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+          }
+          if (!method.form && Object.keys(answer).length > 0) {
+            return yield* new AuthorizationError({ cause: new Error("External method does not accept a form answer") })
+          }
+          yield* createCredential({
+            integrationID: input.integrationID,
+            label: input.label,
+            value: Credential.External.make({
+              type: "external",
+              methodID: method.id,
+              ...(Object.keys(answer).length > 0 ? { metadata: answer } : {}),
             }),
           })
         }),
@@ -727,6 +809,13 @@ const layer = Layer.effect(
           credentials.update(credentialID, updates),
         ),
         remove: Effect.fn("Integration.connection.remove")((credentialID) => credentials.remove(credentialID)),
+        status: Effect.fn("Integration.connection.status")(function* (input) {
+          const key = statusKey(input.integrationID, input.connection)
+          if (Equal.equals(statuses.get(key), input.status)) return
+          if (input.status) statuses.set(key, input.status)
+          if (!input.status) statuses.delete(key)
+          yield* bus.publish(Integration.Event.Updated, {})
+        }),
       },
       oauth: {
         connect: connectOAuth,

@@ -10,6 +10,7 @@ import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { ConfigFormatter } from "@opencode/schema/config/formatter"
 import { ConfigLSP } from "@opencode/schema/config/lsp"
 import { ConfigMedia } from "@opencode/schema/config/media"
+import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { ConfigPlugin } from "@opencode/schema/config/plugin"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -18,13 +19,11 @@ import { ConfigReference } from "@opencode/schema/config/reference"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Permission } from "@opencode/schema/permission"
 import { ConfigAgentV1 } from "../v1/config/agent.js"
-import { ConfigAttachmentV1 } from "../v1/config/attachment.js"
 import { ConfigCommandV1 } from "../v1/config/command.js"
 import { ConfigMCPV1 } from "../v1/config/mcp.js"
 import { ConfigPermissionV1 } from "../v1/config/permission.js"
 import { ConfigPluginV1 } from "../v1/config/plugin.js"
 import { ConfigProviderV1 } from "../v1/config/provider.js"
-import { ConfigV1 } from "../v1/config/config.js"
 import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
@@ -42,7 +41,7 @@ export type Result =
     }
   | { readonly type: "rejected"; readonly diagnostics: readonly Diagnostic[] }
 
-const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const options = { errors: "all", onExcessProperty: "ignore" } as const
 const unsupportedTopLevel = ["logLevel", "server", "subagent_depth", "layout"] as const
 const unsupportedExperimental = [
   "disable_paste_summary",
@@ -53,6 +52,7 @@ const unsupportedExperimental = [
 ] as const
 const unsupportedProvider = ["id", "whitelist", "blacklist"] as const
 const unsupportedModel = ["release_date", "attachment", "reasoning", "temperature", "experimental"] as const
+const LegacyAutoupdate = Schema.Literals([true, false, "notify"])
 
 export function normalize(input: unknown): Result {
   if (!isRecord(input))
@@ -71,7 +71,7 @@ export function normalize(input: unknown): Result {
     ? decodeEncoded(Schema.Boolean, input.snapshot, ["snapshot"], diagnostics)
     : undefined
   const legacyUpdate = own(input, "autoupdate")
-    ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
+    ? decodeValue(LegacyAutoupdate, input.autoupdate, ["autoupdate"], diagnostics)
     : undefined
   const nativeUpdate = own(input, "update")
     ? decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
@@ -82,15 +82,18 @@ export function normalize(input: unknown): Result {
       : undefined
     : undefined
   const legacyMedia = own(input, "attachment")
-    ? decodeValue(ConfigAttachmentV1.Info, input.attachment, ["attachment"], diagnostics)
+    ? decodeEncoded(ConfigMedia.Info, input.attachment, ["attachment"], diagnostics)
     : undefined
-  if (legacyMedia !== undefined) {
-    const migrated = ConfigMigrateV1.migrate({ attachment: legacyMedia }).media
-    if (migrated !== undefined) encoded.media = canonical(ConfigMedia.Info, migrated)
-  }
+  if (legacyMedia !== undefined) encoded.media = legacyMedia
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
   const migratedUpdate =
-    legacyUpdate === undefined ? undefined : ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+    legacyUpdate === false
+      ? "disable"
+      : legacyUpdate === "notify"
+        ? "notify"
+        : legacyUpdate === true
+          ? "auto"
+          : undefined
   const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
   if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare
@@ -114,10 +117,9 @@ export function normalize(input: unknown): Result {
 
   const legacyCommands = decodeMap(input.command, ConfigCommandV1.Info, ["command"], diagnostics, decodeValue)
   diagnoseSelectionMap(input.command, ["command"], diagnostics)
-  const migratedCommands = mapValues(legacyCommands, (value) => {
-    const migrated = ConfigMigrateV1.commands({ value })?.value
-    return migrated === undefined ? undefined : canonical(ConfigCommand.Info, migrated)
-  })
+  const migratedCommands = mapValues(legacyCommands, (value) =>
+    canonical(ConfigCommand.Info, ConfigMigrateV1.migrateCommand(value)),
+  )
   const nativeCommands = decodeMap(input.commands, ConfigCommand.Info, ["commands"], diagnostics, decodeEncoded)
   mergeMap(
     encoded,
@@ -135,9 +137,7 @@ export function normalize(input: unknown): Result {
   const legacySmallModel = own(input, "small_model")
     ? decodeValue(Schema.String, input.small_model, ["small_model"], diagnostics)
     : undefined
-  const migratedSmallModel = legacySmallModel
-    ? ConfigMigrateV1.migrate({ small_model: legacySmallModel }).agents?.title?.model
-    : undefined
+  const migratedSmallModel = ConfigMigrateV1.modelSelection(legacySmallModel)
   if (legacySmallModel && !migratedSmallModel)
     diagnostics.push({
       kind: "unsupported",
@@ -192,15 +192,20 @@ export function normalize(input: unknown): Result {
   normalizeSkills(input, encoded, diagnostics)
   normalizeMcp(input, encoded, diagnostics)
   normalizeCompaction(input, encoded, diagnostics)
+  normalizePolicies(input, encoded, diagnostics)
   normalizeExperimental(input, encoded, diagnostics)
   normalizeWatcher(input, encoded, diagnostics)
   normalizeFormatter(input, encoded, diagnostics)
   normalizeLsp(input, encoded, diagnostics)
 
+  const model = own(input, "model")
+    ? decodeValue(ConfigModel.Selection, input.model, ["model"], diagnostics)
+    : undefined
+  if (model) encoded.model = { ...model, providerID: ConfigMigrateV1.providerID(model.providerID) }
+
   const nativeAtomic = {
     $schema: Info.fields.$schema,
     shell: Info.fields.shell,
-    model: Info.fields.model,
     default_agent: Info.fields.default_agent,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
@@ -252,6 +257,7 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
       ["experimental", "mcp_timeout"],
       diagnostics,
     )
+    // V1 never applied this to connecting, unlike a per-server timeout.
     if (value !== undefined) {
       timeout.catalog = value
       timeout.execution = value
@@ -267,13 +273,18 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           return
         }
         if (name === "servers" && !isDirectLegacyMcp(value)) {
-          Object.entries(decodeMap(value, ConfigMCP.Server, path, diagnostics, decodeEncoded)).forEach(
-            ([key, server]) => setOwn(nativeServers, key, server),
-          )
+          Object.entries(
+            decodeMap(expandServerTimeouts(value), ConfigMCP.Server, path, diagnostics, decodeEncoded),
+          ).forEach(([key, server]) => setOwn(nativeServers, key, server))
           return
         }
         if (name === "timeout" && !isDirectLegacyMcp(value)) {
-          normalizeMcpTimeout(value, timeout, path, diagnostics)
+          normalizeMcpTimeout(
+            typeof value === "number" ? ConfigMigrateV1.migrateMcpTimeout(value) : value,
+            timeout,
+            path,
+            diagnostics,
+          )
           return
         }
         const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
@@ -291,6 +302,19 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
     ...(Object.keys(timeout).length ? { timeout } : {}),
     ...(Object.keys(servers).length ? { servers } : {}),
   }
+}
+
+// Native servers accept the V1 bare-number timeout so one V1-shaped field does not drop the whole server.
+function expandServerTimeouts(value: unknown) {
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([name, server]) => [
+      name,
+      isRecord(server) && typeof server.timeout === "number"
+        ? { ...server, timeout: ConfigMigrateV1.migrateMcpTimeout(server.timeout) }
+        : server,
+    ]),
+  )
 }
 
 function normalizeMcpTimeout(
@@ -374,12 +398,13 @@ function normalizeCompaction(
   if (Object.keys(result).length || !Object.keys(input.compaction).length) encoded.compaction = result
 }
 
-function normalizeExperimental(
+// V1 provider lists and `experimental.policies` stay supported and merge into
+// top-level `policies`; within a document, later sources win ties.
+function normalizePolicies(
   input: Record<string, unknown>,
   encoded: Record<string, unknown>,
   diagnostics: Diagnostic[],
 ) {
-  const result: Record<string, unknown> = {}
   const generated: unknown[] = []
   const enabled = decodeProviderList(input, "enabled_providers", diagnostics)
   if (enabled.present && (!enabled.nonEmpty || enabled.values.length)) {
@@ -400,7 +425,32 @@ function normalizeExperimental(
       effect: "deny",
     })),
   )
-  const native: unknown[] = []
+  const experimental = isRecord(input.experimental)
+    ? decodeList(
+        input.experimental.policies,
+        ConfigPolicy.Info,
+        ["experimental", "policies"],
+        diagnostics,
+        decodeEncoded,
+      )
+    : []
+  const native = decodeList(input.policies, ConfigPolicy.Info, ["policies"], diagnostics, decodeEncoded)
+  if (
+    generated.length ||
+    experimental.length ||
+    native.length ||
+    Array.isArray(input.policies) ||
+    (isRecord(input.experimental) && Array.isArray(input.experimental.policies))
+  )
+    encoded.policies = [...generated, ...experimental, ...native]
+}
+
+function normalizeExperimental(
+  input: Record<string, unknown>,
+  encoded: Record<string, unknown>,
+  diagnostics: Diagnostic[],
+) {
+  const result: Record<string, unknown> = {}
   if (own(input, "experimental")) {
     if (!isRecord(input.experimental)) invalid(["experimental"], diagnostics)
     if (isRecord(input.experimental)) {
@@ -417,6 +467,33 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.portable_shell_scanner = value
       }
+      if (own(experimental, "todo")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.todo,
+          experimental.todo,
+          ["experimental", "todo"],
+          diagnostics,
+        )
+        if (value !== undefined) result.todo = value
+      }
+      if (own(experimental, "background_compaction")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.background_compaction,
+          experimental.background_compaction,
+          ["experimental", "background_compaction"],
+          diagnostics,
+        )
+        if (value !== undefined) result.background_compaction = value
+      }
+      if (own(experimental, "media_blob")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.media_blob,
+          experimental.media_blob,
+          ["experimental", "media_blob"],
+          diagnostics,
+        )
+        if (value !== undefined) result.media_blob = value
+      }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.subagent_depth,
@@ -426,19 +503,17 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
-      native.push(
-        ...decodeList(
-          experimental.policies,
-          ConfigPolicy.Info,
-          ["experimental", "policies"],
+      if (own(experimental, "location_idle_timeout")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.location_idle_timeout,
+          experimental.location_idle_timeout,
+          ["experimental", "location_idle_timeout"],
           diagnostics,
-          decodeEncoded,
-        ),
-      )
+        )
+        if (value !== undefined) result.location_idle_timeout = value
+      }
     }
   }
-  if (generated.length || native.length || (isRecord(input.experimental) && Array.isArray(input.experimental.policies)))
-    result.policies = [...generated, ...native]
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))
     encoded.experimental = result
 }

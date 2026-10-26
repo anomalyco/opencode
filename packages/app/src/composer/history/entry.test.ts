@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
 import { prependHistoryEntry, removeHistoryEntry, type PromptHistoryComment } from "./entry"
-import { Schema } from "effect"
-import { PromptHistoryState } from "../schema"
-import { Persistence } from "@/runtime/persistence/schema"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 const text = (value: string): Prompt => [{ type: "text", content: value, start: 0, end: value.length }]
+
 const comment = (id: string, value = "note"): PromptHistoryComment => ({
   id,
   path: "src/a.ts",
@@ -41,6 +39,7 @@ describe("Composer history", () => {
       { type: "text", content: "look", start: 0, end: 4 },
       { type: "image", id: "img", filename: "big.png", mime: "image/png", blob: { id: "hash", url: "" } },
     ]
+
     const entries = prependHistoryEntry(prependHistoryEntry([], text("earlier")), image, [comment("c1")])
     expect(entries).toHaveLength(2)
 
@@ -65,6 +64,7 @@ describe("Composer history", () => {
         selection: { startLine: 1, startChar: 0, endLine: 2, endChar: 0 },
       },
     ]
+
     const comments = [comment("c1")]
     const entries = prependHistoryEntry([], prompt, comments)
     const stored = entries[0]
@@ -75,15 +75,5 @@ describe("Composer history", () => {
 
     expect(stored.prompt[0].selection?.startLine).toBe(1)
     expect(stored.comments[0]?.selection.start).toBe(2)
-  })
-
-  test("upgrades stored prompt arrays once at the persistence boundary", () => {
-    expect(
-      Schema.decodeUnknownSync(Persistence.withInitial(PromptHistoryState, { entries: [] }))({
-        entries: [text("stored")],
-      }),
-    ).toEqual({
-      entries: [{ prompt: text("stored"), comments: [] }],
-    })
   })
 })

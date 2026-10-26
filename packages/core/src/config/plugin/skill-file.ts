@@ -1,6 +1,7 @@
 export * as SkillFile from "./skill-file.js"
 
 import path from "path"
+import { isRecord } from "@opencode/ai/utils/record"
 import { Result, Schema, type SchemaIssue, SchemaParser } from "effect"
 import { ConfigMarkdown } from "../markdown.js"
 import { AbsolutePath } from "../../schema.js"
@@ -10,6 +11,7 @@ const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   metadata: Schema.Unknown.pipe(Schema.optional),
+  "disable-model-invocation": Schema.Unknown.pipe(Schema.optional),
 })
 const decodeFrontmatter = SchemaParser.decodeUnknownResult(Frontmatter)
 
@@ -19,15 +21,17 @@ export type ParseResult =
   | { readonly _tag: "Skipped"; readonly reason: "frontmatter"; readonly issue: SchemaIssue.Issue }
 
 const metadataBoolean = (metadata: unknown, key: string) => {
-  if (metadata === undefined || metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return undefined
-  }
-  const value = (metadata as Record<string, unknown>)[key]
+  if (!isRecord(metadata)) return undefined
+  return booleanValue(metadata[key])
+}
+
+const booleanValue = (value: unknown) => {
   if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1 ? true : value === 0 ? false : undefined
   if (typeof value !== "string") return undefined
   const normalized = value.trim().toLowerCase()
-  if (normalized === "true") return true
-  if (normalized === "false") return false
+  if (["true", "yes", "on", "1"].includes(normalized)) return true
+  if (["false", "no", "off", "0"].includes(normalized)) return false
   return undefined
 }
 
@@ -41,7 +45,9 @@ export function parse(directory: string, filepath: string, content: string): Par
     path.dirname(filepath) === directory && path.basename(filepath) !== "SKILL.md"
       ? path.basename(filepath, ".md")
       : path.basename(path.dirname(filepath))
-  const autoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
+  const opencodeAutoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
+  const disableModelInvocation = booleanValue(frontmatter["disable-model-invocation"])
+  const autoinvoke = opencodeAutoinvoke ?? (disableModelInvocation ? false : undefined)
   return {
     _tag: "Parsed",
     skill: {

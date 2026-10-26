@@ -11,6 +11,9 @@ export type EnvInfo = Connection.EnvInfo
 export const Info = Connection.Info
 export type Info = Connection.Info
 
+export const Status = Connection.Status
+export type Status = Connection.Status
+
 /** Identity of an access choice; labels and refreshed token values do not identify a new connection. */
 export function key(
   connection:

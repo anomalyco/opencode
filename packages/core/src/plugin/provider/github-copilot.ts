@@ -1,5 +1,6 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
+import { isRecord } from "@opencode/ai/utils/record"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
@@ -11,6 +12,7 @@ import { Model } from "../../model.js"
 import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
+import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
@@ -225,10 +227,22 @@ export const GithubCopilotPlugin = define({
         })
         return
       }
+      // Without the live model list, the models.dev package says which Copilot API serves
+      // each model: Anthropic Messages stays native, OpenAI means Responses, and anything
+      // else goes through the bundled Copilot SDK's model ID fallback.
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
+          if (model.package === "@opencode/ai/providers/anthropic") {
+            if (loaded.baseURL)
+              model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL}/v1` })
+            return
+          }
+          const responses = model.package === "@opencode/ai/providers/openai"
           model.package = Provider.aisdk("@ai-sdk/github-copilot")
-          if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+          model.settings = Provider.mergeOverlay(model.settings, {
+            ...(loaded.baseURL ? { baseURL: loaded.baseURL } : {}),
+            ...(responses ? { endpoint: "responses" } : {}),
+          })
         })
       }
     })
@@ -272,7 +286,7 @@ export const GithubCopilotPlugin = define({
             .pipe(Effect.orElseSucceed(() => undefined))
           const interaction = interactionType(evt.kind, session?.parentID !== undefined)
           evt.headers["X-Interaction-Type"] = interaction
-          evt.headers["X-Interaction-Id"] = evt.sessionID
+          evt.headers["X-Interaction-Id"] = session ? SessionAffinity.get(session) : evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
         }),
       { providerID: Provider.ID.githubCopilot },
@@ -330,13 +344,13 @@ export const GithubCopilotPlugin = define({
           return
         }
         const id = evt.model.modelID ?? evt.model.id
-        // Copilot serves Grok, Gemini, and MAI Code only on /responses; advertised
-        // endpoint metadata above wins whenever the live model list provides it.
+        // Copilot serves Grok and MAI Code only on /responses, and Gemini only on
+        // /chat/completions; advertised endpoint metadata above wins whenever the
+        // live model list provides it.
         const gpt = /^gpt-(\d+)/.exec(id)
         const responses =
           (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
           id.startsWith("grok-") ||
-          id.startsWith("gemini-") ||
           id.startsWith("mai-code-")
         evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),
@@ -506,16 +520,16 @@ export function interactionType(kind: SessionRequestKind, child: boolean) {
 type RequestMetadata = ReturnType<typeof requestMetadata>
 
 function requestMetadata(url: string, body: unknown) {
-  if (!record(body)) return { agent: false, vision: false }
+  if (!isRecord(body)) return { agent: false, vision: false }
   if (Array.isArray(body.input)) {
     const last = body.input.at(-1)
     return {
-      agent: !record(last) || last.role !== "user",
+      agent: !isRecord(last) || last.role !== "user",
       vision: body.input.some(
         (item) =>
-          record(item) &&
+          isRecord(item) &&
           Array.isArray(item.content) &&
-          item.content.some((part) => record(part) && part.type === "input_image"),
+          item.content.some((part) => isRecord(part) && part.type === "input_image"),
       ),
     }
   }
@@ -523,35 +537,31 @@ function requestMetadata(url: string, body: unknown) {
   const last = body.messages.at(-1)
   if (url.includes("completions")) {
     return {
-      agent: !record(last) || last.role !== "user",
+      agent: !isRecord(last) || last.role !== "user",
       vision: body.messages.some(
         (message) =>
-          record(message) &&
+          isRecord(message) &&
           Array.isArray(message.content) &&
-          message.content.some((part) => record(part) && part.type === "image_url"),
+          message.content.some((part) => isRecord(part) && part.type === "image_url"),
       ),
     }
   }
-  const content = record(last) && Array.isArray(last.content) ? last.content : []
+  const content = isRecord(last) && Array.isArray(last.content) ? last.content : []
   return {
     agent:
-      !record(last) || last.role !== "user" || !content.some((part) => record(part) && part.type !== "tool_result"),
+      !isRecord(last) || last.role !== "user" || !content.some((part) => isRecord(part) && part.type !== "tool_result"),
     vision: body.messages.some(
       (message) =>
-        record(message) &&
+        isRecord(message) &&
         Array.isArray(message.content) &&
         message.content.some(
           (part) =>
-            record(part) &&
+            isRecord(part) &&
             (part.type === "image" ||
               (part.type === "tool_result" &&
                 Array.isArray(part.content) &&
-                part.content.some((nested) => record(nested) && nested.type === "image"))),
+                part.content.some((nested) => isRecord(nested) && nested.type === "image"))),
         ),
     ),
   }
-}
-
-function record(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null && !Array.isArray(input)
 }

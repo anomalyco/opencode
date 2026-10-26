@@ -23,13 +23,32 @@ function wordmark(pad = "") {
   })
 }
 
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
-  const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
+export type SessionEpilogue = { readonly title: string; readonly sessionID?: string }
+// A plugin's ui.epilogue claim: its text stands in for the wordmark and the
+// session rows; undefined prints nothing for the session.
+export type ClaimedEpilogue = { readonly claimed: string | undefined }
+
+// Printed after the TUI closes.
+export function epilogue(input: {
+  readonly session?: SessionEpilogue | ClaimedEpilogue
+  readonly updatedVersion?: string
+}) {
+  if (!input.session && !input.updatedVersion) return
+  const update = input.updatedVersion
+    ? `  ${dim}Run ${reset}${bold}opencode${reset}${dim} to use ${reset}${bold}${input.updatedVersion}${reset}`
+    : undefined
+  // The update notice belongs to the installation, not the session: it stays.
+  if (input.session && "claimed" in input.session) {
+    const lines = [update, input.session.claimed].filter((line) => line !== undefined)
+    return lines.length === 0 ? undefined : lines.join("\n")
+  }
+  const row = (label: string, value: string) => `  ${dim}${label.padEnd(10, " ")}${reset}${bold}${value}${reset}`
   return [
     ...wordmark("  "),
     "",
-    `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}opencode -s ${input.sessionID}${reset}`,
-    "",
+    ...(update ? [update, ""] : []),
+    ...(input.session
+      ? [row("Session", input.session.title), row("Continue", `opencode -s ${input.session.sessionID}`), ""]
+      : []),
   ].join("\n")
 }

@@ -10,6 +10,7 @@ export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
 
 function CollapsibleRoot(props: CollapsibleProps) {
   const [local, others] = splitProps(props, ["class", "classList", "variant"])
+
   return (
     <Kobalte
       data-component="collapsible"

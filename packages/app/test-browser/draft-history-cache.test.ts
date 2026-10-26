@@ -7,25 +7,31 @@ function fixture(id: string, getBlob: () => Promise<Blob | null>) {
     ["history", JSON.stringify({ entries: [{ prompt: [{ type: "image", blob: { id } }] }] })],
     ["draft", JSON.stringify({ prompt: [{ type: "image", blob: { id } }] })],
   ])
+
   const store = createDraftStore({
     get: async (key) => documents.get(key) ?? null,
     set: async (key, value) => {
       documents.set(key, value)
+
       return []
     },
     remove: async (key) => void documents.delete(key),
     putBlob: async () => id,
     getBlob,
   })
+
   return { store, documents }
 }
 
 test("loading history and a draft reads no image bytes", async () => {
   let reads = 0
+
   const { store } = fixture("history-cache-lazy", async () => {
     reads++
+
     return new Blob(["shared screenshot"])
   })
+
   const [history, draft] = await Promise.all([store.getItem("history"), store.getItem("draft")])
   expect(JSON.parse(history!).entries[0].prompt[0].blob).toEqual({ id: "history-cache-lazy" })
   expect(JSON.parse(draft!).prompt[0].blob).toEqual({ id: "history-cache-lazy" })
@@ -36,11 +42,14 @@ test("deduplicates concurrent resolves without invalidating either live referenc
   const pending = Promise.withResolvers<Blob | null>()
   const started = Promise.withResolvers<void>()
   let reads = 0
+
   const { store } = fixture("history-cache-concurrent", () => {
     reads++
     started.resolve()
+
     return pending.promise
   })
+
   await store.getItem("history")
   const first = resolveBlobUrl({ id: "history-cache-concurrent" })
   const second = resolveBlobUrl({ id: "history-cache-concurrent" })
@@ -57,10 +66,13 @@ test("deduplicates concurrent resolves without invalidating either live referenc
 
 test("a document re-read while its image is live gets the URL back without a read", async () => {
   let reads = 0
+
   const { store, documents } = fixture("history-cache-remount", async () => {
     reads++
+
     return new Blob(["saved screenshot"])
   })
+
   const url = await resolveBlobUrl({ id: "history-cache-remount" })
   const changed = JSON.parse(documents.get("history")!)
   changed.entries[0].prompt.unshift({ type: "text", content: "new admission" })
@@ -73,10 +85,13 @@ test("a document re-read while its image is live gets the URL back without a rea
 
 test("reuses a just-stored attachment without a round trip", async () => {
   let reads = 0
+
   const { store } = fixture("history-cache-put", async () => {
     reads++
+
     return new Blob(["unexpected read"])
   })
+
   const reference = await store.putBlob(new Blob(["pending admission"]))
   expect(JSON.parse((await store.getItem("draft"))!).prompt[0].blob).toEqual(reference)
   expect(await resolveBlobUrl({ id: reference.id })).toBe(reference.url)
@@ -96,6 +111,7 @@ test("retries after a failed blob read", async () => {
   let reads = 0
   fixture("history-cache-failure", async () => {
     if (++reads === 1) throw new Error("temporary storage failure")
+
     return new Blob(["recovered"])
   })
   await expect(resolveBlobUrl({ id: "history-cache-failure" })).rejects.toThrow("temporary storage failure")
@@ -112,6 +128,7 @@ test("keeps different blob IDs independent", async () => {
     putBlob: async () => "unused",
     getBlob: async (id) => {
       reads.push(id)
+
       return new Blob([id])
     },
   })

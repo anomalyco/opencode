@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { addRendererHeaders, documentPolicyHeader, jsCallStacksDocumentPolicy, upsertHeader } from "./headers"
+import { addRendererHeaders, documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
 
 describe("renderer response headers", () => {
   test("keeps the server's exact allow-headers list so Chromium can reuse the cached preflight", () => {
@@ -8,6 +8,7 @@ describe("renderer response headers", () => {
       "access-control-allow-headers": ["authorization"],
       "access-control-max-age": ["86400"],
     }
+
     addRendererHeaders(headers, { document: false })
     expect(headers).toEqual({
       "access-control-allow-origin": ["*"],
@@ -31,11 +32,5 @@ describe("renderer response headers", () => {
     const asset = {}
     addRendererHeaders(asset, { document: false })
     expect(Object.keys(asset)).not.toContain(documentPolicyHeader)
-  })
-
-  test("upsert replaces a header regardless of key casing", () => {
-    const headers = { "X-Test": ["a"] }
-    upsertHeader(headers, "x-test", ["b"])
-    expect(headers).toEqual({ "X-Test": ["b"] })
   })
 })

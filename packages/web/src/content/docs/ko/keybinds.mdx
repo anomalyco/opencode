@@ -24,8 +24,6 @@ OpenCode에는 `tui.json`을 통해 커스터마이즈할 수 있는 키바인�
     "session_timeline": "<leader>g",
     "session_fork": "none",
     "session_rename": "none",
-    "session_share": "none",
-    "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
     "session_child_first": "<leader>down",

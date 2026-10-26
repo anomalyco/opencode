@@ -1,22 +1,14 @@
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { sessionTabTitle } from "./tab-title"
 
-describe("session tab titles", () => {
-  test("uses the same localized label before a title arrives", () => {
-    for (const title of [
-      undefined,
-      "",
-      "New session - 2026-07-30T18:45:03.662Z",
-      "Child session - 2026-07-30T18:45:03.662Z",
-    ]) {
-      expect(sessionTabTitle(title, "Session")).toBe("Session")
-      expect(sessionTabTitle(title, "Sitzung")).toBe("Sitzung")
-    }
-  })
-
-  test("preserves generated and user-supplied titles", () => {
-    for (const title of ["Generated title", "New session", "New session - custom"]) {
-      expect(sessionTabTitle(title, "Session")).toBe(title)
-    }
-  })
+test.each([
+  [undefined, "Session", "Session"],
+  ["", "Sitzung", "Sitzung"],
+  ["New session - 2026-07-30T18:45:03.662Z", "Session", "Session"],
+  ["Child session - 2026-07-30T18:45:03.662Z", "Sitzung", "Sitzung"],
+  ["Generated title", "Session", "Generated title"],
+  ["New session", "Session", "New session"],
+  ["New session - custom", "Session", "New session - custom"],
+])("session tab title %p with fallback %p is %p", (title, fallback, expected) => {
+  expect(sessionTabTitle(title, fallback)).toBe(expected)
 })

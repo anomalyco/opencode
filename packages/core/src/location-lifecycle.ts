@@ -1,6 +1,6 @@
 export * as LocationLifecycle from "./location-lifecycle.js"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LocationEvent } from "@opencode/schema/location-event"
 import { Bus } from "./bus.js"
@@ -39,9 +39,11 @@ const layer = Layer.effect(
     })
     yield* Effect.addFinalizer(() => unsubscribe)
     let closed = false
-    const shutdown = yield* Effect.cached(
-      Effect.gen(function* () {
-        closed = true
+    const done = yield* Deferred.make<void>()
+    const shutdown = Effect.suspend(() => {
+      if (closed) return Deferred.await(done)
+      closed = true
+      return Effect.gen(function* () {
         yield* permission.close
         yield* forms.close
         yield* rpc.close
@@ -52,8 +54,8 @@ const layer = Layer.effect(
             location: Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
           },
         )
-      }).pipe(Effect.uninterruptible),
-    )
+      }).pipe(Effect.ensuring(Deferred.succeed(done, undefined)))
+    }).pipe(Effect.uninterruptible)
     return Service.of({
       isClosed: () => closed,
       shutdown,

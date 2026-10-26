@@ -4,15 +4,13 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { useCommand } from "@/shell/commands/command"
-import { settingsProjects, useSettingsServers } from "./servers/inventory"
+import { useSettingsServers } from "./servers/inventory"
 import { useSettingsSurface } from "./surface"
-import { pageIcons } from "./pages"
 import { rankSettings, type SettingsSearchResult } from "./search-results"
 import { settingsSearchIndex } from "./search-index"
 import { SettingsSearchEmpty } from "./search-empty"
@@ -20,17 +18,15 @@ import { SettingsSearchEmpty } from "./search-empty"
 export function SettingsSearch() {
   const language = useLanguage()
   const command = useCommand()
-  const platform = usePlatform()
-  const global = useGlobal()
   const servers = useSettingsServers()
   const surface = useSettingsSurface()
   const search = surface.search
-  const mobile = createMediaQuery("(max-width: 767px)")
   const [state, setState] = createStore({ narrow: false, overflow: { start: false, end: false } })
   const listID = `settings-results-${createUniqueId()}`
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let results: HTMLDivElement | undefined
+
   const updateOverflow = () => {
     if (!input) return
     const offset = Math.abs(input.scrollLeft)
@@ -39,10 +35,12 @@ export function SettingsSearch() {
       end: input.scrollWidth - input.clientWidth - offset > 1,
     })
   }
+
   createEffect(on(() => search.state.query, updateOverflow))
   onMount(() => {
     if (input) createResizeObserver(input, updateOverflow)
     const screen = root?.closest<HTMLElement>(".settings-screen")
+
     if (!screen) return
     setState("narrow", screen.clientWidth < 800)
     createResizeObserver(screen, (rect) => setState("narrow", rect.width < 800))
@@ -59,27 +57,11 @@ export function SettingsSearch() {
       },
     },
   ])
-  const inventory = createMemo(() =>
-    servers().map((server) => {
-      const context = server.connection ? global.ensureServerCtx(server.connection) : undefined
-      return {
-        ...server,
-        connected: context?.sdk.connection.status() === "connected",
-        projects: context ? settingsProjects(context) : [],
-      }
-    }),
-  )
-  const origin = () => search.state.origin ?? surface.view()
-  const catalog = createMemo(() =>
-    settingsSearchIndex({
-      servers: inventory(),
-      desktop: platform.platform === "desktop",
-      browser: !!platform.browserPane,
-      mobile: mobile(),
-      translate: language.t,
-    }),
-  )
-  const matches = createMemo(() => rankSettings(search.state.query, catalog(), origin()))
+
+  const catalog = createSettingsSearchCatalog()
+
+  const matches = createMemo(() => rankSettings(search.state.query, catalog()))
+
   const category = (item: SettingsSearchResult) =>
     item.topLevel
       ? "settings.search.group.pages"
@@ -88,6 +70,7 @@ export function SettingsSearch() {
         : item.project
           ? "settings.search.group.projects"
           : "settings.search.group.servers"
+
   const shown = createMemo(() => {
     const groups = new Map<ReturnType<typeof category>, SettingsSearchResult[]>()
     matches()
@@ -95,11 +78,14 @@ export function SettingsSearch() {
       .forEach((item) => {
         const key = category(item)
         const items = groups.get(key)
+
         if (items) return items.push(item)
         groups.set(key, [item])
       })
+
     return Array.from(groups.values()).flat()
   })
+
   const iconGroups = createMemo(
     () =>
       new Set(
@@ -108,6 +94,7 @@ export function SettingsSearch() {
           .map(category),
       ),
   )
+
   const expanded = () => !!search.state.query.trim() && (!state.narrow || search.state.expanded)
   const highlighted = () => shown().find((item) => item.id === search.state.highlighted) ?? shown()[0]
   const optionID = (id: string) => `${listID}-${encodeURIComponent(id)}`
@@ -120,18 +107,24 @@ export function SettingsSearch() {
       { defer: true },
     ),
   )
+
   const group = (item: SettingsSearchResult) => {
     if (item.entity && !item.project) return ""
+
     if (!item.server || servers().length > 1) return item.owner
+
     return item.projectName ?? ""
   }
+
   const select = (item: SettingsSearchResult) => {
     surface.search.open(item.view, item.id)
+
     if (state.narrow && item.view.type === "root") {
       input?.blur()
       root?.closest<HTMLElement>(".settings-screen")?.focus({ preventScroll: true })
     }
   }
+
   const clear = () => {
     search.clear()
     input?.focus()
@@ -144,7 +137,7 @@ export function SettingsSearch() {
       data-expanded={search.state.expanded}
       data-empty={!search.state.query.trim()}
       on:keydown={{
-        // Handle result navigation before ScrollView's generic scrolling keys.
+        // Handle result navigation instead of the results list's native key scrolling.
         capture: true,
         handleEvent: (event) => {
           if (
@@ -156,40 +149,47 @@ export function SettingsSearch() {
             event.shiftKey
           )
             return
+
           if (
             event.target !== input &&
             !(event.target instanceof Element && event.target.closest(".settings-search-result"))
           )
             return
+
           if (event.key === "Escape" && search.state.query) {
             event.preventDefault()
             event.stopPropagation()
             clear()
+
             return
           }
+
           if (event.key === "Enter" && expanded() && highlighted()) {
             event.preventDefault()
             event.stopPropagation()
             select(highlighted()!)
+
             return
           }
+
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
+
           if ((event.key === "Home" || event.key === "End") && event.target === input) return
           event.preventDefault()
           event.stopPropagation()
           search.expand()
           const index = shown().findIndex((item) => item.id === highlighted()?.id)
-          const next =
-            shown()[
-              event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? shown().length - 1
-                  : Math.max(0, Math.min(shown().length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))
-            ]
+
+          const last = shown().length - 1
+          const moves = { Home: 0, End: last, ArrowDown: Math.min(last, index + 1), ArrowUp: Math.max(0, index - 1) }
+          const move = Object.entries(moves).find(([key]) => key === event.key)
+
+          const next = move && shown()[move[1]]
+
           if (!next) return
           search.highlight(next.id)
           const row = results?.querySelector<HTMLElement>(`#${CSS.escape(optionID(next.id))}`)
+
           if (event.target !== input) row?.focus({ preventScroll: true })
           row?.scrollIntoView({ block: "nearest", inline: "nearest" })
         },
@@ -222,10 +222,11 @@ export function SettingsSearch() {
       />
       <Show when={search.state.query.trim()}>
         <div class="settings-search-matches">
-          <ScrollView
+          <div
             class="settings-search-scroll"
+            data-scrollable
             data-empty={!shown().length}
-            viewportRef={(element) => {
+            ref={(element) => {
               results = element
               queueMicrotask(() => {
                 if (element.isConnected) element.scrollTop = search.state.scrollTop
@@ -294,11 +295,7 @@ export function SettingsSearch() {
                       <span class="settings-search-label">
                         <Show
                           when={item.projectInfo}
-                          fallback={
-                            <Show when={item.topLevel}>
-                              <Icon name={pageIcons[item.view.tab]} />
-                            </Show>
-                          }
+                          fallback={<Show when={item.topLevel && item.icon}>{(icon) => <Icon name={icon()} />}</Show>}
                         >
                           {(project) => (
                             <ProjectIcon project={project()} class="settings-search-project-icon" aria-hidden="true" />
@@ -316,7 +313,7 @@ export function SettingsSearch() {
                 )}
               </For>
             </div>
-          </ScrollView>
+          </div>
           <Show when={!matches().length}>
             <SettingsSearchEmpty query={search.state.query} />
           </Show>
@@ -326,5 +323,39 @@ export function SettingsSearch() {
         </div>
       </Show>
     </div>
+  )
+}
+
+/** The settings search index for the current platform, servers, and extensions. */
+export function createSettingsSearchCatalog() {
+  const language = useLanguage()
+  const platform = usePlatform()
+  const global = useGlobal()
+  const servers = useSettingsServers()
+  const surface = useSettingsSurface()
+  const mobile = createMediaQuery("(max-width: 767px)")
+
+  const inventory = createMemo(() =>
+    servers().map((server) => {
+      const context = server.connection ? global.ensureServerCtx(server.connection) : undefined
+
+      return {
+        ...server,
+        connected: context?.sdk.connection.status() === "connected",
+        projects: context ? context.projects.list() : [],
+      }
+    }),
+  )
+
+  return createMemo(() =>
+    settingsSearchIndex({
+      servers: inventory(),
+      selected: surface.server()?.key,
+      desktop: platform.platform === "desktop",
+      browser: platform.platform === "desktop",
+      mobile: mobile(),
+      translate: language.t,
+      extensions: surface.extensions.items(),
+    }),
   )
 }

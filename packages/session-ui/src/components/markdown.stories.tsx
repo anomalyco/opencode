@@ -34,6 +34,25 @@ export const CompactResult = {
   ),
 }
 
+export const Table = {
+  render: () => (
+    <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+      <Markdown
+        text={[
+          "Crops on the outside, kitchen in the middle, farms at the bottom next to it.",
+          "",
+          "| | West | Centre | East |",
+          "| --- | --- | --- | --- |",
+          "| North | Lettuce ×2 | Tomato ×2 | Berry ×1 (pal food) |",
+          "| Middle | Wheat ×1 + Mill | Palbox + Feed Box | Hot Spring + Pal Beds |",
+          "| South | Ranch | Refrigerator · Electric Kitchen · Generator | Chest (overflow) |",
+          "| Far south | Breeding Farm A | (walkway) | Breeding Farm B |",
+        ].join("\n")}
+      />
+    </div>
+  ),
+}
+
 const streamed =
   "Streaming Markdown now keeps existing elements alive while each newly arriving word fades into the response."
 
@@ -42,6 +61,7 @@ function StreamingMarkdown() {
   const [count, setCount] = createSignal(1)
   const timer = setInterval(() => setCount((value) => Math.min(value + 1, words.length)), 180)
   onCleanup(() => clearInterval(timer))
+
   return <Markdown text={words.slice(0, count()).join("")} streaming={count() < words.length} />
 }
 
@@ -72,9 +92,11 @@ function StreamingInlineCodeMarkdown() {
     "`bun te",
     "st`.",
   ]
+
   const [count, setCount] = createSignal(1)
   const timer = setInterval(() => setCount((value) => (value >= chunks.length ? 1 : value + 1)), 220)
   onCleanup(() => clearInterval(timer))
+
   return <Markdown text={chunks.slice(0, count()).join("")} streaming />
 }
 
@@ -102,16 +124,21 @@ const externalLinkChunks = [
 
 function StreamingExternalLinks() {
   const [count, setCount] = createSignal(1)
+
   const timer = setInterval(() => {
     setCount((value) => {
       if (value === externalLinkChunks.length) {
         clearInterval(timer)
+
         return value
       }
+
       return value + 1
     })
   }, 380)
+
   onCleanup(() => clearInterval(timer))
+
   return (
     <Markdown text={externalLinkChunks.slice(0, count()).join("")} streaming={count() < externalLinkChunks.length} />
   )

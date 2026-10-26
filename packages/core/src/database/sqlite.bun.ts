@@ -1,8 +1,8 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite"
 import { Context, Effect, Layer } from "effect"
-import { Reactivity } from "effect/unstable/reactivity"
-import { SqlClient } from "effect/unstable/sql"
-import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
+import { Reactivity } from "effect/reactivity"
+import { SqlClient } from "effect/sql"
+import { classifySqliteError, SqlError } from "effect/sql/SqlError"
 import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode/core/database/SqliteBun" as const

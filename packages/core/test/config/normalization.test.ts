@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary, Duration, Effect, Schema } from "effect"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Info } from "@opencode/schema/config"
 
-const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const options = { errors: "all", onExcessProperty: "ignore" } as const
 
 function normalized(input: unknown) {
   const result = ConfigNormalize.normalize(input)
@@ -45,10 +44,48 @@ function withoutEmptyCompatibilityContainers(input: Record<string, unknown>) {
       delete compaction.keep
     if (!originallyEmpty && !Object.keys(compaction).length) delete result.compaction
   }
+  // Deprecated experimental policies normalize into top-level policies.
+  if (typeof result.experimental === "object" && result.experimental !== null && !Array.isArray(result.experimental)) {
+    const experimental = result.experimental as Record<string, unknown>
+    if (Array.isArray(experimental.policies)) {
+      result.policies = [...experimental.policies, ...(Array.isArray(result.policies) ? result.policies : [])]
+      delete experimental.policies
+      if (!Object.keys(experimental).length) delete result.experimental
+    }
+  }
   return result
 }
 
 describe("ConfigNormalize", () => {
+  test("accepts tool.use without losing statement order", () => {
+    const policies = [
+      { action: "tool.use", effect: "deny", resource: "shell:*" },
+      { action: "tool.use", effect: "allow", resource: "shell:git *" },
+      { action: "tool.use", effect: "deny", resource: "shell:git push *" },
+    ] as const
+    const result = normalized({ experimental: { policies } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).policies).toEqual(policies)
+  })
+
+  test("drops unsupported policy actions without losing supported policies", () => {
+    const supported = { action: "tool.use", effect: "deny", resource: "shell:*" } as const
+    const result = normalized({
+      experimental: {
+        policies: [
+          { action: "permission", effect: "allow", resource: "*" },
+          supported,
+          { action: "future.use", effect: "deny", resource: "*" },
+        ],
+      },
+    })
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).policies).toEqual([supported])
+    expect(result.diagnostics.map((diagnostic) => diagnostic.path)).toEqual([
+      ["experimental", "policies", "0"],
+      ["experimental", "policies", "2"],
+    ])
+  })
+
   test("rejects every non-object root with one root diagnostic", () => {
     for (const input of [null, [], "config", true, 1]) {
       expect(ConfigNormalize.normalize(input)).toEqual({
@@ -80,16 +117,21 @@ describe("ConfigNormalize", () => {
   })
 
   test("preserves arbitrary JSON-round-tripped native configuration", () => {
-    FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
-        const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
-        const result = normalized(source)
-        expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
-          Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
-        )
-      }),
-      { numRuns: 100 },
+    const result = Effect.runSync(
+      Arbitrary.checkEffect(
+        Arbitrary.schema(Info),
+        (info) => {
+          const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
+          const result = normalized(source)
+          expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
+            Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
+          )
+          return true
+        },
+        { runs: 100 },
+      ),
     )
+    expect(Arbitrary.formatCheckFailure(result)).toBeUndefined()
   })
 
   test("merges named maps by entry and gives valid native entries precedence", () => {
@@ -149,6 +191,21 @@ describe("ConfigNormalize", () => {
     expect(() => Schema.decodeUnknownSync(Info)(result.encoded)).not.toThrow()
   })
 
+  test("renames legacy provider IDs in the top-level model", () => {
+    expect(normalized({ model: "google-vertex-anthropic/claude#high" }).encoded.model).toEqual({
+      providerID: "google-vertex",
+      model: "claude",
+      variant: "high",
+    })
+    expect(
+      normalized({ model: { providerID: "azure-cognitive-services", model: "deployment" } }).encoded.model,
+    ).toEqual({ providerID: "azure", model: "deployment" })
+    expect(normalized({ model: "anthropic/claude" }).encoded.model).toEqual({
+      providerID: "anthropic",
+      model: "claude",
+    })
+  })
+
   test("migrates the legacy small model to the title agent", () => {
     const result = normalized({ small_model: "anthropic/claude-haiku-4-5" })
     expect(result.encoded.agents).toEqual({
@@ -203,6 +260,18 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("accepts partial model capabilities without reporting a diagnostic", () => {
+    const result = normalized({
+      providers: {
+        demo: { name: "Demo", models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } } },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+    expect(result.encoded.providers).toEqual({
+      demo: { name: "Demo", models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } } },
+    })
+  })
+
   test("uses a valid retired provider alias when the canonical legacy entry is malformed", () => {
     const result = normalized({
       provider: {
@@ -233,6 +302,25 @@ describe("ConfigNormalize", () => {
       { action: "subagent", resource: "*", effect: "allow" },
       { action: "native", resource: "*", effect: "deny" },
     ])
+  })
+
+  test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
+    const build = {
+      tools: { write: false, read: true },
+      permission: { "*": "allow", bash: "ask", custom: "deny", edit: "allow" },
+    }
+    // An agent's permission overrides its tools in place, like Object.assign.
+    expect(normalized({ [key]: { build } }).encoded.agents).toMatchObject({
+      build: {
+        permissions: [
+          { action: "edit", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "*", resource: "*", effect: "allow" },
+          { action: "shell", resource: "*", effect: "ask" },
+          { action: "custom", resource: "*", effect: "deny" },
+        ],
+      },
+    })
   })
 
   test("redacts permission resource keys from invalid diagnostics", () => {
@@ -332,6 +420,35 @@ describe("ConfigNormalize", () => {
     ).toBe(true)
   })
 
+  test("expands numeric MCP timeouts to every phase", () => {
+    const result = normalized({
+      mcp: {
+        timeout: 4000,
+        servers: {
+          local: { type: "local", command: ["local"], timeout: 6000 },
+          remote: { type: "remote", url: "https://remote.example.com", timeout: 8000 },
+          structured: { type: "local", command: ["structured"], timeout: { catalog: 9000 } },
+          invalid: { type: "local", command: ["invalid"], timeout: -1 },
+        },
+      },
+    })
+    expect(result.encoded.mcp).toEqual({
+      timeout: { startup: 4000, catalog: 4000, execution: 4000 },
+      servers: {
+        local: { type: "local", command: ["local"], timeout: { startup: 6000, catalog: 6000, execution: 6000 } },
+        remote: {
+          type: "remote",
+          url: "https://remote.example.com",
+          timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+        },
+        structured: { type: "local", command: ["structured"], timeout: { catalog: 9000 } },
+      },
+    })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["mcp", "servers", "invalid"]],
+    ])
+  })
+
   test("uses raw MCP discriminators for reserved server names", () => {
     const result = normalized({
       mcp: {
@@ -388,40 +505,56 @@ describe("ConfigNormalize", () => {
   })
 
   test("distinguishes empty, mixed, and wholly malformed enabled provider lists", () => {
-    expect(normalized({ enabled_providers: [] }).encoded.experimental).toEqual({
-      policies: [{ action: "provider.use", resource: "*", effect: "deny" }],
-    })
-    expect(normalized({ enabled_providers: [1, "anthropic", false] }).encoded.experimental).toEqual({
-      policies: [
-        { action: "provider.use", resource: "*", effect: "deny" },
-        { action: "provider.use", resource: "anthropic", effect: "allow" },
-      ],
-    })
-    expect(normalized({ enabled_providers: [1, false] }).encoded.experimental).toBeUndefined()
-    expect(normalized({ enabled_providers: "anthropic" }).encoded.experimental).toBeUndefined()
+    expect(normalized({ enabled_providers: [] }).encoded.policies).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+    ])
+    expect(normalized({ enabled_providers: [1, "anthropic", false] }).encoded.policies).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+      { action: "provider.use", resource: "anthropic", effect: "allow" },
+    ])
+    expect(normalized({ enabled_providers: [1, false] }).encoded.policies).toBeUndefined()
+    expect(normalized({ enabled_providers: "anthropic" }).encoded.policies).toBeUndefined()
   })
 
-  test("appends native policies after migrated provider policies", () => {
+  test("merges migrated, experimental, and native policies in order", () => {
     expect(
       normalized({
         enabled_providers: ["anthropic"],
         disabled_providers: ["openai"],
+        policies: [{ action: "provider.use", resource: "native", effect: "deny" }],
         experimental: {
           portable_shell_scanner: true,
+          todo: true,
+          background_compaction: true,
+          media_blob: true,
           subagent_depth: 0,
+          location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
-      }).encoded.experimental,
-    ).toEqual({
-      portable_shell_scanner: true,
-      subagent_depth: 0,
+      }).encoded,
+    ).toMatchObject({
+      experimental: {
+        portable_shell_scanner: true,
+        todo: true,
+        background_compaction: true,
+        media_blob: true,
+        subagent_depth: 0,
+        location_idle_timeout: "7200000 millis",
+      },
       policies: [
         { action: "provider.use", resource: "*", effect: "deny" },
         { action: "provider.use", resource: "anthropic", effect: "allow" },
         { action: "provider.use", resource: "openai", effect: "deny" },
         { action: "provider.use", resource: "custom", effect: "allow" },
+        { action: "provider.use", resource: "native", effect: "deny" },
       ],
     })
+  })
+
+  test("never emits experimental policies", () => {
+    expect(
+      normalized({ experimental: { policies: [{ action: "provider.use", resource: "*", effect: "deny" }] } }).encoded,
+    ).toEqual({ policies: [{ action: "provider.use", resource: "*", effect: "deny" }] })
   })
 
   test("reports unsupported legacy settings without including their values", () => {
@@ -481,6 +614,77 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("migrates the legacy thinking block-binding opt-out into model compatibility", () => {
+    const result = normalized({
+      provider: {
+        gateway: {
+          models: {
+            anthropic: { options: { thinking: { type: "adaptive", blockBinding: false }, effort: "high" } },
+            bedrock: { options: { reasoningConfig: { blockBinding: false } } },
+            both: {
+              options: {
+                thinking: { type: "adaptive", blockBinding: false },
+                reasoningConfig: { type: "adaptive", blockBinding: false },
+              },
+            },
+            untouched: { options: { thinking: { type: "adaptive" } } },
+          },
+        },
+      },
+    })
+    expect(result.encoded.providers).toMatchObject({
+      gateway: {
+        models: {
+          anthropic: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, effort: "high" },
+          },
+          bedrock: { compatibility: { supportsThinkingBlockBinding: false }, settings: {} },
+          both: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, reasoningConfig: { type: "adaptive" } },
+          },
+          untouched: { settings: { thinking: { type: "adaptive" } } },
+        },
+      },
+    })
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "bedrock", "settings", "reasoningConfig"])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "thinking",
+      "blockBinding",
+    ])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "reasoningConfig",
+      "blockBinding",
+    ])
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
+  })
+
+  test("migrates the legacy setCacheKey provider option into provider compatibility", () => {
+    const result = normalized({
+      provider: {
+        proxy: { npm: "@ai-sdk/openai-compatible", options: { baseURL: "https://proxy.test/v1", setCacheKey: true } },
+        openai: { options: { setCacheKey: false } },
+        untouched: { options: { baseURL: "https://untouched.test/v1" } },
+      },
+    })
+    expect(result.encoded.providers).toMatchObject({
+      proxy: { compatibility: { supportsPromptCacheKey: true }, settings: { baseURL: "https://proxy.test/v1" } },
+      openai: { compatibility: { supportsPromptCacheKey: false } },
+    })
+    expect(result.encoded.providers).not.toHaveProperty(["proxy", "settings", "setCacheKey"])
+    expect(result.encoded.providers).not.toHaveProperty(["openai", "settings", "setCacheKey"])
+    expect(result.encoded.providers).not.toHaveProperty(["untouched", "compatibility"])
+  })
+
   test("invalid legacy provider overlays skip only that provider", () => {
     const result = normalized({
       provider: {
@@ -507,7 +711,7 @@ describe("ConfigNormalize", () => {
       agents: {},
       providers: {},
       instructions: [],
-      experimental: { subagent_depth: 0 },
+      experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
     expect(result.encoded).toMatchObject({
       snapshots: false,
@@ -516,7 +720,7 @@ describe("ConfigNormalize", () => {
       agents: {},
       providers: {},
       instructions: [],
-      experimental: { subagent_depth: 0 },
+      experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
     expect(result.encoded.share).toBeUndefined()
   })

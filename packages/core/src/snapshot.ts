@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
@@ -106,26 +106,37 @@ const layer = Layer.effect(
     const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
 
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
-      const relative = path.relative(worktree, location.directory)
-      if (relative.startsWith("..") || path.isAbsolute(relative))
+      if (!FSUtil.contains(worktree, location.directory))
         return yield* new Error({ operation: "capture", message: "Location is outside the project" })
-      return RelativePath.make(relative.replaceAll("\\", "/") || ".")
+      return RelativePath.make(path.relative(worktree, location.directory).replaceAll("\\", "/") || ".")
     })
 
     const enabled = () => location.vcs?.type === "git" && state.get().enabled
+
+    // `objects.pack` takes a cross-process lock, so a run that outlasts the interval never overlaps the next.
+    let lastPackCheck = Number.NEGATIVE_INFINITY
+    const packWhenDue = Effect.fnUntraced(function* (repository: Git.Repository) {
+      const now = yield* Clock.currentTimeMillis
+      if (now - lastPackCheck < 10 * 60 * 1000) return
+      lastPackCheck = now
+      yield* git.objects.pack(repository).pipe(
+        Effect.catch((cause) => Effect.logWarning("failed to pack snapshot objects", { cause })),
+        Effect.forkIn(lifetime),
+      )
+    })
 
     const capture = Effect.fn("Snapshot.capture")(function* () {
       if (!enabled()) return undefined
       return yield* Effect.gen(function* () {
         const repo = yield* repository
-        return ID.make(
-          yield* git.tree.capture({
-            repository: repo.snapshotRepository,
-            scopes: [yield* scope(repo.worktree)],
-            ignores: repo.source,
-            maximumUntrackedFileBytes: 2 * 1024 * 1024,
-          }),
-        )
+        const tree = yield* git.tree.capture({
+          repository: repo.snapshotRepository,
+          scopes: [yield* scope(repo.worktree)],
+          ignores: repo.source,
+          maximumUntrackedFileBytes: 2 * 1024 * 1024,
+        })
+        yield* packWhenDue(repo.snapshotRepository)
+        return ID.make(tree)
       }).pipe(
         Effect.catch((cause) => Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined))),
       )
@@ -157,6 +168,7 @@ const layer = Layer.effect(
       const changed = yield* git.tree
         .files({ repository: compared.repository, from: compared.from, to: compared.to })
         .pipe(Effect.mapError((cause) => failure("files", cause)))
+      if (changed.length === 0) return []
       const skipped = yield* ignored("files", compared.source, changed)
       return changed.filter((file) => !skipped.has(file))
     })
@@ -174,12 +186,10 @@ const layer = Layer.effect(
           paths: input.paths,
         })
         .pipe(Effect.mapError((cause) => failure("diff", cause)))
-      const skipped = yield* ignored(
-        "diff",
-        compared.source,
-        diffs.map((file) => RelativePath.make(file.file)),
-      )
-      return diffs.filter((file) => !skipped.has(RelativePath.make(file.file)))
+      if (diffs.length === 0) return []
+      const paths = diffs.map((file) => RelativePath.make(file.file))
+      const skipped = yield* ignored("diff", compared.source, paths)
+      return diffs.filter((_, index) => !skipped.has(paths[index]!))
     })
 
     const plan = Effect.fnUntraced(function* (worktree: AbsolutePath, input: RestoreInput) {

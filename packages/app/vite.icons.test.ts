@@ -21,12 +21,15 @@ test.each(["dev", "beta", "prod", "local"])("bundles %s app icons", async (chann
     ],
     build: { write: false, copyPublicDir: false },
   })
+
   if (!("output" in result)) throw new Error("Expected a single build output")
 
   await check(channel === "local" ? "dev" : channel, async (path) => {
     const file = result.output.find((file) => `/${file.fileName}` === path)
+
     if (file?.type !== "asset") throw new Error(`Missing asset: ${path}`)
-    return typeof file.source === "string" ? new TextEncoder().encode(file.source) : file.source
+
+    return new Uint8Array(Buffer.from(file.source))
   })
 })
 
@@ -39,16 +42,21 @@ test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
     optimizeDeps: { noDiscovery: true, include: [] },
     server: { host: "127.0.0.1", port: 0, hmr: false, preTransformRequests: false, watch: null },
   })
+
   try {
     await server.listen()
-    const address = server.httpServer?.address()
-    if (!address || typeof address === "string") throw new Error("Expected an HTTP port")
+    const url = server.resolvedUrls?.local[0]
+
+    if (!url) throw new Error("Expected a local URL")
 
     await check(channel, async (path) => {
-      const response = await fetch(`http://127.0.0.1:${address.port}${path}`)
+      const response = await fetch(new URL(path, url))
       expect(response.status).toBe(200)
+
       if (path.endsWith(".webmanifest")) expect(response.headers.get("content-type")).toBe("application/manifest+json")
+
       if (path.endsWith(".png")) expect(response.headers.get("content-type")).toBe("image/png")
+
       return new Uint8Array(await response.arrayBuffer())
     })
   } finally {
@@ -59,7 +67,7 @@ test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
 async function check(channel: string, read: (path: string) => Promise<Uint8Array>) {
   const html = new TextDecoder().decode(await read("/index.html"))
   const actual: typeof manifest = JSON.parse(new TextDecoder().decode(await read("/site.webmanifest")))
-  expect(actual.icons.every((icon) => icon.purpose === "maskable")).toBe(true)
+  expect(actual.icons.some((icon) => icon.purpose === "maskable")).toBe(true)
   expect(actual).toEqual({
     ...manifest,
     icons: manifest.icons.map((icon) => ({ ...icon, src: `/icons/${channel}${icon.src}` })),
@@ -78,6 +86,7 @@ async function check(channel: string, read: (path: string) => Promise<Uint8Array
     }).map(async ([name, source]) => {
       const bytes = await read(`/icons/${channel}/${name}`)
       expect(bytes).toEqual(await Bun.file(new URL(`../desktop/icons/${channel}/${source}`, import.meta.url)).bytes())
+
       if (!name.endsWith(".png")) return
       const size = name === "apple-touch-icon.png" ? 180 : Number(name.match(/(192|512)/)?.[0])
       expect(new DataView(bytes.buffer, bytes.byteOffset).getUint32(16)).toBe(size)

@@ -1,4 +1,4 @@
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import type { FilesImpl } from "./files.js"
 
 export interface Driver {

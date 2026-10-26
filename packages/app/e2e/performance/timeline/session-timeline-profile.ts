@@ -1,26 +1,31 @@
-import type { CDPSession, Page } from "@playwright/test"
+import type { Page } from "@playwright/test"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 
 export async function startTimelineProfile(page: Page, options: { cpuThrottle: number; profileCPU: boolean }) {
   const cdp = await page.context().newCDPSession(page)
+
   if (options.cpuThrottle > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: options.cpuThrottle })
+
   if (options.profileCPU) {
     await cdp.send("Profiler.enable")
     await cdp.send("Profiler.setSamplingInterval", { interval: 100 })
     await cdp.send("Profiler.start")
   }
+
   return {
     async stop() {
       if (!options.profileCPU) return
       const result = await cdp.send("Profiler.stop")
       const directory = process.env.TIMELINE_CPU_PROFILE_DIR
+
       if (directory) {
         await mkdir(directory, { recursive: true })
         const file = path.join(directory, `${process.env.OPENCODE_PERFORMANCE_RUN_ID ?? "manual"}-timeline.cpuprofile`)
         await writeFile(file, JSON.stringify(result.profile))
         console.log("timeline cpu profile file", file)
       }
+
       const self = new Map<number, number>()
       result.profile.samples?.forEach((id, index) => {
         const duration = (result.profile.timeDeltas?.[index] ?? 0) / 1_000

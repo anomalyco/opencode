@@ -17,7 +17,7 @@ export function buildLocationServiceMap(
     Effect.gen(function* () {
       const owner = yield* Effect.scope
       const builds = MutableHashMap.empty<Location.Ref, { close?: Effect.Effect<void> }>()
-      const inner: LayerMap.LayerMap<Location.Ref, LocationServices> = yield* LayerMap.make(
+      const inner: LayerMap.LayerMap<Location.Ref, LocationServices, Instance.Error> = yield* LayerMap.make(
         (ref: Location.Ref) => {
           const build: { close?: Effect.Effect<void> } = {}
           MutableHashMap.set(builds, ref, build)

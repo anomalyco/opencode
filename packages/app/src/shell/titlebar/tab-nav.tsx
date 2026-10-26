@@ -1,20 +1,19 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Predicate } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMutation } from "@tanstack/solid-query"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
-import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
-import { displayName } from "@/shell/layout/helpers"
-import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
-import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { displayName } from "@opencode/ui/project-avatar"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionTabTitle } from "./tab-title"
-import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
 import "./tab-nav.css"
 
@@ -27,9 +26,14 @@ export function TabNavItem(props: {
   server: ServerConnection.Key
   session: SessionInfo | undefined
   preparing: boolean
+  unread: boolean
+  attention: boolean
+  loading: boolean
   fallbackTitle?: string
+  fallbackDirectory?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
+  onDelete: () => void
   onNavigate: () => void
   active?: boolean
   suppressNavigation?: boolean
@@ -45,41 +49,87 @@ export function TabNavItem(props: {
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
   let measureFrame: number | undefined
-  const rename = createMutation(() => ({ mutationFn: props.onRename }))
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     props.onClose()
   }
+
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
+
+  // The project icon stays put; status shows where the close button appears on hover.
+  const status = () => {
+    if (props.preparing || props.loading) return "busy"
+
+    if (!props.session || props.active) return
+
+    if (props.attention) return "attention"
+
+    if (props.unread) return "unread"
+  }
+
+  const dotted = () => status() === "attention" || status() === "unread"
+
   const project = createMemo(() => {
     const session = props.session
-    if (!session) return
-    return serverCtx()?.projects.forSession(session)
+
+    if (session) return serverCtx()?.projects.forSession(session)
+
+    if (!props.fallbackDirectory) return
+
+    return serverCtx()?.projects.forDirectory(props.fallbackDirectory) ?? { worktree: props.fallbackDirectory }
   })
+
   const title = createMemo(() => {
     const session = props.session
+
     return sessionTabTitle(session ? session.title : props.fallbackTitle, language.t("session.tab.session"))
   })
 
   const projectName = createMemo(() => {
     const session = props.session
+
     if (!session) return
+
     return displayName(project() ?? { worktree: session.location.directory })
   })
+
   const previewPath = createMemo(() => {
     const session = props.session
+
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
-    return home ? session.location.directory.replace(home, "~") : session.location.directory
+    const directory = session.location.directory
+
+    if (!home || !directory.startsWith(home) || !/^([/\\]|$)/.test(directory.slice(home.length))) return directory
+
+    return "~" + directory.slice(home.length)
   })
-  // Only label the server when multiple servers are connected.
+
+  // Only label the server when multiple servers are connected, and never the current one.
   const serverLabel = createMemo(() => {
     if (servers.list.length <= 1) return
     const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
-    return conn ? serverName(conn) : undefined
+
+    return conn ? servers.tag(conn) : undefined
+  })
+
+  // Like the TUI, a prompt sent to a background tab's session pulses the tab once.
+  const [promptPulse, setPromptPulse] = createSignal(0)
+  createEffect(() => {
+    const data = serverCtx()?.data
+    const sessionID = props.session?.id
+
+    if (!data || !sessionID) return
+    onCleanup(
+      data.on("session.inbox.enqueued", (event) => {
+        if (props.active || event.data.item.type !== "user" || data.session.root(event.data.sessionID) !== sessionID)
+          return
+        setPromptPulse((count) => count + 1)
+      }),
+    )
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
@@ -88,8 +138,10 @@ export function TabNavItem(props: {
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
       setTitleOverflowing(false)
+
       return
     }
+
     setTitleOverflowing(titleEl.scrollWidth > titleEl.clientWidth)
   }
 
@@ -124,7 +176,7 @@ export function TabNavItem(props: {
   }
 
   const closeRename = async (save: boolean) => {
-    if (rename.isPending || !editing()) return
+    if (!editing()) return
 
     const original = props.session?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
@@ -136,13 +188,15 @@ export function TabNavItem(props: {
       return
     }
 
-    await rename.mutateAsync(next)
+    await props.onRename(next)
   }
 
   createEffect(() => {
     if (editing()) return
+
     if (!titleEl) return
     const value = title()
+
     if (value === undefined) return
     titleEl.textContent = value
   })
@@ -150,8 +204,10 @@ export function TabNavItem(props: {
   const openRename = (event?: MouseEvent) => {
     event?.preventDefault()
     event?.stopPropagation()
-    if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
+
+    if (props.dragging || editing()) return
     const session = props.session
+
     if (!session) return
     titleEl.textContent = session.title ?? ""
     setEditing(true)
@@ -170,7 +226,9 @@ export function TabNavItem(props: {
       "pointerdown",
       (event) => {
         const target = event.target
+
         if (!(target instanceof Node)) return
+
         if (tabRoot.contains(target)) return
         void closeRename(true)
       },
@@ -184,7 +242,8 @@ export function TabNavItem(props: {
     <div
       ref={(el) => {
         tabRoot = el
-        forwardTabRef(props.ref, el)
+
+        if (Predicate.isFunction(props.ref)) props.ref(el)
       }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
@@ -194,6 +253,7 @@ export function TabNavItem(props: {
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
+      data-status={status()}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
       onMouseDown={(event) => {
@@ -206,6 +266,9 @@ export function TabNavItem(props: {
         closeTab(event)
       }}
     >
+      <Show when={promptPulse()} keyed>
+        <span data-slot="tab-prompt-pulse" aria-hidden="true" onAnimationEnd={() => setPromptPulse(0)} />
+      </Show>
       <Menu.Context.Trigger
         as="a"
         disabled={editing() || props.dragging}
@@ -222,15 +285,20 @@ export function TabNavItem(props: {
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
+
           if (editing()) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
           event.preventDefault()
+
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
+
           if (editing()) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
@@ -238,27 +306,15 @@ export function TabNavItem(props: {
       >
         <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
           <Show
-            when={props.session}
-            keyed
+            when={props.session?.location.directory ?? props.fallbackDirectory}
             fallback={
-              <Show
-                when={props.preparing}
-                fallback={
-                  <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
-                }
-              >
-                <SessionProgressIndicatorV2 />
-              </Show>
+              <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
           >
-            {(session) => (
-              <SessionTabAvatar
-                project={project()}
-                directory={session.location.directory}
-                sessionId={session.id}
-                server={props.server}
-              />
-            )}
+            {(directory) => <SessionTabAvatarView project={project()} directory={directory()} unread={false} />}
+          </Show>
+          <Show when={dotted()}>
+            <span data-slot="tab-avatar-unread-dot" aria-hidden="true" />
           </Show>
         </span>
         <span
@@ -274,15 +330,18 @@ export function TabNavItem(props: {
             "overflow-hidden text-clip whitespace-nowrap": !editing(),
             "select-text": editing(),
           }}
-          contenteditable={editing() ? true : undefined}
+          contenteditable={editing() ? "plaintext-only" : undefined}
           onDblClick={openRename}
           onKeyDown={(event) => {
             event.stopPropagation()
+
             if (event.key === "Enter") {
               event.preventDefault()
               void closeRename(true)
+
               return
             }
+
             if (event.key !== "Escape") return
             event.preventDefault()
             titleEl.textContent = props.session?.title ?? ""
@@ -301,10 +360,15 @@ export function TabNavItem(props: {
       </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
+        <span data-slot="tab-status" aria-hidden="true">
+          <ActivityRing data-mark="busy" />
+          <span data-mark="attention" data-slot="tab-status-dot" />
+          <span data-mark="unread" data-slot="tab-status-dot" />
+        </span>
         <IconButton
           size="small"
           variant="ghost-muted"
-          class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          class="hover-reveal relative z-10"
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -322,6 +386,7 @@ export function TabNavItem(props: {
       modal={false}
       onOpenChange={(open) => {
         setMenu("open", open)
+
         if (open) setPopoverOpen(false)
       }}
     >
@@ -349,10 +414,14 @@ export function TabNavItem(props: {
             openRename()
           }}
         >
-          <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
+          <Menu.Item disabled={!props.session} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>
           <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
+          <Menu.Separator />
+          <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
+            {language.t("session.delete.title")}…
+          </Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>
     </Menu.Context>
@@ -373,14 +442,18 @@ export function DraftTabItem(props: {
   orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
+
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     props.onClose()
   }
+
   return (
     <div
-      ref={(el) => forwardTabRef(props.ref, el)}
+      ref={(el) => {
+        if (Predicate.isFunction(props.ref)) props.ref(el)
+      }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
       data-orientation={props.orientation ?? "horizontal"}
@@ -411,13 +484,16 @@ export function DraftTabItem(props: {
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
           event.preventDefault()
+
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
@@ -458,7 +534,7 @@ export function DraftTabItem(props: {
             event.preventDefault()
             event.stopPropagation()
           }}
-          class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          class="hover-reveal relative z-10"
           onClick={closeTab}
           icon={<Icon name="xmark-small" />}
           aria-label={language.t("common.closeTab")}

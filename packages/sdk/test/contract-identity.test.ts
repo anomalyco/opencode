@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test"
+import { EnvironmentDriver } from "@opencode/core/environment/driver"
+import { EnvironmentFiles } from "@opencode/core/environment/files"
 import { Location as CoreLocation } from "@opencode/core/location"
+import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { SessionInbox as CoreSessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage as CoreSessionMessage } from "@opencode/core/session/message"
 import { Agent } from "@opencode/schema/agent"
@@ -20,6 +23,7 @@ import { ClientApi, groupNames, promiseOmitEndpoints } from "@opencode/protocol/
 import { compile, emitPromise } from "@opencode/httpapi-codegen"
 
 const SDK = await import("../src/index")
+const SDKEffect = await import("../src/effect")
 const CoreAgent = await import("@opencode/core/agent")
 const CoreModel = await import("@opencode/core/model")
 const CoreProject = await import("@opencode/core/project")
@@ -97,4 +101,10 @@ test("client and Server contracts generate identically", () => {
   const client = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints })
 
   expect(emitPromise(client)).toEqual(emitPromise(server))
+})
+
+test("re-exports workspace and environment driver contracts from @opencode/sdk/effect", () => {
+  expect(SDKEffect.WorkspaceDriver).toBe(WorkspaceDriver)
+  expect(SDKEffect.EnvironmentDriver).toBe(EnvironmentDriver)
+  expect(SDKEffect.EnvironmentFiles).toBe(EnvironmentFiles)
 })

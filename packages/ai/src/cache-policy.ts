@@ -10,7 +10,7 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
+import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
@@ -27,25 +27,60 @@ const BREAKPOINT_CAP = 4
 //   - undefined   → "auto" — caching is on by default.
 //   - "auto"      → tools + first/last system + final message boundary.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
+//   - `{ ttl }`   → "auto" with that lifetime.
 //   - object form → exactly what the caller asked for.
 const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
-  if (policy === undefined || policy === "auto") return AUTO
   if (policy === "none") return NONE
-  return policy
+  if (typeof policy === "object" && !isAuto(policy)) return policy
+  return AUTO
 }
+
+const isAuto = (policy: CachePolicy | undefined) =>
+  policy === undefined ||
+  policy === "auto" ||
+  (typeof policy === "object" &&
+    policy.tools === undefined &&
+    policy.system === undefined &&
+    policy.messages === undefined)
+
+/** The requested cache lifetime, for routes that send it as a request-level option instead of on markers. */
+export const requestTTL = (request: LLMRequest) => (typeof request.cache === "object" ? request.cache.ttl : undefined)
 
 // Protocols whose wire format ignores inline cache markers (OpenAI's implicit
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set([
+  "alibaba-chat",
+  "alibaba-messages",
   "anthropic-messages",
+  "anthropic-compatible-messages",
+  "bedrock-mantle-messages",
+  "cloudflare-ai-gateway-messages",
   "google-vertex-messages",
+  "meta-messages",
+  "minimax-messages",
+  "moonshot-messages",
+  "vercel-ai-gateway-messages",
+  "zai-coding-messages",
   "bedrock-converse",
   "openrouter",
+  "digitalocean",
 ])
 
-const makeHint = (ttlSeconds: number | undefined): CacheHint =>
-  ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
+// OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without breakpoints.
+// Gemini uses only the last breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs
+// more than none. Qwen ignores breakpoints on tool definitions and caches tools with the system prompt.
+const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
+const gatewayPolicy = (modelID: string): CachePolicyObject => {
+  // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
+  const id = modelID.replace(/^~/, "")
+  if (id.startsWith("anthropic/")) return AUTO
+  if (id.startsWith("qwen/") || id.startsWith("alibaba/qwen")) return QWEN
+  return NONE
+}
+
+const makeHint = (ttl: CacheTTL | undefined): CacheHint =>
+  ttl !== undefined ? new CacheHint({ type: "ephemeral", ttl }) : new CacheHint({ type: "ephemeral" })
 
 interface Budget {
   remaining: number
@@ -84,8 +119,13 @@ const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, bud
 const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
   messages.findLastIndex((m) => m.role === role)
 
+type CacheablePart = Exclude<ContentPart, { readonly type: "compaction" | "effort" }>
+
+const isCacheablePart = (part: ContentPart): part is CacheablePart =>
+  part.type !== "compaction" && part.type !== "effort"
+
 // Mark the last text part of `messages[index]`. If no text part exists, mark
-// the last content part regardless of type — that's the breakpoint position
+// the last cacheable content part — that's the breakpoint position
 // in tool-result-only messages too.
 const markMessageAt = (
   messages: ReadonlyArray<Message>,
@@ -97,11 +137,11 @@ const markMessageAt = (
   const target = messages[index]!
   if (target.content.length === 0) return messages
   const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
-  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.length - 1
-  const existing = target.content[markAt]!
-  if (("cache" in existing && existing.cache) || budget.remaining === 0) return messages
+  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.findLastIndex(isCacheablePart)
+  const existing = target.content[markAt]
+  if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const nextContent = target.content.map((part, i) => (i === markAt ? ({ ...part, cache: hint } as ContentPart) : part))
+  const nextContent = target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part))
   const next = new Message({ ...target, content: nextContent })
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
@@ -141,20 +181,17 @@ const countHints = (request: LLMRequest) =>
     (count, message) =>
       count +
       message.content.reduce(
-        (contentCount, part) => contentCount + ("cache" in part && part.cache !== undefined ? 1 : 0),
+        (contentCount, part) => contentCount + (isCacheablePart(part) && part.cache !== undefined ? 1 : 0),
         0,
       ),
     0,
   )
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
-  if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto"))
-    return request
-  const policy = resolve(request.cache)
+  const policy = selectPolicy(request)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
-  const hint = makeHint(policy.ttlSeconds)
+  const hint = makeHint(requestTTL(request))
   const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
   const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
   const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
@@ -162,4 +199,24 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
   return LLMRequest.update(request, { tools, system, messages })
+}
+
+/** Whether the cache policy places inline markers, which then carry the requested lifetime. */
+export const placesMarkers = (request: LLMRequest) => {
+  const policy = selectPolicy(request)
+  return Boolean(policy.tools || policy.system || policy.messages)
+}
+
+// A declared cache format overrides the route allowlist and its model-ID heuristics.
+const selectPolicy = (request: LLMRequest): CachePolicyObject => {
+  const format = request.model.compatibility?.cacheFormat
+  const route = request.model.route.id
+  const auto = isAuto(request.cache)
+  if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
+  if (format === "anthropic") return resolve(request.cache)
+  if (!RESPECTS_INLINE_HINTS.has(route)) return NONE
+  if (!auto) return resolve(request.cache)
+  if (route === "openrouter" || route === "vercel-ai-gateway-messages") return gatewayPolicy(request.model.id)
+  if (route === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
+  return AUTO
 }

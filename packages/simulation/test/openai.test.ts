@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { DEFAULT_BASE_URL, PATH } from "@opencode/ai/protocols/openai-chat"
 import { Effect, Stream } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
-import { HttpClientError } from "effect/unstable/http/HttpClientError"
+import { HttpClientRequest } from "effect/http"
+import { HttpClientError } from "effect/http/HttpClientError"
 import { SimulationOpenAI } from "../src/backend/openai"
 import { SimulatedProvider } from "../src/backend/simulated-provider"
 

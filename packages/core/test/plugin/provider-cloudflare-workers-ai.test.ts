@@ -119,7 +119,7 @@ describe("CloudflareWorkersAIPlugin", () => {
     ),
   )
 
-  it.effect("uses env account ID over configured account ID", () =>
+  it.effect("uses configured account ID over env account ID", () =>
     withEnv({ CLOUDFLARE_ACCOUNT_ID: "env-acct" }, () =>
       Effect.gen(function* () {
         const catalog = yield* seed((provider) => {
@@ -129,7 +129,7 @@ describe("CloudflareWorkersAIPlugin", () => {
         yield* addPlugin()
         expect(required(yield* catalog.get(providerID))).toMatchObject({
           package: "aisdk:test-provider",
-          settings: { baseURL: "https://api.cloudflare.com/client/v4/accounts/env-acct/ai/v1" },
+          settings: { baseURL: "https://api.cloudflare.com/client/v4/accounts/configured-acct/ai/v1" },
         })
       }),
     ),

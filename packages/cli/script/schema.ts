@@ -5,7 +5,7 @@ import { Info, SchemaURL } from "../src/config/schema"
 const target = process.argv[2]
 if (!target) throw new Error("A schema output path is required")
 
-const document = Schema.toJsonSchemaDocument(Info)
+const document = Schema.toJsonSchemaDocument(Info, { onExcessProperty: "error" })
 const content = await format(
   JSON.stringify({
     $schema: "https://json-schema.org/draft/2020-12/schema",

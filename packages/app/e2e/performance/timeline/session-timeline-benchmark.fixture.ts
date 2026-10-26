@@ -7,13 +7,24 @@ import { expect } from "../benchmark"
 import { createTwoFilesPatch } from "diff"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
+
 const projectID = "proj_timeline_state_regression"
+
+/** The workspace a benchmark response names, in the shape the server's location-scoped routes return. */
+export const benchmarkLocation = { directory, project: { id: projectID, directory, canonical: directory } }
+
 const sessionID = "ses_timeline_state_regression"
+
 const userMessageID = "msg_user_regression"
+
 const assistantMessageID = "msg_assistant_regression"
+
 const editPartID = "prt_0001_edit"
+
 export const textPartID = `${assistantMessageID}:text:0`
+
 const title = "Timeline collapse state regression"
+
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
 type EventPayload = OpenCodeEvent
@@ -70,14 +81,17 @@ export async function setupTimelineBenchmark(
 ) {
   const events: EventPayload[] = []
   let eventBatch = options.eventBatch
+
   const currentUserMessage = options.turnDiffs
     ? { ...userMessage, metadata: { diffs: options.turnDiffs as JsonValue } }
     : userMessage
+
   const messages = [
     ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index))
       .flat()
       .map((message) => {
         if (options.historyShape !== "tool-heavy" || message.type !== "assistant") return message
+
         return {
           ...message,
           content: [
@@ -106,6 +120,7 @@ export async function setupTimelineBenchmark(
     currentUserMessage,
     assistantMessage,
   ]
+
   await mockOpenCodeServer(page, {
     directory,
     project: project(),
@@ -136,6 +151,7 @@ export async function setupTimelineBenchmark(
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
   await expectAppVisible(scroller)
+
   return {
     workload: {
       messages: messages.length,
@@ -168,7 +184,9 @@ export async function setupTimelineBenchmark(
         const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
           element.querySelector(`[data-timeline-part-id="${partID}"]`),
         )
+
         if (!root) return false
+
         return new Promise<boolean>((resolve) => {
           const height = root.scrollHeight
           requestAnimationFrame(() =>
@@ -211,6 +229,7 @@ function performanceTurn(index: number) {
   const assistantID = `msg_0000_${suffix}_b_assistant`
   const before = historicalSource(index, false)
   const after = historicalSource(index, true)
+
   const parts = [
     ...(index % 5 === 0
       ? [
@@ -300,6 +319,7 @@ function performanceTurn(index: number) {
         ]
       : []),
   ] as unknown as ContentSeed[]
+
   return [
     {
       id: userID,
@@ -318,12 +338,14 @@ function performanceTurn(index: number) {
       finish: "stop",
       content: parts.map((part) => {
         if (part.type === "text") return { type: "text" as const, text: part.text }
+
         if (part.type === "reasoning")
           return {
             type: "reasoning" as const,
             text: part.text,
             time: { created: part.time.start, completed: part.time.end },
           }
+
         return toolContent(part)
       }),
     },
@@ -373,6 +395,7 @@ function timelineEvent<Type extends "session.text.started" | "session.text.delta
   durable = false,
 ): Extract<OpenCodeEvent, { type: Type }> {
   eventSequence++
+
   return {
     id: `evt_timeline_benchmark_${eventSequence}`,
     created: 1700000002000 + eventSequence,
@@ -400,6 +423,7 @@ export function SessionList(props: { rows: SessionRow[] }) {
     </section>
   )
 }`
+
   return `## Session renderer review ${index}
 
 The active session keeps **semantic row identity** while reconciling measured content. See [Solid documentation](https://docs.solidjs.com/) and the inline \`measureElement(node)\` call.
@@ -418,6 +442,7 @@ ${index % 4 === 0 ? `\`\`\`tsx\n${code}\n\`\`\`\n\n\`\`\`bash\nbun typecheck\nbu
 function historicalSource(index: number, updated: boolean) {
   const method = updated ? "toLocaleUpperCase(props.locale)" : "toUpperCase()"
   const limit = updated ? 24 : 20
+
   return `import { createMemo, For } from "solid-js"
 
 type Message = {
@@ -468,10 +493,12 @@ function realisticPatch(index: number) {
 
 export function streamChunk(index: number, count: number) {
   if (index === 0) return `\n\n## Implementation plan\n\nStreaming **bold analysis`
+
   if (index === count - 1)
     return `\n\`\`\`\n\n## Verification\n\n- **Typecheck:** passed\n- **Timeline geometry:** stable\n- **Streaming output:** benchmark-complete <!-- stream-${index} -->`
 
   const section = Math.floor(index / 18) + 1
+
   const fragments = [
     ` continues across three`,
     ` or four word`,
@@ -492,6 +519,7 @@ export function streamChunk(index: number, count: number) {
     ` activeID()) // stream-${index}\n`,
     `// stream-${index}\n\`\`\`\n\n### Iteration ${section}\n\nStreaming **bold analysis`,
   ]
+
   return fragments[(index - 1) % fragments.length]!
 }
 

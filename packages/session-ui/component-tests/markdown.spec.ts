@@ -1,13 +1,12 @@
-import { fileURLToPath } from "node:url"
 import type { Page } from "@playwright/test"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=",
   "base64",
 )
 
-const fixture = `/@fs/${fileURLToPath(new URL("./markdown.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
+const fixture = sourceURL(new URL("./markdown.fixture.tsx", import.meta.url))
 
 story.beforeEach(async ({ mount }) => {
   const root = await mount("components-markdown--complete-response")
@@ -21,23 +20,37 @@ story("renders small completed Markdown immediately without skipping sanitizatio
       text: '**Small response**\n\n<img src="missing" onerror="alert(1)"><script>alert(2)</script>',
     })
     const markdown = document.querySelector('[data-testid="markdown-fixture"] [data-component="markdown"]')!
+
     return {
       ready: markdown.hasAttribute("data-markdown-ready"),
       bold: markdown.querySelector("strong")?.textContent,
       unsafe: markdown.querySelectorAll("script, [onerror]").length,
     }
   }, fixture)
+
   expect(result).toEqual({ ready: true, bold: "Small response", unsafe: 0 })
   const harness = page.getByTestId("markdown-fixture")
   await harness.getByLabel("Markdown text").fill("```ts\nconst value = 42\n```")
   await expect(harness.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
   await expect(harness.locator("pre code")).toHaveText("const value = 42")
-  await expect(harness.locator("pre.shiki")).toBeVisible()
+  await expect(harness.locator("pre.highlights")).toBeVisible()
+})
+
+story("keeps Markdown text selectable inside a container that disables selection", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    document.body.style.userSelect = "none"
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Selectable answer text" })
+  }, fixture)
+
+  await page.getByTestId("markdown-fixture").getByText("Selectable answer text").click({ clickCount: 3 })
+  expect(await page.evaluate(() => getSelection()?.toString().trim())).toBe("Selectable answer text")
 })
 
 story("sanitizes raw HTML while preserving supported Markdown markup", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
+
     return [
       "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
       '<script>alert(1)</script><style>body { display: none }</style><img src="safe.png" onerror="alert(2)"><a href="java&#x73;cript:alert(3)">unsafe</a>',
@@ -47,10 +60,11 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
       '<svg viewBox="0 0 10 10"><path d="M0 0L10 10" onload="alert(4)"></path><script>alert(5)</script></svg>',
     ].map(sanitizeMarkdown)
   }, fixture)
+
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a>unsafe</a>',
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a href="/local">local</a>',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
     '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
     "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
     '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"></path></svg>',
@@ -60,14 +74,17 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
 story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { renderMermaidSvg, sanitizeMarkdown } = await import(fixture)
+
     const html =
       '<a href="https://example.com" target="_blank" rel="nofollow">external</a><img src="safe.png" onerror="alert(1)">'
+
     const before = sanitizeMarkdown(html)
     const renders = []
+
     for (const source of [
       "flowchart LR\n A[Start] --> B[End]",
       "sequenceDiagram\n Alice->>Bob: Hello",
-      '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n A["<a href=\'https://example.com\' target=\'_blank\'>External</a>"] --> B[End]',
+      '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n A["<a href=\'https://example.com\' target=\'_blank\'>External</a>"] --> B[End]\n click A "https://example.com" _blank',
     ]) {
       const svg = await renderMermaidSvg(source)
       const document = new DOMParser().parseFromString(svg, "image/svg+xml")
@@ -83,6 +100,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
         markdown: sanitizeMarkdown(html),
       })
     }
+
     return {
       before,
       renders,
@@ -90,6 +108,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
       afterInvalid: sanitizeMarkdown(html),
     }
   }, fixture)
+
   expect(result.before).toBe(
     '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><img data-local-image="safe.png">',
   )
@@ -100,12 +119,132 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
       root: "svg",
       text: expect.stringContaining("External"),
       unsafe: 0,
-      links: [{ href: "https://example.com", target: "_blank", rel: "noopener" }],
+      links: [{ href: "https://example.com/", target: "_blank", rel: "noopener noreferrer" }],
       markdown: result.before,
     },
   ])
   expect(result.invalid).toBeUndefined()
   expect(result.afterInvalid).toBe(result.before)
+})
+
+for (const cached of [false, true]) {
+  story(`decorates known inline paths before insertion with cached Markdown ${cached}`, async ({ page }) => {
+    const initial = await page.evaluate(
+      async ({ fixture, cached }) => {
+        const { mountMarkdown } = await import(fixture)
+
+        return mountMarkdown({
+          text: "`src/file.ts` and `src/file.ts` and `missing.ts` and [`src/file.ts`](https://example.com)",
+          cached,
+          synchronousFiles: true,
+        })
+      },
+      { fixture, cached },
+    )
+
+    expect(initial).toEqual([
+      { text: "src/file.ts", kind: "path" },
+      { text: "src/file.ts", kind: "path" },
+      { text: "missing.ts", kind: null },
+      { text: "src/file.ts", kind: null },
+    ])
+  })
+}
+
+story("does not report completed Markdown ready until all inline path checks settle", async ({ page }) => {
+  const checks = await page.evaluateHandle(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    const existing = Promise.withResolvers<boolean>()
+    const missing = Promise.withResolvers<boolean>()
+    const requested: string[] = []
+    await mountMarkdown({
+      text: "`src/file.ts` and `src/file.ts` and `missing/file.ts`",
+      localFileExists: (path: string) => {
+        requested.push(path)
+
+        return path === "src/file.ts" ? existing.promise : missing.promise
+      },
+    })
+
+    return { requested, existing: () => existing.resolve(true), missing: () => missing.reject(new Error("Offline")) }
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator("code")).toHaveCount(3)
+  expect(await checks.evaluate((state) => state.requested)).toEqual(["src/file.ts", "missing/file.ts"])
+  await expect(markdown).not.toHaveAttribute("data-markdown-ready")
+  await checks.evaluate((state) => state.existing())
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCount(2)
+  await expect(markdown).not.toHaveAttribute("data-markdown-ready")
+  await checks.evaluate((state) => state.missing())
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.getByText("missing/file.ts", { exact: true })).not.toHaveAttribute("data-inline-code-kind")
+  await checks.dispose()
+})
+
+story("ignores stale inline path results when completed Markdown is replaced", async ({ page }) => {
+  const checks = await page.evaluateHandle(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    const first = Promise.withResolvers<boolean>()
+    const next = Promise.withResolvers<boolean>()
+    const requested: string[] = []
+    await mountMarkdown({
+      text: "Before `src/file.ts`",
+      cached: true,
+      localFileExists: (path: string) => {
+        requested.push(path)
+
+        return requested.length === 1 ? first.promise : next.promise
+      },
+    })
+
+    return { requested, first: () => first.resolve(true), next: () => next.resolve(false) }
+  }, fixture)
+
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  await expect(markdown.locator("p")).toHaveText("Before src/file.ts")
+  await expect(markdown).not.toHaveAttribute("data-markdown-ready")
+  await harness.getByLabel("Markdown text").fill("Replacement `src/file.ts`")
+  await expect(markdown.locator("p")).toHaveText("Replacement src/file.ts")
+  expect(await checks.evaluate((state) => state.requested)).toEqual(["src/file.ts", "src/file.ts"])
+  await checks.evaluate((state) => state.first())
+  await expect(markdown).not.toHaveAttribute("data-markdown-ready")
+  await checks.evaluate((state) => state.next())
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCount(0)
+  await checks.dispose()
+})
+
+story("keeps streaming Markdown ready while a completed prefix waits for a path check", async ({ page }) => {
+  const checks = await page.evaluateHandle(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    const existing = Promise.withResolvers<boolean>()
+    const requested: string[] = []
+    await mountMarkdown({
+      text: "Completed `src/file.ts`.\n\nStreaming **answer**",
+      streaming: true,
+      localFileExists: (path: string) => {
+        requested.push(path)
+
+        return existing.promise
+      },
+    })
+
+    return { requested, resolve: () => existing.resolve(true) }
+  }, fixture)
+
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  await expect(markdown.locator("strong")).toHaveText("answer")
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  expect(await checks.evaluate((state) => state.requested)).toEqual(["src/file.ts"])
+  await harness.getByLabel("Streaming").uncheck()
+  await expect(markdown).not.toHaveAttribute("data-markdown-ready")
+  await checks.evaluate((state) => state.resolve())
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
+  await checks.dispose()
 })
 
 story("mounts cached completed Markdown with sanitized HTML and decorations", async ({ page }) => {
@@ -118,7 +257,7 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
       fixture,
       text: [
         "# Completed response",
-        "`src/file.ts` and `https://example.com/docs` and [link](https://example.com)",
+        "`src/file.ts` and `missing.ts` and `https://example.com/docs` and [link](https://example.com)",
         '<img src="missing" onerror="alert(1)"><script>alert(2)</script><a href="javascript:alert(3)">unsafe</a>',
         "```ts\nconst answer = 42\n```",
       ].join("\n\n"),
@@ -130,15 +269,11 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown.getByRole("heading")).toHaveText("Completed response")
   await expect(markdown.locator("script, [onerror], [href^='javascript:']")).toHaveCount(0)
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
-  expect(await resolvedColor(page, "--v2-text-text-code-path")).toBe("rgb(44, 71, 200)")
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
     "color",
     await resolvedColor(page, "--v2-text-text-code-path"),
   )
-  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
-    "background-color",
-    "rgba(0, 0, 0, 0)",
-  )
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute(
     "rel",
@@ -182,15 +317,16 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   const github = markdown.getByRole("link", { name: "#540" })
   await expect(github).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/540")
   await expect(github).toHaveText("#540")
-  expect(await github.evaluate((link) => getComputedStyle(link, "::before").width)).toBe("14px")
-  expect(await github.evaluate((link) => getComputedStyle(link, "::before").maskImage)).toContain("data:image/svg+xml")
-  expect(
-    await markdown.getByRole("link", { name: "GitHub" }).evaluate((link) => getComputedStyle(link, "::before").content),
-  ).toBe('""')
+  const mark = github.locator(".markdown-link-favicon[data-github]")
+  expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").width)).toBe("14px")
+  expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").maskImage)).toContain("data:image/svg+xml")
+  await expect(mark.locator("img")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]")).toHaveCount(
+    1,
+  )
+
   for (const name of ["other site", "lookalike"]) {
-    expect(
-      await markdown.getByRole("link", { name }).evaluate((link) => getComputedStyle(link, "::before").content),
-    ).toBe("none")
+    await expect(markdown.getByRole("link", { name }).locator(".markdown-link-favicon[data-github]")).toHaveCount(0)
   }
 })
 
@@ -200,7 +336,9 @@ story("keeps favicon space stable across loading and failure without fetching pr
   const loading = new Promise<void>((resolve) => (release = resolve))
   await page.route("https://www.google.com/s2/favicons?**", async (route) => {
     requested.push(route.request().url())
+
     if (route.request().url().includes("developer.mozilla.org")) await loading
+
     if (route.request().url().includes("broken.example.org")) return route.abort()
     await route.fulfill({ status: 200, contentType: "image/png", body: png })
   })
@@ -224,7 +362,9 @@ story("keeps favicon space stable across loading and failure without fetching pr
   const image = docs.locator(".markdown-link-favicon img")
   await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
   await expect(image).toHaveCSS("opacity", "0")
-  await expect(docs.locator(".markdown-link-favicon")).toHaveCSS("width", "14px")
+  expect((await docs.locator(".markdown-link-favicon").boundingBox())?.width).toBe(14)
+  // A late web font swap also changes the link width; measure after fonts settle.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
   release()
   await expect(image).toHaveAttribute("data-loaded", "")
@@ -233,17 +373,69 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
   expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
   expect(
-    await image.evaluate((favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top),
+    await image.evaluate((favicon) => {
+      const image = favicon.getBoundingClientRect()
+      const box = favicon.parentElement!.getBoundingClientRect()
+
+      return image.top + image.height / 2 - (box.top + box.height / 2)
+    }),
   ).toBe(0)
 
-  await expect(markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img")).not.toHaveAttribute(
-    "data-loaded",
-    "",
-  )
+  await expect(
+    markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img"),
+  ).not.toHaveAttribute("data-loaded", "")
   await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
-  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   expect(requested).toHaveLength(2)
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
+})
+
+story("keeps link icons on the same line as the start of their label", async ({ page }) => {
+  await page.route("https://www.google.com/s2/favicons?**", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: png }),
+  )
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "Read the [MDN reference](https://developer.mozilla.org/docs) and",
+        "[#540](https://github.com/anomalyco/opencode/pull/540) then",
+        "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/white-space/long-path",
+      ].join(" "),
+      cached: true,
+    })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.locator(".markdown-link-favicon img")).toHaveCount(2)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  const result = await markdown.evaluate((root: HTMLElement) => {
+    const links = Array.from(root.querySelectorAll<HTMLAnchorElement>("a.external-link"))
+
+    // An icon is orphaned when the link's first line fragment, which holds the icon, sits above the label's first glyph.
+    const orphaned = (link: HTMLAnchorElement) => {
+      const text = document.createTreeWalker(link, NodeFilter.SHOW_TEXT).nextNode()!
+      const range = document.createRange()
+      range.setStart(text, 0)
+      range.setEnd(text, 1)
+
+      return range.getBoundingClientRect().top - link.getClientRects()[0].top > 1
+    }
+
+    const widths = Array.from({ length: 400 }, (_, index) => 120 + index).filter((width) => {
+      root.style.width = `${width}px`
+
+      return links.some(orphaned)
+    })
+
+    root.style.width = "160px"
+
+    return { widths, long: links[2].getClientRects().length }
+  })
+
+  expect(result.widths).toEqual([])
+  expect(result.long).toBeGreaterThan(1)
 })
 
 async function resolvedColor(page: Page, token: string) {
@@ -253,6 +445,7 @@ async function resolvedColor(page: Page, token: string) {
     document.body.append(probe)
     const color = getComputedStyle(probe).color
     probe.remove()
+
     return color
   }, token)
 }
@@ -280,12 +473,14 @@ story("shares in-flight Markdown rendering without overwriting a reclaimed cache
     const abandoned = renderCachedMarkdown({ raw: "abandoned", src: "abandoned" }, "in-flight")
     await renderCachedMarkdown({ raw, src: raw }, "in-flight")
     await abandoned
+
     return {
       shared: left === right,
       html: left.html,
       cached: getCachedMarkdown("in-flight") === left,
     }
   }, fixture)
+
   expect(result).toMatchObject({ shared: true, cached: true })
   expect(result.html).toContain("<strong>Shared result</strong>")
 })
@@ -295,16 +490,20 @@ story("settles an abandoned parse and permits immediate cache-key reuse", async 
     const { getCachedMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(fixture)
     const controller = new AbortController()
     const raw = "```typescript\nconst abandoned = true\n```"
+
     const pending = renderCachedMarkdown({ raw, src: raw }, "released", controller.signal).catch(
-      (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+      (error: Error) => error instanceof MarkdownWorkerDisposedError,
     )
+
     controller.abort()
     const rejected = await pending
     const empty = getCachedMarkdown("released") === undefined
     const replacement = "```typescript\nconst replacement = true\n```"
     const rendered = await renderCachedMarkdown({ raw: replacement, src: replacement }, "released")
+
     return { rejected, empty, cached: getCachedMarkdown("released") === rendered, html: rendered.html }
   }, fixture)
+
   expect(result).toMatchObject({ rejected: true, empty: true, cached: true })
   expect(result.html).toContain("replacement")
   expect(result.html).not.toContain("abandoned")
@@ -320,23 +519,29 @@ for (const owned of [true, false]) {
           const first = new AbortController()
           const second = new AbortController()
           const raw = "```typescript\nconst shared = true\n```"
+
           const pending = renderCachedMarkdown({ raw, src: raw }, "shared-lifetime", first.signal).catch(
-            (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+            (error: Error) => error instanceof MarkdownWorkerDisposedError,
           )
+
           let complete = false
+
           const survivor = renderCachedMarkdown(
             { raw, src: raw },
             "shared-lifetime",
             owned ? second.signal : undefined,
           ).then((value: { html: string }) => {
             complete = true
+
             return value
           })
+
           first.abort()
           const rejected = await pending
           const independent = !complete
           const rendered = await survivor
           second.abort()
+
           return {
             rejected,
             independent,
@@ -346,6 +551,7 @@ for (const owned of [true, false]) {
         },
         { fixture, owned },
       )
+
       expect(result).toMatchObject({ rejected: true, independent: true, cached: true })
       expect(result.html).toContain("shared")
     },
@@ -358,12 +564,15 @@ story("does not admit an already disposed Markdown consumer", async ({ page }) =
     const controller = new AbortController()
     controller.abort()
     const raw = "```typescript\nconst ignored = true\n```"
+
     const rejected = await renderCachedMarkdown({ raw, src: raw }, "already-disposed", controller.signal).then(
       () => false,
-      (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+      (error: Error) => error instanceof MarkdownWorkerDisposedError,
     )
+
     return { rejected, empty: getCachedMarkdown("already-disposed") === undefined }
   }, fixture)
+
   expect(result).toEqual({ rejected: true, empty: true })
 })
 
@@ -372,18 +581,23 @@ story("releases a timeline preload without cancelling a mounted shared consumer"
     const { getCachedMarkdown, preloadMarkdown, renderCachedMarkdown, MarkdownWorkerDisposedError } = await import(
       fixture
     )
+
     const controller = new AbortController()
     const raw = "```typescript\nconst preloaded = true\n```"
+
     const preload = preloadMarkdown(raw, "timeline-preload", controller.signal).then(
       () => false,
-      (error: unknown) => error instanceof MarkdownWorkerDisposedError,
+      (error: Error) => error instanceof MarkdownWorkerDisposedError,
     )
+
     const mounted = renderCachedMarkdown({ raw, src: raw }, "timeline-preload:0:full")
     controller.abort()
     const rejected = await preload
     const rendered = await mounted
+
     return { rejected, cached: getCachedMarkdown("timeline-preload:0:full") === rendered, html: rendered.html }
   }, fixture)
+
   expect(result).toMatchObject({ rejected: true, cached: true })
   expect(result.html).toContain("preloaded")
 })
@@ -403,11 +617,14 @@ story("keeps a reopened cached answer recent under cache pressure", async ({ pag
   await expect(markdown).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown.locator("strong")).toHaveText("Cached answer")
+
   const cached = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, touchCachedMarkdown } = await import(fixture)
     touchCachedMarkdown("newest", { raw: "newest", hash: "newest", html: "<p>newest</p>" })
+
     return getCachedMarkdown("markdown-test:0:full")?.raw
   }, fixture)
+
   expect(cached).toBe("**Cached answer**")
 })
 
@@ -418,15 +635,15 @@ story("renders cached Mermaid blocks and falls back to code for invalid diagrams
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
-  await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
+  await expect(markdown.locator('[data-component="markdown-mermaid"] > svg.pele')).toBeVisible()
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
-  await harness.getByLabel("Markdown text").fill("```mermaid\nnot a diagram\n```")
+  await harness.getByLabel("Markdown text").fill("```mermaid\nflowchart LR; A[broken\n```")
   await expect(markdown.locator('[data-component="markdown-mermaid"]')).toHaveCount(0)
   await expect(markdown.locator("pre code")).toBeVisible()
-  await expect(markdown.locator("pre code")).toHaveText("not a diagram")
+  await expect(markdown.locator("pre code")).toHaveText("flowchart LR; A[broken")
   await expect(markdown.getByRole("button", { name: "Copy", exact: true })).toBeVisible()
 })
 
@@ -449,7 +666,7 @@ story("renders the trailing chunk while the stream is paused", async ({ page }) 
 story("keeps live elements and selection when a stream completes and later changes", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
-    await mountMarkdown({ text: "Hello **world**", streaming: true })
+    await mountMarkdown({ text: "Hello **world**", streaming: true, synchronousFiles: true })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
@@ -474,8 +691,9 @@ story("keeps live elements and selection when a stream completes and later chang
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
   await expect(paragraph).toHaveAttribute("data-retained", "true")
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("world")
-  await harness.getByLabel("Markdown text").fill("Changed **content**")
-  await expect(paragraph).toHaveText("Changed content")
+  await harness.getByLabel("Markdown text").fill("Changed **content** in `new/file.ts` and `new/file.ts`")
+  await expect(paragraph).toHaveText("Changed content in new/file.ts and new/file.ts")
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText(["new/file.ts", "new/file.ts"])
   await expect(paragraph).toHaveAttribute("data-retained", "true")
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
@@ -521,11 +739,13 @@ story("highlights streamed code across comment and string boundaries", async ({ 
   const markdown = harness.locator('[data-component="markdown"]')
   const code = markdown.locator("pre code")
   const chunks = ["/* multi", "line\ncomment *", "/\nconst message = `hel", "lo ${1 + 2}`\n", "const pattern = /a+b/g"]
+
   for (let index = 1; index <= chunks.length; index++) {
     const text = chunks.slice(0, index).join("")
     await harness.getByLabel("Markdown text").fill(`\`\`\`ts\n${text}`)
     await expect(code).toHaveText(text)
   }
+
   await expect(code.locator('span[style*="color"]')).not.toHaveCount(0)
   await harness.getByLabel("Markdown text").fill(`\`\`\`ts\n${chunks.join("")}\n\`\`\``)
   await harness.getByLabel("Streaming").uncheck()
@@ -571,36 +791,34 @@ story("preserves streamed math through completion and a fresh render", async ({ 
 })
 
 for (const theme of ["light", "dark"]) {
-  for (const width of [390, 1280]) {
-    story(`renders class and connected subgraph diagrams in ${theme} at ${width}px`, async ({ mount, page }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await mount("components-markdown--complete-response", { globals: { theme } })
-      await expect(page.locator("html")).toHaveClass(new RegExp(theme))
-      await page.evaluate(async (fixture) => {
-        const { mountMarkdown } = await import(fixture)
-        await mountMarkdown({
-          text: [
-            "```mermaid\nclassDiagram\nAnimal <|-- Duck\nAnimal : +int age\nDuck : +swim()\n```",
-            "```mermaid\nflowchart LR\nsubgraph Input\ndirection TB\nA[Prompt] --> B[Parse]\nend\nsubgraph Output\ndirection TB\nC[Render] --> D[Display]\nend\nB --> C\n```",
-          ].join("\n\n"),
-          streaming: true,
-        })
-      }, fixture)
-      const harness = page.getByTestId("markdown-fixture")
-      const diagrams = harness.locator('[data-component="markdown-mermaid"] > svg')
-      await expect(diagrams).toHaveCount(2)
-      await expect(diagrams.nth(0)).toBeVisible()
-      await expect(diagrams.nth(0)).toContainText("swim()")
-      await expect(diagrams.nth(1)).toBeVisible()
-      await expect(diagrams.nth(1)).toContainText("Display")
-      await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
-      await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
-      await harness.getByLabel("Streaming").uncheck()
-      await expect(diagrams).toHaveCount(2)
-      await expect(diagrams.nth(0)).toBeVisible()
-      await expect(diagrams.nth(1)).toBeVisible()
-    })
-  }
+  story(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
+    await page.setViewportSize({ width: 390, height: 900 })
+    await mount("components-markdown--complete-response", { globals: { theme } })
+    await expect(page.locator("html")).toHaveClass(new RegExp(theme))
+    await page.evaluate(async (fixture) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({
+        text: [
+          "```mermaid\nclassDiagram\nAnimal <|-- Duck\nAnimal : +int age\nDuck : +swim()\n```",
+          "```mermaid\nflowchart LR\nsubgraph Input\ndirection TB\nA[Prompt] --> B[Parse]\nend\nsubgraph Output\ndirection TB\nC[Render] --> D[Display]\nend\nB --> C\n```",
+        ].join("\n\n"),
+        streaming: true,
+      })
+    }, fixture)
+    const harness = page.getByTestId("markdown-fixture")
+    const diagrams = harness.locator('[data-component="markdown-mermaid"] > svg')
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagrams.nth(0)).toBeVisible()
+    await expect(diagrams.nth(0)).toContainText("swim()")
+    await expect(diagrams.nth(1)).toBeVisible()
+    await expect(diagrams.nth(1)).toContainText("Display")
+    await expect(diagrams.nth(1).locator(".pele-edge")).toHaveCount(3)
+    await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
+    await harness.getByLabel("Streaming").uncheck()
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagrams.nth(0)).toBeVisible()
+    await expect(diagrams.nth(1)).toBeVisible()
+  })
 }
 
 for (const streaming of [false, true]) {
@@ -676,6 +894,7 @@ for (const streaming of [false, true]) {
 story("keeps remote images browser-owned and rejects unsafe image sources", async ({ page }) => {
   await page.route("https://images.example/chart.png", (route) => {
     expect(route.request().headers().authorization).toBeUndefined()
+
     return route.fulfill({ contentType: "image/png", body: png })
   })
   await page.evaluate(async (fixture) => {
@@ -730,7 +949,7 @@ story("keeps scripts and external resources inactive inside local SVG images", a
   await preview.close()
 })
 
-story("loads file URLs and leaves unreadable images as alt text", async ({ page }) => {
+story("loads file URLs and Windows paths, and leaves unreadable images as alt text", async ({ page }) => {
   const requested = new Set<string>()
   await page.route("**/api/fs/read/**", async (route) => {
     const url = new URL(route.request().url())
@@ -745,18 +964,21 @@ story("loads file URLs and leaves unreadable images as alt text", async ({ page 
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({
       images: true,
-      text: "![Available](file:///C:/tmp/chart%25.png)\n\n![Unavailable](file:///tmp/missing.png)",
+      // Marked percent-encodes the backslashes of a Windows image path, here inside a table cell.
+      text: "![Available](file:///C:/tmp/chart%25.png)\n\n![Unavailable](file:///tmp/missing.png)\n\n| Windows |\n| --- |\n| ![Windows](C:\\tmp\\windows.png) |",
     })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
+
+  for (const name of ["Available", "Windows"])
+    await expect
+      .poll(() =>
+        harness.getByRole("button", { name, exact: true }).evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBe(1)
   await expect
-    .poll(() =>
-      harness
-        .getByRole("button", { name: "Available", exact: true })
-        .evaluate((image: HTMLImageElement) => image.naturalWidth),
-    )
-    .toBe(1)
-  await expect.poll(() => [...requested].sort()).toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/missing.png"])
+    .poll(() => [...requested].sort())
+    .toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/missing.png", "/api/fs/read/windows.png"])
   await expect(harness.getByRole("button", { name: "Unavailable" })).not.toHaveAttribute("src")
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")

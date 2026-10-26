@@ -5,10 +5,10 @@ import { optional } from "./schema.js"
 import { AbsolutePath } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
 
-export const ID = Schema.String.pipe(Schema.brand("Skill.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Skill.ID"), Schema.annotate({ identifier: "Skill.ID" }))
 export type ID = typeof ID.Type
 
-export const Name = Schema.String.pipe(Schema.brand("Skill.Name"))
+export const Name = Schema.String.pipe(Schema.brand("Skill.Name"), Schema.annotate({ identifier: "Skill.Name" }))
 export type Name = typeof Name.Type
 
 export interface DirectorySource extends Schema.Schema.Type<typeof DirectorySource> {}

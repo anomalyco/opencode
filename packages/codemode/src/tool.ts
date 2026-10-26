@@ -13,6 +13,7 @@ export type JsonSchema = {
   readonly anyOf?: ReadonlyArray<JsonSchema>
   readonly oneOf?: ReadonlyArray<JsonSchema>
   readonly allOf?: ReadonlyArray<JsonSchema>
+  readonly not?: JsonSchema
   readonly properties?: Readonly<Record<string, JsonSchema>>
   readonly required?: ReadonlyArray<string>
   readonly items?: JsonSchema

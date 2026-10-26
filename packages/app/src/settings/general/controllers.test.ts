@@ -24,13 +24,16 @@ describe("settings controllers", () => {
 
   test("debounces previews and stops owned audio on disposal", async () => {
     vi.useFakeTimers()
+
     try {
       const played: string[] = []
       const stopped: string[] = []
+
       const owned = createRoot((dispose) => ({
         dispose,
         preview: createSoundPreviewController(async (id) => {
           played.push(id ?? "")
+
           return () => stopped.push(id ?? "")
         }),
       }))

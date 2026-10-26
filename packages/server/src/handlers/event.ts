@@ -1,8 +1,7 @@
-import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { Effect, Stream } from "effect"
-import { HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpServerResponse } from "effect/http"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { EventFeed } from "../event-feed"
 

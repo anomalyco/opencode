@@ -1,5 +1,12 @@
 import { Schema } from "effect"
 import { Skill } from "@opencode/schema/skill"
+import { Location } from "@opencode/schema/location"
+
+export class LocationNotFoundError extends Schema.TaggedError<LocationNotFoundError>()(
+  "LocationNotFoundError",
+  { location: Location.PublicRef, message: Schema.String },
+  { httpApiStatus: 404 },
+) {}
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
   "InvalidRequestError",
@@ -203,6 +210,15 @@ export class PermissionNotFoundError extends Schema.TaggedError<PermissionNotFou
   "PermissionNotFoundError",
   {
     requestID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PermissionSavedNotFoundError extends Schema.TaggedError<PermissionSavedNotFoundError>()(
+  "PermissionSavedNotFoundError",
+  {
+    id: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

@@ -25,10 +25,12 @@ it.live("list reads saved inventory even when its checkout is missing, without b
       await fs.rm(directory, { recursive: true })
       expect(await api.worktree.list({ projectID: session.projectID })).toEqual([{ directory }])
       await expect(api.worktree.create({ projectID: session.projectID })).rejects.toMatchObject({
+        _tag: "WorktreeError",
         name: "WorktreeError",
         data: { message: `Worktree directory unavailable: ${directory}` },
       })
       await expect(api.worktree.refresh({ projectID: session.projectID })).rejects.toMatchObject({
+        _tag: "WorktreeError",
         name: "WorktreeError",
         data: { message: `Worktree directory unavailable: ${directory}` },
       })
@@ -109,7 +111,7 @@ it.live("remove loads canonical strategies and enforces project ownership", () =
       const foreign = await api.session.create({ location: { directory: other } })
       await expect(
         api.worktree.remove({ projectID: foreign.projectID, directory: linked, force: true }),
-      ).rejects.toMatchObject({ name: "WorktreeError" })
+      ).rejects.toMatchObject({ _tag: "WorktreeError", name: "WorktreeError" })
       expect(await fs.stat(linked).then((stat) => stat.isDirectory())).toBe(true)
       await api.worktree.remove({ projectID: session.projectID, directory: linked, force: false })
       expect(await api.debug.location.list()).toContainEqual({ directory })
@@ -267,7 +269,11 @@ it.live(
           body: JSON.stringify({ projectID, directory: custom.directory, force: false }),
         })
         expect(failure.status).toBe(400)
-        expect(await failure.json()).toMatchObject({ data: { forceRequired: true } })
+        expect(await failure.json()).toMatchObject({
+          _tag: "WorktreeError",
+          name: "WorktreeError",
+          data: { forceRequired: true },
+        })
         expect(await Bun.file(path.join(custom.directory, "dirty.txt")).text()).toBe("keep me")
         expect(await api.worktree.list({ projectID })).toEqual(rows)
         expect(await api.debug.location.list()).toContainEqual({ directory: first })

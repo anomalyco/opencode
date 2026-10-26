@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMClient } from "../../src/index.js"
+import { LLM, LLMClient } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { Azure, Meta, OpenAI, XAI } from "../../src/providers/index.js"
 import { WebSocketTransport } from "../../src/route.js"
@@ -35,14 +35,16 @@ it.effect("decodes error frames verbatim in shared SSE and WebSocket decoding", 
   }),
 )
 
-it.effect("reads bare WebSocket error envelopes as error events", () =>
+it.effect("reads untyped error envelopes as error events and ignores other untyped frames", () =>
   Effect.gen(function* () {
     const message = "gRPC error: Response with id=resp_missing not found"
-    for (const error of [{ type: "api_error", message }, message, 42]) {
-      expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify({ error }))).toEqual({ type: "error", error })
-    }
-    for (const frame of [{ error: null }, { message }]) {
-      expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify(frame)).pipe(Effect.flip)).toBeDefined()
+    for (const decode of [decodeEvent, OpenResponses.decodeChannelEvent]) {
+      for (const error of [{ type: "api_error", message }, message, 42]) {
+        expect(yield* decode(JSON.stringify({ error }))).toEqual({ type: "error", error })
+      }
+      for (const frame of [{}, { error: null }, { message }]) {
+        expect(yield* decode(JSON.stringify(frame))).toEqual({ ...frame, type: "ignored" })
+      }
     }
   }),
 )

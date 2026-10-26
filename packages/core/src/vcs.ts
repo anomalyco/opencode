@@ -5,24 +5,30 @@ import { Cause, Context, Effect, FiberSet, Layer, Schema, Semaphore, Stream } fr
 import type { VcsDefinition, VcsEditor } from "@opencode/plugin/effect/vcs"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FileSystem } from "@opencode/schema/filesystem"
-import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs"
+import { Base, BranchList, FileStatus, Info, Mode, Untracked } from "@opencode/schema/vcs"
 import { VcsEvent } from "@opencode/schema/vcs-event"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
+import { Project } from "./project.js"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
-export { Base, BranchList, FileStatus, Info, Mode }
+export { Base, BranchList, FileStatus, Info, Mode, Untracked }
 
 export class DiffError extends Schema.TaggedError<DiffError>()("Vcs.DiffError", {
   message: Schema.String,
 }) {}
 
+export class InitializeError extends Schema.TaggedError<InitializeError>()("Vcs.InitializeError", {
+  kind: Schema.Literals(["missing", "conflict", "unknown", "unsupported", "failed"]),
+}) {}
+
 export interface DiffOptions {
   readonly context?: number
   readonly base?: string
+  readonly untracked?: Untracked
 }
 
 export interface BranchOptions {
@@ -40,6 +46,7 @@ export interface Adapter {
 
 export interface Interface extends Adapter, State.Transformable<VcsEditor> {
   readonly base: () => Effect.Effect<Base | null, DiffError>
+  readonly initialize: (providerID: string) => Effect.Effect<void, InitializeError>
 }
 
 interface Data {
@@ -124,7 +131,9 @@ const layer = Layer.effect(
         const provider = selected()
         const next: Info = provider
           ? {
-              ...(yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })),
+              ...(yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), {
+                branch: {},
+              })),
               provider: provider.id,
             }
           : { branch: {} }
@@ -166,6 +175,24 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
+      initialize: Effect.fn("Vcs.initialize")(function* (providerID: string) {
+        if (!(yield* fs.isDir(location.project.directory))) return yield* new InitializeError({ kind: "missing" })
+        if (yield* Project.root(fs, location.project.directory)) return yield* new InitializeError({ kind: "conflict" })
+        const provider = state.get().providers.get(providerID)
+        if (!provider) return yield* new InitializeError({ kind: "unknown" })
+        if (!provider.init) return yield* new InitializeError({ kind: "unsupported" })
+        yield* provider
+          .init(scope)
+          .pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.failCause(cause).pipe(Effect.orDie)
+                : Effect.logWarning("vcs initialization failed", { provider: providerID, cause }).pipe(
+                    Effect.andThen(Effect.fail(new InitializeError({ kind: "failed" }))),
+                  ),
+            ),
+          )
+      }),
       info: Effect.fn("Vcs.info")(function* () {
         return current.info
       }),
@@ -210,6 +237,7 @@ const layer = Layer.effect(
               ...scope,
               mode,
               ...(options?.base !== undefined ? { base: options.base } : {}),
+              ...(options?.untracked !== undefined ? { untracked: options.untracked } : {}),
               context: options?.context ?? PATCH_CONTEXT_LINES,
               maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
             })

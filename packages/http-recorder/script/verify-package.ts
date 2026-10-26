@@ -27,8 +27,8 @@ export const verifyPackage = async (archive: string) => {
       `import { HttpRecorder } from "@opencode/http-recorder"
 import { NodeSocket } from "@effect/platform-node"
 import { Layer } from "effect"
-import { HttpClient } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { HttpClient } from "effect/http"
+import { Socket } from "effect/socket"
 
 const options: HttpRecorder.RecorderOptions = { match: () => true, redact: { jsonFields: ["access_token"] } }
 const socketOptions: HttpRecorder.SocketRecorderOptions = { redact: { jsonFields: ["access_token"] } }

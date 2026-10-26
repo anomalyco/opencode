@@ -17,6 +17,7 @@ export type { LineComment } from "./schema"
 type CommentFocus = { file: string; id: string }
 
 const WORKSPACE_KEY = "__workspace__"
+
 const MAX_COMMENT_SESSIONS = 20
 
 function sessionKey(dir: string, id: string | undefined) {
@@ -25,7 +26,9 @@ function sessionKey(dir: string, id: string | undefined) {
 
 function decodeSessionKey(key: string) {
   const split = key.lastIndexOf("\n")
+
   if (split < 0) return { dir: key, id: WORKSPACE_KEY }
+
   return {
     dir: key.slice(0, split),
     id: key.slice(split + 1),
@@ -46,7 +49,9 @@ function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
   }
 
   if (selection.side) next.side = selection.side
+
   if (selection.endSide) next.endSide = selection.endSide
+
   return next
 }
 
@@ -61,11 +66,15 @@ function group(comments: LineComment[]) {
   return comments.reduce<Record<string, LineComment[]>>((acc, comment) => {
     const list = acc[comment.file]
     const next = cloneComment(comment)
+
     if (list) {
       list.push(next)
+
       return acc
     }
+
     acc[comment.file] = [next]
+
     return acc
   }, {})
 }
@@ -79,10 +88,13 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
   // Reuse the previous array when contents are unchanged so consumers keep a stable
   // identity; a fresh array per call cascaded into diff annotation re-renders.
   let lastAll: LineComment[] = []
+
   const all = () => {
     const next = aggregate(store.comments)
+
     if (next.length === lastAll.length && next.every((item, index) => item === lastAll[index])) return lastAll
     lastAll = next
+
     return next
   }
 
@@ -126,6 +138,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     setStore("comments", file, (items) =>
       (items ?? []).map((item) => {
         if (item.id !== id) return item
+
         return { ...item, comment }
       }),
     )
@@ -166,6 +179,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
 
 export function createCommentSessionForTest(comments: Record<string, LineComment[]> = {}) {
   const [store, setStore] = createStore<CommentStore>({ comments })
+
   return createCommentSessionState(store, setStore)
 }
 
@@ -173,6 +187,7 @@ function createCommentSession(scope: ServerScope, dir: string, id: string | unde
   const [store, setStore, _, ready] = persisted(Persist.serverScoped(scope, dir, id, "comments"), CommentStore, {
     comments: {},
   })
+
   const session = createCommentSessionState(store, setStore)
 
   return {
@@ -200,9 +215,11 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
     const params = useParams()
     const sdk = useWorkspaceLocation()
     const serverSDK = useServerSDK()
+
     const cache = createScopedCache(
       (key) => {
         const decoded = decodeSessionKey(key)
+
         return createRoot((dispose) => ({
           value: createCommentSession(
             serverSDK.scope,
@@ -222,6 +239,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
 
     const load = (dir: string, id: string | undefined) => {
       const key = sessionKey(dir, id)
+
       return cache.get(key).value
     }
 

@@ -3,28 +3,31 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { expect } from "bun:test"
+import { binaryPath } from "@opencode-ai/pty"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { Session } from "@opencode/schema/session"
 import { Effect, Exit, Schema, Scope } from "effect"
-import { HttpServer } from "effect/unstable/http"
+import { HttpServer } from "effect/http"
 import { OpenCode } from "../../client/src/promise/index"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
-const binary = process.env.OPENCODE_PTY_BIN ?? "/root/projects/opencode-pty/target/debug/opencode-pty"
-const smoke = existsSync(binary) ? it.live : it.live.skip
+// opencode-pty does not support Windows, and its package resolves no binary on other unsupported platforms.
+const binary = process.platform === "win32" ? undefined : (process.env.OPENCODE_PTY_BIN ?? binaryPath)
+const smoke = binary !== undefined && existsSync(binary) ? it.live : it.live.skip
 
 smoke(
   "reads the latest controlled terminal with optional physical line counts through the SDK",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* testDirectory("xdg")
+      const fixture = yield* testDirectory()
       const server = yield* ServerProcess.start<never, never>({
         hostname: "127.0.0.1",
         port: 0,
         password: "secret",
         app: { version: "test-version" },
         database: { path: fixture.database },
+        pty: { root: fixture.directory },
         fs: { filewatcher: false },
       })
       const base = HttpServer.formatAddress(server.address)
@@ -142,13 +145,14 @@ smoke(
   "creates two persistent terminals for one session through the client API",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* testDirectory("xdg")
+      const fixture = yield* testDirectory()
       const server = yield* ServerProcess.start<never, never>({
         hostname: "127.0.0.1",
         port: 0,
         password: "secret",
         app: { version: "test-version" },
         database: { path: fixture.database },
+        pty: { root: fixture.directory },
         fs: { filewatcher: false },
       })
       const base = HttpServer.formatAddress(server.address)
@@ -188,14 +192,15 @@ smoke(
       const first = Schema.decodeUnknownSync(PersistentPty.Info)(
         (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
           command: "/usr/bin/env",
-          args: ["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"],
+          // Exercise transport bursts without macOS's 1024-byte canonical line buffer limit.
+          args: ["/bin/sh", "-c", "stty -echo -icanon min 1 time 0; printf terminal-one; cat"],
           cwd: process.cwd(),
           title: "first",
           env: {},
         })).data,
       )
       expect(first.command).toBe("/usr/bin/env")
-      expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"])
+      expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo -icanon min 1 time 0; printf terminal-one; cat"])
       expect(first.cwd).toBe(process.cwd())
       expect(yield* Effect.promise(() => events.next("persistent-pty.added"))).toMatchObject({
         data: { sessionID, terminal: { id: first.id } },
@@ -315,7 +320,7 @@ smoke(
   "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* testDirectory("override")
+      const fixture = yield* testDirectory()
       const scope = yield* Scope.Scope
       const originalScope = yield* Scope.fork(scope)
       const options = {
@@ -324,6 +329,7 @@ smoke(
         password: "secret",
         app: { version: "test-version" },
         database: { path: fixture.database },
+        pty: { root: fixture.directory },
         fs: { filewatcher: false },
       }
       const original = yield* ServerProcess.start<never, never>(options).pipe(
@@ -365,7 +371,7 @@ smoke(
       expect(process.kill(first.pid, 0)).toBeTrue()
 
       const replacementScope = yield* Scope.fork(scope)
-      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { handoff } }).pipe(
+      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { ...options.pty, handoff } }).pipe(
         Effect.provideService(Scope.Scope, replacementScope),
       )
       const replacementBase = HttpServer.formatAddress(replacement.address)
@@ -385,25 +391,90 @@ smoke(
   30_000,
 )
 
-function testDirectory(mode: "xdg" | "override") {
+smoke(
+  "migrates a legacy runtime directory on restart and boots fresh when the registration is gone",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory()
+      const scope = yield* Scope.Scope
+      const legacy = path.join(fixture.root, "legacy")
+      const options = {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      }
+      const sessionID = Session.ID.make("ses_persistent_pty_migration")
+      const originalScope = yield* Scope.fork(scope)
+      const original = yield* ServerProcess.start<never, never>({ ...options, pty: { root: legacy } }).pipe(
+        Effect.provideService(Scope.Scope, originalScope),
+      )
+      const base = HttpServer.formatAddress(original.address)
+      const first = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; printf before-migration; exec cat"],
+          cwd: process.cwd(),
+          title: "legacy",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(base, first.id, "before-migration")).toContain("before-migration")
+      const legacyHandoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      yield* Scope.close(originalScope, Exit.void)
+
+      const migratedScope = yield* Scope.fork(scope)
+      const migrated = yield* ServerProcess.start<never, never>({
+        ...options,
+        pty: { root: fixture.directory, handoff: legacyHandoff },
+      }).pipe(Effect.provideService(Scope.Scope, migratedScope))
+      const migratedBase = HttpServer.formatAddress(migrated.address)
+      const directory = path.join(fixture.directory, path.basename(legacyHandoff.directory))
+      expect(existsSync(path.join(directory, "service.json"))).toBeTrue()
+      expect(existsSync(path.join(legacyHandoff.directory, "service.json"))).toBeFalse()
+      expect(
+        (yield* request(migratedBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      ).toMatchObject([{ id: first.id, pid: first.pid }])
+
+      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(migratedBase, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      expect(handoff.directory).toBe(directory)
+      yield* Scope.close(migratedScope, Exit.void)
+      // Simulate macOS purging the registration while the daemon waits for its successor.
+      yield* Effect.promise(() => fs.rm(path.join(directory, "service.json")))
+
+      const fresh = yield* ServerProcess.start<never, never>({ ...options, pty: { root: fixture.directory, handoff } })
+      const freshBase = HttpServer.formatAddress(fresh.address)
+      expect((yield* request(freshBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      const second = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(freshBase, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "printf after-restart; exec cat"],
+          cwd: process.cwd(),
+          title: "fresh",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(freshBase, second.id, "after-restart")).toContain("after-restart")
+    }),
+  30_000,
+)
+
+function testDirectory() {
   return Effect.acquireRelease(
     Effect.promise(async () => {
-      const environment = {
-        binary: process.env.OPENCODE_PTY_BIN,
-        runtime: process.env.OPENCODE_PTY_RUNTIME_DIR,
-        xdg: process.env.XDG_RUNTIME_DIR,
-        shell: process.env.SHELL,
-      }
+      const environment = { binary: process.env.OPENCODE_PTY_BIN, shell: process.env.SHELL }
       const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-server-test-"))
-      const runtime = path.join(root, "runtime")
       process.env.OPENCODE_PTY_BIN = binary
-      delete process.env.OPENCODE_PTY_RUNTIME_DIR
-      process.env.XDG_RUNTIME_DIR = runtime
       process.env.SHELL = "/bin/sh"
-      if (mode === "override") process.env.OPENCODE_PTY_RUNTIME_DIR = runtime
       return {
         database: path.join(root, "opencode.db"),
-        directory: mode === "override" ? runtime : path.join(runtime, "opencode-pty"),
+        directory: path.join(root, "runtime"),
         environment,
         root,
       }
@@ -412,8 +483,6 @@ function testDirectory(mode: "xdg" | "override") {
       Effect.promise(async () => {
         await fs.rm(fixture.root, { recursive: true, force: true })
         restore("OPENCODE_PTY_BIN", fixture.environment.binary)
-        restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
-        restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
         restore("SHELL", fixture.environment.shell)
       }),
   )
@@ -570,7 +639,13 @@ async function verifySharedControl(base: string, ptyID: string) {
     second.socket.send(inputFrame(70, 20, "from-second\n"))
     await waitForSocketOutput([first, second], "from-second")
 
-    await waitForForegroundProcess([first, second], "cat")
+    // opencode-pty v0.1.13 uses /proc on Linux and returns None on other platforms:
+    // https://github.com/anomalyco/opencode-pty/blob/v0.1.13/src/service.rs#L1091-L1128
+    if (process.platform === "linux") await waitForForegroundProcess([first, second], "cat")
+    if (process.platform !== "linux") {
+      expect(first.foregroundProcess).toBeNull()
+      expect(second.foregroundProcess).toBeNull()
+    }
 
     for (const character of "printf abc | rev\n") second.socket.send(inputFrame(70, 20, character))
     await waitForSocketOutput([first, second], "printf abc | rev")
@@ -578,12 +653,36 @@ async function verifySharedControl(base: string, ptyID: string) {
     second.socket.send(inputFrame(70, 20, "x".repeat(1024)))
     second.socket.send(inputFrame(70, 20, "after-burst\n"))
     await waitForSocketOutput([first, second], "after-burst")
+    expect(first.output).toContain("x".repeat(1024) + "after-burst")
+    expect(second.output).toContain("x".repeat(1024) + "after-burst")
     expect(first.closed).toBeFalse()
     expect(second.closed).toBeFalse()
     expect(first.resizes).toBeGreaterThan(0)
     expect(second.resizes).toBeGreaterThan(0)
     expect(first.output).not.toContain("\0")
     expect(second.output).not.toContain("\0")
+    expect(first.size).toEqual({ cols: 70, rows: 20 })
+    expect(second.size).toEqual({ cols: 70, rows: 20 })
+
+    await waitForController(first, "second")
+    second.socket.close()
+    // Promotion is emitted by the daemon only after the server detaches the closed socket.
+    await waitForController(first, "first")
+    expect(second.closed).toBeTrue()
+    first.socket.send(inputFrame(70, 20, "after-detach\n"))
+    await waitForSocketOutput([first], "after-detach")
+
+    const replay = await openTerminalSocket(base, ptyID, "replay", "observer")
+    try {
+      // openTerminalSocket resolves at replay_complete, before any new input is sent.
+      expect(replay.output).toContain("from-first")
+      expect(replay.output).toContain("from-second")
+      expect(replay.output).toContain("after-detach")
+      first.socket.send(inputFrame(70, 20, "after-replay\n"))
+      await waitForSocketOutput([first, replay], "after-replay")
+    } finally {
+      replay.socket.close()
+    }
   } finally {
     first.socket.close()
     second.socket.close()
@@ -615,6 +714,8 @@ async function openTerminalSocket(
     output: "",
     closed: false,
     resizes: 0,
+    size: undefined as { cols: number; rows: number } | undefined,
+    controller: undefined as string | undefined,
     foregroundProcess: null as string | null,
   }
   state.socket.binaryType = "arraybuffer"
@@ -636,6 +737,12 @@ async function openTerminalSocket(
           return
         }
         state.resizes++
+        if (typeof message.cols === "number" && typeof message.rows === "number")
+          state.size = { cols: message.cols, rows: message.rows }
+        return
+      }
+      if (message.type === "controller_changed") {
+        state.controller = typeof message.attachmentID === "string" ? message.attachmentID : undefined
         return
       }
       if (message.type === "foreground_process_changed") {
@@ -666,6 +773,15 @@ async function openTerminalSocket(
     })
   })
   return state
+}
+
+async function waitForController(socket: { controller: string | undefined; closed: boolean }, expected: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (socket.controller === expected) return
+    if (socket.closed) throw new Error("Persistent PTY observer disconnected")
+    await Bun.sleep(20)
+  }
+  throw new Error(`Persistent PTY controller did not become ${expected}: ${socket.controller}`)
 }
 
 async function waitForForegroundProcess(

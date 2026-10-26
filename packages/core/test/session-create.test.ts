@@ -36,6 +36,8 @@ import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { initGit } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
@@ -130,6 +132,40 @@ describe("Session.create", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("repeat Session.create on the same location spawns no git", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => initGit(directory))
+        const counter = countingSpawner()
+        const layer = AppNodeBuilder.build(
+          LayerNode.group([
+            Database.node,
+            Bus.node,
+            Project.node,
+            LocationServiceMap.node,
+            SessionProjector.node,
+            SessionStore.node,
+            Session.node,
+          ]),
+          [
+            Bus.node.replace(Bus.configured({ persist: true })),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+            counter.node,
+          ],
+        )
+        yield* Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+          yield* sessions.create({ location: ref })
+          const before = counter.spawns()
+          yield* sessions.create({ location: ref })
+          expect(counter.spawns()).toBe(before)
+        }).pipe(Effect.provide(layer))
+      }),
+    ),
+  )
+
   projectIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -158,11 +194,7 @@ describe("Session.create", () => {
           .pipe(Effect.orDie)
         if (!before) return yield* Effect.die(new Error("created session not found"))
 
-        yield* Effect.promise(async () => {
-          await $`git init -q`.cwd(directory)
-          await $`git config user.email test@example.com`.cwd(directory)
-          await $`git config user.name Test`.cwd(directory)
-        })
+        yield* Effect.promise(() => initGit(directory))
         const unborn = yield* projects.resolve(ref.directory)
         const unbornRoot = yield* session.get(created.id)
         const unbornNested = yield* session.get(child.id)
@@ -269,9 +301,7 @@ describe("Session.create", () => {
 
         yield* Effect.promise(async () => {
           for (const root of [nested, outer]) {
-            await $`git init -q`.cwd(root)
-            await $`git config user.email test@example.com`.cwd(root)
-            await $`git config user.name Test`.cwd(root)
+            await initGit(root)
             await $`git commit --allow-empty -qm initial`.cwd(root)
           }
         })
@@ -926,7 +956,7 @@ describe("Session.create", () => {
       const input = { id, location }
       const created = yield* session.create(input)
 
-      yield* db.update(SessionTable).set({ agent: "build" }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+      yield* db.update(SessionTable).set({ agent: Agent.defaultID }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
 
       expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "build" })
     }),
@@ -1270,7 +1300,6 @@ describe("SessionTransfer", () => {
       yield* bus.publish(SessionEvent.Compaction.Started, {
         sessionID: source.id,
         reason: "manual",
-        recent: "pending",
       })
 
       expect((yield* transfer.export({ sessionID: source.id })).messages).toMatchObject([Expected.user("Settled")])
@@ -1292,7 +1321,7 @@ describe("SessionTransfer", () => {
       const runningCompactionID = SessionMessage.ID.create()
       const completedCompactionID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
-      const providerState = { responseId: "summary-response" }
+      const native = { responseId: "summary-response" }
 
       yield* transfer.import({
         data: {
@@ -1339,7 +1368,6 @@ describe("SessionTransfer", () => {
               status: "running",
               reason: "manual",
               summary: "pending",
-              recent: "pending",
               time: { created: DateTime.makeUnsafe(8) },
             },
             {
@@ -1348,9 +1376,8 @@ describe("SessionTransfer", () => {
               status: "completed",
               reason: "manual",
               model,
-              providerState,
+              native,
               summary: "summary",
-              recent: "recent",
               time: { created: DateTime.makeUnsafe(9) },
             },
           ],
@@ -1365,10 +1392,10 @@ describe("SessionTransfer", () => {
         completedCompactionID,
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
-      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, providerState })
+      expect((yield* transfer.export({ sessionID })).messages.at(-1)).toMatchObject({ model, native })
       expect((yield* transfer.export({ sessionID, sanitize: true })).messages.at(-1)).toMatchObject({
         model,
-        providerState: { redacted: `compaction-provider-state:${completedCompactionID}` },
+        native: { redacted: `compaction-native:${completedCompactionID}` },
       })
     }),
   )

@@ -1,7 +1,8 @@
-import { Meta, Title } from "@solidjs/meta"
+import { Title } from "@solidjs/meta"
 import { createAsync, useParams } from "@solidjs/router"
 import { createMemo, Show } from "solid-js"
 import ModelCompareDetailPage from "../../../component/model-compare-detail"
+import { NotFoundMeta } from "../../../component/not-found-meta"
 import { resolveComparisonFamily } from "../../../lib/comparison-pages"
 import { getModelCatalog } from "../../model-catalog"
 
@@ -23,7 +24,7 @@ export default function ModelCompareFamily() {
       fallback={
         <Show when={comparison() === null}>
           <Title>Model comparison not found</Title>
-          <Meta name="robots" content="noindex,follow" />
+          <NotFoundMeta unavailable={catalog()?.models.length === 0} />
           <main data-page="stats">
             <div data-component="empty-state">
               <strong>Comparison not found</strong>

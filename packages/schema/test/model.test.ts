@@ -53,6 +53,26 @@ describe("Model.Compatibility", () => {
       requireAssistantAfterTool: true,
     })
   })
+
+  test("keeps capability overrides that gate protocol features", () => {
+    const decode = Schema.decodeUnknownSync(Model.Compatibility)
+
+    for (const supportsEffortUpdates of [false, true]) {
+      expect(decode({ supportsEffortUpdates, supportsThinkingBlockBinding: true })).toEqual({
+        supportsEffortUpdates,
+        supportsThinkingBlockBinding: true,
+      })
+    }
+  })
+
+  test("omits undefined protocol capability overrides when encoded", () => {
+    expect(
+      Schema.encodeSync(Model.Compatibility)({
+        supportsEffortUpdates: undefined,
+        supportsThinkingBlockBinding: undefined,
+      }),
+    ).toEqual({})
+  })
 })
 
 describe("Model.Info", () => {

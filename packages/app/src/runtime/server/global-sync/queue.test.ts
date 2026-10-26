@@ -7,6 +7,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 10))
 describe("createRefreshQueue", () => {
   test("clears queued directories by normalized key", async () => {
     const calls: string[] = []
+
     const queue = createRefreshQueue({
       paused: () => false,
       key: directoryKey,
@@ -27,6 +28,7 @@ describe("createRefreshQueue", () => {
 
   test("passes the original directory to bootstrapInstance", async () => {
     const calls: string[] = []
+
     const queue = createRefreshQueue({
       paused: () => false,
       key: directoryKey,

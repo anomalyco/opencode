@@ -1,10 +1,33 @@
 # @opencode/ai
 
-Schema-first APIs for text, images, video, speech, and transcription, built with Effect.
+Schema-first APIs for text, images, video, speech, transcription, and decisions, built with Effect.
+
+`@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
+and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
+
+```ts
+import { AI } from "@opencode/ai"
+import { OpenAI } from "@opencode/ai/providers"
+
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
+
+const ai = AI.make()
+const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
+const response = await ai.llm.generate(input)
+console.log(response.text)
+const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
+await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
+for await (const event of ai.llm.stream(ai.llm.request(input))) {
+  // LLMEvent
+}
+await ai.dispose()
+```
+
+The Effect API lives at `@opencode/ai/effect`. Its methods return `Effect` or `Stream`:
 
 ```ts
 import { Effect } from "effect"
-import { AIClient, LLM } from "@opencode/ai"
+import { AIClient, LLM } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -27,18 +50,49 @@ Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`
 `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+### Google Interactions
+
+`Google.configure({ apiKey }).interactions(modelID)` selects the Interactions API; `.model(modelID)` still selects
+GenerateContent. The package entrypoint is `@opencode/ai/providers/google/interactions`.
+
+For Vertex AI, use `GoogleVertexInteractions.configure({ project, location: "global" }).model(modelID)` or
+`@opencode/ai/providers/google-vertex/interactions`. It uses Application Default Credentials by default, accepts
+an explicit `accessToken` or `auth` override, and supports Express mode with `apiKey`. Vertex metadata and raw usage
+live under `providerMetadata.vertex`. The default is still full-history replay with `store: false`.
+
+```ts
+const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
+const response = yield* LLM.generate({
+  model,
+  prompt: "Say hello.",
+  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+})
+```
+
+Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
+input. Full-history replay is the default (`store: false`); implicit caching works without retained interactions.
+For server-side continuation, set `store: true` on the predecessor, read `interactionId` from the final event's
+`providerMetadata.google`, and pass `previousInteractionId` on the next request with **only new messages**. Repeat
+the system instructions and tool declarations on each request. Set `store: true` on each response you intend to
+continue from. The package does not automatically select or persist continuation IDs.
+
+Raw usage is preserved in `usage.providerMetadata.google`. `inputTokens` follows Google's top-level accounting;
+`contextTokens` uses its full `raw_prompt_token` count when supplied. These can differ substantially with server-side
+continuation. Explicit caches, hosted tools, and generated media are not supported by this initial protocol.
+
 The same configured facade names image, video, speech, and transcription models. `Image.generate` resolves the
 provider's image route from the model and returns `Media.Asset`s with lazily decoded bytes:
 
 ```ts
 import { NodeFileSystem } from "@effect/platform-node"
-import { Image, Media } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai/effect"
 
 const image = Effect.gen(function* () {
   const response = yield* Image.generate({
     model: openai.image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
-    size: "1024x1024",
+    aspect: "1:1",
+    resolution: "1K",
     providerOptions: { quality: "high" }, // typed per image model
   })
   yield* Media.write(response.image, "./garden.png")
@@ -64,73 +118,140 @@ const logged = RequestExecutor.middleware((request, next) =>
 const everything = AIClient.layerWith(logged) // or AI.make({ layer: logged })
 ```
 
-Prefer promises? `@opencode/ai/promise` exposes the same LLM and media APIs over one managed runtime, plus asset
-helpers; `ai.file` and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
+## Venice AI
+
+`Venice` provides native Chat Completions with streaming tools and reasoning. `model` and `chat`
+select the same API; credentials default to `VENICE_API_KEY`.
 
 ```ts
-import { AI } from "@opencode/ai/promise"
+import { LLM } from "@opencode/ai/effect"
+import { Venice } from "@opencode/ai/providers"
+import { Effect } from "effect"
 
-const ai = AI.make()
-const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
-const text = await ai.llm.generate(input)
-const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
-for await (const event of ai.llm.stream(ai.llm.request(input))) {
-  // LLMEvent
-}
-await ai.dispose()
+const program = Effect.gen(function* () {
+  const response = yield* LLM.generate({
+    model: Venice.configure({ apiKey: process.env.VENICE_API_KEY }).chat("qwen3-6-27b"),
+    prompt: "Explain this design.",
+    providerOptions: {
+      reasoningEffort: "high",
+      veniceParameters: { includeVeniceSystemPrompt: false },
+    },
+  })
+  console.log(response.text)
+})
 ```
 
-## Experimental evaluation
+Effort lowers to `reasoning.effort`; `reasoning.enabled` and `reasoning.summary` are also available.
+Supported effort levels and toggles depend on the selected model. Omitted controls preserve its defaults.
+Venice's added system prompt is disabled by default, matching the previous OpenCode Venice SDK behavior.
 
-Evaluation models compare shared state with typed choice, score, and boolean questions. The API is
-isolated under an experimental entrypoint and provider namespace while the contract evolves:
+Replay complete `response.message` values to retain signed/encrypted reasoning and Gemini thought
+signatures, including per-tool signatures. Venice's encrypted scalar trailers are excluded from visible
+reasoning but retained in provider metadata for replay. Cache affinity uses `promptCacheKey`, and cache-write
+usage reads Venice's `cache_creation_input_tokens` field.
+
+The native package entrypoint is `@opencode/ai/providers/venice`. Image generation, embeddings, Responses, and
+client-side E2EE are not implemented by this provider.
+
+## Decisions
+
+Decision models answer typed questions about an input: a yes/no `predicate` (a probability), a `choice` from listed
+values, or a `score` on ordered levels, each with the probability of every option.
 
 ```ts
 import { Effect } from "effect"
-import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
-import { TypeSafeAI } from "@opencode/ai/providers"
+import { Decision, DecisionClient, Media } from "@opencode/ai/effect"
+import { OpenAI } from "@opencode/ai/providers"
 
-const model = TypeSafeAI.configure().experimental.evaluation("jev-latest")
-
-const program = Evaluation.run({
-  model,
-  state: "I was charged twice. Please refund the duplicate payment.",
-  questions: {
-    department: {
+const program = Decision.generate({
+  model: OpenAI.configure().decision("gpt-6-luna"),
+  input: [
+    { type: "text", text: "I was charged twice. Please refund the duplicate payment." },
+    { type: "media", media: Media.url("https://example.com/receipt.png", { mediaType: "image/png" }) },
+  ],
+  questions: [
+    { name: "refund", type: "predicate", instructions: "Is the customer asking for a refund?" },
+    {
+      name: "department",
       type: "choice",
       instructions: "Which team should handle this?",
-      criteria: { billing: "Payments and refunds", technical: "Bugs and outages" },
+      choices: [{ value: "billing", description: "Payments and refunds" }, { value: "technical" }],
     },
-    urgency: {
+    {
+      name: "urgency",
       type: "score",
       instructions: "How urgent is this?",
-      criteria: ["Can wait", "Needs prompt attention", "Blocking revenue"],
+      levels: [{ label: "Can wait" }, { label: "Needs prompt attention" }, { label: "Blocking revenue" }],
     },
-    refund: { type: "boolean", instructions: "Is the customer asking for a refund?" },
-  },
+  ],
 })
 
-const response = await Effect.runPromise(program.pipe(Effect.provide(EvaluationClient.fetchLayer)))
-
-console.log(response.answers.department.choice)
-console.log(response.answers.refund.probability)
+const response = await Effect.runPromise(program.pipe(Effect.provide(DecisionClient.fetchLayer)))
+const [refund, department] = response.answers
 ```
 
-`TypeSafeAI` reads `TYPESAFE_API_KEY`. `OpenCodeZen` exposes the same selector and reads
-`OPENCODE_API_KEY`. OpenRouter and Vercel AI Gateway use the same provider shape:
+`input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
+A question the host declines is `{ name, type: "error", reason: "refusal" }`; the other answers still come back.
+Media goes wherever the host reads it, and a kind the host has no place for fails the call. Host-specific fields go in
+`providerOptions`, typed by the selected model (OpenAI `promptCacheKey` and `safetyIdentifier`, OpenRouter
+`provider` routing, Baseten `max_len`).
 
 ```ts
-import { OpenRouter, VercelAIGateway } from "@opencode/ai/providers"
+import {
+  Baseten,
+  CloudflareAIGateway,
+  CloudflareWorkersAI,
+  DigitalOcean,
+  OpenCode,
+  OpenRouter,
+  TypeSafeAI,
+  VercelAIGateway,
+} from "@opencode/ai/providers"
 
-OpenRouter.configure().experimental.evaluation("typesafe/jev-1.13")
-VercelAIGateway.configure().experimental.evaluation("typesafe-ai/jev")
+TypeSafeAI.configure().decision("jev-latest")
+OpenCode.configure().decision("jev-1.13")
+OpenRouter.configure().decision("typesafe/jev-1.13")
+VercelAIGateway.configure().decision("typesafe-ai/jev")
+Baseten.configure().decision("decision-models/baseten-elephant-9b-latest")
+DigitalOcean.configure().decision("typesafe-jev-1.13.0")
+CloudflareWorkersAI.configure({ accountId }).decision("@cf/cloudflare/clef")
+CloudflareAIGateway.configure({ accountId }).decision("typesafe/jev")
 ```
 
-OpenRouter reads `OPENROUTER_API_KEY`. Vercel reads `AI_GATEWAY_API_KEY`, then `VERCEL_OIDC_TOKEN`.
-The common API uses `boolean`; System One routes lower it to native `noul`.
-Choice and score confidence plus score legends remain available in provider metadata, and the
-provider's rounded probabilities are returned unchanged.
+OpenAI and Vercel AI Gateway use OpenAI's `/v1/decisions` API. TypeSafe, OpenCode, OpenRouter, Baseten and
+DigitalOcean use System One (`/systemone`), and Cloudflare sends the System One body through `/ai/run`.
+
+### Extraction (experimental)
+
+Extraction models read typed values out of text instead of answering questions with probabilities. A field of type
+`text`, `number`, `date`, `time`, `datetime`, `duration`, `list`, `estimate` or `forecast` gets an answer typed to
+match; other types are sent and answered as-is. Only Cloudflare's Clairic serves it today, so it lives under
+`@opencode/ai/experimental`.
+
+```ts
+import { ai } from "@opencode/ai"
+import { Extraction } from "@opencode/ai/experimental"
+import { CloudflareWorkersAI } from "@opencode/ai/providers"
+
+const response = await ai.run(
+  Extraction.generate({
+    model: CloudflareWorkersAI.configure({ accountId }).experimental.extraction("@cf/cloudflare/clairic"),
+    input: "Invoice INV-2291, issued 2026-09-02, net 30. Total $1,080.00. Contact: Dana Ruiz, Priya Shah.",
+    fields: {
+      invoiceNumber: { type: "text" },
+      dueDate: { type: "date", instructions: "Issue date plus the net payment days" },
+      total: { type: "number", decimals: 2, unit: "USD" },
+      contacts: { type: "list", items: "text" },
+    },
+  }),
+)
+response.answers.total.value // 1080, or null when the input does not say
+```
+
+Value answers carry `guess`, `nullProbability` and `confidence`; text answers carry a `span` into `input`. Estimates and
+forecasts return `median`, `p10` and `p90`. Field options other than `type`, `instructions` and `nullThreshold` go to
+Clairic as written. Effect users provide `RequestExecutor.fetchLayer` (or `AIClient.layer`). Images are not supported
+yet.
 
 ## Alibaba Cloud Model Studio
 
@@ -139,7 +260,7 @@ Chat Completions (`.model` or `.chat`), Anthropic-compatible Messages (`.message
 Responses (`.responses`). These routes use HTTP/SSE.
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { Alibaba } from "@opencode/ai/providers"
 
 const alibaba = Alibaba.configure({
@@ -204,13 +325,22 @@ Package entrypoints are `@opencode/ai/providers/alibaba`, `alibaba/chat`, `aliba
 and `alibaba/responses`. Live recordings cover all three APIs in Singapore; regional URL construction
 is unit-tested for all six regions.
 
+### Images
+
+`alibaba.image(...)` uses the native multimodal generation API (`/api/v1/services/aigc/multimodal-generation/generation`)
+for Qwen-Image (`qwen-image-2.0`, `qwen-image-2.0-pro`) and Wan (`wan2.7-image`, `wan2.7-image-pro`). `aspect` and
+`resolution` lower to a `W*H` size, `providerOptions.size` sets it exactly, and `images` are sent as URLs or data URLs
+for editing. Native `parameters` include `size`, `seed`, `negativePrompt`, `promptExtend`, `watermark`, `thinkingMode`,
+and `enableSequential`; raw keys such as `bbox_list` pass through. Results are URLs that Model Studio keeps for 24
+hours. A complete `baseURL` for images includes `/api/v1`.
+
 ## Z.AI
 
 `ZAI` uses the standard API. Chat Completions is the default language-model API;
 the existing `.image(...)` selector provides image generation.
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { ZAI, ZAICodingPlan } from "@opencode/ai/providers"
 
 const zai = ZAI.configure({ apiKey: process.env.ZAI_API_KEY })
@@ -276,7 +406,7 @@ Package entrypoints are `@opencode/ai/providers/zai`, `zai/chat`, `zai-coding-pl
 Moonshot defaults to Chat Completions, with Messages and Responses selectors for Kimi K3:
 
 ```ts
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { Moonshot } from "@opencode/ai/providers"
 
 const moonshot = Moonshot.configure({ apiKey: process.env.MOONSHOT_API_KEY })
@@ -338,7 +468,7 @@ MiniMax defaults to its Messages API and reads `MINIMAX_API_KEY` when `apiKey` i
 
 ```ts
 import { Effect } from "effect"
-import { AIClient, LLM } from "@opencode/ai"
+import { AIClient, LLM } from "@opencode/ai/effect"
 import { MiniMax } from "@opencode/ai/providers"
 
 const minimax = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY })
@@ -415,7 +545,7 @@ citations or separate result blocks. Retain `response.message` for either API's 
 Use `Image.generate` for one-off generation or editing:
 
 ```ts
-import { Image, Media } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai/effect"
 
 const generation = Image.generate({
   model: meta.image("muse-image-1.0"),
@@ -428,13 +558,13 @@ const edit = Image.generate({
   model: meta.image("muse-image-1.0"),
   prompt: "Make the square purple.",
   images: [Media.bytes(imageBytes, "image/webp")],
-  format: "png",
-  providerOptions: { reasoningStrength: "low" },
+  providerOptions: { reasoningStrength: "low", outputFormat: "png" },
 })
 ```
 
-The default image format is WEBP; `format` also accepts PNG/JPEG and `responseFormat: "url"`
-returns a signed URL. `size` is an aspect-ratio hint. For conversational images, select
+The default image format is WEBP; `outputFormat` also accepts PNG/JPEG and `responseFormat: "url"`
+returns a signed URL. `aspect` lowers to Meta's `size`, which is only an aspect-ratio hint: Meta renders about 2.5
+megapixels whatever you ask, so `resolution` is ignored with a notice. For conversational images, select
 `meta.responses("muse-image-1.0")` with `tools: [Meta.imageGeneration({ reasoningStrength: "low" })]`.
 Generated images are provider-executed tool results with file content. Retain `response.message` to
 replay the signed image handle on the next request. Muse Image accepts only the `image_generation` tool.
@@ -446,11 +576,12 @@ Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even whe
 
 Use `Image.generate` with an image model for direct asset generation. `Image.request` mirrors `LLM.request`: the
 model comes from the facade's `.image(...)` selector (mirroring `.responses(...)`), common fields
-(`images`, `mask`, `n`, `size`, `aspectRatio`, `seed`, `format`) lower natively or fail typed, and
-`providerOptions` is inferred from the selected model:
+(`images`, `n`, `aspect`, `resolution`) lower natively or fail typed, and `providerOptions` is inferred from the
+selected model. `aspect` is a ratio such as `"16:9"`; `resolution` is a size tier (`"1K"` is about 1024×1024 pixels
+at that ratio, `"2K"` about 2048×2048). Exact sizes, seeds, masks, and output formats are provider options:
 
 ```ts
-import { Image, Media } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -460,9 +591,10 @@ const program = Effect.gen(function* () {
     model: openai.image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
     n: 2,
-    size: "1024x1024",
-    format: "webp",
+    aspect: "16:9",
+    resolution: "2K",
     providerOptions: {
+      outputFormat: "webp",
       quality: "high", // inferred from the OpenAI image model
       future_option: true, // unknown native options pass through unchanged
     },
@@ -472,24 +604,34 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Common fields are portable in shape, not in support. Unsupported fields fail with a typed `AIError` before any network
-call rather than being dropped, so check this table before swapping only the `model`:
+Common fields are portable in shape, not in support. A route that has to approximate `aspect` or `resolution`
+returns what it used in `response.notices`; one that cannot honor them fails with a typed `AIError` before any network
+call rather than dropping them, so check this table before swapping only the `model`:
 
-| Provider              | `n` | `size`    | `aspectRatio` | `seed` | `format` | `images`                         | `mask`              |
-| --------------------- | --- | --------- | ------------- | ------ | -------- | -------------------------------- | ------------------- |
-| OpenAI                | ✓¹  | ✓         | ✗             | ✗      | ✓        | ✓                                | ✓                   |
-| Google (Gemini)       | 1   | ✗         | ✓             | ✓      | ✗        | ✓ (no public URLs)               | ✗                   |
-| xAI                   | ✓   | ✗         | ✓             | ✗      | ✗        | ✓                                | ✗                   |
-| Z.ai                  | ✗   | ✓         | ✗             | ✗      | ✗        | ✗                                | ✗                   |
-| Meta                  | ✓   | ✓ (hint)  | ✗             | ✗      | ✓        | ✓                                | ✗                   |
-| Black Forest Labs     | 1   | per model | per model     | ✓      | ✓        | per model (1–8)                  | `flux-pro-1.0-fill` |
-| fal                   | ✓   | per model | per model     | ✓      | ✓        | 1 (several on `/edit`, `/multi`) | ✓                   |
-| Replicate             | ✗   | ✗         | ✗             | ✗      | ✗        | ✗ (use `providerOptions`)        | ✗                   |
-| Stability `image`     | 1   | ✗         | ✓             | ✓      | ✓        | 1 (not on `core`)                | ✗                   |
-| Stability `upscale()` | ✗   | ✗         | ✗             | ✓      | ✓        | exactly 1 (required)             | ✗                   |
+| Provider              | `n` | `aspect`             | `resolution`          | `images`                         | Moved to `providerOptions`                         |
+| --------------------- | --- | -------------------- | --------------------- | -------------------------------- | -------------------------------------------------- |
+| OpenAI                | ✓¹  | nearest size, notice | nearest size, notice  | ✓                                | `size`, `outputFormat`, `mask`                     |
+| Google (Gemini)       | 1   | ✓                    | ✓ (`imageSize`)       | ✓ (no public URLs)               | `seed`                                             |
+| xAI                   | ✓   | ✓                    | `1k`/`2k`, notice     | ✓                                | none                                               |
+| Meta                  | ✓   | ✓ (hint)             | ignored, notice       | ✓                                | `size`, `outputFormat`                             |
+| Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
+| Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
+| Black Forest Labs     | 1   | per model            | width × height models | per model (1–8)                  | `width`, `height`, `seed`, `output_format`, `mask` |
+| fal                   | ✓   | per model            | per model             | 1 (several on `/edit`, `/multi`) | `image_size`, `seed`, `output_format`, `mask`      |
+| Replicate             | ✗   | ✗                    | ✗                     | ✗ (use `providerOptions`)        | everything                                         |
+| Stability `image`     | 1   | ✓                    | ✗                     | 1 (not on `core`)                | `seed`, `output_format`                            |
+| Stability `upscale()` | ✗   | ✗                    | ✗                     | exactly 1 (required)             | `seed`, `output_format`                            |
+| Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
+| Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
 
-✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. ¹ `Image.stream` on OpenAI generates one image. fal
-rejects `size` and `aspectRatio` together; which one a fal or BFL model takes depends on the model.
+✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. "width × height"
+computes a size the provider accepts and fails when the request falls outside its limits. ¹ `Image.stream` on OpenAI
+generates one image. On OpenAI, `gpt-image-2` and later get a computed size; older models get the nearest of their
+fixed sizes. `providerOptions.size` replaces `aspect` and `resolution`, so setting both fails. Vercel AI Gateway
+forwards `outputFormat` but does not apply it, so the returned bytes keep the upstream model's own format. ² Workers AI
+`@cf/black-forest-labs/flux-1-schnell` takes no size, and the provider rejects it. ³ Non-OpenAI gateway models
+(`bfl/flux-2-pro`) get a computed width × height, which the gateway passes through; models with a fixed list, such as
+Recraft, reject sizes outside it.
 
 `Media.Asset` is the one asset type shared by image requests, image responses, LLM messages, and tool results.
 `asset.source` is the serializable `Media.Source` (`bytes`, `base64`, `url`, or `ref`); `asset.bytes()`,
@@ -521,15 +663,15 @@ only forward refs that belong to their own provider (OpenAI, xAI, and Gemini ima
 returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design. Raw strings are not accepted as
 image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images` uses text-to-image generation; a
 non-empty array selects the provider's edit behavior (see the table above for routes that limit the count). OpenAI
-uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. The common `mask`
-field selects inpainting; routes that cannot honor it fail with `UnsupportedOperation`:
+uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. Inpainting is a
+provider option on the routes that support it (OpenAI, fal, and BFL `flux-pro-1.0-fill`):
 
 ```ts
 const inpainted = Image.generate({
   model: openai.image("gpt-image-2"),
   prompt,
   images: [Media.bytes(sourceBytes, "image/png")],
-  mask: Media.bytes(maskBytes, "image/png"),
+  providerOptions: { mask: Media.bytes(maskBytes, "image/png") },
 })
 ```
 
@@ -558,9 +700,9 @@ const xai = Image.generate({
   model: XAI.configure({ apiKey }).image("any-model-id"),
   prompt,
   n: 2,
-  aspectRatio: "16:9",
+  aspect: "16:9",
+  resolution: "1K",
   providerOptions: {
-    resolution: "1k",
     responseFormat: "b64_json",
     future_option: true,
   },
@@ -577,10 +719,10 @@ const googleProgram = Effect.gen(function* () {
   const response = yield* Image.generate({
     model: Google.configure({ apiKey }).image("any-model-id"),
     prompt: "A robot tending a rooftop garden",
-    aspectRatio: "16:9",
-    seed: 42,
+    aspect: "16:9",
+    resolution: "2K",
     providerOptions: {
-      imageSize: "2K",
+      seed: 42,
       thinkingLevel: "HIGH",
       includeThoughts: true,
       futureOption: true,
@@ -625,7 +767,7 @@ and emits `image-partial` events before each final `image`; `Image.generate` kee
 
 ```ts
 import { Stream } from "effect"
-import { ImageEvent } from "@opencode/ai"
+import { ImageEvent } from "@opencode/ai/effect"
 
 const previews = Image.stream({
   model: openai.image("gpt-image-2"),
@@ -648,7 +790,7 @@ import { BlackForestLabs, Stability } from "@opencode/ai/providers"
 const bfl = BlackForestLabs.configure({ apiKey: process.env.BFL_API_KEY })
 
 const submit = Effect.gen(function* () {
-  const generation = yield* Image.start({ model: bfl.image("flux-2-pro"), prompt, size: "1024x768" })
+  const generation = yield* Image.start({ model: bfl.image("flux-2-pro"), prompt, aspect: "4:3" })
   persist({ provider: "black-forest-labs", modelID: "flux-2-pro", token: generation.token })
 })
 
@@ -704,12 +846,12 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Video mirrors `Image` with one difference: every provider is asynchronous, so the route is a submit-then-poll
 `Generation`. Models come from `.video(...)` selectors on the `Google` (Veo), `XAI`, `Fal`, and `Runway` facades.
-Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspectRatio`, `resolution`, `audio`, `n`, `seed`,
+Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`, `resolution`, `audio`, `n`, `seed`,
 `negativePrompt`) lower natively or fail with a typed `AIError` before any network call; provider-native controls live
 under `providerOptions`, inferred from the selected model.
 
 ```ts
-import { Video } from "@opencode/ai"
+import { Video } from "@opencode/ai/effect"
 import { Google, Runway } from "@opencode/ai/providers"
 
 const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY })
@@ -720,7 +862,7 @@ const program = Effect.gen(function* () {
     {
       model: google.video("veo-3.1-generate-preview"),
       prompt: "Panning wide shot of a calico kitten sleeping in the sunshine",
-      aspectRatio: "16:9",
+      aspect: "16:9",
       resolution: "1080p",
       durationSeconds: 8,
       providerOptions: { personGeneration: "allow_adult" },
@@ -770,7 +912,7 @@ Provider notes:
 - **fal** endpoints are model-specific: `durationSeconds`, `references`, and `frames.last` fail typed and belong in
   `providerOptions` under the model's own names (`duration: "8s"`, `end_image_url`, …). Auth is
   `Authorization: Key <FAL_KEY>`.
-- **Runway** expects pixel ratios in `aspectRatio` for most models (`"1280:720"`), pins `X-Runway-Version`, reports
+- **Runway** expects pixel ratios in `aspect` for most models (`"1280:720"`), pins `X-Runway-Version`, reports
   `usage: { type: "credits" }`, and its output URLs expire after 24–48 hours.
 
 The promise client exposes the same surface: `ai.video.start(...)` resolves to a handle with `await`, `events`,
@@ -781,7 +923,7 @@ aborting rejects the Promise or throws from the `for await` loop with `signal.re
 unless `abort(reason)` passed one), while `break` stops a stream without throwing.
 
 ```ts
-import { ai } from "@opencode/ai/promise"
+import { ai } from "@opencode/ai"
 
 const generation = await ai.video.start({ model, prompt })
 for await (const event of generation.events({ poll: { interval: 10_000 } })) console.log(event.type)
@@ -798,7 +940,7 @@ selectors on the `OpenAI`, `Google` (Gemini TTS), `ElevenLabs`, `Cartesia`, and 
 before any network call; provider-native controls live under `providerOptions`, inferred from the selected model.
 
 ```ts
-import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai"
+import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai/effect"
 import { ElevenLabs, OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -863,7 +1005,7 @@ Provider notes:
 The promise client mirrors the Effect API; `ai.speech.stream` is an `AsyncIterable`.
 
 ```ts
-import { ai } from "@opencode/ai/promise"
+import { ai } from "@opencode/ai"
 
 const response = await ai.speech.generate({ model, text: "Hello from OpenCode.", voice: "coral" })
 await ai.write(response.audio, "hello.mp3")
@@ -885,7 +1027,7 @@ any network call; a route may return more than asked.
 
 ```ts
 import { Console, Effect, Stream } from "effect"
-import { Media, Transcription, TranscriptionEvent } from "@opencode/ai"
+import { Media, Transcription, TranscriptionEvent } from "@opencode/ai/effect"
 import { AssemblyAI, Deepgram, OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -946,6 +1088,8 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 
 ## Public API
 
+Everything below is exported from `@opencode/ai/effect` unless noted.
+
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
@@ -958,8 +1102,10 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 - **`Video.request` / `generate` / `stream` / `start` / `resume`** — queued video generation through a provider-neutral request; `VideoClient` is its Effect service and layer.
 - **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
 - **`Transcription.request` / `generate` / `stream` / `start` / `resume`** — speech-to-text over inline, streaming, and queued routes; `TranscriptionClient` is its Effect service and layer.
+- **`Decision.request` / `Decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, and `transcription` as Promise / `AsyncIterable` APIs, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
+- **`@opencode/ai`** (Promise root) — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, `transcription`, and `decision` as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
+- **`@opencode/ai/experimental`** — APIs that may still change: `Extraction` (typed values read out of text) and `Realtime` (`Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or a short-lived WebSocket URL and token).
 
 ## Testing
 
@@ -1084,7 +1230,7 @@ Enable OpenAI compaction with typed provider options:
 
 ```ts
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai"
+import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const request = LLM.request({
@@ -1107,7 +1253,7 @@ const continued = Effect.gen(function* () {
 A compaction part has `provider` and exactly one representation: `encrypted` for Responses, or `text` for Anthropic. Responses also preserves the optional checkpoint `id`. These fields survive message serialization without becoming visible assistant text. Sending a checkpoint to another provider or an incompatible API fails rather than silently losing context.
 
 ```ts
-import { CompactionPart, ProviderID } from "@opencode/ai"
+import { CompactionPart, ProviderID } from "@opencode/ai/effect"
 
 CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_123", encrypted: "..." })
 CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "Summary of the conversation..." })
@@ -1178,13 +1324,33 @@ cache: {
   tools?: boolean,
   system?: boolean,
   messages?: "latest-user-message" | "latest-assistant" | { tail: number },
-  ttlSeconds?: number,         // ≥ 3600 → 1h on Anthropic/Bedrock; else 5m
+  ttl?: CacheTTL,              // "5m", "30m", "1h", "12h", "24h", ...
 }
 ```
 
+An object with placement fields places exactly those breakpoints. An object with only `ttl` keeps automatic placement.
+
+### Cache lifetime
+
+`ttl` is a duration in models.dev's format (`<number>` followed by `ms`, `s`, `m`, `h` or `d`). It is sent to the provider as given, so use one the provider accepts. Leaving it unset keeps the provider default.
+
+```ts
+LLM.request({ model, system, prompt, cache: { ttl: "1h" } })
+```
+
+| Protocol                                                                  | How `ttl` is sent                                                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Anthropic Messages family, Meta Messages                                  | `ttl` on every `cache_control` marker                                                      |
+| Bedrock Converse                                                          | `ttl` on every `cachePoint`; older Claude releases that only cache for 5m drop `"1h"`      |
+| OpenRouter, DigitalOcean, Alibaba Chat markers                            | `ttl` on every `cache_control` marker                                                      |
+| OpenAI Responses (OpenAI, Azure, Cloudflare AI Gateway)                   | `"24h"` → `prompt_cache_retention: "24h"`; anything else → `prompt_cache_options: { ttl }` |
+| Chat Completions without markers (OpenAI-compatible, Moonshot, DeepInfra) | same mapping as OpenAI Responses                                                           |
+
+OpenAI's two fields cover different models: `prompt_cache_retention` (`"in_memory"` or `"24h"`) is the only control before GPT-5.6, and GPT-5.6+ reads `prompt_cache_options.ttl` (`"30m"` or `"12h"`). Sending `prompt_cache_options` to an older model returns a 400. `"in_memory"` is not a duration; send it with an HTTP body overlay.
+
 ### Manual hints
 
-Inline `CacheHint` on any text / system / tool / tool-result part overrides automatic placement. The auto policy preserves manual hints, counts them against Anthropic and Bedrock's four-breakpoint limit, and only fills the remaining slots.
+Inline `CacheHint` (`{ type: "ephemeral", ttl? }`) on any text / system / tool / tool-result part overrides automatic placement. The auto policy preserves manual hints, counts them against Anthropic and Bedrock's four-breakpoint limit, and only fills the remaining slots.
 
 ```ts
 LLM.request({
@@ -1217,12 +1383,12 @@ import { OpenAI, CloudflareAIGateway } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
 const gateway = CloudflareAIGateway.configure({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  accountId,
   gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN,
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock (Converse and Mantle), Azure OpenAI, Alibaba, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, DigitalOcean, Fireworks, Groq, Meta, MiniMax, Mistral, Moonshot, OpenRouter, TogetherAI, Venice, Vercel AI Gateway, xAI, Z.ai, and Z.ai Coding Plan. TypeSafe AI and OpenCode expose decision models only. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 
@@ -1255,13 +1421,14 @@ APIs have separate entrypoints:
 - `@opencode/ai/providers/openai-compatible/responses`
 - `@opencode/ai/providers/anthropic-compatible`
 - `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/interactions`
 - `@opencode/ai/providers/google-vertex/chat`
 - `@opencode/ai/providers/google-vertex/responses`
 - `@opencode/ai/providers/google-vertex/messages`
 
 OpenAI Responses has one semantic route and uses HTTP by default. Advanced callers may supply a per-call WebSocket channel executor through `StreamOptions`; transport policy does not change provider settings, model identity, or route identity. The provider-neutral Open Responses implementation owns the reusable WebSocket request and event contract, while each provider opts in with its own handshake and connection policy. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; the Responses adapter at `providers/openai-compatible/responses` uses the provider-neutral Open Responses protocol. OpenAI Responses extends that baseline with OpenAI tools, event variants, metadata, and defaults. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
 
-Vertex Gemini, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini instead selects express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present. Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
+Vertex Gemini, Vertex Interactions, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini and Interactions instead select express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present (explicit `project` or `location` selects ADC over an ambient key). Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
 
 Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890` and require OAuth or ADC; Vertex express-mode API keys support publisher models only.
 
@@ -1326,10 +1493,10 @@ Compose a route with `Route.make({ protocol, endpoint, auth, framing, ... })`. T
 
 ## Effect
 
-This package is built on Effect. Public methods return `Effect` or `Stream`; provide `AIClient.layer` (or `AIClient.layerWith(executor)`) for every modality, then import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
+This package is built on Effect. Public methods in `@opencode/ai/effect` return `Effect` or `Stream`; provide `AIClient.layer` (or `AIClient.layerWith(executor)`) for every modality, then import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
 
 ## See also
 
 - `AGENTS.md` — architecture, route construction, contributor guide
-- `example/tutorial.ts` — runnable end-to-end walkthrough
+- `example/tutorial.ts` — runnable end-to-end walkthrough (`bun example/tutorial.ts <example>`)
 - `test/provider/*.test.ts` — fixture-first protocol tests; `*.recorded.test.ts` files cover live cassettes

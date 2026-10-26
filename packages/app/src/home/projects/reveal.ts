@@ -1,13 +1,15 @@
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
-import { displayName, errorMessage } from "@/shell/layout/helpers"
+import { displayName } from "@opencode/ui/project-avatar"
+import { errorMessage } from "@/shell/layout/helpers"
 import type { LocalProject } from "@/shell/state/layout"
 import { showToast } from "@/shell/notifications/toast"
 
 export function useRevealProject() {
   const language = useLanguage()
   const platform = usePlatform()
+
   const available = (conn: ServerConnection.Any) =>
     platform.platform === "desktop" && !!platform.revealPath && ServerConnection.local(conn)
 

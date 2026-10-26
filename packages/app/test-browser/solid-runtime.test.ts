@@ -20,6 +20,7 @@ test("a memo created during a paused transition has a committed value", async ()
   const started = Promise.withResolvers<void>()
   const memos: Accessor<string>[] = []
   const [session, setSession] = createSignal(false)
+
   const dispose = render(
     () =>
       createComponent(Suspense, {
@@ -30,6 +31,7 @@ test("a memo created during a paused transition has a committed value", async ()
             memos.push(createMemo(() => "Session"))
             const [data] = createResource(() => loaded.promise)
             started.resolve()
+
             return createMemo(() => data() ?? "")
           }) as unknown as JSX.Element
         },
@@ -64,7 +66,9 @@ test.each(["solid.js", "solid.cjs", "dev.js", "dev.cjs", "server.js", "server.cj
       createComputed: typeof createComputed
       onCleanup: typeof onCleanup
     } = await import(`solid-js/dist/${file}`)
+
     const cleaned: string[] = []
+
     const dispose = runtime.createRoot((dispose) => {
       runtime.onCleanup(() => cleaned.push("root"))
       runtime.createComputed(() => {
@@ -74,10 +78,12 @@ test.each(["solid.js", "solid.cjs", "dev.js", "dev.cjs", "server.js", "server.cj
         runtime.onCleanup(() => cleaned.push("second"))
         runtime.onCleanup(() => {
           cleaned.push("reentrant")
+
           // Bound the regression so an unpatched runtime fails without overflowing the stack.
           if (cleaned.filter((item) => item === "reentrant").length === 1) dispose()
         })
       })
+
       return dispose
     })
 

@@ -2,7 +2,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
 import { Form } from "@opencode/schema/form"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   IntegrationAttemptNotFoundError,
   IntegrationMethodNotFoundError,
@@ -76,6 +76,27 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
           identifier: "integration.connect.key",
           summary: "Connect with key",
           description: "Run a key authentication method and store the resulting credential.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("integration.connect.external", "/api/integration/:integrationID/connect/external", {
+      params: { integrationID: Integration.ID },
+      query: LocationQuery,
+      payload: Schema.Struct({
+        methodID: Integration.MethodID,
+        answer: Schema.optional(Form.Answer),
+        label: Schema.optional(Schema.String),
+      }),
+      success: HttpApiSchema.NoContent,
+      error: [IntegrationNotFoundError, InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "integration.connect.external",
+          summary: "Connect with external credentials",
+          description: "Run an external authentication method and store a reference to its credential source.",
         }),
       ),
   )

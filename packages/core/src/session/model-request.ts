@@ -10,7 +10,7 @@ import {
   type Media,
   Message,
   SystemPart,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
   SessionCompaction,
@@ -24,15 +24,15 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
 import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
+import { SessionAffinity } from "./affinity.js"
 import { SessionModelTransport } from "./model-transport.js"
-import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
@@ -46,8 +46,8 @@ const IMAGE_REMOVED =
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
-// A summary never needs more, and a request asking for more cannot be shrunk to fit a window the catalog overstates.
-const SUMMARY_OUTPUT_MAX = 32_000
+// No reply needs more, however much the model allows.
+const OUTPUT_TOKEN_MAX = 256_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
@@ -82,13 +82,8 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-const outputLimit = (
-  limit: Model.Info["limit"],
-  kind: "primary" | "compaction",
-  inputTokens?: Input["inputTokens"],
-) => {
-  const model = limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK
-  const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : model
+export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
+  const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
   if (inputTokens === undefined || limit.context <= 0) return requested
   const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
@@ -123,89 +118,95 @@ const mimeToModality = (mime: string) => {
   if (mime === "application/pdf") return "pdf"
 }
 
-const unsupportedMedia = (mime: string, name: string | undefined, capabilities: Model.Capabilities) => {
+// xAI rejects any other image type (e.g. GIF) with invalid_image, and the stored image would fail every later turn.
+const XAI_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"])
+
+const unsupportedMedia = (
+  mime: string,
+  name: string | undefined,
+  capabilities: Model.Capabilities,
+  provider: string | undefined,
+) => {
   const modality = mimeToModality(mime)
-  if (!modality || capabilities.input.some((item) => item.startsWith(modality))) return
-  return {
-    type: "text" as const,
-    text: `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${modality} input). Inform the user.`,
-  }
+  if (!modality) return
+  const unsupported = !capabilities.input.some((item) => item.startsWith(modality))
+    ? modality
+    : provider === "xai" && modality === "image" && !XAI_IMAGE_MIMES.has(mime.toLowerCase())
+      ? mime
+      : undefined
+  if (!unsupported) return
+  return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${unsupported} input). Inform the user.`
 }
 
-export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities) =>
-  messages.map((message) =>
-    Message.make({
-      ...message,
-      content: message.content.map((part) => {
-        if (part.type === "media") {
-          return unsupportedMedia(part.media.mediaType, part.filename, capabilities) ?? part
-        }
-        if (part.type !== "tool-result" || part.result.type !== "content") return part
-        return {
-          ...part,
-          result: {
-            ...part.result,
-            value: part.result.value.map((item: Content) => {
-              if (item.type !== "file") return item
-              return unsupportedMedia(item.mime, item.name, capabilities) ?? item
-            }),
-          },
-        }
-      }),
-    }),
-  )
+// The inline budget counts base64 characters, which are ASCII, so a string's length is its size without scanning it.
+// Remote and provider-referenced media carry no local payload and never count toward the inline budget.
+const mediaBytes = (media: Media.Asset) => {
+  if (media.source.type === "base64") return media.source.data.length
+  if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
+  return 0
+}
+
+/** Replaces media with the returned text; messages without replacements are returned unchanged. */
+const replaceMedia = (
+  messages: LLMRequest["messages"],
+  replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
+) =>
+  messages.map((message) => {
+    const content = message.content.map((part) => {
+      if (part.type === "media") {
+        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+        return text === undefined ? part : Message.text(text)
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return part
+      const result = part.result
+      const value = result.value.map((item): Content => {
+        if (item.type !== "file") return item
+        const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
+        return text === undefined ? item : { type: "text", text }
+      })
+      return value.every((item, index) => item === result.value[index])
+        ? part
+        : { ...part, result: { ...result, value } }
+    })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
+  })
+
+export const unsupportedParts = (
+  messages: LLMRequest["messages"],
+  capabilities: Model.Capabilities,
+  provider?: string,
+) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
-  // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
-  const size = (media: Media.Asset) => {
-    if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
-    if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
-    return 0
-  }
-  const imageBytes = messages.reduce(
-    (total, message) =>
-      total +
-      message.content.reduce((sum, part) => {
-        if (part.type === "media" && isImage(part.media.mediaType)) return sum + size(part.media)
-        if (part.type !== "tool-result" || part.result.type !== "content") return sum
-        return (
-          sum +
-          part.result.value.reduce(
-            (bytes: number, item: Content) =>
-              bytes + (item.type === "file" && isImage(item.mime) ? Buffer.byteLength(item.uri) : 0),
-            0,
-          )
-        )
-      }, 0),
-    0,
-  )
-  if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
-
-  let removed = 0
-  return messages.map((message) =>
-    Message.make({
-      ...message,
-      content: message.content.map((part) => {
-        if (part.type === "media" && isImage(part.media.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
-          removed += size(part.media)
-          return Message.text(IMAGE_REMOVED)
-        }
-        if (part.type !== "tool-result" || part.result.type !== "content") return part
-        return {
-          ...part,
-          result: {
-            ...part.result,
-            value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
-              removed += Buffer.byteLength(item.uri)
-              return { type: "text" as const, text: IMAGE_REMOVED }
-            }),
-          },
-        }
-      }),
+  const sizes = messages.flatMap((message) =>
+    message.content.flatMap((part) => {
+      if (part.type === "media") return isImage(part.media.mediaType) ? [mediaBytes(part.media)] : []
+      if (part.type !== "tool-result" || part.result.type !== "content") return []
+      return part.result.value.flatMap((item: Content) =>
+        item.type === "file" && isImage(item.mime) ? [item.uri.length] : [],
+      )
     }),
   )
+  // Replay the images in order, dropping the oldest down to the target whenever the kept payload passes the trigger.
+  // A new image then moves the cut only every (trigger - target) bytes instead of on every request, so the replaced
+  // prefix, and with it the provider's prompt cache, stays the same between cuts.
+  let cut = 0
+  let kept = 0
+  for (const size of sizes) {
+    kept += size
+    if (kept <= IMAGE_BYTES_TRIGGER) continue
+    while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
+  }
+  if (cut === 0) return messages
+
+  let index = 0
+  return replaceMedia(messages, (media) => {
+    if (!isImage(media.mime)) return
+    return index++ < cut ? IMAGE_REMOVED : undefined
+  })
 }
 
 type Definitions = PluginHooks.Domains["session"]["context"]["tools"]
@@ -238,8 +239,12 @@ export const layer = Layer.effect(
       }
       // Remember which tool each definition object came from. Hooks rename a tool by moving
       // its definition to a new key, so after the hook we find the tool by object identity.
+      // Definitions are shared across steps and sessions, and hooks may edit schemas in place,
+      // so each hook gets a deep copy.
       const given = new Map(
-        tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
+        tools.definitions.map(
+          (t) => [{ description: t.description, input: JSON.parse(JSON.stringify(t.inputSchema)) }, t] as const,
+        ),
       )
       // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
       // because their reasoning is hard to budget.
@@ -251,7 +256,7 @@ export const layer = Layer.effect(
           messages: input.messages,
           options:
             kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
+              ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
               : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
@@ -268,24 +273,27 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
-      const affinity = session.parentID ?? session.fork?.sessionID ?? session.id
+      const affinity = SessionAffinity.get(session)
       const base = LLM.request({
         model: model.model,
         http: {
           headers: {
-            "x-session-affinity": session.id,
-            "X-Session-Id": session.id,
+            "x-opencode-session-id": session.id,
+            ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
+            "x-session-affinity": affinity,
+            "X-Session-Id": affinity,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
             "User-Agent": App.useragent(app),
             "x-opencode-project": session.projectID,
-            "x-opencode-session": session.id,
+            "x-opencode-session": affinity,
             "x-opencode-client": app.name,
           },
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
+        cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
+        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,
@@ -295,7 +303,7 @@ export const layer = Layer.effect(
       const baseURL = base.model.route.endpoint.baseURL
       const modelHook = yield* hooks.trigger("session", "model.request", {
         ...scope,
-        baseURL: typeof baseURL === "string" ? baseURL : undefined,
+        baseURL,
         headers: { ...base.http?.headers },
       })
       const route =
@@ -305,44 +313,30 @@ export const layer = Layer.effect(
       const request = LLMRequest.update(base, {
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         http: new HttpOptions({
-          body: base.http?.body,
+          ...base.http,
           headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
-          query: base.http?.query,
         }),
       })
-      // History selects native windows against the catalog route before hooks run. A newly installed
-      // routing hook must not send an existing opaque window to another deployment; `prepare` has no
-      // error channel, so like hook failures this surfaces as a defect.
-      const selected = SessionProviderContext.provenance(model)
-      if (
-        selected &&
-        !SessionProviderContext.compatible(
-          selected,
-          SessionProviderContext.provenance({ model: request.model, ref: model.ref }),
-        ) &&
-        request.messages.some((message) => message.content.some((part) => part.type === "compaction"))
-      )
-        return yield* Effect.die(
-          new Error("Provider context is incompatible with the route selected by model request hooks"),
-        )
-
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", model.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", model.ref.providerID))
       const http: StreamOptions["http"] = hasHttpHooks
         ? (req, handler) =>
             Effect.gen(function* () {
-              const before = yield* hooks.trigger("session", "http.request", {
-                ...scope,
-                request: yield* HttpClientRequest.toWeb(req),
-              })
-              let sent = HttpClientRequest.fromWeb(before.request)
-              if (before.request.body)
-                sent = HttpClientRequest.bodyUint8Array(
-                  sent,
-                  new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
-                  before.request.headers.get("content-type") ?? undefined,
-                )
+              const request = yield* HttpClientRequest.toWeb(req)
+              const before = yield* hooks.trigger("session", "http.request", { ...scope, request })
+              // A hook that kept the request object cannot have replaced its body, so the original body is sent as is.
+              // Reading it back would hold a second full copy of the request, screenshots included, for the whole call.
+              const sent =
+                before.request === request
+                  ? HttpClientRequest.setBody(HttpClientRequest.fromWeb(request), req.body)
+                  : before.request.body
+                    ? HttpClientRequest.bodyUint8Array(
+                        HttpClientRequest.fromWeb(before.request),
+                        new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
+                        before.request.headers.get("content-type") ?? undefined,
+                      )
+                    : HttpClientRequest.fromWeb(before.request)
               const res = yield* handler(sent)
               const after = yield* hooks.trigger("session", "http.response", {
                 ...scope,
@@ -353,7 +347,7 @@ export const layer = Layer.effect(
                 ),
               })
               return HttpClientResponse.fromWeb(sent, after.response)
-            }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))))
+            })
         : undefined
       // HTTP hooks wrap every HTTP request, including the WebSocket fallback path. The route decides
       // which transport actually carries the request, so both hook families are always offered.
@@ -390,17 +384,19 @@ export const layer = Layer.effect(
         retry: (event: Parameters<Prepared["retry"]>[0]) =>
           hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
         // Permission.assert and the question tool throw declines as defects so tools cannot
-        // catch them and turn a "no" into model-visible output. Recover them here as failures.
+        // catch them and turn a "no" into model-visible output. Recover them here as failures,
+        // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
+        // plugin tools do.
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
           tools.execute({ ...call, definitions: hooked }).pipe(
             Effect.catchCauseFilter(
               (cause) => {
-                const decline = cause.reasons.flatMap((r) =>
-                  Cause.isDieReason(r) &&
-                  (r.defect instanceof Permission.DeclinedError || r.defect instanceof QuestionTool.CancelledError)
-                    ? [r.defect]
-                    : [],
-                )[0]
+                const decline = cause.reasons
+                  .map((r) => (Cause.isDieReason(r) ? r.defect : Cause.isFailReason(r) ? r.error.error : undefined))
+                  .find(
+                    (value): value is Permission.DeclinedError | QuestionTool.CancelledError =>
+                      value instanceof Permission.DeclinedError || value instanceof QuestionTool.CancelledError,
+                  )
                 return decline ? Result.succeed(decline) : Result.fail(cause)
               },
               (decline) => Effect.fail(decline),

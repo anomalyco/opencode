@@ -1,7 +1,9 @@
 import type { WebContents } from "electron"
 
 const focusDebuggerOwners = new WeakSet<WebContents>()
+
 const forcedFocusNodes = new WeakMap<WebContents, number[]>()
+
 const focusableSelector = `
   a[href],
   button:not([disabled]),
@@ -15,12 +17,15 @@ const focusableSelector = `
 
 export async function setForceFocus(contents: WebContents, enabled: boolean) {
   const debuggerApi = contents.debugger
+
   if (!debuggerApi.isAttached()) {
     if (!enabled) {
       focusDebuggerOwners.delete(contents)
       forcedFocusNodes.delete(contents)
+
       return
     }
+
     debuggerApi.attach("1.3")
     focusDebuggerOwners.add(contents)
     debuggerApi.once("detach", () => {
@@ -39,21 +44,26 @@ export async function setForceFocus(contents: WebContents, enabled: boolean) {
       ),
     )
     forcedFocusNodes.delete(contents)
+
     if (!focusDebuggerOwners.delete(contents)) return
     debuggerApi.detach()
+
     return
   }
 
   await debuggerApi.sendCommand("DOM.enable")
   await debuggerApi.sendCommand("CSS.enable")
+
   const document: unknown = await debuggerApi.sendCommand("DOM.getDocument", {
     depth: -1,
     pierce: true,
   })
+
   const nodes: unknown = await debuggerApi.sendCommand("DOM.querySelectorAll", {
     nodeId: readDocumentNodeId(document),
     selector: focusableSelector,
   })
+
   const nodeIds = readNodeIds(nodes)
   forcedFocusNodes.set(contents, [...new Set([...(forcedFocusNodes.get(contents) ?? []), ...nodeIds])])
   await Promise.allSettled(
@@ -78,6 +88,7 @@ function readDocumentNodeId(value: unknown) {
   ) {
     throw new Error("Invalid DOM.getDocument response")
   }
+
   return value.root.nodeId
 }
 
@@ -91,5 +102,6 @@ function readNodeIds(value: unknown) {
   ) {
     throw new Error("Invalid DOM.querySelectorAll response")
   }
+
   return value.nodeIds
 }

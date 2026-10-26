@@ -1,7 +1,7 @@
 export * as Formatter from "./formatter.js"
 
 import { Context, Effect, Layer } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import path from "path"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { AppProcess } from "@opencode/util/process"

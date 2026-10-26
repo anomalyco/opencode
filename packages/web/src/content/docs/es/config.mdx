@@ -16,7 +16,7 @@ OpenCode admite los formatos **JSON** y **JSONC** (JSON con comentarios).
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
   "theme": "opencode",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
 }
 ```
@@ -34,7 +34,7 @@ Los archivos de configuración se **fusionan**, no se reemplazan.
 
 Los archivos de configuración se fusionan, no se reemplazan. Se combinan las configuraciones de las siguientes ubicaciones de configuración. Las configuraciones posteriores anulan las anteriores solo para claves en conflicto. Se conservan las configuraciones no conflictivas de todas las configuraciones.
 
-Por ejemplo, si su configuración global establece `theme: "opencode"` y `autoupdate: true`, y la configuración de su proyecto establece `model: "anthropic/claude-sonnet-4-5"`, la configuración final incluirá las tres configuraciones.
+Por ejemplo, si su configuración global establece `theme: "opencode"` y `autoupdate: true`, y la configuración de su proyecto establece `model: "anthropic/claude-sonnet-5-5"`, la configuración final incluirá las tres configuraciones.
 
 ---
 
@@ -234,8 +234,8 @@ Puede configurar los proveedores y modelos que desea utilizar en su configuraci�
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -324,7 +324,7 @@ Puedes configurar agentes especializados para tareas específicas a través de l
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -357,27 +357,6 @@ Esta configuración se aplica en todas las interfaces: TUI, CLI (`opencode run`)
 
 ---
 
-### Compartir
-
-Puede configurar la función [compartir](/docs/share) a través de la opción `share`.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "manual"
-}
-```
-
-Esto requiere:
-
-- `"manual"` - Permitir compartir manualmente mediante comandos (predeterminado)
-- `"auto"` - Comparte automáticamente nuevas conversaciones
-- `"disabled"` - Deshabilitar el uso compartido por completo
-
-De forma predeterminada, el uso compartido está configurado en modo manual, donde debe compartir conversaciones explícitamente usando el comando `/share`.
-
----
-
 ### Comandos
 
 Puede configurar comandos personalizados para tareas repetitivas a través de la opción `command`.
@@ -390,7 +369,7 @@ Puede configurar comandos personalizados para tareas repetitivas a través de la
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",

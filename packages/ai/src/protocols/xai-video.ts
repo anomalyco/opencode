@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/http"
 import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -20,7 +20,7 @@ export const STATUS_PATH = "/videos"
 // ---------------------------------------------------------------------------
 
 /**
- * Provider-native options. Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspectRatio`,
+ * Provider-native options. Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`,
  * `resolution`, `audio`) live on the request. `mode` selects the endpoint a `video` input is sent to.
  */
 export type XAIVideoOptions = {
@@ -102,7 +102,7 @@ const fromRequest = Effect.fn("XAIVideo.fromRequest")(function* (request: Reques
         reference_images: references.length === 0 ? undefined : references,
         video,
         duration: request.durationSeconds,
-        aspect_ratio: request.aspectRatio,
+        aspect_ratio: request.aspect,
         resolution: request.resolution,
         generate_audio: request.audio,
       },

@@ -1,15 +1,18 @@
 import type { Accessor } from "solid-js"
-import type { ActiveComposerAdapter, ComposerControls } from "@/composer/adapter"
+import type { ActiveComposerAdapter, ComposerControls, ComposerSession } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
+import { createSessionMessageHandoff } from "@/session/handoff"
 import { useWorkspaceLocation } from "@/workspaces/location"
 
 export function createActiveComposerAdapter(input: {
   sessionID: string
+  sessionKey: Accessor<string>
   controls: Accessor<ComposerControls>
   submitted: () => void
   setEditor: (element: HTMLDivElement) => void
+  background: NonNullable<ComposerSession["background"]>
 }) {
   const id = input.sessionID
 
@@ -19,6 +22,7 @@ export function createActiveComposerAdapter(input: {
   const data = useData()
   const server = useServerSDK()
   const location = useWorkspaceLocation()
+
   const adapter: ActiveComposerAdapter = {
     kind: "active-session",
     state,
@@ -30,10 +34,12 @@ export function createActiveComposerAdapter(input: {
     session: () => ({
       id,
       directory: location().directory,
+      handoff: createSessionMessageHandoff(input.sessionKey(), id, server.event),
       api: server.api.session,
       data,
       current: () => data.session.get(id),
       admitted: (messageID) => data.session.input.has(id, messageID) || !!data.session.message.get(id, messageID),
+      background: input.background,
     }),
     interrupt: () =>
       server.api.session
@@ -41,5 +47,6 @@ export function createActiveComposerAdapter(input: {
         .then(() => undefined)
         .catch(() => undefined),
   }
+
   return adapter
 }

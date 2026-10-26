@@ -1,7 +1,7 @@
 export * as TestWebSearch from "./websearch"
 
 import { Context, Deferred, Effect, Layer } from "effect"
-import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"

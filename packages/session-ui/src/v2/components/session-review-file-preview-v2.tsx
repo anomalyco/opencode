@@ -47,13 +47,17 @@ export type SessionReviewFilePreviewV2Props = {
 
 function statusLabel(status: ViewDiff["status"]) {
   if (status === "added") return "A"
+
   if (status === "deleted") return "D"
+
   return "M"
 }
 
 function statusType(status: ViewDiff["status"]) {
   if (status === "added") return "added"
+
   if (status === "deleted") return "deleted"
+
   return "modified"
 }
 
@@ -64,7 +68,9 @@ function selectionSide(range: SelectedLineRange) {
 function selectionPreview(diff: ViewDiff, range: SelectedLineRange) {
   const side = selectionSide(range)
   const contents = text(diff, side)
+
   if (contents.length === 0) return undefined
+
   return previewSelectedLines(contents, range)
 }
 
@@ -111,6 +117,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     ...normalize(props.diff),
     preloaded: "preloaded" in props.diff ? props.diff.preloaded : undefined,
   }))
+
   const diffCanRender = createMemo(() => view().additions !== 0 || view().deletions !== 0)
   const mediaKind = createMemo(() => mediaKindFromPath(props.file))
   const comments = createMemo(() => (props.comments ?? []).filter((comment) => comment.file === props.file))
@@ -167,7 +174,9 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
 
   createEffect(() => {
     const focus = props.focusedComment
+
     if (!focus) return
+
     if (focus.file !== props.file) {
       // The focused file has no mounted preview (e.g. not in the current diff
       // set); clear the focus anyway so it cannot hijack a later diff refresh.
@@ -179,6 +188,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
           props.onFocusedCommentChange?.(null)
         })
       })
+
       return
     }
 
@@ -186,6 +196,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       setStore("opened", focus.id)
 
       const comment = (props.comments ?? []).find((item) => item.file === focus.file && item.id === focus.id)
+
       if (comment) setStore("selection", cloneSelectedLineRange(comment.selection))
 
       // The diff renders asynchronously, so poll for the comment anchor before
@@ -193,16 +204,21 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       // re-open a stale comment.
       focusToken++
       const token = focusToken
+
       const scrollTo = (attempt: number) => {
         if (token !== focusToken) return
         const anchor = scrollRef?.querySelector(`[data-comment-id="${focus.id}"]`)
+
         if (anchor instanceof HTMLElement) {
           anchor.scrollIntoView({ block: "center" })
+
           return
         }
+
         if (attempt >= 120) return
         requestAnimationFrame(() => scrollTo(attempt + 1))
       }
+
       requestAnimationFrame(() => scrollTo(0))
       requestAnimationFrame(() => {
         if (token !== focusToken) return

@@ -44,9 +44,11 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     ensureDir(dir)
 
     const current = tree.dir[dir]
+
     if (!opts?.force && current?.loaded) return Promise.resolve()
 
     const pending = inflight.get(dir)
+
     if (pending) return pending
 
     setTree(
@@ -76,12 +78,14 @@ export function createFileTreeStore(options: TreeStoreOptions) {
             for (const child of prevChildren) {
               if (nextSet.has(child)) continue
               const existing = draft[child]
+
               if (existing?.type === "directory") removedDirs.push(child)
               delete draft[child]
             }
 
             if (removedDirs.length > 0) {
               const keys = Object.keys(draft)
+
               for (const key of keys) {
                 for (const removed of removedDirs) {
                   if (!key.startsWith(removed + "/")) continue
@@ -124,6 +128,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
       })
 
     inflight.set(dir, promise)
+
     return promise
   }
 
@@ -134,6 +139,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     const dir = options.normalizeDir(input)
     ensureDir(dir)
     setTree("dir", dir, "expanded", true)
+
     if (behavior?.list === false) return
     void listDir(dir)
   }
@@ -146,18 +152,23 @@ export function createFileTreeStore(options: TreeStoreOptions) {
 
   const dirState = (input: string) => {
     const dir = options.normalizeDir(input)
+
     return tree.dir[dir]
   }
 
   const children = (input: string) => {
     const dir = options.normalizeDir(input)
     const ids = tree.dir[dir]?.children
+
     if (!ids) return []
     const out: FileNode[] = []
+
     for (const id of ids) {
       const node = tree.node[id]
+
       if (node) out.push(node)
     }
+
     return out
   }
 

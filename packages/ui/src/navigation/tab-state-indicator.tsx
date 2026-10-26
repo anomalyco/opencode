@@ -2,6 +2,7 @@ import { splitProps, type ComponentProps } from "solid-js"
 
 export function TabStateIndicator(props: ComponentProps<"svg">) {
   const [local, rest] = splitProps(props, ["class", "classList", "width", "height"])
+
   return (
     <svg
       {...rest}

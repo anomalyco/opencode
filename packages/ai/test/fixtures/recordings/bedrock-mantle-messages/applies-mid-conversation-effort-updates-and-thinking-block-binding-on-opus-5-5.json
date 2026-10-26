@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "anthropic.claude-opus-5-5",
+    "tags": [
+      "prefix:bedrock-mantle-messages",
+      "provider:amazon-bedrock",
+      "protocol:anthropic-messages",
+      "reasoning",
+      "effort-update"
+    ],
+    "name": "bedrock-mantle-messages/applies-mid-conversation-effort-updates-and-thinking-block-binding-on-opus-5-5",
+    "recordedAt": "2026-10-04T03:56:23.139Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1/messages",
+        "headers": {
+          "anthropic-beta": "interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic.claude-opus-5-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Compute 37 * 43 step by step, then reply with only the integer.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}},\"output_config\":{\"effort\":\"high\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\",\"id\":\"msg_bdrk_y7h2x5bz6w6ggmekuxekbi6rseptglsljkwgj36phisnsnu3syea\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":31,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":2,\"service_tier\":\"standard\"},\"input_transformations\":[]}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"They\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" want\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" only\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" the final\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" integer, so\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" I just\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" need\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" to compute 37\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"×43 \"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"using the dif\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"ference of squares: 40\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"²−3²\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" = 1600−9 =\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" 1591.\\n\\n\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"CAQSogUKEggSEAEYAjgBQgh0aGlua2luZxIM48GlQ7IvNDW3jk2BGgw0Aq5cIs+m8gjYEIQiMFOyG984KYDLRzchzn2ApX6Rs3r7+CtXL0KeCRsXr1XKY3Y0UNK73Qrjyk94TGFPTSq9BCCZALbMiaeiIDqgB3H8jfrU26rP6kORoTJuF84ByBhXGI9AGo30c3RU2ZueXE/oLvRkK12g8r3TPql2fam1gcC/SeZ627fqGykV6G8WrPH7kthjbR45vnRuaqgFZmyA4C/XCxEH0zSSlVAhXf3Um9sjO/RD8lMJttQCAJSurbB5wmKbUQmZeOjIn8augHV/KmsGcFaHBjGLNfnwfEUwLEbRjNh5eIsmcs9dFfIeYHYNRgtLnBkERACoKPQLp2xU090/wCwrFHIGgLYbklR5wUhGqrAERhOAybqMxlNN3dwd7dV5Tbd16xEghDWb6wUtoxnNQdsUsV/0F/b8Ov9TSu93db/QJAkR74OBMtPuEu914SxtC4NBtqX5YZQAo//O4piaQGzFRVE7TahKzMS5bD111w/qz/cLpqEI/bZMqsXKdzBuMMOAox9TvgTumemdiiPu8tn2ONQeAnuNLjArrr7Jz1mbE9GqPl6aJW9HYWPb0BxCQ/hRXFz5d0v+okmmn5KCV2nD55wk2ySWz9OxIMQUsJ6uEUVOZPk7O0ZJ2ppoLAx6GYq2f55nNcUCsbKB4gB4+QlNp3Tf5IemDdZaY/tGW71dgpYI7iWYYEhqNtlC8pXpoEIbO31IvAHS9BGeQRYQQh1h0muEz4S1+YICPTdXnUmjc0uJ9MGBIKOuBsUhg+E4dzZzOfwS4KteNmJgjhj53WVdjJgRslemZle0tZphrTLLgvZpLZDVIYmOkIpbo2tf5Cflx/rf/NPg7RgB\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"1591\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":31,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":86,\"output_tokens_details\":{\"thinking_tokens\":82}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1/messages",
+        "headers": {
+          "anthropic-beta": "interleaved-thinking-2025-05-14,mid-conversation-output-config-2026-07-01,thinking-binding-controls-2026-08-01",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic.claude-opus-5-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Compute 37 * 43 step by step, then reply with only the integer.\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"They want only the final integer, so I just need to compute 37×43 using the difference of squares: 40²−3² = 1600−9 = 1591.\\n\\n\",\"signature\":\"CAQSogUKEggSEAEYAjgBQgh0aGlua2luZxIM48GlQ7IvNDW3jk2BGgw0Aq5cIs+m8gjYEIQiMFOyG984KYDLRzchzn2ApX6Rs3r7+CtXL0KeCRsXr1XKY3Y0UNK73Qrjyk94TGFPTSq9BCCZALbMiaeiIDqgB3H8jfrU26rP6kORoTJuF84ByBhXGI9AGo30c3RU2ZueXE/oLvRkK12g8r3TPql2fam1gcC/SeZ627fqGykV6G8WrPH7kthjbR45vnRuaqgFZmyA4C/XCxEH0zSSlVAhXf3Um9sjO/RD8lMJttQCAJSurbB5wmKbUQmZeOjIn8augHV/KmsGcFaHBjGLNfnwfEUwLEbRjNh5eIsmcs9dFfIeYHYNRgtLnBkERACoKPQLp2xU090/wCwrFHIGgLYbklR5wUhGqrAERhOAybqMxlNN3dwd7dV5Tbd16xEghDWb6wUtoxnNQdsUsV/0F/b8Ov9TSu93db/QJAkR74OBMtPuEu914SxtC4NBtqX5YZQAo//O4piaQGzFRVE7TahKzMS5bD111w/qz/cLpqEI/bZMqsXKdzBuMMOAox9TvgTumemdiiPu8tn2ONQeAnuNLjArrr7Jz1mbE9GqPl6aJW9HYWPb0BxCQ/hRXFz5d0v+okmmn5KCV2nD55wk2ySWz9OxIMQUsJ6uEUVOZPk7O0ZJ2ppoLAx6GYq2f55nNcUCsbKB4gB4+QlNp3Tf5IemDdZaY/tGW71dgpYI7iWYYEhqNtlC8pXpoEIbO31IvAHS9BGeQRYQQh1h0muEz4S1+YICPTdXnUmjc0uJ9MGBIKOuBsUhg+E4dzZzOfwS4KteNmJgjhj53WVdjJgRslemZle0tZphrTLLgvZpLZDVIYmOkIpbo2tf5Cflx/rf/NPg7RgB\"},{\"type\":\"text\",\"text\":\"1591\"}]},{\"role\":\"system\",\"content\":[],\"output_config\":{\"effort\":\"low\"}},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Add 9 to that result. Reply with only the integer.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}},\"output_config\":{\"effort\":\"high\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\",\"id\":\"msg_bdrk_yzpmbqh3aag3i7kymdm7ctqputcpeuln3cy44msgbdnctkcweena\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":139,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":4,\"service_tier\":\"standard\"},\"input_transformations\":[]}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"1600\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":139,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":4,\"output_tokens_details\":{\"thinking_tokens\":0}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

@@ -48,10 +48,35 @@ export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
 ): ProviderOptions | undefined => mergeJsonRecords(...items)
 
+/** Milliseconds for an HTTP timeout, or `false` to disable it. */
+export const HttpTimeout = Schema.Union([Schema.Number.check(Schema.isGreaterThan(0)), Schema.Literal(false)])
+export type HttpTimeout = Schema.Schema.Type<typeof HttpTimeout>
+
+/** Applied to `headerTimeout` when a request leaves it unset. */
+export const DEFAULT_HTTP_TIMEOUT_MS = 300_000
+
+/**
+ * Applied to `chunkTimeout` when a request leaves it unset. Some providers, such as DeepSeek, have specifically asked
+ * clients to allow at least 15 minutes, because their models can stream nothing for minutes while they reason.
+ */
+export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
+
+/** `Content-Encoding` for JSON request bodies; `none` sends plain JSON. */
+export const RequestEncoding = Schema.Literals(["zstd", "gzip", "none"])
+export type RequestEncoding = Schema.Schema.Type<typeof RequestEncoding>
+
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** Time allowed for the whole request, from send until the response completes. Unbounded when unset. */
+  timeout: Schema.optional(HttpTimeout),
+  /** Time allowed for response headers to arrive. */
+  headerTimeout: Schema.optional(HttpTimeout),
+  /** Time allowed between streamed response chunks once headers have arrived. */
+  chunkTimeout: Schema.optional(HttpTimeout),
+  /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
+  encoding: Schema.optional(RequestEncoding),
 }) {}
 
 export namespace HttpOptions {
@@ -70,8 +95,21 @@ export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined
   const body = mergeJsonRecords(...items.map((item) => item?.body))
   const headers = mergeStringRecords(...items.map((item) => item?.headers))
   const query = mergeStringRecords(...items.map((item) => item?.query))
-  if (!body && !headers && !query) return undefined
-  return new HttpOptions({ body, headers, query })
+  const timeout = items.findLast((item) => item?.timeout !== undefined)?.timeout
+  const headerTimeout = items.findLast((item) => item?.headerTimeout !== undefined)?.headerTimeout
+  const chunkTimeout = items.findLast((item) => item?.chunkTimeout !== undefined)?.chunkTimeout
+  const encoding = items.findLast((item) => item?.encoding !== undefined)?.encoding
+  if (
+    !body &&
+    !headers &&
+    !query &&
+    timeout === undefined &&
+    headerTimeout === undefined &&
+    chunkTimeout === undefined &&
+    encoding === undefined
+  )
+    return undefined
+  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout, encoding })
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
@@ -169,6 +207,9 @@ export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
   typeof LanguageModelMaxTokensFieldCompatibility
 >
 
+export const LanguageModelCacheFormatCompatibility = Schema.Literals(["anthropic", "alibaba"])
+export type LanguageModelCacheFormatCompatibility = Schema.Schema.Type<typeof LanguageModelCacheFormatCompatibility>
+
 export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(
   "LLM.LanguageModelCompatibility",
 )({
@@ -180,11 +221,15 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   requireFinishReason: Schema.optional(Schema.Boolean),
   requireAssistantAfterTool: Schema.optional(Schema.Boolean),
   supportsStore: Schema.optional(Schema.Boolean),
-  supportsUsageInStreaming: Schema.optional(Schema.Boolean),
+  /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
+  streamUsage: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
-  // Accepts `prompt_cache_key` in the Chat Completions body. Chat omits the
-  // key unless this is set; session-affinity headers still flow regardless.
+  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
+  // this is true; other protocols omit it only when this is false.
+  // Session-affinity headers still flow regardless.
   supportsPromptCacheKey: Schema.optional(Schema.Boolean),
+  /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
+  cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
@@ -297,9 +342,16 @@ export const LanguageModelSchema = Schema.declare((value): value is LanguageMode
   expected: "LLM.LanguageModel",
 })
 
+// Provider cache lifetime such as "5m", "30m", "1h" or "24h", in models.dev's duration format. It is sent as given;
+// each provider accepts its own set, and omitting it keeps the provider default.
+export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals(["ms", "s", "m", "h", "d"])]).check(
+  Schema.isPattern(/^\d+(ms|s|m|h|d)$/),
+)
+export type CacheTTL = typeof CacheTTL.Type
+
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),
-  ttlSeconds: Schema.optional(Schema.Number),
+  ttl: Schema.optional(CacheTTL),
 }) {}
 
 // Auto-placement policy for prompt caching. The protocol-neutral lowering step
@@ -311,7 +363,9 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // tool loops.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular
-// object form to override individual choices.
+// object form to choose placements exactly; an object with only `ttl` keeps
+// the automatic placements and sets their lifetime. Routes without inline
+// markers send `ttl` as a request-level cache option where one exists.
 export const CachePolicyObject = Schema.Struct({
   tools: Schema.optional(Schema.Boolean),
   system: Schema.optional(Schema.Boolean),
@@ -322,7 +376,7 @@ export const CachePolicyObject = Schema.Struct({
       Schema.Struct({ tail: Schema.Natural }),
     ]),
   ),
-  ttlSeconds: Schema.optional(Schema.Number),
+  ttl: Schema.optional(CacheTTL),
 })
 export type CachePolicyObject = Schema.Schema.Type<typeof CachePolicyObject>
 

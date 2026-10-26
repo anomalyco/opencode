@@ -1,98 +1,88 @@
 ---
-title: "Budgets API"
-description: "Read effective monthly budgets for every workspace member and manage each member's custom budget."
+title: "Budgets"
+description: "Cap monthly spend for a workspace, its members, and its service accounts."
 ---
 
-Read effective monthly budgets for every workspace member and manage each member's custom budget from an integration.
+Budgets cap monthly spend through policies. Owners and admins manage them in **Controls**.
 
-## Quick start
+## Budget levels
 
-Create a service account API key with **All** permissions in the [Console](https://opencode.ai/console).
-Inference-only keys cannot access budget data or change limits.
+| Policy audience        | Applies to                                           |
+| ---------------------- | ---------------------------------------------------- |
+| Entire workspace       | Combined spend of all members and service accounts   |
+| All members            | Each member, or one shared allowance for all members |
+| Members tagged with    | Members with the chosen tags                         |
+| These members          | Specific members                                     |
+| All service accounts   | Each service account, or one shared allowance        |
+| These service accounts | Specific service accounts                            |
 
-```bash
-export CONSOLE_URL="https://opencode.ai/console"
-export SERVICE_API_KEY="oc_sk_..."
-```
+A request must fit under every applicable budget. A larger allowance never overrides a smaller one. Without any
+budget, spend is unlimited.
 
-List member budgets:
+## Workspace budget
 
-```bash
-curl --fail-with-body \
-  "${CONSOLE_URL}/api/v1/budgets/members" \
-  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
-  --header "Accept: application/json"
-```
+The workspace budget blocks requests for everyone once the workspace reaches it.
 
-## List member budgets
+1. Open **Controls** and click **Add policy**.
+2. Choose **Entire workspace** and add a **Budget** rule.
+3. Enter the monthly limit in USD and click **Save**.
+
+## Member budgets
+
+Choose **All members** in a policy to give each member a monthly allowance, or share one amount across the group.
+Choose specific members or tags to cover a smaller group.
+
+To budget for one person:
+
+1. Open the member in **Settings › Members**.
+2. Click **Create budget policy** to open the builder with that person selected.
+3. Enter the amount and click **Save**.
+
+Their member page lists the policies that apply. If an all-member budget also covers them, both limits apply.
+
+## Service account budgets
+
+In **Controls**, choose **All service accounts** or **These service accounts**, add a **Budget** rule, and set an
+individual or shared monthly allowance. The policy covers every key belonging to those accounts.
+
+## Amounts and resets
+
+- Amounts are in US dollars with up to two decimal places.
+- Budgets reset on the 1st of each month at 00:00 UTC.
+- A `$0` budget blocks all spend that counts toward budgets.
+- Adding or changing a budget includes spend already recorded that month; it does not reset the allowance.
+
+## What counts
+
+By default, a budget covers **All spend**. You can narrow it to selected models; then only those models count,
+with either one allowance for the set or a separate allowance for each model.
+
+| Spend                                                               | Counts toward budgets        |
+| ------------------------------------------------------------------- | ---------------------------- |
+| Paid Console models                                                 | Yes                          |
+| Models on [your own providers](/console/providers) with a price set | Yes, at the configured price |
+| [Web search](/console/websearch)                                    | Yes, for all-spend budgets   |
+| Free models                                                         | No                           |
+| [Go](/console/go) usage within the plan                             | No                           |
+| Go extra usage paid from credits                                    | Yes                          |
+
+## When a budget is reached
+
+New requests fail with HTTP `429` until the budget resets or an owner or admin raises it. The response identifies
+a policy budget failure but does not name the budget. Open the request in **Activity › Logs** to see the policy
+that blocked it.
 
 ```text
-GET /api/v1/budgets/members
+Upstream request failed: Policy budget exceeded
 ```
 
-The response includes every current member, ordered by email. A limit with source `custom` is a member override;
-source `default` is inherited from the workspace default. A null limit and source mean the member is unlimited.
+Budgets are checked when a request starts. Requests already in progress finish, so spend can end slightly above the
+limit.
 
-```json
-[
-  {
-    "user_id": "user_...",
-    "email": "alice@example.com",
-    "limit_micro_cents": "7525000000",
-    "spent_micro_cents": "1250000000",
-    "exceeded": false,
-    "resets_at": "2026-10-01T00:00:00.000Z",
-    "source": "custom",
-    "updated_at": "2026-09-03T12:00:00.000Z"
-  }
-]
-```
+## Track spend
 
-Monetary response fields are decimal strings in microcents so integrations do not lose precision. There are
-100,000,000 microcents per US dollar. Spend and reset timestamps cover the current UTC calendar month. `updated_at` is
-null when there is no custom member override.
+Each member sees their own spending and limit on **Activity**. Open **My usage** for **Activity › Overview**,
+including budget details and reset dates.
 
-## Set a custom budget
-
-```text
-PUT /api/v1/budgets/members/:user_id
-```
-
-Set a $75.25 monthly budget for one member:
-
-```bash
-curl --fail-with-body --request PUT \
-  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
-  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
-  --header "Content-Type: application/json" \
-  --data '{"budget_dollars":75.25}'
-```
-
-`budget_dollars` accepts a non-negative US-dollar amount with at most two decimal places. The PUT is idempotent and
-returns HTTP 204. Use the member ID returned by the list operation.
-
-## Return to the workspace default
-
-```text
-DELETE /api/v1/budgets/members/:user_id
-```
-
-Remove the custom override:
-
-```bash
-curl --fail-with-body --request DELETE \
-  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
-  --header "Authorization: Bearer ${SERVICE_API_KEY}"
-```
-
-Deleting an override does not delete the member. The member inherits the workspace default budget afterward, or
-becomes unlimited when the workspace has no default. Repeating the request is safe and returns HTTP 204.
-
-## Errors
-
-| Status | Meaning                                                  |
-| ------ | -------------------------------------------------------- |
-| `400`  | Invalid member ID or budget amount.                      |
-| `401`  | Missing, invalid, expired, or revoked service API key.   |
-| `403`  | The API key does not have permission to manage budgets.  |
-| `404`  | The member is not in the workspace bound to the API key. |
+Owners and admins can open **Activity › Usage** from the spending chart. It breaks down cost by day, model, and
+person, and the **Export usage** button downloads daily totals for the last 7, 30, or 90 days as CSV.

@@ -10,15 +10,20 @@ export function mountBasicTool() {
   document.body.appendChild(host)
   render(() => {
     const [state, setState] = createStore({ label: "Initial title", titles: 0, details: 0 })
+
     function Title() {
       // Count construction, including JSX created by unused trigger getter reads.
       setState("titles", (value) => value + 1)
+
       return <span title={state.label}>{state.label}</span>
     }
+
     function Details() {
       setState("details", (value) => value + 1)
+
       return <p>Tool details</p>
     }
+
     return (
       <>
         <output data-testid="trigger-constructions">{state.titles}</output>

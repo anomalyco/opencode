@@ -21,10 +21,12 @@ export function createComposerSubmission(input: {
     clear() {
       if (initial !== target) {
         initial.reset()
+
         // A preparing session may already have an unsent follow-up in its promoted composer.
         if (preserveDraft && target.current().some((part) => isAttachment(part) || part.content.length > 0))
           following = clonePrompt(target.current())
       }
+
       if (!following) target.reset()
       cleared = target.current()
     },
@@ -36,6 +38,7 @@ export function createComposerSubmission(input: {
     current: (value: ComposerStateTarget) => target === value,
     restore() {
       if (cleared !== undefined && target.current() !== cleared) return
+
       return {
         target,
         prompt: following ? appendPrompt(input.prompt, following) : input.prompt,

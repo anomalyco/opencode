@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:vercel-native",
+      "provider:vercel-ai-gateway"
+    ],
+    "name": "vercel-native/continues-messages-gemini-reasoning-and-tools",
+    "recordedAt": "2026-10-02T03:35:15.999Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://ai-gateway.vercel.sh/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"google/gemini-3.8-flash\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"gen_01M3XAWAZ6J0VZ2XBQD2GHA031\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"google/gemini-3.8-flash\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"AY89a19bLXkNRJcCTLXJhlklpdU5hxo3vEit19RMmh8bC8Jm2SmGq6E5NZdq177AdJfOKRYxZkFuEaJ/ngpxoqLeB47ZMMK4VSZD2lhRbfFR6S8bITZ1\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_355115\",\"name\":\"get_weather\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":52,\"output_tokens\":16},\"provider_metadata\":{\"vertex\":{\"promptFeedback\":null,\"groundingMetadata\":null,\"urlContextMetadata\":null,\"safetyRatings\":null,\"usageMetadata\":{\"promptTokenCount\":52,\"candidatesTokenCount\":16,\"totalTokenCount\":68,\"trafficType\":\"ON_DEMAND\",\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":52}],\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":16}]},\"finishMessage\":null,\"serviceTier\":null},\"gateway\":{\"routing\":{\"originalModelId\":\"google/gemini-3.8-flash\",\"resolvedProvider\":\"vertex\",\"fallbacksAvailable\":[\"google\"],\"planningReasoning\":\"System credentials planned for: vertex, google. Total execution order: vertex(system) → google(system)\",\"canonicalSlug\":\"google/gemini-3.8-flash\",\"finalProvider\":\"vertex\",\"modelAttemptCount\":1,\"modelAttempts\":[{\"canonicalSlug\":\"google/gemini-3.8-flash\",\"success\":true,\"providerAttemptCount\":1,\"providerAttempts\":[{\"provider\":\"vertex\",\"credentialType\":\"system\",\"success\":true,\"startTime\":1790912113658,\"endTime\":1790912114756,\"statusCode\":200,\"providerResponseId\":\"cSa_avLEL-zFiLsP5L_a4Ak\"}]}],\"totalProviderAttemptCount\":1,\"affinity\":{\"outcome\":\"skipped_below_min_prefix\"},\"clientSessionId\":\"a47cd177650917b88c4d443d7bd8be68\",\"clientSessionIdSource\":\"fingerprint\"},\"cost\":\"0.000099\",\"marketCost\":\"0.000099\",\"surchargeCost\":\"0\",\"gatewayCost\":\"0.000099\",\"inferenceCost\":\"0.000099\",\"inputInferenceCost\":\"0.000039\",\"outputInferenceCost\":\"0.00006\",\"generationId\":\"gen_01M3XAWAZ6J0VZ2XBQD2GHA031\"}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://ai-gateway.vercel.sh/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"google/gemini-3.8-flash\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"AY89a19bLXkNRJcCTLXJhlklpdU5hxo3vEit19RMmh8bC8Jm2SmGq6E5NZdq177AdJfOKRYxZkFuEaJ/ngpxoqLeB47ZMMK4VSZD2lhRbfFR6S8bITZ1\"},{\"type\":\"tool_use\",\"id\":\"call_355115\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_355115\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"gen_01M3XAWC57YKVKCYGSHBPW86GH\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"google/gemini-3.8-flash\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Paris is\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" sunny.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":83,\"output_tokens\":4},\"provider_metadata\":{\"vertex\":{\"promptFeedback\":null,\"groundingMetadata\":null,\"urlContextMetadata\":null,\"safetyRatings\":null,\"usageMetadata\":{\"promptTokenCount\":83,\"candidatesTokenCount\":4,\"totalTokenCount\":87,\"trafficType\":\"ON_DEMAND\",\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":83}],\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":4}]},\"finishMessage\":null,\"serviceTier\":null},\"gateway\":{\"routing\":{\"originalModelId\":\"google/gemini-3.8-flash\",\"resolvedProvider\":\"vertex\",\"fallbacksAvailable\":[\"google\"],\"planningReasoning\":\"System credentials planned for: vertex, google. Total execution order: vertex(system) → google(system)\",\"canonicalSlug\":\"google/gemini-3.8-flash\",\"finalProvider\":\"vertex\",\"modelAttemptCount\":1,\"modelAttempts\":[{\"canonicalSlug\":\"google/gemini-3.8-flash\",\"success\":true,\"providerAttemptCount\":1,\"providerAttempts\":[{\"provider\":\"vertex\",\"credentialType\":\"system\",\"success\":true,\"startTime\":1790912114880,\"endTime\":1790912116051,\"statusCode\":200,\"providerResponseId\":\"cia_auGLOt3Mw8cPopm3wAY\"}]}],\"totalProviderAttemptCount\":1,\"affinity\":{\"outcome\":\"skipped_below_min_prefix\"},\"clientSessionId\":\"a47cd177650917b88c4d443d7bd8be68\",\"clientSessionIdSource\":\"fingerprint\"},\"cost\":\"0.00007725\",\"marketCost\":\"0.00007725\",\"surchargeCost\":\"0\",\"gatewayCost\":\"0.00007725\",\"inferenceCost\":\"0.00007725\",\"inputInferenceCost\":\"0.00006225\",\"outputInferenceCost\":\"0.000015\",\"generationId\":\"gen_01M3XAWC57YKVKCYGSHBPW86GH\"}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

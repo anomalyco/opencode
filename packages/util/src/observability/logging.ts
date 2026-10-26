@@ -111,7 +111,7 @@ export const trim = Effect.fn("Logging.trim")(function* (
   if (size <= max) return
   const handle = yield* fs.open(target, { flag: "r+" })
   const start = yield* lineStart(handle, size - keep)
-  yield* handle.seek(0, "start")
+  yield* handle.seek(0n, "start")
   // Reads run to the current EOF so lines appended since the stat survive; the write cursor always
   // trails the read cursor so the forward copy never overwrites unread bytes.
   const written = yield* fs.stream(target, { offset: start, chunkSize: LOG_TRIM_CHUNK }).pipe(
@@ -146,7 +146,7 @@ function lineStart(handle: FileSystem.File, from: number) {
   return Effect.gen(function* () {
     let cursor = from
     while (true) {
-      yield* handle.seek(cursor, "start")
+      yield* handle.seek(BigInt(cursor), "start")
       const chunk = yield* handle.readAlloc(LOG_TRIM_CHUNK)
       if (Option.isNone(chunk)) return cursor
       const newline = chunk.value.indexOf(10)

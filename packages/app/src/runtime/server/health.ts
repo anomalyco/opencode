@@ -2,12 +2,14 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
-import { Accessor, createEffect, onCleanup } from "solid-js"
+import { Accessor, createEffect, createSignal, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
 export type ServerHealth = {
   healthy: boolean
   version?: string
+  /** The server machine's name, when the server reports one. */
+  hostname?: string
   incompatible?: boolean
   checking?: boolean
   unauthorized?: boolean
@@ -21,9 +23,13 @@ interface CheckServerHealthOptions {
 }
 
 const defaultTimeoutMs = 30_000
+
 const defaultRetryCount = 2
+
 const defaultRetryDelayMs = 100
+
 const cacheMs = 750
+
 const healthCache = new Map<
   string,
   { at: number; done: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
@@ -35,6 +41,7 @@ function cacheKey(server: ServerConnection.HttpBase) {
 
 function timeoutSignal(timeoutMs: number) {
   const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
+
   if (timeout) {
     try {
       return {
@@ -43,8 +50,10 @@ function timeoutSignal(timeoutMs: number) {
       }
     } catch {}
   }
+
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+
   return { signal: controller.signal, clear: () => clearTimeout(timer) }
 }
 
@@ -52,26 +61,35 @@ function wait(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
       reject(new DOMException("Aborted", "AbortError"))
+
       return
     }
+
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort)
       resolve()
     }, ms)
+
     const onAbort = () => {
       clearTimeout(timer)
       reject(new DOMException("Aborted", "AbortError"))
     }
+
     signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
 
 function retryable(error: unknown, signal?: AbortSignal) {
   if (signal?.aborted) return false
+
   if (error instanceof ClientError) return error.reason === "Transport"
+
   if (!(error instanceof Error)) return false
+
   if (error.name === "AbortError" || error.name === "TimeoutError") return false
+
   if (error instanceof TypeError) return true
+
   return /network|fetch|econnreset|econnrefused|enotfound|timedout/i.test(error.message)
 }
 
@@ -84,17 +102,21 @@ export async function checkServerHealth(
   const signal = opts?.signal ?? timeout?.signal
   const retryCount = opts?.retryCount ?? defaultRetryCount
   const retryDelayMs = opts?.retryDelayMs ?? defaultRetryDelayMs
+
   const headers = server.password
     ? {
         Authorization: `Basic ${authTokenFromCredentials({ password: server.password })}`,
       }
     : undefined
+
   const next = (count: number, error: unknown) => {
     if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false } as const)
+
     return wait(retryDelayMs * (count + 1), signal)
       .then(() => attempt(count + 1))
       .catch(() => ({ healthy: false }))
   }
+
   const attempt = async (count: number): Promise<ServerHealth> => {
     const current = await OpenCode.make({
       baseUrl: server.url,
@@ -102,13 +124,20 @@ export async function checkServerHealth(
       headers,
     })
       .server.info({ signal })
-      .then((status) => ({ data: { healthy: true as const, version: status.version } }))
+      .then((status) => ({
+        data: { healthy: true as const, version: status.version, hostname: status.hostname },
+      }))
       .catch((error) => ({ error }))
+
     if ("data" in current) return current.data
+
     if (signal?.aborted) return { healthy: false }
+
     if (isUnauthorizedError(current.error)) return { healthy: false, unauthorized: true }
+
     return next(count, current.error)
   }
+
   return attempt(0).finally(() => timeout?.clear?.())
 }
 
@@ -122,14 +151,19 @@ export function useCheckServerHealth() {
     const key = cacheKey(http)
     const hit = healthCache.get(key)
     const now = Date.now()
+
     if (hit && hit.fetch === fetcher && (!hit.done || now - hit.at < cacheMs)) return hit.promise
+
     const promise = checkServerHealth(http, fetcher).finally(() => {
       const next = healthCache.get(key)
+
       if (!next || next.promise !== promise) return
       next.done = true
       next.at = Date.now()
     })
+
     healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
+
     return promise
   }
 }
@@ -144,22 +178,31 @@ export function createServerHealth(
   check: (http: ServerConnection.HttpBase) => Promise<ServerHealth>,
 ) {
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
+  const [attempt, setAttempt] = createSignal(0)
   const endpoints = new Map<ServerConnection.Key, string>()
+  // Callers of `retry` wait for the probe round it starts.
+  const waiting: (() => void)[] = []
 
   createEffect(() => {
+    attempt()
+
     if (!enabled()) {
       endpoints.clear()
       setStatus(reconcile({}))
+      waiting.splice(0).forEach((resolve) => resolve())
+
       return
     }
+
     // Snapshot transport fields synchronously so a newly established SSH tunnel
     // invalidates both the old result and any probe still using the old endpoint.
     const list = servers().map((conn) => ({
       key: ServerConnection.key(conn),
-      type: conn.type,
+      managed: conn.type === "extension" && conn.managed,
       http: conn.http,
-      stage: conn.type === "ssh" ? conn.stage : undefined,
+      stage: conn.type === "extension" ? conn.state : undefined,
     }))
+
     for (const conn of list) {
       if (conn.stage && conn.stage !== "ready") {
         endpoints.delete(conn.key)
@@ -175,15 +218,20 @@ export function createServerHealth(
         )
         continue
       }
+
       const endpoint = cacheKey(conn.http)
-      if (conn.type === "ssh" && endpoints.get(conn.key) !== endpoint) {
+
+      if (conn.managed && endpoints.get(conn.key) !== endpoint) {
         setStatus(conn.key, reconcile({ healthy: false, checking: true }))
       }
+
       endpoints.set(conn.key, endpoint)
     }
+
     for (const key of endpoints.keys()) {
       if (!list.some((conn) => conn.key === key)) endpoints.delete(key)
     }
+
     let dead = false
 
     const refresh = async () => {
@@ -197,18 +245,24 @@ export function createServerHealth(
                 : conn.stage === "incompatible"
                   ? { healthy: false, incompatible: true }
                   : undefined
+
             return
           }
+
           const result = await check(conn.http)
           results[conn.key] = result
+
           if (!dead) setStatus(conn.key, reconcile(result))
         }),
       )
+
       if (dead) return
       setStatus(reconcile(results))
     }
 
-    void refresh()
+    void refresh().finally(() => {
+      if (!dead) waiting.splice(0).forEach((resolve) => resolve())
+    })
     const id = setInterval(() => void refresh(), pollMs)
     onCleanup(() => {
       dead = true
@@ -216,5 +270,13 @@ export function createServerHealth(
     })
   })
 
-  return status
+  return {
+    status,
+    /** Probes every server now instead of at the next poll; resolves when that round finishes. */
+    retry: () =>
+      new Promise<void>((resolve) => {
+        waiting.push(resolve)
+        setAttempt((value) => value + 1)
+      }),
+  }
 }

@@ -150,10 +150,15 @@ test("export reports a missing session without a stack trace", async () => {
   }
 })
 
-test("import validates a file and sends it to the resolved location", async () => {
+test("import sends the file unchanged to the resolved location", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-"))
   const file = path.join(root, "session.json")
-  await fs.writeFile(file, JSON.stringify(transfer))
+  // The server upgrades transcripts exported by earlier releases, so legacy fields must reach it intact.
+  const legacy = {
+    ...transfer,
+    messages: [...transfer.messages, { id: "msg_legacy", type: "compaction", providerState: { kept: true } }],
+  }
+  await fs.writeFile(file, JSON.stringify(legacy))
   let imported: unknown
   const server = Bun.serve({
     port: 0,
@@ -187,7 +192,7 @@ test("import validates a file and sends it to the resolved location", async () =
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(`Imported session: ${info.id}${os.EOL}`)
-    expect(imported).toEqual({ ...transfer, location: { directory: root } })
+    expect(imported).toEqual({ ...legacy, location: { directory: root } })
   } finally {
     await server.stop(true)
     await fs.rm(root, { recursive: true, force: true })

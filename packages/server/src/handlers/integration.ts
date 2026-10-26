@@ -1,7 +1,7 @@
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { Effect } from "effect"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
 import {
   IntegrationAttemptNotFoundError,
@@ -77,6 +77,26 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
             service.connection.key({
               integrationID: ctx.params.integrationID,
               key: ctx.payload.key,
+              answer: ctx.payload.answer,
+              label: ctx.payload.label,
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "integration.connect.external",
+        Effect.fn(function* (ctx) {
+          const service = yield* Integration.Service
+          if (!(yield* service.get(ctx.params.integrationID)))
+            return yield* new IntegrationNotFoundError({
+              integrationID: ctx.params.integrationID,
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
+          yield* authorize(
+            service.connection.external({
+              integrationID: ctx.params.integrationID,
+              methodID: ctx.payload.methodID,
               answer: ctx.payload.answer,
               label: ctx.payload.label,
             }),

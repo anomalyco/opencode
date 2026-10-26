@@ -63,6 +63,7 @@ export async function resolveSessionTarget(input: {
     (await input.client.session
       .create(
         {
+          id: input.session,
           agent: prepared.agent,
           model: prepared.model,
           location: { directory: location.directory },
@@ -101,14 +102,11 @@ async function selectSession(input: {
   fork?: boolean
   signal?: AbortSignal
 }) {
-  const explicit = input.session
-    ? await input.client.session.get({ sessionID: input.session }, ...requestOptions(input.signal)).catch((error) => {
-        if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError")
-          return undefined
-        throw error
-      })
-    : undefined
-  if (input.session && !explicit) throw new Error("Session not found")
+  const explicit = input.session ? await findSession(input.client, input.session, input.signal) : undefined
+  if (input.session && !explicit) {
+    if (input.fork) throw new Error("Session not found")
+    return { session: undefined }
+  }
   if (explicit)
     return {
       session: input.fork
@@ -131,6 +129,13 @@ async function selectSession(input: {
         })
       : selected,
   }
+}
+
+export function findSession(client: OpenCodeClient, sessionID: string, signal?: AbortSignal) {
+  return client.session.get({ sessionID }, ...requestOptions(signal)).catch((error) => {
+    if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError") return undefined
+    throw error
+  })
 }
 
 async function latestSession(

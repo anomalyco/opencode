@@ -10,7 +10,7 @@ import "../../component/title-shimmer"
 import { getScrollAcceleration } from "../../util/scroll"
 import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+export function Sidebar(props: { sessionID: string }) {
   const data = useData()
   const theme = useTheme()
   const config = useConfig().data
@@ -27,7 +27,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
-        position={props.overlay ? "absolute" : "relative"}
+        position="relative"
       >
         <box flexShrink={0} paddingRight={2} paddingBottom={1}>
           <title_shimmer

@@ -386,7 +386,8 @@
       }
     }
 
-    [data-component="brand-grid"] > div:hover [data-component="actions"] {
+    [data-component="brand-grid"] > div:hover [data-component="actions"],
+    [data-component="brand-grid"] > div:focus-within [data-component="actions"] {
       opacity: 1;
 
       @media (max-width: 40rem) {

@@ -1,5 +1,8 @@
 import { Effect } from "effect"
+import path from "node:path"
 import { define } from "@opencode/plugin/effect/plugin"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Provider } from "../../provider.js"
 
 // Ambient inputs the AWS default credential chain can turn into credentials
@@ -19,6 +22,29 @@ const isBedrock = (item: { readonly package: string }) =>
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",
   effect: Effect.fn(function* (ctx) {
+    const fs = yield* FSUtil.Service
+    const paths = [
+      process.env.AWS_CONFIG_FILE ?? path.join(Global.Path.home, ".aws", "config"),
+      process.env.AWS_SHARED_CREDENTIALS_FILE ?? path.join(Global.Path.home, ".aws", "credentials"),
+    ]
+    const files = yield* Effect.all(
+      paths.map((file) => fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))),
+    )
+    // Discover names only. Resolving every profile here could run credential helpers or contact AWS.
+    const profiles = Array.from(
+      new Set(
+        files.flatMap((content, index) =>
+          Array.from((content ?? "").matchAll(/^\s*\[([^\]\r\n]+)\]/gm)).flatMap((match) => {
+            const section = match[1].trim()
+            // The credentials file uses bare names; the config file prefixes all but "default" with "profile ".
+            if (index === 1 || section === "default") return [section]
+            return section.startsWith("profile ") ? [section.slice(8).trim()] : []
+          }),
+        ),
+      ),
+    )
+      .filter(Boolean)
+      .toSorted()
     yield* ctx.integration.transform((editor) => {
       // models.dev advertises AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and
       // AWS_REGION alongside the bearer token. Only the bearer token is a key;
@@ -26,6 +52,34 @@ export const AmazonBedrockPlugin = define({
       editor.method.update({
         integrationID: Provider.ID.amazonBedrock,
         method: { type: "env", names: ["AWS_BEARER_TOKEN_BEDROCK"] },
+      })
+      editor.method.update({
+        integrationID: Provider.ID.amazonBedrock,
+        method: { type: "key", label: "Bedrock API key" },
+      })
+      editor.method.update({
+        integrationID: Provider.ID.amazonBedrock,
+        method: {
+          id: "aws-profile",
+          type: "external",
+          label: "AWS profile (SSO or named profile)",
+          form: [
+            {
+              key: "profile",
+              type: "string",
+              title: "AWS profile",
+              description: profiles.length
+                ? `Found ${profiles.length} profile${profiles.length === 1 ? "" : "s"} in your AWS configuration.`
+                : "No profiles found in your AWS configuration.",
+              required: true,
+              minLength: 1,
+              pattern: "\\S",
+              placeholder: "Profile name",
+              custom: true,
+              options: profiles.map((profile) => ({ value: profile, label: profile })),
+            },
+          ],
+        },
       })
     })
     yield* ctx.provider.transform((evt) => {

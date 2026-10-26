@@ -2,24 +2,35 @@ import { protocol } from "electron"
 import type { BrowserWindow } from "electron"
 
 export const rendererProtocol = "oc"
+
 export const rendererHost = "renderer"
+
+/** Files of installed GUI extensions: `oc://extensions/<id>/<path>`. */
+export const extensionHost = "extensions"
 
 export function loadWindow(win: BrowserWindow, html: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
+
   if (devUrl) {
     void win.loadURL(new URL(html, devUrl).toString())
+
     return
   }
+
   void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 
 export function isRendererUrl(value?: string, html = false) {
   if (!value || !URL.canParse(value)) return false
   const url = new URL(value)
+
   if (html && !url.pathname.endsWith(".html")) return false
+
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
   const devUrl = process.env.ELECTRON_RENDERER_URL
+
   if (!devUrl || !URL.canParse(devUrl)) return false
+
   return url.origin === new URL(devUrl).origin
 }
 
@@ -33,6 +44,8 @@ export function registerRendererScheme() {
         secure: true,
         standard: true,
         supportFetchAPI: true,
+        // Extension fonts and fetched assets are cross-origin to the renderer.
+        corsEnabled: true,
         stream: true,
         // Let Chromium keep V8 bytecode for the renderer bundle between launches.
         codeCache: true,

@@ -1,6 +1,8 @@
 export * as ConfigFormatterPlugin from "./formatter.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
+import type { Entry } from "@opencode/schema/config"
+import type { ConfigFormatter } from "@opencode/schema/config/formatter"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
@@ -25,7 +27,7 @@ export const Plugin = define({
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, formatter.reload())
 
     yield* formatter.transform((editor) => {
-      const configured = Config.latest(loaded.entries, "formatter")
+      const configured = resolve(loaded.entries)
       if (!configured) return
       const builtIns = make({
         directory: location.directory,
@@ -56,3 +58,19 @@ export const Plugin = define({
     })
   }),
 })
+
+// Documents apply from lowest to highest priority. A boolean resets everything before it; an object
+// merges each named formatter's supplied fields over the same name from earlier objects.
+function resolve(entries: readonly Entry[]) {
+  return entries.reduce<boolean | Record<string, ConfigFormatter.Entry> | undefined>((result, entry) => {
+    if (entry.type !== "document" || entry.info.formatter === undefined) return result
+    if (typeof entry.info.formatter === "boolean") return entry.info.formatter
+    return Object.entries(entry.info.formatter).reduce(
+      (merged, [name, item]) => ({
+        ...merged,
+        [name]: { ...merged[name], ...item, environment: { ...merged[name]?.environment, ...item.environment } },
+      }),
+      typeof result === "object" ? result : {},
+    )
+  }, undefined)
+}

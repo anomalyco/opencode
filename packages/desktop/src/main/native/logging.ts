@@ -8,13 +8,17 @@ import { VERSION } from "../constants"
 import { marks } from "../lifecycle/marks"
 
 const MAX_LOG_AGE_DAYS = 7
-const TAIL_LINES = 1000
+
 const EXPORT_WINDOW = 24 * 60 * 60 * 1000
+
 const MAX_EXPORT_FILE_SIZE = 50 * 1024 * 1024
+
 const NET_LOG_SIZE = 20 * 1024 * 1024
 
 let root = ""
+
 let run = ""
+
 let netLogPath: string | undefined
 
 export interface Interface {
@@ -41,6 +45,7 @@ const serviceLayer = Layer.effect(
       marks,
     })
     const exportDebug = exportDebugLogsEffect(fs, path).pipe(Effect.orDie)
+
     return Service.of({
       startNetwork: startNetLog(path).pipe(
         Effect.catch((error) => Effect.logWarning("failed to start net log", { error })),
@@ -62,16 +67,17 @@ const nativeLogger = Logger.make((options) => {
     const entry = Logger.formatStructured.log(options)
     const scope = typeof entry.annotations.scope === "string" ? entry.annotations.scope : "main"
     const annotations = Object.fromEntries(Object.entries(entry.annotations).filter(([key]) => key !== "scope"))
+
     const context = {
       ...(Object.keys(annotations).length === 0 ? {} : { annotations }),
       ...(Object.keys(entry.spans).length === 0 ? {} : { spans: entry.spans }),
       ...(entry.cause === undefined ? {} : { cause: entry.cause }),
     }
+
     const messages = Array.isArray(options.message) ? options.message : [options.message]
-    log.scope(safeLogName(scope))[methods[options.logLevel]](
-      ...messages,
-      ...(Object.keys(context).length === 0 ? [] : [context]),
-    )
+    log
+      .scope(safeLogName(scope))
+      [methods[options.logLevel]](...messages, ...(Object.keys(context).length === 0 ? [] : [context]))
   } catch {
     // Logging must not interrupt application work.
   }
@@ -127,14 +133,16 @@ function startNetLog(path: Path.Path) {
   if (netLog.currentlyLogging) return Effect.void
   const target = path.join(run, "network.netlog")
   netLogPath = target
-  return Effect.tryPromise(() => netLog.startLogging(target, { captureMode: "default", maxFileSize: NET_LOG_SIZE })).pipe(
-    Effect.tap(() => scoped("network", Effect.logInfo("net log started", { path: target }))),
-  )
+
+  return Effect.tryPromise(() =>
+    netLog.startLogging(target, { captureMode: "default", maxFileSize: NET_LOG_SIZE }),
+  ).pipe(Effect.tap(() => scoped("network", Effect.logInfo("net log started", { path: target }))))
 }
 
 function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
   return Effect.gen(function* () {
     const restartNetLog = netLog.currentlyLogging
+
     if (restartNetLog) {
       yield* Effect.tryPromise(() => netLog.stopLogging()).pipe(
         Effect.catch((error) => scoped("network", Effect.logWarning("failed to stop net log", { error }))),
@@ -142,27 +150,29 @@ function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
     }
 
     const output = path.join(app.getPath("downloads"), `opencode-debug-${stamp()}.zip`)
+
     return yield* Effect.gen(function* () {
       yield* Effect.logInfo("exporting debug logs", { output })
+
       const files = [
         ...(yield* collect(fs, path, root, "desktop")),
         ...(yield* Effect.forEach(serverLogRoots(path), (dir, i) => collect(fs, path, dir, `server-${i + 1}`))).flat(),
         ...(yield* collect(fs, path, app.getPath("crashDumps"), "crashpad")),
       ]
+
       const truncated = files.filter((file) => file.offset > 0).map((file) => file.name)
       yield* writeZip(fs, output, [
         { name: "manifest.json", data: Buffer.from(JSON.stringify({ ...manifest(path), truncated }, null, 2)) },
         ...files,
       ])
       yield* Effect.sync(() => shell.showItemInFolder(output))
+
       return output
     }).pipe(
       Effect.ensuring(
         restartNetLog
           ? startNetLog(path).pipe(
-              Effect.catch((error) =>
-                scoped("network", Effect.logWarning("failed to restart net log", { error })),
-              ),
+              Effect.catch((error) => scoped("network", Effect.logWarning("failed to restart net log", { error }))),
             )
           : Effect.void,
       ),
@@ -170,19 +180,10 @@ function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
   })
 }
 
-export const tail = Effect.fn("DesktopLogging.tail")(function* () {
-  const fs = yield* FileSystem.FileSystem
-  return yield* Effect.gen(function* () {
-    const path = log.transports.file.getFile().path
-    const contents = yield* fs.readFileString(path)
-    const lines = contents.split("\n")
-    return lines.slice(Math.max(0, lines.length - TAIL_LINES)).join("\n")
-  }).pipe(Effect.orElseSucceed(() => ""))
-})
-
 function initRunDirectory(fs: FileSystem.FileSystem, path: Path.Path) {
   root = path.join(app.getPath("userData"), "logs")
   run = path.join(root, stamp())
+
   return fs.makeDirectory(run, { recursive: true })
 }
 
@@ -208,6 +209,7 @@ function cleanup(fs: FileSystem.FileSystem, path: Path.Path) {
         Effect.gen(function* () {
           const file = path.join(dir, entry)
           const info = yield* fs.stat(file)
+
           if (Option.getOrElse(info.mtime, () => new Date(0)).getTime() < cutoff) {
             yield* fs.remove(file, { recursive: true, force: true })
           }
@@ -238,9 +240,8 @@ function manifest(path: Path.Path) {
 
 function serverLogRoots(path: Path.Path) {
   const xdgData = process.env.XDG_DATA_HOME || path.join(homedir(), ".local", "share")
-  return [
-    ...new Set([path.join(xdgData, "opencode", "log"), path.join(app.getPath("userData"), "opencode", "log")]),
-  ]
+
+  return [...new Set([path.join(xdgData, "opencode", "log"), path.join(app.getPath("userData"), "opencode", "log")])]
 }
 
 type Entry = { name: string; path: string; offset: number } | { name: string; data: Uint8Array }
@@ -250,16 +251,21 @@ function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix
     if (!(yield* fs.exists(dir).pipe(Effect.orElseSucceed(() => false)))) return []
     const cutoff = Date.now() - EXPORT_WINDOW
     const entries = yield* fs.readDirectory(dir, { recursive: true })
+
     return (yield* Effect.forEach(entries, (entry) =>
       Effect.gen(function* () {
         const file = path.join(dir, entry)
         const info = yield* fs.stat(file)
+
         if (info.type === "Directory") return null
+
         if (Option.getOrElse(info.mtime, () => new Date(0)).getTime() < cutoff) return null
+
         if (file.endsWith(".heapsnapshot")) return null
         // Server logs append forever without rotation, so the active log is often the largest
         // file. Export its tail rather than dropping the most relevant file from the bundle.
         const offset = Math.max(0, Number(info.size) - MAX_EXPORT_FILE_SIZE)
+
         return { name: path.join(prefix, entry).replace(/\\/g, "/"), path: file, offset }
       }),
     )).filter((entry) => entry !== null)
@@ -280,6 +286,7 @@ function writeZip(fs: FileSystem.FileSystem, output: string, entries: Entry[]) {
               : entry.offset === 0
                 ? yield* fs.readFile(entry.path)
                 : Buffer.concat(yield* Stream.runCollect(fs.stream(entry.path, { offset: entry.offset })))
+
           yield* Effect.tryPromise(() => writer.add(entry.name, new BlobReader(new Blob([new Uint8Array(data)]))))
         }),
       { concurrency: 1, discard: true },
@@ -292,6 +299,7 @@ function writeZip(fs: FileSystem.FileSystem, output: string, entries: Entry[]) {
 function initConsoleTransport() {
   if (app.isPackaged) {
     log.transports.console.level = false
+
     return
   }
 

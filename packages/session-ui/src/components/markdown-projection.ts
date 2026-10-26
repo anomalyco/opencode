@@ -6,6 +6,8 @@ export function completedProjection(text: string): Projection {
 
 export function canReusePendingBlock(current: Pick<Block, "mode" | "raw"> | undefined, next: Block) {
   if (!current || current.mode !== next.mode) return false
+
   if (next.mode === "code" || next.mode === "live") return next.raw.startsWith(current.raw)
+
   return current.raw === next.raw
 }

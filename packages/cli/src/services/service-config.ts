@@ -2,16 +2,24 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
+import { RemoteTunnel } from "./remote-tunnel"
 
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
 // points the client package's service operations at this CLI: which
 // registration file (by channel), which version, and how to spawn opencode.
 
 export const Info = Schema.Struct({
+  disabled: Schema.optional(Schema.Boolean),
+  // Present when remote access is on. The route is generated, never user-set: the secret subdomain the service is
+  // served on.
+  remote: Schema.optional(Schema.Struct({ route: Schema.String })),
+  // Set once the user has accepted exposing the service to the internet, or had remote access on before, so turning
+  // remote access off and on again does not ask a second time.
+  remoteAccepted: Schema.optional(Schema.Literal(true)),
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
@@ -20,20 +28,38 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
-const keys = ["hostname", "port", "password", "cors", "env"] as const
+const keys = ["disabled", "remote", "hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+// Earlier builds stored remote access as a boolean.
+const decodeLegacy = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ ...Info.fields, remote: Schema.Boolean })),
+)
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
+// Released channels share one service, port and database, so switching between stable and beta keeps the same sessions.
+// Dev builds come from every merge to dev and run their own: sharing let a dev build replace the stable server, and a
+// beta app then adopt that dev server.
 export function filename(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
+  if (channel === "latest" || channel === "beta" || channel === "next") return "service.json"
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
+export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+  const port = channelPort(channel)
+  // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
+  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
+  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
+  // 12 bits: 0xC0DE becomes 0x70DE.
+  if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
+  return port
+}
+
+function channelPort(channel: string) {
+  if (channel === "latest" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
+  if (channel === "dev") return 0xc0e0
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
 }
 
@@ -78,7 +104,16 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 })
 
 function configKey(key: string): Key {
-  if (key === "hostname" || key === "port" || key === "password" || key === "cors" || key === "env") return key
+  if (
+    key === "disabled" ||
+    key === "remote" ||
+    key === "hostname" ||
+    key === "port" ||
+    key === "password" ||
+    key === "cors" ||
+    key === "env"
+  )
+    return key
   throw new Error(`Unknown service config key: ${key}`)
 }
 
@@ -94,11 +129,24 @@ const paths = Effect.gen(function* () {
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
+      // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
+      // older build and is left for a released client to replace.
+      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
+        ? [path.join(global.state, "service.json")]
+        : []),
     ],
     configFile: path.join(global.config, name),
   }
 })
+
+// Clients find the service at its registration under XDG_STATE_HOME. A saved value would move the
+// registration away from them, and children of the service (tool shells, a relaunched Desktop) would
+// look for it in the wrong place, so the service keeps the state directory it was launched with.
+export function processEnv(env: Info["env"]) {
+  if (env === undefined) return undefined
+  const { XDG_STATE_HOME: _state, ...rest } = env
+  return rest
+}
 
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
@@ -106,30 +154,38 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: (yield* read()).env,
-    command: [
-      ...selfCommand(),
-      "serve",
-      "--service",
-    ],
+    env: processEnv((yield* read()).env),
+    command: [...selfCommand(), "serve", "--service"],
   }
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
   const { fs, configFile, legacyConfigFile } = yield* paths
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
-  return yield* fs.readFileString(configFile).pipe(
-    Effect.flatMap(decodeInfo),
-    Effect.orElseSucceed(() => ({}) as Info),
-  )
+  const text = yield* fs.readFileString(configFile).pipe(Effect.option)
+  if (Option.isNone(text)) return {} as Info
+  const info = yield* decodeInfo(text.value).pipe(Effect.option)
+  if (Option.isSome(info)) return info.value
+  const legacy = decodeLegacy(text.value)
+  if (Option.isNone(legacy)) return {} as Info
+  // Repair the file in place so every reader sees the same route.
+  const { remote: enabled, ...rest } = legacy.value
+  const repaired: Info = enabled ? { ...rest, remote: { route: route() } } : rest
+  yield* write(repaired)
+  return repaired
 })
+
+// 64 random bits as 16 hex characters, a valid DNS label.
+function route() {
+  return randomBytes(8).toString("hex")
+}
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   const { fs, configFile } = yield* paths
-  const temp = configFile + ".tmp"
+  const temp = configFile + "." + process.pid + ".tmp"
   yield* fs.makeDirectory(path.dirname(configFile), { recursive: true })
   yield* fs.writeFileString(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })
-  yield* fs.rename(temp, configFile)
+  yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
 })
 
 export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {
@@ -143,14 +199,41 @@ export const password = Effect.fn("cli.service-config.password")(function* (valu
   return next
 })
 
+export const acceptRemote = Effect.fn("cli.service-config.accept-remote")(function* () {
+  yield* write({ ...(yield* read()), remoteAccepted: true })
+})
+
+// Disabling forgets the address, so enabling again issues a new unguessable one. Having had it on counts as
+// accepting remote access.
+const disableRemote = Effect.fnUntraced(function* () {
+  const { remote, ...next } = yield* read()
+  yield* write(remote === undefined ? next : { ...next, remoteAccepted: true })
+})
+
+// Turns remote access on and returns its route, created once and kept so the remote URL survives restarts.
+export const remote = Effect.fn("cli.service-config.remote")(function* () {
+  const existing = yield* read()
+  if (existing.remote) return existing.remote.route
+  const next = route()
+  yield* write({ ...existing, remote: { route: next } })
+  return next
+})
+
 export const get = Effect.fn("cli.service-config.get")(function* (key?: string, name?: string) {
   if (key === undefined) {
     const { password: _password, ...safe } = yield* read()
-    return JSON.stringify(safe, null, 2)
+    // The route is as sensitive as the password: it is the unguessable half of the remote address.
+    return JSON.stringify(safe.remote === undefined ? safe : { ...safe, remote: {} }, null, 2)
   }
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service get ${selected}`)
   switch (selected) {
+    case "disabled": {
+      return String((yield* read()).disabled ?? false)
+    }
+    case "remote": {
+      return String((yield* read()).remote !== undefined)
+    }
     case "hostname": {
       return (yield* read()).hostname ?? ""
     }
@@ -177,6 +260,24 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
   if (selected !== "env" && nestedValue !== undefined)
     throw new Error(`Usage: opencode service set ${selected} <value>`)
   switch (selected) {
+    case "disabled": {
+      if (value !== "true" && value !== "false") throw new Error("Disabled must be true or false")
+      if (value === "true") yield* Service.stop(yield* options())
+      yield* write({ ...(yield* read()), disabled: value === "true" })
+      return
+    }
+    case "remote": {
+      if (value !== "true" && value !== "false") throw new Error("Remote must be true or false")
+      // A tunnel that cannot be created leaves remote access off instead of a service that keeps retrying.
+      if (value === "true") yield* RemoteTunnel.ensure()
+      yield* Service.stop(yield* options())
+      if (value === "true") {
+        yield* remote()
+        return
+      }
+      yield* disableRemote()
+      return
+    }
     case "hostname": {
       yield* Service.stop(yield* options())
       yield* write({ ...(yield* read()), hostname: value })
@@ -221,6 +322,16 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
   switch (selected) {
+    case "disabled": {
+      const { disabled: _disabled, ...next } = yield* read()
+      yield* write(next)
+      return
+    }
+    case "remote": {
+      yield* Service.stop(yield* options())
+      yield* disableRemote()
+      return
+    }
     case "hostname": {
       yield* Service.stop(yield* options())
       const { hostname: _hostname, ...next } = yield* read()

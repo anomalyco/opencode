@@ -15,6 +15,7 @@ export function SettingsSearchField(props: {
   const [state, setState] = createStore({ overflow: { start: false, end: false } })
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
+
   const updateOverflow = () => {
     if (!input) return
     const offset = Math.abs(input.scrollLeft)
@@ -23,6 +24,7 @@ export function SettingsSearchField(props: {
       end: input.scrollWidth - input.clientWidth - offset > 1,
     })
   }
+
   const clear = () => {
     props.onInput("")
     input?.focus({ preventScroll: true })
@@ -31,6 +33,7 @@ export function SettingsSearchField(props: {
   createEffect(on(() => props.value, updateOverflow))
   onMount(() => {
     const screen = root?.closest<HTMLElement>(".settings-screen")
+
     if (!screen) return
     makeEventListener(screen, "keydown", (event) => {
       if (
@@ -73,10 +76,13 @@ export function SettingsSearchField(props: {
           if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return
           event.preventDefault()
           event.stopPropagation()
+
           if (props.value) {
             clear()
+
             return
           }
+
           event.currentTarget.blur()
           event.currentTarget.closest<HTMLElement>(".settings-screen")?.focus({ preventScroll: true })
         }}

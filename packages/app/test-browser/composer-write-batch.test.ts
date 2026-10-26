@@ -9,6 +9,7 @@ import { flushPersisted } from "@/runtime/persistence/persist"
 function setup(read: () => string | null | Promise<string | null> = () => null) {
   return createRoot((dispose) => {
     const writes: ComposerStore[] = []
+
     const state = createComposerState(ServerScope.local, { draftID: "composer-write-batch-test" }, undefined, {
       platform: "desktop",
       os: "windows",
@@ -24,12 +25,14 @@ function setup(read: () => string | null | Promise<string | null> = () => null) 
         removeItem() {},
       }),
     })
+
     return { state, writes, editor: createComposerEditorActions(state.store), dispose }
   })
 }
 
 test("composer-write-batch: a burst of edits persists once with prompt, cursor and retry together", async () => {
   const value = setup()
+
   try {
     await value.state.ready.promise
     value.state.context.add({ type: "file", path: "src/queue.ts", preview: "await queue.flush()" })
@@ -54,6 +57,7 @@ test("composer-write-batch: a burst of edits persists once with prompt, cursor a
 
 test("composer-write-batch: a save with no serialized change writes nothing", async () => {
   const value = setup()
+
   try {
     await value.state.ready.promise
     value.state.set([{ type: "text", content: "previous", start: 0, end: 8 }], 5)
@@ -75,6 +79,7 @@ test("composer-write-batch: a save with no serialized change writes nothing", as
 
 test("composer-write-batch: state replacement snapshots the value at save time", async () => {
   const value = setup()
+
   try {
     await value.state.ready.promise
     value.state.set([{ type: "text", content: "previous", start: 0, end: 8 }], 5)
@@ -95,6 +100,7 @@ test("composer-write-batch: state replacement snapshots the value at save time",
 
 test("composer-write-batch: the last edit in a window wins and attachments are retained", async () => {
   const value = setup()
+
   try {
     await value.state.ready.promise
     value.state.set(
@@ -135,6 +141,7 @@ test("composer-write-batch: the last edit in a window wins and attachments are r
 test("composer-write-batch: an edit still wins over a pending persisted read", async () => {
   const loading = Promise.withResolvers<string>()
   const value = setup(() => loading.promise)
+
   try {
     value.editor.setPrompt([{ type: "text", content: "new", start: 0, end: 3 }], 3)
     loading.resolve(
@@ -157,6 +164,7 @@ test("composer-write-batch: an edit still wins over a pending persisted read", a
 
 test("composer-write-batch: observers see every edit before anything is persisted", async () => {
   const value = setup()
+
   try {
     await value.state.ready.promise
     createRoot((dispose) => {

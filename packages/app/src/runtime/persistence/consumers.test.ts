@@ -1,59 +1,94 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { WorkspaceOnboardingSchema, ProviderTipSchema, WorkspaceTipSchema } from "@/new-session/view"
+import { WorkspaceOnboardingSchema, ProviderTipSchema } from "@/new-session/view"
 import { ModelSelectionSchema } from "@/providers/models/selection"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
 import { languageSchema } from "@/runtime/i18n/language"
 import { HomeServersSchema } from "@/home/projects/controller"
 import { ModelProvidersSchema } from "@/settings/models/models"
+import { ProjectState, VcsState } from "@/runtime/server/persistence"
+
+function stored<S extends Schema.ConstraintCodec<object, unknown>>(
+  name: string,
+  schema: S,
+  initial: NoInfer<S["Type"]>,
+  cases: [unknown, unknown][],
+) {
+  const codec = Persistence.withInitial(schema, initial)
+
+  return { name, decode: Schema.decodeUnknownSync(codec), encode: Schema.encodeUnknownSync(codec), cases }
+}
+
+const collapsed = [
+  [{}, { collapsed: {} }],
+  [{ collapsed: [] }, { collapsed: {} }],
+  [
+    { collapsed: { open: false, closed: true, invalid: "false" } },
+    { collapsed: { open: false, closed: true, invalid: false } },
+  ],
+] satisfies [unknown, unknown][]
 
 describe("persisted consumer schemas", () => {
-  test("onboarding and provider tip retain defaults and validate stored values", () => {
-    const onboarding = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceOnboardingSchema, { used: false }))
-    const tip = Schema.decodeUnknownSync(Persistence.withInitial(ProviderTipSchema, { dismissedAt: 0 }))
-    const workspaceTip = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceTipSchema, { dismissedAt: 0 }))
-    expect(onboarding({})).toEqual({ used: false })
-    expect(onboarding({ used: "true" })).toEqual({ used: false })
-    expect(onboarding({ used: true })).toEqual({ used: true })
-    expect(tip({})).toEqual({ dismissedAt: 0 })
-    expect(tip({ dismissedAt: "yesterday" })).toEqual({ dismissedAt: 0 })
-    expect(tip({ dismissedAt: Infinity })).toEqual({ dismissedAt: 0 })
-    expect(tip({ dismissedAt: 123 })).toEqual({ dismissedAt: 123 })
-    expect(workspaceTip({ dismissedAt: 123 })).toEqual({ dismissedAt: 123 })
-  })
-
-  test("collapse records recover malformed entries without losing valid siblings", () => {
-    for (const schema of [HomeServersSchema, ModelProvidersSchema]) {
-      const decode = Schema.decodeUnknownSync(Persistence.withInitial(schema, { collapsed: {} }))
-      expect(decode({})).toEqual({ collapsed: {} })
-      expect(decode({ collapsed: [] })).toEqual({ collapsed: {} })
-      expect(decode({ collapsed: { open: false, closed: true, invalid: "false" } })).toEqual({
-        collapsed: { open: false, closed: true, invalid: false },
-      })
-    }
-  })
-
-  test("model selection migrates legacy picks and omits workspace state", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))
-    expect(decode({})).toEqual({ session: {} })
-    const state = decode({ pick: { __workspace__: { agent: "plan" }, session1: { agent: "build" } } })
-    expect(state.session.session1?.agent).toBe("build")
-    expect(state.session.__workspace__).toBeUndefined()
-    const encoded = Schema.encodeSync(
-      Schema.fromJsonString(Persistence.withInitial(ModelSelectionSchema, { session: {} })),
-    )(state)
-    expect(JSON.parse(encoded)).toEqual({ session: { session1: { agent: "build" } } })
-    expect(decode(JSON.parse(encoded))).toEqual(state)
+  test.each([
+    stored("workspace onboarding", WorkspaceOnboardingSchema, { used: false }, [
+      [{}, { used: false }],
+      [{ used: "true" }, { used: false }],
+      [{ used: true }, { used: true }],
+    ]),
+    stored("provider tip", ProviderTipSchema, { dismissedAt: 0 }, [
+      [{}, { dismissedAt: 0 }],
+      [{ dismissedAt: "yesterday" }, { dismissedAt: 0 }],
+      [{ dismissedAt: Infinity }, { dismissedAt: 0 }],
+      [{ dismissedAt: 123 }, { dismissedAt: 123 }],
+    ]),
+    stored("home server collapse", HomeServersSchema, { collapsed: {} }, collapsed),
+    stored("model provider collapse", ModelProvidersSchema, { collapsed: {} }, collapsed),
+    stored("VCS cache", VcsState, { value: undefined }, [
+      [{}, { value: undefined }],
+      [{ value: null }, { value: undefined }],
+      [{ value: { branch: 1 } }, { value: undefined }],
+      [{ value: { default_branch: "main" } }, { value: { default_branch: "main" } }],
+      [
+        { value: { branch: "feature", default_branch: "main", obsolete: true } },
+        { value: { branch: "feature", default_branch: "main" } },
+      ],
+    ]),
+    stored("project cache", ProjectState, { value: undefined }, [
+      [{}, { value: undefined }],
+      [{ value: [] }, { value: undefined }],
+      [{ value: { icon: { override: 1 } } }, { value: undefined }],
+      [{ value: { commands: { start: false } } }, { value: undefined }],
+      [{ value: {} }, { value: {} }],
+      [
+        {
+          value: {
+            name: "Project",
+            icon: { override: "data:image/png;base64,abc", color: "blue" },
+            commands: { start: "bun dev" },
+          },
+        },
+        {
+          value: {
+            name: "Project",
+            icon: { override: "data:image/png;base64,abc", color: "blue" },
+            commands: { start: "bun dev" },
+          },
+        },
+      ],
+    ]),
+  ])("$name defaults missing or invalid values and round-trips valid ones", (row) => {
+    row.cases.forEach(([input, expected]) => {
+      const value = row.decode(input)
+      expect<unknown>(value).toEqual(expected)
+      expect(row.decode(row.encode(value))).toEqual(value)
+    })
   })
 
   test("current model selections take precedence over legacy picks", () => {
-    expect(
-      Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
-        session: {},
-        pick: { session1: { agent: "plan" } },
-      }),
-    ).toEqual({ session: {} })
+    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))
+    expect(decode({})).toEqual({ session: {} })
+    expect(decode({ session: {}, pick: { session1: { agent: "plan" } } })).toEqual({ session: {} })
   })
 
   test("model selection validates nested model keys and preserves explicit null variants", () => {
@@ -64,6 +99,7 @@ describe("persisted consumer schemas", () => {
         invalid: "build",
       },
     })
+
     expect(state.session.good).toEqual({
       agent: "build",
       model: { providerID: "provider", modelID: "model", variant: "high" },
@@ -78,6 +114,7 @@ describe("persisted consumer schemas", () => {
   test("file views validate scroll positions and line sides independently", () => {
     const decode = Schema.decodeUnknownSync(Persistence.withInitial(FileViewsSchema, { file: {} }))
     expect(decode({})).toEqual({ file: {} })
+
     const state = decode({
       file: {
         good: {
@@ -90,6 +127,7 @@ describe("persisted consumer schemas", () => {
         invalid: false,
       },
     })
+
     expect(state.file.good).toEqual({
       scrollTop: 12,
       scrollLeft: 4,

@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 
-export const ID = Schema.String.pipe(Schema.brand("WebSearch.ID"))
+export const ID = Schema.String.pipe(Schema.brand("WebSearch.ID"), Schema.annotate({ identifier: "WebSearch.ID" }))
 export type ID = typeof ID.Type
 
 export interface Provider extends Schema.Schema.Type<typeof Provider> {}

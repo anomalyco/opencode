@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect, Option, Scope, Tracer } from "effect"
-import { HttpMiddleware, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpMiddleware, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { withoutParentSpan } from "../src/request-tracing"
 
 test("requests ignore ambient parents and continue inbound trace context", async () => {

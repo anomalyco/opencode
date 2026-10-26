@@ -43,6 +43,7 @@ export const Basic = {
 export const Controlled = {
   render: () => {
     const [value, setValue] = createSignal("weekly")
+
     return (
       <div style={{ display: "grid", gap: "12px" }}>
         <RadioGroup label="Controlled" value={value()} onChange={(v) => setValue(v)} name="controlled-frequency">

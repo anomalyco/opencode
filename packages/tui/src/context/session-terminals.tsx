@@ -2,7 +2,6 @@ import type { PersistentPtyInfo } from "@opencode/client"
 import { createSignal, onCleanup } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
-import { useConfig } from "../config"
 import { useData } from "./data"
 import { useEvent } from "./event"
 import { useStorage } from "./storage"
@@ -15,10 +14,16 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
   name: "SessionTerminals",
   init: () => {
     const client = useClient()
-    const config = useConfig().data
     const data = useData()
     const event = useEvent()
+    const [available, setAvailable] = createSignal(false)
     const [focus, setFocus] = createSignal<string>()
+    // Input written before a terminal's pane mounts waits here; the pane drains it when it attaches.
+    const writers = new Map<string, (data: Uint8Array) => void>()
+    const pending = new Map<string, Uint8Array[]>()
+    // Settles once the latest terminal support check finishes; pending until the first connection.
+    const initial = Promise.withResolvers<void>()
+    let check = initial.promise
     const storage = useStorage()
     const [store, update] = storage.store<SessionTerminalsState>("session-terminal-selection", {
       initial: { sessions: {} },
@@ -39,9 +44,10 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       })
     }
 
-    const selectTerminal = async (sessionID: string, ptyID: string | null) => {
+    // `focus: false` shows the terminal without moving keyboard focus into it, for terminals the user didn't open.
+    const selectTerminal = async (sessionID: string, ptyID: string | null, options?: { focus?: boolean }) => {
       if (ptyID !== null && !terminals[sessionID]?.some((terminal) => terminal.id === ptyID)) return
-      setFocus(ptyID ?? undefined)
+      setFocus(options?.focus === false ? undefined : (ptyID ?? undefined))
       await update((draft) => {
         draft.sessions[sessionID] = ptyID
       })
@@ -50,23 +56,41 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
     for (const type of ["persistent-pty.added", "persistent-pty.removed"] as const) {
       onCleanup(
         event.on(type, (evt) => {
-          if (!config.session.terminal || !terminals[evt.data.sessionID]) return
+          if (!available() || !terminals[evt.data.sessionID]) return
           void refresh(evt.data.sessionID).catch((error) =>
             console.error("Failed to refresh persistent terminal panes", error),
           )
         }),
       )
     }
+    // The event stream opens with server.connected, so this runs for the first connection and every reconnect.
     onCleanup(
       event.on("server.connected", () => {
-        if (!config.session.terminal) return
-        Object.keys(terminals).forEach((sessionID) => {
-          void refresh(sessionID).catch((error) => console.error("Failed to refresh persistent terminal panes", error))
-        })
+        check = client.api.server
+          .info()
+          .then((info) => {
+            // Servers that predate the field omit it; keep offering terminals as clients did before.
+            setAvailable(info.capabilities?.persistentPty !== false)
+            if (!available()) return
+            Object.keys(terminals).forEach((sessionID) => {
+              void refresh(sessionID).catch((error) =>
+                console.error("Failed to refresh persistent terminal panes", error),
+              )
+            })
+          })
+          .catch((error) => {
+            setAvailable(false)
+            console.error("Failed to read server terminal support", error)
+          })
+          .finally(initial.resolve)
       }),
     )
 
     return {
+      available,
+      async checked() {
+        await check
+      },
       get(sessionID: string) {
         return {
           terminals: terminals[sessionID] ?? [],
@@ -75,7 +99,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       },
       refresh,
       selectTerminal,
-      async newTerminal(sessionID: string): Promise<PersistentPtyInfo> {
+      async newTerminal(sessionID: string, options?: { focus?: boolean }): Promise<PersistentPtyInfo> {
         const session = data.session.get(sessionID)
         const terminal = await client.api.experimental.persistentPty.create({
           sessionID,
@@ -85,8 +109,21 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
           env: {},
         })
         await refresh(sessionID)
-        await selectTerminal(sessionID, terminal.id)
+        await selectTerminal(sessionID, terminal.id, options)
         return terminal
+      },
+      write(ptyID: string, data: Uint8Array) {
+        const writer = writers.get(ptyID)
+        if (writer) return writer(data)
+        pending.set(ptyID, [...(pending.get(ptyID) ?? []), data])
+      },
+      attachWriter(ptyID: string, writer: (data: Uint8Array) => void) {
+        writers.set(ptyID, writer)
+        pending.get(ptyID)?.forEach(writer)
+        pending.delete(ptyID)
+        return () => {
+          if (writers.get(ptyID) === writer) writers.delete(ptyID)
+        }
       },
       shouldFocus(ptyID: string) {
         return focus() === ptyID

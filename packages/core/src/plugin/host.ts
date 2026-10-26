@@ -19,6 +19,7 @@ import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
+import { InstructionEntry } from "../session/instruction-entry.js"
 import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -69,6 +70,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
+  const instructionEntries = yield* InstructionEntry.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
@@ -146,8 +148,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
       transform: (callback) =>
         agents.transform((editor) => {
           callback({
-            list: () => mutable(editor.list()),
-            get: (id) => mutable(editor.get(Agent.ID.make(id))),
+            list: editor.list,
+            get: (id) => editor.get(Agent.ID.make(id)),
             default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
             update: (id, update) => editor.update(Agent.ID.make(id), update),
             remove: (id) => editor.remove(Agent.ID.make(id)),
@@ -252,6 +254,9 @@ export const make = Effect.fn("PluginHost.make")(function* (
       reload: commands.reload,
       transform: commands.transform,
     },
+    credential: {
+      activate: (input) => integration.connection.activate(input.credentialID),
+    },
     event: {
       subscribe: () =>
         bus
@@ -283,6 +288,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
             key: input.key,
+            answer: input.answer,
+            label: input.label,
+          }),
+        external: (input) =>
+          integration.connection.external({
+            integrationID: Integration.ID.make(input.integrationID),
+            methodID: Integration.MethodID.make(input.methodID),
             answer: input.answer,
             label: input.label,
           }),
@@ -345,12 +357,21 @@ export const make = Effect.fn("PluginHost.make")(function* (
           integration.connection.resolve(
             connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
           ),
+        status: (input) =>
+          integration.connection.status({
+            integrationID: Integration.ID.make(input.integrationID),
+            connection:
+              input.connection.type === "credential"
+                ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
+                : input.connection,
+            status: input.status,
+          }),
       },
       transform: (callback) =>
         integration.transform((editor) => {
           callback({
-            list: () => mutable(editor.list()),
-            get: (id) => mutable(editor.get(Integration.ID.make(id))),
+            list: editor.list,
+            get: (id) => editor.get(Integration.ID.make(id)),
             update: (id, update) => editor.update(Integration.ID.make(id), update),
             remove: (id) => editor.remove(Integration.ID.make(id)),
             method: {
@@ -415,6 +436,16 @@ export const make = Effect.fn("PluginHost.make")(function* (
                 : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
             ),
           ),
+      // Plain rejections stay defects, as for built-in tools, so they end the step.
+      assert: (input) =>
+        permission.assert(input).pipe(
+          Effect.catchTags({
+            "Permission.BlockedError": (error) => Effect.fail(new Tool.Error({ message: error.message, error })),
+            "Permission.CorrectedError": (error) => Effect.fail(new Tool.Error({ message: error.feedback, error })),
+            "Session.NotFoundError": (error) =>
+              Effect.fail(new Tool.Error({ message: `Session not found: ${error.sessionID}`, error })),
+          }),
+        ),
     },
     plugin: {
       list: () => response(plugin.list()),
@@ -517,6 +548,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
+      list: sessions.list,
       create: (input) =>
         sessions.create({
           id: input?.id,
@@ -525,18 +557,27 @@ export const make = Effect.fn("PluginHost.make")(function* (
           model: input?.model,
           metadata: input?.metadata,
           permissions: input?.permissions,
-          location:
-            input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+          ...(input?.parentID === undefined
+            ? {
+                location:
+                  input?.location ??
+                  Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+              }
+            : { parentID: input.parentID }),
         }),
       get: (input) => sessions.get(input.sessionID),
+      remove: (input) => sessions.remove(input.sessionID),
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
       generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: (input) => sessions.command({ ...input, command: input.name }),
+      compact: sessions.compact,
       update: Effect.fn(function* (input) {
         yield* sessions.get(input.sessionID)
         if (input.title !== undefined) yield* sessions.rename({ sessionID: input.sessionID, title: input.title })
+        if (input.metadata !== undefined)
+          yield* sessions.setMetadata({ sessionID: input.sessionID, metadata: input.metadata })
         if (input.permissions !== undefined)
           yield* sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
       }),
@@ -548,6 +589,24 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      instructions: {
+        entry: {
+          list: Effect.fn(function* (input) {
+            yield* sessions.get(input.sessionID)
+            return yield* instructionEntries.list(input.sessionID)
+          }),
+          put: Effect.fn(function* (input) {
+            const key = yield* Schema.decodeUnknownEffect(InstructionEntry.Key)(input.key)
+            yield* sessions.get(input.sessionID)
+            yield* instructionEntries.put({ ...input, key })
+          }),
+          remove: Effect.fn(function* (input) {
+            const key = yield* Schema.decodeUnknownEffect(InstructionEntry.Key)(input.key)
+            yield* sessions.get(input.sessionID)
+            yield* instructionEntries.remove({ ...input, key })
+          }),
+        },
+      },
     },
   }
   return context
@@ -577,6 +636,7 @@ export const requirements = LayerNode.group([
   Permission.node,
   PluginHooks.node,
   Session.node,
+  InstructionEntry.node,
   PersistentPty.node,
   LocationServiceMap.node,
 ])
@@ -642,6 +702,12 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     }
   }
   if (input.method.type === "command") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+    }
+  }
+  if (input.method.type === "external") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },

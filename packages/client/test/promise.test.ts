@@ -13,6 +13,7 @@ test("exposes every standard HTTP API group", () => {
     "message",
     "model",
     "generate",
+    "voice",
     "provider",
     "integration",
     "mcp",
@@ -34,24 +35,28 @@ test("exposes every standard HTTP API group", () => {
     "debug",
     "migration",
     "websearch",
+    "usage",
     "config",
   ])
-  expect(Object.keys(client.debug)).toEqual(["location"])
+  expect(Object.keys(client.debug)).toEqual(["heapDump", "location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
   expect(Object.keys(client.message)).toEqual(["list"])
   expect(Object.keys(client.integration)).toEqual(["list", "get", "wellknown", "connect", "oauth", "command"])
   expect(Object.keys(client.integration.wellknown)).toEqual(["add"])
-  expect(Object.keys(client.integration.connect)).toEqual(["key"])
+  expect(Object.keys(client.integration.connect)).toEqual(["key", "external"])
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
-  expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
+  expect(Object.keys(client.voice)).toEqual(["models", "session"])
+  expect(Object.keys(client.usage)).toEqual(["limits"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "write", "watch", "unwatch"])
+  expect(Object.keys(client.vcs)).toEqual(["init", "get", "base", "status", "branch", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
-  expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
+  expect(Object.keys(client.experimental).sort()).toEqual(["media", "persistentPty"])
+  expect(Object.keys(client.experimental.media)).toEqual(["get"])
   expect(client.experimental.persistentPty.read).toBeFunction()
-  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
+  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
@@ -174,21 +179,25 @@ test("declared errors are thrown as Error instances that keep the body", async (
   expect(error).toMatchObject({ _tag: "InvalidRequestError", kind: "integration_authorization" })
 })
 
-test("declared errors with a data envelope read the nested message", async () => {
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async () =>
-      Response.json({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } }, { status: 400 }),
-  })
-  const error = await client.worktree.create({ projectID: "prj_test" }).then(
-    () => undefined,
-    (cause: unknown) => cause,
-  )
-  expect(error).toBeInstanceOf(Error)
-  if (!(error instanceof Error)) throw error
-  expect(error.message).toBe("Worktree directory unavailable")
-  expect(error.name).toBe("WorktreeError")
-  expect(error).toMatchObject({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } })
+test("worktree errors retain the existing envelope with or without a tag", async () => {
+  for (const body of [
+    { name: "WorktreeError", data: { message: "Worktree directory unavailable" } },
+    { _tag: "WorktreeError", name: "WorktreeError", data: { message: "Worktree directory unavailable" } },
+  ]) {
+    const client = OpenCode.make({
+      baseUrl: "http://localhost:3000",
+      fetch: async () => Response.json(body, { status: 400 }),
+    })
+    const error = await client.worktree.create({ projectID: "prj_test" }).then(
+      () => undefined,
+      (cause: unknown) => cause,
+    )
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toBe("Worktree directory unavailable")
+    expect(error.name).toBe("WorktreeError")
+    expect(error).toMatchObject(body)
+  }
 })
 
 test("client errors keep the reason and describe the failure in the message", async () => {
@@ -967,7 +976,7 @@ test("session methods use the public HTTP contract", async () => {
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
-  const interrupted = await client.session.interrupt({ sessionID: "ses_test", continue: true })
+  const interrupted = await client.session.interrupt({ sessionID: "ses_test", resume: true })
   const message = await client.session.message.get({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
@@ -995,7 +1004,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
-    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?resume=true"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const viewBody = requests.find((request) => request.url.endsWith("/api/session/ses_test/view"))?.init?.body

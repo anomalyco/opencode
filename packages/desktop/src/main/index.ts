@@ -13,6 +13,7 @@ import { registerRendererScheme } from "./windows/scheme"
 // hundred milliseconds of module evaluation and layers — loads. Configuration and the scheme must
 // precede ready; the window is created the moment ready fires; everything else is imported after.
 configureApplication()
+
 if (acquireApplicationLock()) {
   registerRendererScheme()
   // Window first, then the bundle: starting the import before ready delays ready itself, because the
@@ -23,10 +24,12 @@ if (acquireApplicationLock()) {
     createEarlyWindow()
     marks.window = Date.now()
     startSidecarProbe()
+
     // The window's renderer is already loading. Its HTML and preloaded chunks are served from this
     // thread, so the bundle waits for that burst to be answered (or a cap) before it evaluates.
     if (!process.env.ELECTRON_RENDERER_URL) await rendererAssetsServed({ quietMs: 40, capMs: 400 })
     marks.served = Date.now()
+
     return import("./desktop")
   })
 }

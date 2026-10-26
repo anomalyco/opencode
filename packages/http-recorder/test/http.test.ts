@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import { existsSync } from "node:fs"
 import { isHttpInteraction } from "../src/cassette/model"
 import { HttpRecorder } from "../src"

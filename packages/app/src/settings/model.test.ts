@@ -14,7 +14,9 @@ import {
 } from "./model"
 
 const schema = Persistence.withInitial(settingsPersistence, defaultSettings)
+
 const decode = Schema.decodeUnknownSync(schema)
+
 const encode = Schema.encodeSync(schema)
 
 describe("settings timeline detail migration", () => {
@@ -23,6 +25,7 @@ describe("settings timeline detail migration", () => {
       general: { shellToolPartsExpanded: true, editToolPartsExpanded: false, showReasoningSummaries: true },
       appearance: { fontSize: 16 },
     })
+
     expect(settings.general.timelineDetail).toEqual({
       ...timelinePresets[2].value,
       shell: { placement: "separate", details: "expanded" },
@@ -34,15 +37,37 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
-  test("restores summary expansion and discards the retired status preference", () => {
+  test("keeps the values extensions copy out once and discards retired preferences", () => {
     const settings = decode({
-      general: { showStatus: true, showSearch: true },
+      general: {
+        showStatus: true,
+        showSearch: true,
+        experimentalBrowser: false,
+        showProjectIcon: true,
+        releaseNotes: false,
+        mobileDiffWrap: false,
+      },
+      appearance: { showProjectName: true },
       sessionSummary: { projectExpanded: false, serverExpanded: true },
     })
+
     expect(settings.general.showSearch).toBe(true)
     expect(settings.general).not.toHaveProperty("showStatus")
-    expect(settings.sessionSummary).toEqual({ projectExpanded: false, serverExpanded: true })
-    expect(decode(encode(settings)).sessionSummary).toEqual(settings.sessionSummary)
+    expect(settings.general).not.toHaveProperty("experimentalBrowser")
+    expect(settings.general).not.toHaveProperty("showProjectIcon")
+    expect(settings.appearance).not.toHaveProperty("showProjectName")
+
+    const copied = (value: typeof settings) => ({
+      sessionSummary: value.sessionSummary,
+      releaseNotes: value.general.releaseNotes,
+      mobileDiffWrap: value.general.mobileDiffWrap,
+    })
+
+    expect(copied(decode(encode(settings)))).toEqual({
+      sessionSummary: { projectExpanded: false, serverExpanded: true },
+      releaseNotes: false,
+      mobileDiffWrap: false,
+    })
   })
 
   test("uses the supplied initial values independently of the current schema", () => {
@@ -51,6 +76,7 @@ describe("settings schema", () => {
       general: { ...defaultSettings.general, timelineDetail: timelinePresets[4].value, autoSave: false },
       appearance: { ...defaultSettings.appearance, fontSize: 20 },
     }
+
     const restore = Schema.decodeUnknownSync(Persistence.withInitial(settingsPersistence, initial))
     expect(restore({})).toEqual(initial)
     expect(restore({ general: { reasoningMode: "invalid", showReasoningSummaries: true } })).toEqual(initial)
@@ -64,31 +90,28 @@ describe("settings schema", () => {
   test("supplies the existing defaults for an empty document", () => {
     expect(decode({})).toEqual({
       general: {
-        autoSave: true,
-        releaseNotes: true,
-        showFileTree: false,
-        showNavigation: false,
-        showSearch: false,
-        showTerminal: false,
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
+        showTurnDiffs: false,
+        backgroundActivity: "left",
+        timelineWidth: "comfortable",
+        newIcons: false,
+        newModelPicker: false,
         mobileTitlebarPosition: "top",
-        mobileDiffWrap: true,
-        terminalPlacement: "side",
         followUpBehavior: "steer",
       },
-      sessionSummary: { projectExpanded: true, serverExpanded: true },
       appearance: {
         fontSize: 14,
         mono: "",
         sans: "",
         terminal: "",
         tabLayout: "horizontal",
+        reduceMotion: "system",
       },
       keybinds: {},
-      permissions: { autoApprove: false },
+      permissions: { autoApprove: false, autoApproveProjects: {} },
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
-      notifications: { agent: true, permissions: true, errors: false },
+      notifications: { agent: false, permissions: true, errors: false },
       sounds: {
         agentEnabled: true,
         agent: "staplebops-01",
@@ -96,6 +119,7 @@ describe("settings schema", () => {
         permissions: "staplebops-02",
         errorsEnabled: true,
         errors: "nope-03",
+        interfaceEnabled: true,
       },
     })
   })
@@ -108,20 +132,24 @@ describe("settings schema", () => {
         releaseNotes: undefined,
         reasoningMode: 3,
         followUpBehavior: "invalid",
+        backgroundActivity: "invalid",
+        timelineWidth: "invalid",
       },
       appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
-      permissions: { autoApprove: true },
+      permissions: { autoApprove: true, autoApproveProjects: { on: true, off: false, bad: "yes" } },
       workspaces: { defaultDestination: "new", lastUsed: { good: "workspace", bad: true } },
       keybinds: { good: "ctrl+k", bad: 3 },
       notifications: { agent: false, permissions: "yes", errors: true },
       sounds: { agent: "custom", agentEnabled: false, permissions: 3 },
     })
+
     expect(settings.general).toMatchObject({
       showTerminal: true,
       autoSave: false,
-      releaseNotes: true,
       timelineDetail: timelinePresets[2].value,
       followUpBehavior: "steer",
+      backgroundActivity: "left",
+      timelineWidth: "comfortable",
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,
@@ -129,23 +157,14 @@ describe("settings schema", () => {
       sans: "",
       terminal: "",
       tabLayout: "vertical",
+      reduceMotion: "system",
     })
-    expect(settings.permissions.autoApprove).toBe(true)
+    expect(settings.permissions).toEqual({ autoApprove: true, autoApproveProjects: { on: true, off: false } })
     expect(settings.workspaces).toEqual({ defaultDestination: "new", lastUsed: { good: "workspace" } })
     expect(settings.keybinds).toEqual({ good: "ctrl+k" })
     expect(settings.notifications).toEqual({ agent: false, permissions: true, errors: true })
     expect(settings.sounds).toMatchObject({ agent: "custom", agentEnabled: false, permissions: "staplebops-02" })
     expect(decode(encode(settings))).toEqual(settings)
-  })
-
-  test("discards retired experimental preferences", () => {
-    const settings = decode({
-      general: { experimentalBrowser: false, showProjectIcon: true },
-      appearance: { showProjectName: true },
-    })
-    expect(settings.general).not.toHaveProperty("experimentalBrowser")
-    expect(settings.general).not.toHaveProperty("showProjectIcon")
-    expect(settings.appearance).not.toHaveProperty("showProjectName")
   })
 
   test.each([undefined, null, false, 7, "invalid", []].map((invalid) => [invalid]))(
@@ -176,30 +195,21 @@ describe("settings schema", () => {
   })
 })
 
-describe("settings font families", () => {
-  test("defaults normal text to Inter", () => {
-    expect(sansDefault).toBe("Inter")
-    expect(sansFontFamily(undefined)).toStartWith('"Inter", ')
-    expect(sansFontFamily("")).toStartWith('"Inter", ')
-    expect(sansFontFamily("   ")).toStartWith('"Inter", ')
-  })
+test("font defaults are Inter and IBM Plex Mono", () => {
+  expect(sansDefault).toBe("Inter")
+  expect(monoDefault).toBe("IBM Plex Mono")
+})
 
-  test("keeps custom normal fonts ahead of the default", () => {
-    expect(sansFontFamily("Custom Sans")).toStartWith('"Custom Sans", "Inter", ')
-  })
-
-  test("defaults monospace text to IBM Plex Mono", () => {
-    expect(monoDefault).toBe("IBM Plex Mono")
-    expect(monoFontFamily(undefined)).toStartWith('"IBM Plex Mono", ')
-    expect(monoFontFamily("")).toStartWith('"IBM Plex Mono", ')
-    expect(monoFontFamily("   ")).toStartWith('"IBM Plex Mono", ')
-  })
-
-  test("keeps custom monospace fonts ahead of the default", () => {
-    expect(monoFontFamily("Custom Mono")).toStartWith('"Custom Mono", "IBM Plex Mono", ')
-  })
-
-  test("preserves the separate terminal font default", () => {
-    expect(terminalFontFamily(undefined)).toStartWith('"JetBrainsMono Nerd Font Mono", ')
-  })
+test.each([
+  { name: "sans", family: sansFontFamily, font: undefined, prefix: '"Inter", ' },
+  { name: "sans", family: sansFontFamily, font: "", prefix: '"Inter", ' },
+  { name: "sans", family: sansFontFamily, font: "   ", prefix: '"Inter", ' },
+  { name: "sans", family: sansFontFamily, font: "Custom Sans", prefix: '"Custom Sans", "Inter", ' },
+  { name: "mono", family: monoFontFamily, font: undefined, prefix: '"IBM Plex Mono", ' },
+  { name: "mono", family: monoFontFamily, font: "", prefix: '"IBM Plex Mono", ' },
+  { name: "mono", family: monoFontFamily, font: "   ", prefix: '"IBM Plex Mono", ' },
+  { name: "mono", family: monoFontFamily, font: "Custom Mono", prefix: '"Custom Mono", "IBM Plex Mono", ' },
+  { name: "terminal", family: terminalFontFamily, font: undefined, prefix: '"JetBrainsMono Nerd Font Mono", ' },
+])("$name font family for $font starts with $prefix", ({ family, font, prefix }) => {
+  expect(family(font)).toStartWith(prefix)
 })

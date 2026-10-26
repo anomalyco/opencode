@@ -19,6 +19,7 @@ export const make = Effect.fn("BackgroundServiceState.make")(function* (options:
     Effect.ensuring(Deferred.succeed(first, undefined)),
     Effect.forkScoped,
   )
+
   return {
     connection: Deferred.await(first).pipe(
       Effect.flatMap(() => Ref.get(current)),

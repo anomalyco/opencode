@@ -13,6 +13,7 @@ export function ConsoleAuthorization(props: {
   onCopy: () => void
 }) {
   const language = useLanguage()
+
   return (
     <div
       data-component="console-authorization"

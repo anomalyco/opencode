@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, Message, ToolDefinition } from "../../src/index.js"
+import { HttpClientRequest } from "effect/http"
+import { LLM, Message, ToolDefinition } from "../../src/effect.js"
 import {
   AmazonBedrock,
   AmazonBedrockMantle,
@@ -43,12 +43,13 @@ describe("native OpenAI-compatible providers", () => {
       [Azure.configure({ resourceName: "resource", apiKey: "test" }).responses("model"), "azure"],
       [AmazonBedrock.configure({ apiKey: "test" }).model("model"), "bedrock"],
       [AmazonBedrockMantle.configure({ apiKey: "test" }).chat("model"), "mantle"],
+      [AmazonBedrockMantle.configure({ apiKey: "test" }).messages("model"), "mantle"],
       [AmazonBedrockMantle.configure({ apiKey: "test" }).responses("model"), "mantle"],
       [Google.configure({ apiKey: "test" }).model("model"), "google"],
       [GoogleVertex.configure(vertex).model("model"), "vertex"],
       [GoogleVertexChat.configure(vertex).model("model"), "vertex"],
       [GoogleVertexResponses.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexMessages.configure(vertex).model("model"), "anthropic"],
+      [GoogleVertexMessages.configure(vertex).model("model"), "vertex"],
       [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic"],
       [
         AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "minimax" }).model("model"),
@@ -64,6 +65,7 @@ describe("native OpenAI-compatible providers", () => {
       [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek"],
       [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks"],
       [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
+      [Groq.configure({ apiKey: "test" }).model("model"), "groq"],
       [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai"],
       [CloudflareAIGateway.configure({ accountId: "account" }).model("model"), "cloudflare-ai-gateway"],
       [CloudflareWorkersAI.configure({ accountId: "account" }).model("model"), "cloudflare-workers-ai"],
@@ -81,13 +83,13 @@ describe("native OpenAI-compatible providers", () => {
 
     expect(together).toMatchObject({
       provider: "togetherai",
-      compatibility: { maxTokensField: "max_tokens", supportsStore: false, supportsStrictMode: false },
+      compatibility: { maxTokensField: "max_tokens", supportsStrictMode: false },
       route: { id: "togetherai-chat", protocol: "openai-chat" },
     })
     expect(together.route.endpoint.baseURL).toBe("https://api.together.xyz/v1")
     expect(cerebras).toMatchObject({
       provider: "cerebras",
-      compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning", supportsStore: false },
+      compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning" },
       route: { id: "cerebras-chat", protocol: "openai-chat" },
     })
     expect(cerebras.route.endpoint.baseURL).toBe("https://api.cerebras.ai/v1")
@@ -127,7 +129,7 @@ describe("native OpenAI-compatible providers", () => {
     const deepinfra = DeepInfra.configure({ apiKey: "fixture" }).model("google/gemma-3-27b-it")
     expect(deepinfra).toMatchObject({
       provider: "deepinfra",
-      compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning_content", supportsStore: false },
+      compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning_content" },
       route: { id: "deepinfra-chat", protocol: "openai-chat" },
     })
     expect(deepinfra.route.endpoint.baseURL).toBe("https://api.deepinfra.com/v1/openai")

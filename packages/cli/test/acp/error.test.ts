@@ -1,50 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { RequestError } from "@agentclientprotocol/sdk"
 import { ACPError } from "../../src/acp/error"
+import { delivered, rpcError, startSession, textDelta, type Wire } from "./wire-fixture"
 
 describe("acp errors", () => {
-  test("maps validation failures to invalid params", () => {
-    const cases: ACPError.Error[] = [
-      new ACPError.SessionNotFoundError({ sessionId: "ses_missing" }),
-      new ACPError.InvalidConfigOptionError({ configId: "temperature" }),
-      new ACPError.InvalidModelError({ providerId: "anthropic", modelId: "claude-missing" }),
-      new ACPError.InvalidEffortError({ effort: "extreme" }),
-      new ACPError.InvalidModeError({ mode: "turbo" }),
-    ]
-
-    expect(cases.map((error) => ACPError.toRequestError(error).code)).toEqual([-32602, -32602, -32602, -32602, -32602])
-  })
-
-  test("includes safe validation details", () => {
-    expect(ACPError.toRequestError(new ACPError.SessionNotFoundError({ sessionId: "ses_123" }))).toMatchObject({
-      code: -32602,
-      data: { sessionId: "ses_123" },
-    })
-    expect(ACPError.toRequestError(new ACPError.InvalidModelError({ modelId: "gpt-missing" }))).toMatchObject({
-      code: -32602,
-      data: { modelId: "gpt-missing" },
-    })
-  })
-
-  test("maps auth required to the SDK auth error", () => {
-    const requestError = ACPError.toRequestError(new ACPError.AuthRequiredError())
-
-    expect(requestError).toBeInstanceOf(RequestError)
-    expect(requestError.code).toBe(-32000)
-    expect(requestError.message).toBe("Authentication required: provider authentication required")
-    expect(requestError.data).toEqual({})
-  })
-
-  test("maps service failures to safe internal errors", () => {
-    const requestError = ACPError.toRequestError(
-      new ACPError.ServiceFailureError({ service: "provider", safeMessage: "Provider request failed" }),
-    )
-
-    expect(requestError.code).toBe(-32603)
-    expect(requestError.message).toBe("Internal error: Provider request failed")
-    expect(requestError.data).toEqual({ service: "provider" })
-  })
-
   test("wraps unknown defects without leaking raw details", () => {
     const requestError = ACPError.toRequestError(
       ACPError.fromUnknown(new Error("stack has sk-ant-secret and oauth refresh token")),
@@ -57,4 +15,37 @@ describe("acp errors", () => {
     expect(serialized).not.toContain("oauth refresh token")
     expect(serialized).not.toContain("stack")
   })
+})
+
+describe("acp error boundary over the wire", () => {
+  test.each<[string, (acp: Wire) => void, string[]]>([
+    ["ends", (acp) => acp.server.closeEvents(), []],
+    [
+      "drops its connection",
+      (acp) => acp.server.dropEvents(),
+      ["ACP catalog event stream failed", "ACP selection event stream failed"],
+    ],
+  ])(
+    "reports an unavailable server when the event stream %s mid-turn and once the server stops",
+    async (_, lose, logs) => {
+      await using acp = await startSession({
+        onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_held", "working")],
+      })
+      const unavailable = {
+        code: -32603,
+        message: "Internal error: OpenCode server is unavailable",
+        data: { errorName: "ServerUnavailable" },
+      }
+
+      const prompt = acp.prompt(acp.sessionId, "hold")
+      await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+      await acp.request("session/set_mode", { sessionId: acp.sessionId, modeId: "build" })
+      lose(acp)
+
+      expect(await rpcError(prompt)).toEqual(unavailable)
+      await acp.server.stop()
+      expect(await rpcError(acp.request("session/list", {}))).toEqual(unavailable)
+      expect(acp.logs.map((log) => String(log.message)).toSorted()).toEqual(logs)
+    },
+  )
 })

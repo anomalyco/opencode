@@ -85,6 +85,7 @@ export const Definitions = {
   "diff.single_patch": keybind("s", "Toggle single patch view"),
   "diff.switch_source": keybind("d", "Switch diff viewer source"),
   "diff.toggle_view": keybind("v", "Toggle diff viewer split or unified view"),
+  "diff.toggle_fullscreen": keybind("f", "Toggle diff viewer full screen"),
   "diff.mark_reviewed": keybind("m", "Toggle selected diff file reviewed"),
   "diff.help": keybind("?,shift+?,shift+/", "Show more diff viewer shortcuts"),
 
@@ -121,8 +122,9 @@ export const Definitions = {
   "session.fork": keybind("none", "Fork session from message"),
   "session.rename": keybind("ctrl+r", "Rename session"),
   "session.delete": keybind("ctrl+d", "Delete session"),
-  "session.share": keybind("none", "Share current session"),
-  "session.unshare": keybind("none", "Unshare current session"),
+  // Retain shipped configuration names; session sharing was removed.
+  "session.share": keybind("none", "Deprecated: session sharing was removed"),
+  "session.unshare": keybind("none", "Deprecated: session sharing was removed"),
   "session.interrupt": keybind("escape", "Interrupt current session"),
   "session.background": keybind("ctrl+b", "Background blocking session tools"),
   "session.compact": keybind("<leader>c", "Compact the session"),
@@ -161,12 +163,14 @@ export const Definitions = {
   "stash.delete": keybind("ctrl+d", "Delete stash entry"),
   "model.dialog.provider": keybind("ctrl+a", "Open provider list from model dialog"),
   "model.dialog.favorite": keybind("ctrl+f", "Toggle model favorite status"),
+  "model.dialog.usage": keybind("ctrl+u", "Open usage limits from model dialog"),
   "model.list": keybind("<leader>m", "List available models"),
   "model.cycle_recent": keybind("f2", "Next recently used model"),
   "model.cycle_recent_reverse": keybind("shift+f2", "Previous recently used model"),
   "model.cycle_favorite": keybind("none", "Next favorite model"),
   "model.cycle_favorite_reverse": keybind("none", "Previous favorite model"),
   "mcp.list": keybind("none", "List MCP servers"),
+  "usage.show": keybind("none", "View usage limits"),
   "provider.connect": keybind("none", "Connect integration"),
   "agent.list": keybind("<leader>a", "List agents"),
   "agent.cycle": keybind("shift+tab", "Next agent"),
@@ -278,14 +282,12 @@ export const Definitions = {
   "plugins.toggle": keybind("return", "Toggle plugin"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
   "dialog.plugins.error": keybind("space", "View plugin error"),
-  "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
   "dialog.plugins.update": keybind("ctrl+u", "Update plugin from plugin dialog"),
   "dialog.plugins.check": keybind("ctrl+r", "Check for plugin updates from plugin dialog"),
 
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
   "terminal.title.toggle": keybind("none", "Toggle terminal title"),
   "plugins.list": keybind("none", "Open plugin manager dialog"),
-  "plugins.install": keybind("none", "Install plugin"),
 
   "which-key.toggle": keybind("ctrl+alt+k", "Toggle which-key panel"),
   "which-key.layout.toggle": keybind("ctrl+alt+shift+k", "Switch which-key layout"),
@@ -346,8 +348,6 @@ export function parse(keybinds: KeybindOverrides): Keybinds {
     ]),
   ) as Keybinds
 }
-
-export const Keybinds = { parse }
 
 export function unknownKeys(input: object) {
   return Object.keys(input).filter((key) => !KeybindNames.has(key))

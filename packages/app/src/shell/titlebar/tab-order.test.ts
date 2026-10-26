@@ -1,16 +1,15 @@
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 
-describe("adjacentTabKey", () => {
-  test("follows the visible left-to-right order", () => {
-    expect(adjacentTabKey(["c", "a", "b"], "c", 1)).toBe("a")
-    expect(adjacentTabKey(["c", "a", "b"], "a", -1)).toBe("c")
-  })
+test("finds the nearest accepted tab in either direction, wrapping around", () => {
+  const order = ["a", "b", "c", "d", "e"]
+  const unread = new Set(["a", "d"])
 
-  test("skips tabs omitted from the visible order", () => {
-    expect(adjacentTabKey(["a", "c"], "a", 1)).toBe("c")
-    expect(adjacentTabKey(["a", "c"], "c", 1)).toBe("a")
-  })
+  expect(adjacentTabKey(order, "b", 1, (key) => unread.has(key))).toBe("d")
+  expect(adjacentTabKey(order, "b", -1, (key) => unread.has(key))).toBe("a")
+  expect(adjacentTabKey(order, "e", 1, (key) => unread.has(key))).toBe("a")
+  expect(adjacentTabKey(order, "a", -1, (key) => unread.has(key))).toBe("d")
+  expect(adjacentTabKey(order, "a", 1, (key) => key === "a")).toBeUndefined()
 })
 
 test("merges reordered visible tabs around hidden tabs", () => {

@@ -34,8 +34,6 @@ export type Settings = ProviderPackage.Settings &
 
 const Options = Schema.Struct({
   includeReasoning: Schema.optional(Schema.Boolean),
-  parallelToolCalls: Schema.optional(Schema.Boolean),
-  serviceTier: Schema.optional(Schema.String),
   user: Schema.optional(Schema.String),
 })
 
@@ -46,8 +44,6 @@ export const protocol = Protocol.make({
       ...OpenAIChat.bodyFields,
       reasoning_format: Schema.optional(Schema.Literal("parsed")),
       include_reasoning: Schema.optional(Schema.Boolean),
-      parallel_tool_calls: Schema.optional(Schema.Boolean),
-      service_tier: Schema.optional(Schema.String),
       user: Schema.optional(Schema.String),
     }),
     from: Effect.fn("Groq.fromRequest")(function* (request: LLMRequest) {
@@ -59,8 +55,6 @@ export const protocol = Protocol.make({
         ...(yield* OpenAIChat.fromRequest(request)),
         reasoning_format: gptOSS ? undefined : ("parsed" as const),
         include_reasoning: gptOSS ? options.includeReasoning : undefined,
-        parallel_tool_calls: options.parallelToolCalls,
-        service_tier: options.serviceTier,
         user: options.user,
       }
     }),
@@ -71,7 +65,7 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: "groq-chat",
   provider: id,
-  providerMetadataKey: "openai",
+  providerMetadataKey: "groq",
   protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL }),
   framing: OpenAIChat.framing,
@@ -93,7 +87,6 @@ export const configure = (input: LanguageModelOptions = {}) => {
           maxTokensField: "max_completion_tokens",
           reasoningField: "reasoning",
           requireReasoning: false,
-          supportsStore: false,
           supportsStrictMode: false,
         },
       }),
@@ -110,8 +103,8 @@ export const model: ProviderPackage.Definition<Settings, ProviderOptions>["model
   configure({
     apiKey,
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 

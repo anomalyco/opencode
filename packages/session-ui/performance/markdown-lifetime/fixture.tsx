@@ -8,8 +8,10 @@ import "@opencode/ui/styles/tokens"
 import "../../src/components/markdown.css"
 
 const scenario = new URLSearchParams(location.search).get("scenario") ?? "mounted"
+
 const sections = Array.from({ length: 36 }, (_, index) => {
   const service = ["catalog", "billing", "delivery", "inventory", "accounts", "notifications"][index % 6]
+
   return [
     `## ${index + 1}. Validate the ${service} recovery boundary`,
     `The ${service} service should publish durable progress before acknowledging a request. Keep the request ID in the transaction so a retry does not create a second operation. The implementation below separates admission from delivery and makes the recovery decision explicit.`,
@@ -19,9 +21,12 @@ const sections = Array.from({ length: 36 }, (_, index) => {
     `Run the focused test with \`bun test test/${service}/recovery.test.ts\`. Verify the [transaction contract](https://example.com/transactions) and inspect the operation's final state before expanding the rollout.`,
   ].join("\n\n")
 })
+
 const answer = `# Recovery implementation review\n\n${sections.join("\n\n")}\n\n**Review complete.**`
+
 const destination =
   "## Current destination\n\nThe new session is ready.\n\n```typescript\nconst current = { ready: true }\n```"
+
 const stats = {
   bytes: new TextEncoder().encode(answer).length,
   fences: sections.length,
@@ -39,9 +44,13 @@ const stats = {
 // Keep the real worker and parser. Only hold delivery of this answer's result so
 // disposal always happens after admission and before main-thread postprocessing.
 const descriptor = Object.getOwnPropertyDescriptor(Worker.prototype, "onmessage")!
+
 const post = Worker.prototype.postMessage
+
 let held: (() => void) | undefined
+
 let answerID: number | undefined
+
 Object.defineProperty(Worker.prototype, "onmessage", {
   configurable: true,
   get: descriptor.get,
@@ -51,32 +60,39 @@ Object.defineProperty(Worker.prototype, "onmessage", {
         stats.responses++
         held = () => callback.call(this, event)
         document.querySelector<HTMLButtonElement>("#continue")!.disabled = false
+
         return
       }
+
       callback.call(this, event)
     })
   },
 })
+
 Worker.prototype.postMessage = function (request: MarkdownWorkerRequest) {
   if (request.type === "parse" && request.text === answer) {
     answerID = request.id
     stats.requests++
   }
+
   post.call(this, request)
 }
 
 const observer = new MutationObserver(() => {
   if (!stats.released || stats.ready) return
   const target = document.querySelector(scenario === "leave" ? "#destination" : "#survivor")
+
   if (!target?.hasAttribute("data-markdown-ready")) return
   stats.ready = performance.now()
   document.body.dataset.ready = "true"
 })
+
 observer.observe(document.body, { subtree: true, attributes: true, childList: true })
 
 render(() => {
   const [admitted, setAdmitted] = createSignal(false)
   const [leaving, setLeaving] = createSignal(false)
+
   return (
     <main style={{ "max-width": "960px", margin: "24px auto", "font-family": "sans-serif", "line-height": "1.5" }}>
       <button id="admit" onClick={() => setAdmitted(true)} disabled={admitted()}>
@@ -88,10 +104,12 @@ render(() => {
         onClick={() => {
           stats.released = performance.now()
           performance.mark("markdown-lifetime-release")
+
           if (scenario !== "mounted") {
             stats.disposed = true
             setLeaving(true)
           }
+
           held!()
           held = undefined
           const channel = new MessageChannel()
@@ -102,6 +120,7 @@ render(() => {
             channel.port1.close()
             channel.port2.close()
           }
+
           channel.port2.postMessage(null)
         }}
       >

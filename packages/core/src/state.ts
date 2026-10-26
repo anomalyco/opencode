@@ -126,6 +126,25 @@ export function reconcile(
   })
 }
 
+/**
+ * Runs `notify` only when the serialized projection of `project(state)` differs from the last
+ * notified value. The first notification always runs so a freshly booted Location announces its
+ * current catalog even when empty.
+ */
+export function changes<State>(
+  project: (state: State) => unknown,
+  notify: (state: State) => Effect.Effect<void>,
+): (state: State) => Effect.Effect<void> {
+  let published: string | undefined
+  return (state) =>
+    Effect.suspend(() => {
+      const next = JSON.stringify(project(state)) ?? ""
+      if (next === published) return Effect.void
+      published = next
+      return notify(state)
+    })
+}
+
 export const inherit = Effect.fnUntraced(function* () {
   const batch = yield* CurrentBatch
   return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentBatch, batch)

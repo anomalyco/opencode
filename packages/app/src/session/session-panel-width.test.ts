@@ -1,52 +1,18 @@
-import { describe, expect, test } from "bun:test"
-import {
-  clampSessionPanelWidth,
-  REVIEW_PANE_WIDTH_MIN,
-  REVIEW_PANE_WIDTH_MIN_SPLIT,
-  SESSION_PANEL_WIDTH_MIN,
-  sessionPanelWidthMax,
-} from "./session-panel-width"
+import { expect, test } from "bun:test"
+import { clampSessionPanelWidth } from "./session-panel-width"
 
-describe("sessionPanelWidthMax", () => {
-  test("reserves the unified review pane minimum", () => {
-    expect(sessionPanelWidthMax({ available: 1700, split: false })).toBe(1700 - REVIEW_PANE_WIDTH_MIN)
-  })
-
-  test("reserves a larger minimum for split diffs", () => {
-    expect(sessionPanelWidthMax({ available: 1700, split: true })).toBe(1700 - REVIEW_PANE_WIDTH_MIN_SPLIT)
-    expect(REVIEW_PANE_WIDTH_MIN_SPLIT).toBeGreaterThan(REVIEW_PANE_WIDTH_MIN)
-  })
-
-  test("lets the chat panel take everything beyond the review pane minimum", () => {
-    // Regression: the old cap was 45% of the window, forcing the review pane
-    // to at least 55% of the window regardless of content.
-    const available = 3440
-    expect(sessionPanelWidthMax({ available, split: false })).toBeGreaterThan(available * 0.45)
-  })
-
-  test("never drops below the chat panel minimum on small windows", () => {
-    expect(sessionPanelWidthMax({ available: 600, split: true })).toBe(SESSION_PANEL_WIDTH_MIN)
-    expect(sessionPanelWidthMax({ available: 0, split: false })).toBe(SESSION_PANEL_WIDTH_MIN)
-  })
-})
-
-describe("clampSessionPanelWidth", () => {
-  test("keeps widths already within the limit", () => {
-    expect(clampSessionPanelWidth({ width: 800, available: 1700, split: false })).toBe(800)
-  })
-
-  test("forces the width down when the window shrinks", () => {
-    expect(clampSessionPanelWidth({ width: 1600, available: 1700, split: false })).toBe(1700 - REVIEW_PANE_WIDTH_MIN)
-    expect(clampSessionPanelWidth({ width: 1600, available: 1700, split: true })).toBe(
-      1700 - REVIEW_PANE_WIDTH_MIN_SPLIT,
-    )
-  })
-
-  test("holds the chat panel minimum when there is no room for both", () => {
-    expect(clampSessionPanelWidth({ width: 1600, available: 700, split: true })).toBe(SESSION_PANEL_WIDTH_MIN)
-  })
-
-  test("skips clamping before the layout is measured", () => {
-    expect(clampSessionPanelWidth({ width: 1600, available: undefined, split: false })).toBe(1600)
-  })
+test.each([
+  ["keeps widths already within the limit", 800, 1700, false, false, 800],
+  ["reserves the unified review pane minimum", 1600, 1700, false, false, 1220],
+  ["reserves a larger minimum for split diffs", 1600, 1700, true, false, 900],
+  // Regression: the old cap was 45% of the window, forcing the review pane to at least 55%.
+  ["lets the chat panel take everything beyond the review pane minimum", 3440, 3440, false, false, 2960],
+  ["holds the chat panel minimum when there is no room for both", 1600, 700, true, false, 450],
+  ["never drops below the chat panel minimum on small windows", 1600, 0, false, false, 450],
+  ["skips clamping before the layout is measured", 1600, undefined, false, false, 1600],
+  ["lets a dragged width leave the side pane its hard minimum, split diffs included", 1600, 1700, true, true, 1380],
+  ["keeps a dragged width below the default minimum", 320, 700, true, true, 320],
+  ["never drops a dragged width below the hard chat minimum", 1600, 0, false, true, 320],
+])("%s", (_name, width, available, split, resized, expected) => {
+  expect(clampSessionPanelWidth({ width, available, split, resized })).toBe(expected)
 })

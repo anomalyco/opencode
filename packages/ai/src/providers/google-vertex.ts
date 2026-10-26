@@ -5,7 +5,6 @@ import { ProviderShared } from "../protocols/shared.js"
 import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
@@ -61,7 +60,7 @@ const route = Route.make({
   providerMetadataKey: "vertex",
   protocol,
   endpoint: Endpoint.path(({ request }) => {
-    const model = String(request.model.id)
+    const model = request.model.id
     return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
   }),
   auth: Auth.none,
@@ -69,7 +68,7 @@ const route = Route.make({
     const serviceTier = request.providerOptions?.serviceTier
     return typeof serviceTier === "string" ? { "x-vertex-ai-llm-shared-request-type": serviceTier } : {}
   },
-  framing: Framing.sse,
+  transport: Gemini.transport,
 })
 
 export const routes = [route]
@@ -85,13 +84,13 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
     ...rest
   } = input
   const apiKey = GoogleVertexShared.apiKey(input)
-  const endpointModel = String(modelID).startsWith("endpoints/")
+  const endpointModel = modelID.startsWith("endpoints/")
   if (apiKey !== undefined && endpointModel)
     throw new ProviderConfigurationError({
       provider: id,
       message: "Google Vertex tuned models do not support Express Mode API keys",
     })
-  const location = GoogleVertexShared.location(inputLocation, "us-central1")
+  const location = GoogleVertexShared.location(inputLocation)
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
     baseURL ??
@@ -130,8 +129,8 @@ export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsIn
   return configure({
     ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     location,
     project,
     providerOptions,

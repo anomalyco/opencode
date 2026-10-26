@@ -17,7 +17,7 @@ import {
   GithubCopilotPlugin,
   utilityTitle,
 } from "@opencode/core/plugin/provider/github-copilot"
-import { Message, SystemPart } from "@opencode/ai"
+import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
@@ -183,10 +183,11 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies child-session steps as subagent interactions", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).child, "primary")
+      const ids = yield* sessions()
+      const event = yield* modelRequest(ids.child, "primary")
       expect(event.headers).toEqual({
         "X-Interaction-Type": "conversation-subagent",
-        "X-Interaction-Id": event.sessionID,
+        "X-Interaction-Id": ids.parent,
         "x-initiator": "agent",
       })
     }),
@@ -207,10 +208,11 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies compaction requests by kind rather than agent", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).child, "compaction", "build")
+      const ids = yield* sessions()
+      const event = yield* modelRequest(ids.child, "compaction", "build")
       expect(event.headers).toEqual({
         "X-Interaction-Type": "conversation-compaction",
-        "X-Interaction-Id": event.sessionID,
+        "X-Interaction-Id": ids.parent,
         "x-initiator": "agent",
       })
     }),
@@ -485,7 +487,7 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("uses responses for Grok, Gemini, and MAI Code models", () =>
+  it.effect("uses responses for Grok and MAI Code models and chat for Gemini", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
@@ -510,8 +512,8 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* aisdk.runLanguage({
         model: Model.Info.make({
-          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gemini-3.5-flash")),
-          modelID: Model.ID.make("gemini-3.5-flash"),
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gemini-3.8-flash")),
+          modelID: Model.ID.make("gemini-3.8-flash"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
@@ -538,7 +540,7 @@ describe("GithubCopilotPlugin", () => {
       expect(calls).toEqual([
         "responses:grok-4.5",
         "responses:grok-4.6",
-        "responses:gemini-3.5-flash",
+        "chat:gemini-3.8-flash",
         "responses:mai-code-1.1-flash",
         "chat:gpt-4o",
       ])

@@ -22,6 +22,7 @@ export interface PopoverProps<T extends ValidComponent = "div">
 
 export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>) {
   const i18n = useI18n()
+
   const [local, rest] = splitProps(props, [
     "trigger",
     "triggerAs",
@@ -47,14 +48,18 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
   })
 
   const controlled = () => local.open !== undefined
+
   const opened = () => {
     if (controlled()) return local.open ?? false
+
     return state.uncontrolledOpen
   }
 
   const onOpenChange = (next: boolean) => {
     if (next) setState("dismiss", null)
+
     if (local.onOpenChange) local.onOpenChange(next)
+
     if (controlled()) return
     setState("uncontrolledOpen", next)
   }
@@ -65,9 +70,12 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
     const inside = (node: Node | null | undefined) => {
       if (!node) return false
       const content = state.contentRef
+
       if (content && content.contains(node)) return true
       const trigger = state.triggerRef
+
       if (trigger && trigger.contains(node)) return true
+
       return false
     }
 
@@ -85,14 +93,18 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target
+
       if (!(target instanceof Node)) return
+
       if (inside(target)) return
       close("outside")
     }
 
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target
+
       if (!(target instanceof Node)) return
+
       if (inside(target)) return
       close("outside")
     }

@@ -7,61 +7,54 @@ import {
 } from "./controller"
 
 describe("new session workspace selection", () => {
-  test("uses main when the workspace bar is unavailable", () => {
-    expect(
-      resolveNewSessionWorktree({
-        enabled: false,
-        selected: "/project/feature",
-      }),
-    ).toBe("main")
-  })
-
-  test("uses the saved destination instead of the current worktree", () => {
-    expect(
-      resolveNewSessionWorktree({
+  test.each([
+    {
+      name: "main when the workspace bar is unavailable",
+      input: { enabled: false, selected: "/project/feature" },
+      expected: "main",
+    },
+    {
+      name: "the saved new-workspace destination",
+      input: { enabled: true, fallback: "create" as const },
+      expected: "create",
+    },
+    { name: "the saved local destination", input: { enabled: true, fallback: "main" as const }, expected: "main" },
+    {
+      name: "local when the cached project path is stale",
+      input: { enabled: true, directory: "C:/Projects/repo", projectWorktree: "D:/Projects/repo" },
+      expected: "main",
+    },
+    {
+      name: "the selection when the cached project path is stale",
+      input: {
         enabled: true,
-        fallback: "create",
-      }),
-    ).toBe("create")
-    expect(
-      resolveNewSessionWorktree({
-        enabled: true,
-        fallback: "main",
-      }),
-    ).toBe("main")
+        directory: "C:/Projects/repo",
+        projectWorktree: "D:/Projects/repo",
+        selected: "/worktree",
+      },
+      expected: "/worktree",
+    },
+  ])("resolves $name", ({ input, expected }) => {
+    expect(resolveNewSessionWorktree(input)).toBe(expected)
   })
 
-  test("keeps local selection when the cached project path is stale", () => {
-    const input = { enabled: true, directory: "C:/Projects/repo", projectWorktree: "D:/Projects/repo" }
-    expect(resolveNewSessionWorktree(input)).toBe("main")
-    expect(resolveNewSessionWorktree({ ...input, selected: "/worktree" })).toBe("/worktree")
-  })
+  const branch = (worktree: string) => (worktree === "/project/feature" ? "feature" : undefined)
 
-  test("resolves the branch from the active location", () => {
-    const branch = (worktree: string) => (worktree === "/project/feature" ? "feature" : undefined)
-    expect(resolveNewSessionBranch({ worktree: "main", directory: "/project/feature", worktreeBranch: branch })).toBe(
-      "feature",
-    )
-    expect(resolveNewSessionBranch({ worktree: "create", directory: "/project/feature", worktreeBranch: branch })).toBe(
-      "feature",
-    )
-    expect(
-      resolveNewSessionBranch({ worktree: "/project/feature", directory: "/project", worktreeBranch: branch }),
-    ).toBe("feature")
-    expect(
-      resolveNewSessionBranch({ worktree: "/missing", directory: "/project/feature", worktreeBranch: branch }),
-    ).toBe(undefined)
-  })
-
-  test("uses a selected branch for a new workspace", () => {
+  test.each([
+    { worktree: "main", directory: "/project/feature", createBranch: undefined, expected: "feature" },
+    { worktree: "create", directory: "/project/feature", createBranch: undefined, expected: "feature" },
+    { worktree: "/project/feature", directory: "/project", createBranch: undefined, expected: "feature" },
+    { worktree: "/missing", directory: "/project/feature", createBranch: undefined, expected: undefined },
+    { worktree: "create", directory: "/project/feature", createBranch: "release", expected: "release" },
+  ])("resolves the branch for $worktree in $directory (new branch: $createBranch)", (row) => {
     expect(
       resolveNewSessionBranch({
-        worktree: "create",
-        directory: "/project/feature",
-        createBranch: "release",
-        worktreeBranch: () => "feature",
+        worktree: row.worktree,
+        directory: row.directory,
+        createBranch: row.createBranch,
+        worktreeBranch: branch,
       }),
-    ).toBe("release")
+    ).toBe(row.expected)
   })
 
   test("uses location VCS state when the project inventory is stale", () => {
@@ -70,15 +63,15 @@ describe("new session workspace selection", () => {
     expect(resolveNewSessionGit({})).toBe(false)
   })
 
-  test("cycles between local and a new worktree", () => {
-    expect(cycleNewSessionWorktree({ current: "main" })).toBe("create")
-    expect(cycleNewSessionWorktree({ current: "create" })).toBe("main")
-  })
+  const existing = "/project/feature"
 
-  test("includes the selected existing worktree in the cycle", () => {
-    const existing = "/project/feature"
-    expect(cycleNewSessionWorktree({ current: existing, existing })).toBe("main")
-    expect(cycleNewSessionWorktree({ current: "main", existing })).toBe("create")
-    expect(cycleNewSessionWorktree({ current: "create", existing })).toBe(existing)
+  test.each([
+    { current: "main", existing: undefined, expected: "create" },
+    { current: "create", existing: undefined, expected: "main" },
+    { current: existing, existing, expected: "main" },
+    { current: "main", existing, expected: "create" },
+    { current: "create", existing, expected: existing },
+  ])("cycles from $current (existing: $existing) to $expected", ({ current, existing, expected }) => {
+    expect(cycleNewSessionWorktree({ current, existing })).toBe(expected)
   })
 })

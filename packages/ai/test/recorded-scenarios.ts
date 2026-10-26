@@ -14,7 +14,7 @@ import {
   type ContentPart,
   type FinishReason,
   type LanguageModel,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
 import { Tool } from "../src/tool.js"
 
@@ -126,11 +126,6 @@ const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
 
 export const expectFinish = (events: ReadonlyArray<LLMEvent>, reason: FinishReason) =>
   expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
-
-export const expectWeatherToolCall = (response: LLMResponse) =>
-  expect(response.toolCalls).toMatchObject([
-    { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
-  ])
 
 export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
   const finishes = events.filter(LLMEvent.is.finish)

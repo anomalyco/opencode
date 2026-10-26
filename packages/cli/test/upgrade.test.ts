@@ -18,8 +18,14 @@ describe("upgrade command", () => {
   test("detects the installation method and resolves the latest version", async () => {
     const result = await cli([])
     expect(result.exitCode).toBe(0)
-    expect(result.events).toEqual(["method", "latest", { method: "npm", version: "0.0.0-beta-new" }])
+    expect(result.events).toEqual(["method", { latest: "npm" }, { method: "npm", version: "0.0.0-beta-new" }])
     expect(result.stdout).toContain("Upgrade complete")
+  })
+
+  test("resolves the latest version for an explicit method without detection", async () => {
+    const result = await cli(["--method", "pnpm"], { UPGRADE_TEST_METHOD: "brew" })
+    expect(result.exitCode).toBe(0)
+    expect(result.events).toEqual([{ latest: "pnpm" }, { method: "pnpm", version: "0.0.0-beta-new" }])
   })
 
   test("accepts an explicit version and method without detection or a version lookup", async () => {
@@ -64,7 +70,7 @@ describe("upgrade command", () => {
   test("reports version lookup failures without installing", async () => {
     const result = await cli([], { UPGRADE_TEST_LATEST_ERROR: "1" })
     expect(result.exitCode).toBe(1)
-    expect(result.events).toEqual(["method", "latest"])
+    expect(result.events).toEqual(["method", { latest: "npm" }])
     expect(result.stdout).toContain("Update check failed")
   })
 

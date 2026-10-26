@@ -1,12 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node-shared"
 import { Deferred, Effect, Layer, Ref } from "effect"
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientError,
-  HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { fileSystem, Service } from "../cassette/store.js"
 import type { RecorderOptions } from "../options.js"
 import { make, redactUrl, type Redactor } from "../redaction/redactor.js"
