@@ -40,13 +40,20 @@ function loadLibc(): ReturnType<typeof dlopen<typeof symbols>> | undefined {
 
 export function captureStderr(dir: string): StderrCapture | undefined {
   if (process.env.OPENCODE_TUI_STDERR === "inherit") return undefined
-  if (!process.stdout.isTTY && !process.stdin.isTTY) return undefined
+  // Only stderr being the terminal matters: if the user already redirected
+  // stderr (`opencode --print-logs 2>debug.log`), their redirect must keep
+  // receiving the output instead of being moved into the capture file. When
+  // stderr is not attached to a terminal there is no surface to paint over.
+  if (!process.stderr.isTTY) return undefined
   const libc = loadLibc()
   if (!libc) return undefined
   try {
     mkdirSync(dir, { recursive: true })
     const path = join(dir, "tui-stderr.log")
-    const fd = openSync(path, "a")
+    // Truncate per run instead of appending across sessions: a noisy native
+    // library would otherwise grow the file without bound, and each run's
+    // captured output stays readable in one piece.
+    const fd = openSync(path, "w")
     // Take a fresh reference to fd 2 before dup2 clobbers it, to restore the
     // terminal stderr when the renderer scope ends.
     const saved = libc.symbols.dup(2)

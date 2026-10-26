@@ -1,4 +1,4 @@
-import { existsSync } from "fs"
+import { existsSync, statSync } from "fs"
 import path from "path"
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import "./component/spinner-renderable"
@@ -247,6 +247,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     updatedVersion: undefined as string | undefined,
     reason: undefined as unknown,
   }
+  let stderrCapturePath: string | undefined
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       // The renderer owns the terminal surface for this scope; any native or
@@ -257,7 +258,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         Effect.sync(() => captureStderr(global.log)),
         (captured) => Effect.sync(() => captured?.restore()),
       )
-      if (!captured) log("debug", "failed to capture stderr for the TUI; native output may repaint the screen", {})
+      stderrCapturePath = captured?.path
+      if (!captured) {
+        if (process.stderr.isTTY)
+          log("debug", "failed to capture stderr for the TUI; native output may repaint the screen", {})
+      } else {
+        log("debug", `native and child stderr during the TUI run is captured to ${captured.path}`, {})
+      }
       const options = {
         externalOutputMode: "passthrough",
         targetFps: 60,
@@ -491,6 +498,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     }),
   )
   yield* Effect.sync(() => {
+    if (stderrCapturePath) {
+      // The capture file only has bytes when the run actually produced native
+      // output; tell the user where a crash or noisy child's output went.
+      try {
+        if (statSync(stderrCapturePath).size > 0)
+          process.stderr.write(`stderr output for this run was captured to ${stderrCapturePath}\n`)
+      } catch {}
+    }
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     const text = epilogue({ session: result.session, updatedVersion: result.updatedVersion })
