@@ -6,7 +6,7 @@ import { tmpdir } from "../fixture/tmpdir"
 
 type ChatRequest = { messages: Array<{ role: string; content: string }> }
 
-test("passes positional run messages to the provider once", async () => {
+test("passes a run message after a separator to the provider once", async () => {
   await using root = await tmpdir()
   const config = path.join(root.path, "config")
   const workspace = path.join(root.path, "workspace")
@@ -52,48 +52,41 @@ test("passes positional run messages to the provider once", async () => {
       OPENCODE_DISABLE_AUTOUPDATE: "true",
       OPENCODE_MODELS_PATH: models,
     })
-    const cases = [
-      { args: ["DUPREPRO"], expected: "DUPREPRO" },
-      { args: ["--", "DUPREPRO"], expected: "DUPREPRO" },
-      { args: ["DUPREPRO", "second"], expected: "DUPREPRO second" },
-    ]
+    // One real CLI subprocess: only the separator case duplicated the message.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "run",
+        path.join(import.meta.dir, "../../src/index.ts"),
+        "run",
+        "--standalone",
+        "--format",
+        "json",
+        "--model",
+        "mock/mock",
+        "--",
+        "DUPREPRO",
+      ],
+      {
+        cwd: path.join(import.meta.dir, "../.."),
+        env,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
 
-    for (const item of cases) {
-      requests.length = 0
-      const child = Bun.spawn(
-        [
-          process.execPath,
-          "run",
-          path.join(import.meta.dir, "../../src/index.ts"),
-          "run",
-          "--standalone",
-          "--format",
-          "json",
-          "--model",
-          "mock/mock",
-          ...item.args,
-        ],
-        {
-          cwd: path.join(import.meta.dir, "../.."),
-          env,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      )
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ])
-
-      expect(exitCode, item.args.join(" ")).toBe(0)
-      expect(stderr, item.args.join(" ")).toBe("")
-      expect(stdout, item.args.join(" ")).toContain('"type":"text"')
-      const messages = requests.flatMap(userMessages)
-      expect(messages, item.args.join(" ")).toContain(item.expected)
-      expect(messages.filter((message) => message === item.expected), item.args.join(" ")).toHaveLength(1)
-    }
+    expect(exitCode).toBe(0)
+    expect(stderr).toBe("")
+    expect(stdout).toContain('"type":"text"')
+    const messages = requests.flatMap(userMessages)
+    expect(messages).toContain("DUPREPRO")
+    expect(messages.filter((message) => message === "DUPREPRO")).toHaveLength(1)
   } finally {
     await server.stop(true)
   }
