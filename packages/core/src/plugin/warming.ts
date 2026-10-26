@@ -30,8 +30,18 @@ export const Plugin = define({
     const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
     const requesting = new Set<Session.ID>()
+    // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
-      .subscribe({ types: ["session.step.started", "session.step.streamed", "session.step.failed"] })
+      .subscribe({
+        types: [
+          "session.step.started",
+          "session.step.streamed",
+          "session.step.failed",
+          "session.execution.succeeded",
+          "session.execution.failed",
+          "session.execution.interrupted",
+        ],
+      })
       .pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
