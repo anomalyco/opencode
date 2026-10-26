@@ -7,26 +7,13 @@ import { ProviderCompatibility } from "../model-compatibility.js"
 import { Provider } from "../provider.js"
 import { optional } from "../schema.js"
 
-export const Settings = Schema.StructWithRest(
-  Schema.Struct({
-    timeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    headerTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    compaction: Provider.Compaction.pipe(optional),
-    cache: Provider.Cache.pipe(optional),
-    transport: Provider.Transport.pipe(optional),
-    encoding: Provider.Encoding.pipe(optional),
-  }),
-  [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
-).annotate({ identifier: "Config.Provider.Settings" })
+export const Settings = Schema.StructWithRest(Schema.Struct(Provider.SettingsFields), [
+  Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json)),
+]).annotate({ identifier: "Config.Provider.Settings" })
 export type Settings = typeof Settings.Type
 
 export const ModelSettings = Schema.StructWithRest(
-  Schema.Struct({
-    compaction: Provider.Compaction.pipe(optional),
-    cache: Provider.Cache.pipe(optional),
-    encoding: Provider.Encoding.pipe(optional),
-  }),
+  Schema.Struct(Provider.ModelSettingsFields),
   [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
 ).annotate({ identifier: "Config.Model.Settings" })
 export type ModelSettings = typeof ModelSettings.Type

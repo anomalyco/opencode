@@ -122,20 +122,16 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 
 function prepareOptions(model: RuntimeInfo, pkg: string) {
   const projected = mapBodyToProviderOptions(model, pkg)
+  const settings = model.settings ?? {}
   const options: Record<string, unknown> = {
     name: model.canonical ?? model.providerID,
-    ...(model.settings ?? {}),
+    ...Provider.nativeSettings(settings),
     headers: model.headers,
     body: projected.body,
   }
 
-  const customFetch = options.fetch
-  const timeouts = Provider.timeouts(options)
-  delete options.headerTimeout
-  delete options.chunkTimeout
-  delete options.compaction
-  delete options.cache
-  delete options.transport
+  const customFetch = settings.fetch
+  const timeouts = Provider.timeouts(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
@@ -454,24 +450,13 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   return providerID
 }
 
+// Connection settings configure the SDK provider, not individual requests.
+const CONNECTION_KEYS = new Set(["accessToken", "apiKey", "authToken", "baseURL"])
+
 function requestSettings(settings: Readonly<Record<string, unknown>> | undefined) {
   if (settings === undefined) return undefined
   const result = Object.fromEntries(
-    Object.entries(settings).filter(
-      ([key]) =>
-        ![
-          "apiKey",
-          "authToken",
-          "baseURL",
-          "cache",
-          "chunkTimeout",
-          "compaction",
-          "fetch",
-          "headerTimeout",
-          "timeout",
-          "transport",
-        ].includes(key),
-    ),
+    Object.entries(Provider.nativeSettings(settings)).filter(([key]) => !CONNECTION_KEYS.has(key)),
   )
   return Object.keys(result).length === 0 ? undefined : result
 }
