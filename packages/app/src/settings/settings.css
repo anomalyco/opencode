@@ -1183,7 +1183,6 @@
 
 .settings-provider-account-list {
   max-height: min(240px, calc(var(--kb-popper-content-available-height) - 120px));
-  overflow-y: auto;
 }
 
 .settings-provider-account-label {

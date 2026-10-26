@@ -42,13 +42,9 @@
   min-width: max(var(--kb-popper-anchor-width, 0px), 240px);
   max-width: min(360px, calc(100vw - 56px));
   max-height: min(270px, var(--kb-popper-content-available-height, 270px));
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  align-content: start;
-  column-gap: 8px;
-  padding: 4px;
-  scroll-padding-block: 4px;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
   /* The capsule's hairline, so both insets round to the same device pixels. */
   border: 0.5px solid transparent;
   border-radius: 10px;
@@ -59,6 +55,15 @@
   :is([data-component="menu-v2-item"], [data-component="icon-button-v2"]):is(:focus-visible, [data-state="focus"]) {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: -2px;
+  }
+
+  .scroll-view__viewport {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-content: start;
+    column-gap: 8px;
+    padding: 4px;
+    scroll-padding-block: 4px;
   }
 
   [data-slot="menu-v2-item-content"] > span[dir] {

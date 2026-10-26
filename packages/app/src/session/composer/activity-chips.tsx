@@ -1,3 +1,4 @@
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
@@ -171,38 +172,40 @@ export function SessionActivityChips(props: {
                 queueMicrotask(() => row.scrollIntoView({ block: "nearest", inline: "nearest" }))
               }}
             >
-              <For each={props.subagents}>
-                {(item) => (
-                  <Menu.Item {...row(item)}>
-                    <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
-                    <span class="shrink-0 font-[530]">
-                      <bdi>
-                        {item.agent
-                          ? `${item.agent[0].toUpperCase()}${item.agent.slice(1)}`
-                          : language.t("ui.tool.agent.default")}
-                      </bdi>
-                    </span>
-                    <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
-                      {item.label}
-                    </span>
-                    {end(item)}
-                  </Menu.Item>
-                )}
-              </For>
-              <For each={props.shells}>
-                {(item) => (
-                  <Menu.Item {...row(item)}>
-                    <Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />
-                    <span
-                      dir="ltr"
-                      class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
-                    >
-                      {item.label}
-                    </span>
-                    {end(item)}
-                  </Menu.Item>
-                )}
-              </For>
+              <ScrollView focusable={false}>
+                <For each={props.subagents}>
+                  {(item) => (
+                    <Menu.Item {...row(item)}>
+                      <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
+                      <span class="shrink-0 font-[530]">
+                        <bdi>
+                          {item.agent
+                            ? `${item.agent[0].toUpperCase()}${item.agent.slice(1)}`
+                            : language.t("ui.tool.agent.default")}
+                        </bdi>
+                      </span>
+                      <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
+                        {item.label}
+                      </span>
+                      {end(item)}
+                    </Menu.Item>
+                  )}
+                </For>
+                <For each={props.shells}>
+                  {(item) => (
+                    <Menu.Item {...row(item)}>
+                      <Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />
+                      <span
+                        dir="ltr"
+                        class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
+                      >
+                        {item.label}
+                      </span>
+                      {end(item)}
+                    </Menu.Item>
+                  )}
+                </For>
+              </ScrollView>
             </Menu.Content>
           </Menu.Portal>
         </Menu>

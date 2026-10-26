@@ -1,4 +1,14 @@
-import { createEffect, mergeProps, on, onCleanup, onMount, Show, splitProps, type ComponentProps } from "solid-js"
+import {
+  createEffect,
+  mergeProps,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+  type ComponentProps,
+  type JSX,
+} from "solid-js"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
@@ -24,6 +34,8 @@ export interface ScrollViewProps extends ComponentProps<"div"> {
   onBeforeScroll?: () => void
   /** Offset/extent correction for a virtualized vertical scrollbar. */
   verticalScrollAdjustment?: number
+  /** Set `false` inside menus and lists that own focus and arrow keys: the viewport takes no focus and handles no keys. */
+  focusable?: boolean
 }
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
@@ -134,7 +146,7 @@ export function scrollOffsetFromThumbPointer(input: {
  */
 export function ScrollView(props: ScrollViewProps) {
   const i18n = useI18n()
-  const merged = mergeProps({ orientation: "vertical", thumbVisibility: "hover" }, props)
+  const merged = mergeProps({ orientation: "vertical", thumbVisibility: "hover", focusable: true }, props)
 
   const [local, events, rest] = splitProps(
     merged,
@@ -148,6 +160,7 @@ export function ScrollView(props: ScrollViewProps) {
       "thumbHoverTarget",
       "onBeforeScroll",
       "verticalScrollAdjustment",
+      "focusable",
       "style",
     ],
     [
@@ -174,6 +187,7 @@ export function ScrollView(props: ScrollViewProps) {
 
   const [state, setState] = createStore({
     isHovered: false,
+    // SAFETY: widens the initial `undefined` to the field's full type; the store only ever assigns an axis or undefined.
     dragging: undefined as "vertical" | "horizontal" | undefined,
     isScrolling: false,
     verticalThumbSize: 0,
@@ -265,10 +279,7 @@ export function ScrollView(props: ScrollViewProps) {
     // The observer reports every target once when it starts observing (including a thumb mount that
     // appears later), after layout. Measuring here as well would force a synchronous layout per
     // ScrollView while the page is still rendering.
-    createResizeObserver(
-      () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[],
-      updateThumb,
-    )
+    createResizeObserver(() => [viewportRef, viewportRef.firstElementChild, thumbMount()], updateThumb)
   })
 
   // Inputs that change the thumb without resizing anything: re-measure on change, but leave the
@@ -485,33 +496,29 @@ export function ScrollView(props: ScrollViewProps) {
           updateThumb()
           markScrolling()
 
-          if (typeof events.onScroll === "function") events.onScroll(e as any)
+          forward(events.onScroll, e)
         }}
         // Passive so the compositor never waits on the main thread to scroll; onWheel cannot cancel.
         on:wheel={{
           passive: true,
           handleEvent: (e) => {
             markScrolling()
-            const handler = events.onWheel
-
-            if (typeof handler === "function") handler(e as any)
-
-            if (Array.isArray(handler)) handler[0](handler[1], e as any)
+            forward(events.onWheel, e)
           },
         }}
-        onTouchStart={events.onTouchStart as any}
-        onTouchMove={events.onTouchMove as any}
-        onTouchEnd={events.onTouchEnd as any}
-        onTouchCancel={events.onTouchCancel as any}
-        onPointerDown={events.onPointerDown as any}
-        onClick={events.onClick as any}
-        tabIndex={0}
-        role="region"
-        aria-label={i18n.t("ui.scrollView.ariaLabel")}
+        onTouchStart={events.onTouchStart}
+        onTouchMove={events.onTouchMove}
+        onTouchEnd={events.onTouchEnd}
+        onTouchCancel={events.onTouchCancel}
+        onPointerDown={events.onPointerDown}
+        onClick={events.onClick}
+        tabIndex={local.focusable ? 0 : undefined}
+        role={local.focusable ? "region" : undefined}
+        aria-label={local.focusable ? i18n.t("ui.scrollView.ariaLabel") : undefined}
         onKeyDown={(e) => {
-          onKeyDown(e)
+          if (local.focusable) onKeyDown(e)
 
-          if (typeof events.onKeyDown === "function") events.onKeyDown(e as any)
+          forward(events.onKeyDown, e)
         }}
       >
         {local.children}
@@ -530,4 +537,15 @@ export function ScrollView(props: ScrollViewProps) {
       </Show>
     </div>
   )
+}
+
+function forward<E extends Event>(
+  handler: JSX.EventHandlerUnion<HTMLDivElement, E> | undefined,
+  event: E & { currentTarget: HTMLDivElement; target: Element },
+) {
+  if (!handler) return
+
+  if ("0" in handler) return handler[0](handler[1], event)
+
+  handler(event)
 }

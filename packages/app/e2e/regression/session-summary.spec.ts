@@ -841,7 +841,9 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   await summary.getByRole("button", { name: "MCP", exact: true }).click()
   const menu = page.getByRole("group", { name: "MCP", exact: true })
   await expect(menu.locator(".session-mcp-row")).toHaveCount(30)
-  await expect.poll(() => menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect
+    .poll(() => menu.locator("[data-scrollable]").evaluate((element) => element.scrollHeight > element.clientHeight))
+    .toBe(true)
   await expect
     .poll(async () => {
       const bounds = (await menu.boundingBox())!

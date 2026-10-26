@@ -11,6 +11,7 @@ import {
   Value,
 } from "@kobalte/core/select"
 import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { ScrollView } from "../../components/scroll-view"
 import "./select.css"
 
 function groupOptions<T>(options: T[], groupBy?: (x: T) => string): { category: string; options: T[] }[] {
@@ -54,6 +55,8 @@ const CheckSmall = () => (
     />
   </svg>
 )
+
+type SelectState = { key?: string; cleanup?: void | (() => void) }
 
 export type SelectProps<T> = Omit<
   ComponentProps<typeof Root<T, { category: string; options: T[] }>>,
@@ -102,7 +105,8 @@ export function Select<T>(props: SelectProps<T>) {
     "fitViewport",
   ])
 
-  const state: { key?: string; cleanup?: void | (() => void) } = {}
+  const state: SelectState = {}
+  let scroller: HTMLDivElement | undefined
 
   const stop = () => {
     state.cleanup?.()
@@ -110,7 +114,7 @@ export function Select<T>(props: SelectProps<T>) {
     state.key = undefined
   }
 
-  const keyFor = (item: T) => (local.value ? local.value(item) : String(item as string))
+  const keyFor = (item: T) => (local.value ? local.value(item) : String(item))
 
   const move = (item: T | undefined) => {
     if (!local.onHighlight) return
@@ -148,8 +152,8 @@ export function Select<T>(props: SelectProps<T>) {
       fitViewport={local.fitViewport ?? false}
       value={local.current}
       options={grouped()}
-      optionValue={(x) => (local.value ? local.value(x) : String(x as string))}
-      optionTextValue={(x) => (local.label ? local.label(x) : String(x as string))}
+      optionValue={(x) => (local.value ? local.value(x) : String(x))}
+      optionTextValue={(x) => (local.label ? local.label(x) : String(x))}
       optionGroupChildren="options"
       placeholder={local.placeholder}
       sectionComponent={(sectionProps) => (
@@ -172,7 +176,7 @@ export function Select<T>(props: SelectProps<T>) {
               ? local.children(itemProps.item.rawValue)
               : local.label
                 ? local.label(itemProps.item.rawValue)
-                : String(itemProps.item.rawValue as string)}
+                : String(itemProps.item.rawValue)}
           </ItemLabel>
           <ItemIndicator data-slot="menu-v2-item-indicator" forceMount>
             <CheckSmall />
@@ -180,6 +184,7 @@ export function Select<T>(props: SelectProps<T>) {
         </Item>
       )}
       onChange={(next) => {
+        // SAFETY: Root is single-select over `T` options, so Kobalte reports a `T` (or `T[]` in its widened type).
         const v = next == null ? null : Array.isArray(next) ? ((next[0] as T) ?? null) : (next as T)
         local.onSelect?.(v)
         stop()
@@ -212,7 +217,7 @@ export function Select<T>(props: SelectProps<T>) {
 
               if (local.label && selected != null) return local.label(selected)
 
-              return selected != null ? (selected as string) : ""
+              return selected != null ? String(selected) : ""
             }}
           </Value>
         </div>
@@ -222,7 +227,9 @@ export function Select<T>(props: SelectProps<T>) {
       </Trigger>
       <Portal>
         <Content class={local.contentClass} data-component="menu-v2-content" data-slot="select-v2-content">
-          <Listbox data-slot="select-v2-listbox" />
+          <ScrollView focusable={false} class="max-h-48" viewportRef={(element) => (scroller = element)}>
+            <Listbox data-slot="select-v2-listbox" scrollRef={() => scroller} />
+          </ScrollView>
         </Content>
       </Portal>
     </Root>

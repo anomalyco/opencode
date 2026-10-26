@@ -19,3 +19,20 @@ story("shows how long each background item has been running, ticking while open"
   await expect(elapsed).toHaveText(["13s", "1m 06s", "1h 02m", "5m 42s"])
   expect(await page.locator('[data-slot="session-activity-panel"]').evaluate((node) => node.clientWidth)).toBe(width)
 })
+
+story("insets rows 4px inside the panel's border, so the scroll area adds no width", async ({ mount, page }) => {
+  await mount("session-activity-chips--many-subagents")
+
+  await page.locator('[data-slot="session-activity-chip"]').click()
+  const panel = page.locator('[data-slot="session-activity-panel"]')
+  const insets = await panel.evaluate((node) => {
+    const box = node.getBoundingClientRect()
+    const row = node.querySelector('[data-component="menu-v2-item"]')!.getBoundingClientRect()
+    const border = parseFloat(getComputedStyle(node).borderInlineStartWidth)
+
+    return { start: row.left - box.left - border, end: box.right - row.right - border }
+  })
+
+  expect(insets.start).toBeCloseTo(4, 0)
+  expect(insets.end).toBeCloseTo(4, 0)
+})

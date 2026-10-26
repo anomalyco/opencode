@@ -3,6 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Switch } from "@opencode/ui/switch"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -140,6 +141,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
 
   const rows: Partial<Record<Service, HTMLButtonElement>> = {}
   const panes: Partial<Record<Service, HTMLElement>> = {}
+  const viewports: Partial<Record<Service, HTMLElement>> = {}
   let flyout: HTMLDivElement | undefined
   let surface: HTMLDivElement | undefined
   // The flyout's containing block in the viewport, measured when a list opens and on scroll or resize, so pointer
@@ -338,10 +340,11 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     entries.forEach((entry) => {
       const service = services.find((item) => panes[item.type]?.contains(entry.target))?.type
       const pane = service ? panes[service] : undefined
+      const viewport = service ? viewports[service] : undefined
 
-      if (!service || !pane) return
+      if (!service || !pane || !viewport) return
       setMenu("heights", service, pane.offsetHeight)
-      setMenu("overflow", service, pane.scrollHeight > pane.clientHeight + 1)
+      setMenu("overflow", service, viewport.scrollHeight > viewport.clientHeight + 1)
     }),
   )
 
@@ -462,11 +465,13 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                     data-overflow={menu.overflow[service.type] || undefined}
                     inert={menu.pane !== service.type || undefined}
                   >
-                    <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
-                      <ServiceBody source={source}>
-                        <source.Body />
-                      </ServiceBody>
-                    </div>
+                    <ScrollView focusable={false} viewportRef={(element) => (viewports[service.type] = element)}>
+                      <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
+                        <ServiceBody source={source}>
+                          <source.Body />
+                        </ServiceBody>
+                      </div>
+                    </ScrollView>
                   </div>
                 )
               }}

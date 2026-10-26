@@ -4,6 +4,7 @@ import { DockShell, DockTray } from "@opencode/ui/dock-surface"
 import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useMutation } from "@tanstack/solid-query"
@@ -46,6 +47,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
 
   const visibleWorktrees = () => {
     const query = state.search.trim().toLowerCase()
+
     const matches = query
       ? otherWorktrees().filter((item) => getFilename(item.directory).toLowerCase().includes(query))
       : otherWorktrees()
@@ -157,16 +159,20 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                     "keydown",
                     (event) => {
                       if (!searchInput || event.target === searchInput) return
+
                       if (event.ctrlKey || event.metaKey || event.altKey) return
+
                       if (event.key.length !== 1 && event.key !== "Backspace") return
+
                       if (event.key === " " && !state.search) return
+
                       event.stopPropagation()
                       searchInput.focus({ preventScroll: true })
                     },
                     { capture: true },
                   )
                 }
-                class="max-h-[66.667dvh] w-[200px] overflow-y-auto"
+                class="max-h-[66.667dvh] w-[200px] overflow-hidden"
               >
                 <Menu.Item onSelect={() => move.mutate({ source: "worktree" })} disabled={move.isPending}>
                   <Icon name="plus" />
@@ -185,9 +191,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                       // Worktrees load after the menu opens, so focus the field once it mounts.
                       ref={(element) => {
                         searchInput = element
-                        requestAnimationFrame(() =>
-                          requestAnimationFrame(() => element.focus({ preventScroll: true })),
-                        )
+                        requestAnimationFrame(() => requestAnimationFrame(() => element.focus({ preventScroll: true })))
                       }}
                       value={state.search}
                       placeholder={language.t("session.new.workspace.search.placeholder")}
@@ -212,18 +216,20 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                     {language.t("session.new.workspace.search.empty")}
                   </div>
                 </Show>
-                <For each={visibleWorktrees()}>
-                  {(worktree) => (
-                    <Menu.Item
-                      title={worktree.directory}
-                      onSelect={() => move.mutate({ source: "worktree", directory: worktree.directory })}
-                      disabled={move.isPending}
-                    >
-                      <Icon name="outline-worktree" />
-                      <span class="min-w-0 flex-1 truncate">{getFilename(worktree.directory)}</span>
-                    </Menu.Item>
-                  )}
-                </For>
+                <ScrollView focusable={false}>
+                  <For each={visibleWorktrees()}>
+                    {(worktree) => (
+                      <Menu.Item
+                        title={worktree.directory}
+                        onSelect={() => move.mutate({ source: "worktree", directory: worktree.directory })}
+                        disabled={move.isPending}
+                      >
+                        <Icon name="outline-worktree" />
+                        <span class="min-w-0 flex-1 truncate">{getFilename(worktree.directory)}</span>
+                      </Menu.Item>
+                    )}
+                  </For>
+                </ScrollView>
               </Menu.Content>
             </Menu.Portal>
           </Menu>

@@ -23,6 +23,7 @@ import { Dialog, DialogBody, DialogTitle } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { SearchHighlight, SearchList, type SearchListHandle, type SearchListRow } from "@opencode/ui/search-list"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { TextInput } from "@opencode/ui/text-input"
@@ -941,38 +942,40 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             ref={(element) => (flyoutRef = element)}
             data-component="menu-v2-content"
             data-slot="model-dialog-flyout"
-            class="!fixed max-h-[400px] w-[200px] overflow-y-auto !p-0 !animate-none"
+            class="!fixed max-h-[400px] w-[200px] overflow-hidden !p-0 !animate-none"
             style={{ left: `${store.position.left}px`, top: `${store.position.top}px` }}
             onMouseEnter={() => triangle.cancel()}
           >
-            <Show when={variantsOf(item()).length > 0}>
-              <div class="flex flex-col p-0.5">
-                <For each={[undefined, ...variantsOf(item())]}>
-                  {(value) => (
-                    <div
-                      data-component="menu-v2-item"
-                      role="menuitemradio"
-                      aria-checked={variant(item()) === value}
-                      data-checked={variant(item()) === value ? "" : undefined}
-                      onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
-                      onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
-                      onClick={() => choose(item(), value ?? null)}
-                    >
-                      <span data-slot="menu-v2-item-content" class="capitalize">
-                        {value ?? language.t("common.default")}
-                      </span>
-                      <span
-                        data-slot="menu-v2-item-indicator"
+            <ScrollView focusable={false}>
+              <Show when={variantsOf(item()).length > 0}>
+                <div class="flex flex-col p-0.5">
+                  <For each={[undefined, ...variantsOf(item())]}>
+                    {(value) => (
+                      <div
+                        data-component="menu-v2-item"
+                        role="menuitemradio"
+                        aria-checked={variant(item()) === value}
                         data-checked={variant(item()) === value ? "" : undefined}
+                        onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
+                        onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
+                        onClick={() => choose(item(), value ?? null)}
                       >
-                        <Icon name="check" size="small" />
-                      </span>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-            <ModelDetails model={item()} provider={labels.name(item().provider)} compact usage={usage(item())} />
+                        <span data-slot="menu-v2-item-content" class="capitalize">
+                          {value ?? language.t("common.default")}
+                        </span>
+                        <span
+                          data-slot="menu-v2-item-indicator"
+                          data-checked={variant(item()) === value ? "" : undefined}
+                        >
+                          <Icon name="check" size="small" />
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <ModelDetails model={item()} provider={labels.name(item().provider)} compact usage={usage(item())} />
+            </ScrollView>
           </div>
         )}
       </Show>

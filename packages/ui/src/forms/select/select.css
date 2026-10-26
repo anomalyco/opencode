@@ -235,9 +235,6 @@
   list-style: none;
   min-width: 0;
   width: 100%;
-  max-height: 12rem;
-  overflow-x: hidden;
-  overflow-y: auto;
   outline: none;
   white-space: nowrap;
 

@@ -205,8 +205,9 @@ button.session-service-row:focus-visible,
   grid-area: 1 / 1;
   align-self: start;
   max-height: min(480px, calc(100dvh - 36px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   outline: none;
 
   /* Lists swap at once; only the box glides and resizes, so two lists never show together. */
@@ -219,9 +220,13 @@ button.session-service-row:focus-visible,
   &[data-overflow] {
     mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 16px), transparent);
 
-    > .session-service-pane-content {
+    [data-scrollable] > .session-service-pane-content {
       padding-block: 12px 16px;
     }
+  }
+
+  [data-scrollable] {
+    overscroll-behavior: contain;
   }
 }
 

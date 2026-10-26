@@ -2,6 +2,7 @@ import { For, Show, createSignal, onMount, splitProps, type ComponentProps, type
 import { FileIcon } from "@opencode/ui/file-icon"
 import { useI18n } from "../../context/i18n"
 import { useFilteredList } from "../../hooks"
+import { ScrollView } from "../../components/scroll-view"
 import { Button } from "@opencode/ui/button"
 import "./line-comment.css"
 
@@ -291,7 +292,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
             }}
           />
           <Show when={mentionOpen() && mention.flat().length > 0}>
-            <div data-slot="line-comment-v2-mention-list">
+            <ScrollView focusable={false} data-slot="line-comment-v2-mention-list">
               <For each={mention.flat().slice(0, 10)}>
                 {(item) => {
                   const directory = item.path.endsWith("/") ? item.path : pathDirectory(item.path)
@@ -317,7 +318,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
                   )
                 }}
               </For>
-            </div>
+            </ScrollView>
           </Show>
         </div>
         <div data-slot="line-comment-v2-footer">

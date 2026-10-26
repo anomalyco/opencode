@@ -1,4 +1,5 @@
 import { Menu } from "@opencode/ui/menu"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Icon } from "@opencode/ui/icon"
 import { showToast } from "@opencode/ui/toast"
 import { comparablePath, containsDirectory, getFilename, sameDirectory } from "@opencode/util/path"
@@ -115,15 +116,17 @@ export function SessionWorkspaceMenu(props: {
             {ctx.t("workspace.existing")}
           </Menu.SubTrigger>
           <Menu.Portal>
-            <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
-              <For each={workspaces()}>
-                {(workspace) => (
-                  <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
-                    <Icon name="outline-worktree" class="text-v2-icon-icon-muted" />
-                    <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
-                  </Menu.Item>
-                )}
-              </For>
+            <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-hidden !pb-0 [&_[data-scrollable]>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
+              <ScrollView focusable={false}>
+                <For each={workspaces()}>
+                  {(workspace) => (
+                    <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
+                      <Icon name="outline-worktree" class="text-v2-icon-icon-muted" />
+                      <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
+                    </Menu.Item>
+                  )}
+                </For>
+              </ScrollView>
             </Menu.SubContent>
           </Menu.Portal>
         </Menu.Sub>

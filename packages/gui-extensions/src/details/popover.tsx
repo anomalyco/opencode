@@ -2,6 +2,7 @@ import { Popover } from "@kobalte/core/popover"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { Command, createVisitState, useExtension, type MountedSession } from "../sdk"
@@ -117,7 +118,9 @@ function DetailsPopover(
             if (content instanceof HTMLElement) setTimeout(() => content.focus({ preventScroll: true }))
           }}
         >
-          <div class="max-h-[calc(100dvh-96px)] overflow-y-auto p-1">{props.children}</div>
+          <ScrollView focusable={false} class="max-h-[calc(100dvh-96px)]">
+            <div class="p-1">{props.children}</div>
+          </ScrollView>
         </Popover.Content>
       </Popover.Portal>
     </Popover>

@@ -197,16 +197,20 @@
 }
 
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-list"] {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   max-height: 180px;
-  overflow: auto;
   margin-top: 8px;
-  padding: 4px;
   border: 0.5px solid var(--v2-border-border-muted);
   border-radius: 6px;
   background: var(--v2-background-bg-layer-02);
+}
+
+[data-component="line-comment-v2"][data-variant="editor"]
+  [data-slot="line-comment-v2-mention-list"]
+  > [data-scrollable] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
 }
 
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-item"] {
