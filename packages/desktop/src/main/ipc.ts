@@ -59,6 +59,11 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
   const wire = (win: BrowserWindow) => {
     win.webContents.on("before-input-event", (_event, input) => {
+      // Ctrl+R renames the session in the renderer, so the default menu's Reload must not take it.
+      win.webContents.setIgnoreMenuShortcuts(
+        input.control && !input.meta && !input.shift && !input.alt && input.key.toLowerCase() === "r",
+      )
+
       if (input.type !== "keyDown" || input.key !== "Escape") return
       win.webContents.send(DragCancelEvent)
     })

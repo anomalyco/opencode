@@ -13,7 +13,7 @@ import {
   type ToolEntry,
   UnknownProviderError,
   type Usage,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
@@ -52,9 +52,12 @@ export type Editor = {
   configure: (settings: Partial<Settings>) => void
 }
 
+/** A prompt's size: `measured` is what the provider reported at the latest response, `estimated` is the text since. */
+export type Estimate = { readonly measured: number; readonly estimated: number }
+
 export type Trigger =
-  /** `overflow`: the provider just rejected this context as too long. */
-  | { readonly reason: "auto" | "overflow"; readonly context: SessionContext.Loaded }
+  /** `overflow`: the provider just rejected this context as too long. `estimate` is `estimatePrompt(context)`. */
+  | { readonly reason: "auto" | "overflow"; readonly context: SessionContext.Loaded; readonly estimate?: Estimate }
   /** `inputID` is the `/compact` inbox item, whose message shows the outcome. */
   | { readonly reason: "manual"; readonly context: SessionContext.Loaded; readonly inputID: SessionMessage.ID }
 
@@ -68,9 +71,12 @@ export interface Interface extends State.Transformable<Editor> {
   readonly compact: (trigger: Trigger) => Effect.Effect<Outcome>
   /**
    * Starts a background summary when the context nears the threshold. Never waits for it. Loads `context` only when
-   * background summaries are on.
+   * background summaries are on. `estimate`, when given, is `estimatePrompt` of the loaded context.
    */
-  readonly precompute: <E>(context: Effect.Effect<SessionContext.Loaded, E>) => Effect.Effect<void, E>
+  readonly precompute: <E>(
+    context: Effect.Effect<SessionContext.Loaded, E>,
+    estimate?: Estimate,
+  ) => Effect.Effect<void, E>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -287,7 +293,10 @@ export const layer = Layer.effect(
 
       // Only the user compacts when automatic compaction is off, overflow included.
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
-      if (trigger.reason === "auto" && !due(context, calculateCeiling(context.model.limit, settings.buffer)))
+      if (
+        trigger.reason === "auto" &&
+        !due(context, calculateCeiling(context.model.limit, settings.buffer), trigger.estimate)
+      )
         return { status: "skipped" }
       const held = precomputed.get(context.session.id)
       precomputed.delete(context.session.id)
@@ -296,7 +305,7 @@ export const layer = Layer.effect(
       // The provider just rejected this context, so the estimate ran low; the first attempt already aims below it.
       const budget =
         trigger.reason === "overflow"
-          ? Math.min(model.cap, Math.floor(estimateContext(context) * SHRINK_STEPS[0]))
+          ? Math.min(model.cap, Math.floor(total(trigger.estimate ?? estimatePrompt(context)) * SHRINK_STEPS[0]))
           : model.cap
 
       const selected = model.context === context ? trigger : { ...trigger, context: model.context }
@@ -327,14 +336,17 @@ export const layer = Layer.effect(
      */
     const precompute = Effect.fn("SessionCompaction.precompute")(function* <E>(
       load: Effect.Effect<SessionContext.Loaded, E>,
+      given?: Estimate,
     ) {
       const settings = state.get()
       if (!settings.precompute || !settings.auto) return
       const context = yield* load
       if (context.model.compaction?.type === "native") return
       const ceiling = calculateCeiling(context.model.limit, settings.buffer)
-      if (!Number.isFinite(ceiling) || due(context, ceiling)) return
-      if (estimateContext(context) < ceiling * PRECOMPUTE_RATIO) return
+      if (!Number.isFinite(ceiling)) return
+      const estimate = given ?? estimatePrompt(context)
+      if (due(context, ceiling, estimate)) return
+      if (total(estimate) < ceiling * PRECOMPUTE_RATIO) return
 
       const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
       const anchor = context.messages[anchorIndex]
@@ -406,7 +418,7 @@ export const layer = Layer.effect(
       return { ...exit.value, metadata: { keepID: held.keepID, ...exit.value.metadata } }
     })
 
-    const due = (context: SessionContext.Loaded, ceiling: number) => {
+    const due = (context: SessionContext.Loaded, ceiling: number, estimate?: Estimate) => {
       const messages = context.messages
       // A compaction just completed; let the runner rebuild the request from it first.
       const last = messages.at(-1)
@@ -414,7 +426,7 @@ export const layer = Layer.effect(
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
       const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
       if (measured < messages.findLastIndex(SessionHistory.isNativeCompaction)) return false
-      return estimateContext(context) >= ceiling
+      return total(estimate ?? estimatePrompt(context)) >= ceiling
     }
 
     /**
@@ -1064,13 +1076,12 @@ export const recentUserMessages = (
   return sendable.slice(oldestToDrop(sendable, estimateMessage, keep))
 }
 
-export const estimateContext = (context: SessionContext.Loaded) => {
-  const prompt = estimatePrompt(context)
-  return prompt.measured + prompt.estimated
-}
+const total = (estimate: Estimate) => estimate.measured + estimate.estimated
 
-/** The prompt size: `measured` is what the provider reported at the latest response, `estimated` is the text since. */
-export const estimatePrompt = (context: SessionContext.Loaded) => {
+export const estimateContext = (context: SessionContext.Loaded) => total(estimatePrompt(context))
+
+/** The size of the prompt `context` sends. */
+export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
   const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
   const anchor = context.messages[anchorIndex]
   const base = transcript(context, context.messages.slice(Math.max(0, anchorIndex)))

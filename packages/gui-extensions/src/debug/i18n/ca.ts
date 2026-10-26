@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Commuta la barra de depuració",
-  "status.toggle": "Commuta les eines de depuració",
   ariaLabel: "Diagnòstic de rendiment del desenvolupament",
   providerAriaLabel: "Diagnòstic del rendiment del proveïdor",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Temps des de l’enviament de la sol·licitud al proveïdor fins a la primera sortida del model.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Temps des de l’enviament de la sol·licitud al proveïdor fins al primer text de resposta.",
+  "duration.label": "TIME",
+  "duration.tip": "Temps des de la sol·licitud que va iniciar l'últim torn fins que la resposta va acabar.",
   "tps.label": "TPS",
-  "tps.tip": "Fitxes de sortida per segon després de la primera sortida del model.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Temps des de l’enviament de la sol·licitud al proveïdor fins que finalitza el flux de resposta.",
+  "tps.tip":
+    "Fitxes de sortida i de raonament per segon en les peticions al model de l'últim torn, sense comptar el temps de les eines.",
   "nav.label": "NAV",
   "nav.tip":
     "L'última transició de ruta completada tocant una pàgina de sessió, mesurada des de l'inici de l'encaminador fins a la primera pintura després que s'instal·li.",

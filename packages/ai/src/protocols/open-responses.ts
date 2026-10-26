@@ -60,7 +60,7 @@ const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
   video_url: Schema.String,
 })
-const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
+const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile, OpenResponsesInputVideo])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
 
@@ -513,12 +513,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const decodeImageDetail = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))
 const decodeMessageMetadata = ProviderShared.validateWith(Schema.decodeUnknownEffect(MessageMetadata))
 
-const lowerMedia = Effect.fnUntraced(function* (
-  part: MediaPart,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-  target: "message" | "tool-result",
-) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
   const media = part.media.inline()
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
@@ -528,8 +523,7 @@ const lowerMedia = Effect.fnUntraced(function* (
   const url = ProviderShared.mediaUrl(part.media)
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
   if (part.media.kind !== "image") {
-    if (target === "tool-result" && part.media.kind === "video")
-      return { type: "input_video" as const, video_url: location }
+    if (part.media.kind === "video") return { type: "input_video" as const, video_url: location }
     return {
       type: "input_file" as const,
       filename: part.filename ?? (mime === "application/pdf" ? "document.pdf" : "file"),
@@ -550,15 +544,8 @@ const lowerUserContent = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  if (part.type === "media") return yield* lowerMedia(part, request, adapter)
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
-})
-
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
-  const lowered = yield* lowerMedia(part, request, adapter, "message")
-  if (lowered.type === "input_video")
-    return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
-  return lowered
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -569,16 +556,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
-})
-
-const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
-  item: Content,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter)
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
@@ -719,7 +697,7 @@ const lowerMessages = Effect.fnUntraced(function* (
           input.push({
             type: "message",
             role: "user",
-            content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
+            content: yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter)),
           })
           continue
         }
@@ -729,7 +707,7 @@ const lowerMessages = Effect.fnUntraced(function* (
           input.push({
             type: "message",
             role: "user",
-            content: [yield* lowerMessageMedia(part, request, adapter)],
+            content: [yield* lowerMedia(part, request, adapter)],
           })
           continue
         }

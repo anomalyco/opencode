@@ -50,6 +50,7 @@ The current list of models includes:
 - **LongCat-2.0**
 - **Step 5 Preview**
 - **Beam Free** (limited time, limited regions)
+- **Iceman Contributor Free** (limited time)
 - **MiMo-V2.6-Flash**
 - **MiMo-V2.6-Pro**
 - **MiMo-V2.5**
@@ -152,6 +153,7 @@ Token prices are per 1M tokens.
     | LongCat-2.0                      | $0.30           | $1.20             | $0.006          | -            | **$60**                                        |
     | Step 5 Preview                   | $1.00           | $2.70             | $0.10           | -            | **$15**                                        |
     | Beam Free                        | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
+    | Iceman Contributor Free          | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | MiMo-V2.6-Flash                  | $0.14           | $0.28             | $0.0028         | -            | **$60**                                        |
     | MiMo-V2.6-Pro                    | $0.435          | $0.87             | $0.003625       | -            | **$15**                                        |
     | MiMo-V2.5                        | $0.14           | $0.28             | $0.0028         | -            | **$60**                                        |
@@ -194,6 +196,7 @@ Token prices are per 1M tokens.
     | LongCat-2.0                      | $0.30           | $1.20             | $0.006          | -            | **$240**                                       |
     | Step 5 Preview                   | $1.00           | $2.70             | $0.10           | -            | **$60**                                        |
     | Beam Free                        | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
+    | Iceman Contributor Free          | Free            | Free              | Free            | -            | **Unlimited**<br /><small>limited time</small> |
     | MiMo-V2.6-Flash                  | $0.14           | $0.28             | $0.0028         | -            | **$120**                                       |
     | MiMo-V2.6-Pro                    | $0.435          | $0.87             | $0.003625       | -            | **$60**                                        |
     | MiMo-V2.5                        | $0.14           | $0.28             | $0.0028         | -            | **$120**                                       |
@@ -227,6 +230,8 @@ Token prices are per 1M tokens.
 
 **Beam Free:** Free for a limited time. Not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 
+**Iceman Contributor Free:** Free for a limited time.
+
 **Gemini 4 Argon:** The 50% discount applies through November 30, 2026.
 
 **DeepSeek V4.1 Flash / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday; all other hours, including weekends, are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -250,6 +255,7 @@ Plus estimates scale with each model's higher usage limit.
     | LongCat-2.0                | 11,400               | 28,600            | 57,200             |
     | Step 5 Preview             | 430                  | 1,070             | 2,130              |
     | Beam Free                  | Unlimited            | Unlimited         | Unlimited          |
+    | Iceman Contributor Free    | Unlimited            | Unlimited         | Unlimited          |
     | MiMo-V2.6-Flash            | 30,100               | 75,200            | 150,400            |
     | MiMo-V2.6-Pro              | 3,250                | 8,150             | 16,300             |
     | MiMo-V2.5                  | 30,100               | 75,200            | 150,400            |
@@ -285,6 +291,7 @@ Plus estimates scale with each model's higher usage limit.
     | LongCat-2.0                | 45,600               | 114,400           | 228,800            |
     | Step 5 Preview             | 1,720                | 4,280             | 8,520              |
     | Beam Free                  | Unlimited            | Unlimited         | Unlimited          |
+    | Iceman Contributor Free    | Unlimited            | Unlimited         | Unlimited          |
     | MiMo-V2.6-Flash            | 60,200               | 150,400           | 300,800            |
     | MiMo-V2.6-Pro              | 13,000               | 32,600            | 65,200             |
     | MiMo-V2.5                  | 60,200               | 150,400           | 300,800            |
@@ -399,6 +406,7 @@ You can also access Go models through the following API endpoints.
 | Hy3                        | hy3                        | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
 | Step 5 Preview             | step-5-preview             | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
 | Beam Free                  | beam-free                  | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
+| Iceman Contributor Free    | iceman-contributor-free    | `https://opencode.ai/inference/go/openai/v1/chat/completions`          | `@ai-sdk/openai-compatible` |
 
 </div>
 
@@ -453,12 +461,14 @@ curl https://opencode.ai/inference/go/v1/models
 | Hy3                        | Not used       | 0 days         |
 | Step 5 Preview             | Not used       | 0 days         |
 | Beam Free                  | Not used       | 30 days        |
+| Iceman Contributor Free    | Yes            | Not ZDR        |
 
 - **Grok 4.7:** ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API. [Learn more](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days. [Learn more](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Claude Haiku 5.5:** Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - **Muse Spark 1.3 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Iceman Contributor Free:** Free for a limited time in exchange for permission to use your prompts and completions to improve the model.
 - **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through October 31, 2026.
 
 ## Background

@@ -165,6 +165,17 @@ export const QuestionAnswerCounts = {
   ),
 }
 
+export const QuestionMultiSelect = {
+  render: () => (
+    <SessionPreview
+      title="Choose supporting surfaces"
+      description={description}
+      document={questionPendingDocument}
+      request={{ type: "question", value: { ...activeQuestionRequest, fields: [activeQuestionRequest.fields[1]] } }}
+    />
+  ),
+}
+
 export const McpElicitationRequest = {
   render: () => (
     <SessionPreview
@@ -251,7 +262,6 @@ export const ReviewPlusTerminal = {
       description={description}
       document={{ ...terminalPassedDocument, diffs: editThenTestDocument.diffs }}
       reviewOpened
-      terminal={{ title: "Terminal 1", lines: ["$ bun test", "27 pass", "0 fail"] }}
     />
   ),
 }
@@ -262,7 +272,29 @@ export const ChildSession = {
       title="Inspect the child Session"
       description={description}
       document={subagentDocument}
-      child={{ parentID: "ses_story_parent" }}
+      child={{
+        agent: "surveyor",
+        model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
+        status: "running",
+        started: Date.now() - 65_000,
+      }}
+    />
+  ),
+}
+
+export const ChildSessionDone = {
+  render: () => (
+    <SessionPreview
+      title="Inspect a finished child Session"
+      description={description}
+      document={subagentDocument}
+      child={{
+        agent: "surveyor",
+        model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
+        status: "succeeded",
+        started: 0,
+        ended: 252_000,
+      }}
     />
   ),
 }

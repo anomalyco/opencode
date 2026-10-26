@@ -93,3 +93,12 @@ function withScheme(input: string) {
 
   return `${local ? "http" : "https"}://${value}`
 }
+
+/**
+ * Electron rejects `loadURL` with ERR_FAILED (-2) whenever loading stops before `did-finish-load`. Chromium's media
+ * viewer for a video or audio URL commits its document and stops that way, so a committed navigation has loaded. A
+ * download never commits, so it still fails.
+ */
+export function committedLoad(error: Error, committed: boolean) {
+  return committed && "errno" in error && error.errno === -2
+}

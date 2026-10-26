@@ -1,10 +1,13 @@
 import {
+  batch,
   ErrorBoundary,
+  For,
   Show,
   Match,
   Switch,
   createMemo,
   createEffect,
+  createSignal,
   on,
   onCleanup,
   untrack,
@@ -12,32 +15,39 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { Slot, type BackgroundTask, type MountedSession, type SessionScreen } from "@opencode/gui-extensions/sdk"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
 import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
-import { useExtensionHost } from "@/runtime/extension/host"
 import { ExtensionLinks } from "@/runtime/extension/render"
-import { createPanelSidebar, createRegion, DockRegion, MobilePanel } from "@/runtime/extension/panels"
+import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/extension/panels"
 import { createMobileViews, MobileViewTabs } from "@/runtime/extension/mobile"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { createMountedSession } from "@/runtime/extension/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
-import { SideRegion } from "@/runtime/extension/side-region"
+import { PaneTabs, SideRegion } from "@/runtime/extension/side-region"
+import { createPaneDrag } from "@/runtime/extension/pane-drag"
+import { useLanguage } from "@/runtime/i18n/language"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
+import { createTimelineQuote, TimelineQuote } from "./timeline/quote"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
-import { SessionIdentityHeader } from "./session-identity-header"
-import { SessionReviewToggle } from "./header/session-header-actions"
-import { SessionRunningMenu } from "./header/session-running-menu"
-import { createAnimatedPresence } from "@/runtime/animated-presence"
+import { SessionIdentityHeader, SessionLocation } from "./session-identity-header"
+import { SessionHeaderDrag, windowDragEnabled } from "./header/drag-area"
+import { usePlatform } from "@/runtime/platform/platform"
+import { useServer } from "@/runtime/server/current"
+import { reviewGlyphFill, SessionReviewToggle } from "./header/session-header-actions"
 import { createTimelineCache } from "./timeline/cache"
+import { createPanelMotion, holdLandingWidth, panelOpacity } from "@/shell/panel-motion"
 
 export function SessionScreenView(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
@@ -50,6 +60,7 @@ export function SessionScreenView(props: { session: SessionModel }) {
         screen={mounted.screen}
         view={mounted.view}
         bindBackground={mounted.bindBackground}
+        bindPrompt={mounted.bindPrompt}
       />
     </ExtensionLinks>
   )
@@ -61,11 +72,13 @@ function SessionScreenContent(props: {
   view: Accessor<MountedSession>
   screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
+  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void }) => void
 }) {
   const session = props.session
-  const host = useExtensionHost()
+  const language = useLanguage()
   const attachment = useExtensionAttachment()
   const settings = useSettings()
+  const server = useServer()
   const isDesktop = session.isDesktop
   const bottomMobileTabs = () => settings.general.mobileTitlebarPosition() === "bottom"
   const sidebar = createPanelSidebar()
@@ -75,15 +88,36 @@ function SessionScreenContent(props: {
     view: props.view,
     screen: props.screen,
     tabs: session.layout.tabs,
+    closed: attachment.closed,
+    open: (key) => attachment.openTab(key, props.view()),
+    side: () => session.layout.view().side,
+    // Closing the last tab closes the side region, which opens with a new tab next time. The user's own hand closed
+    // it, so it goes at once.
+    onEmptied: () => {
+      if (!session.layout.view().side.opened()) return
+      session.layout.view().side.toggle()
+      sideMotion.sync(false)
+    },
+    settled: (run) => sideMotion.whenSettled(run),
   })
 
   onCleanup(attachment.region(region))
   const mobile = createMobileViews()
 
-  const screen = createSessionScreenLayout(session, {
-    wide: region.wide,
-    sidebar: () => host.items(Slot).some((item) => item.value.at === "session.panel.sidebar"),
+  const bottomTabs = createMemo(() => region.pane("bottom").keys().length > 0)
+  const bottomOpen = createMemo(() => bottomTabs() && session.layout.view().bottom.opened())
+
+  const drag = createPaneDrag({
+    shown: (pane) => (pane === "bottom" ? bottomOpen() : region.pane(pane).keys().length > 0),
+    drop: (key, target) =>
+      batch(() => {
+        session.layout.tabs().move(key, target.pane, target.before)
+
+        if (target.pane === "bottom") session.layout.view().bottom.setOpened(true)
+      }),
   })
+
+  const screen = createSessionScreenLayout(session, { wide: region.wide })
 
   const timeline = createSessionTimelineInteraction(session)
 
@@ -96,103 +130,83 @@ function SessionScreenContent(props: {
 
   const messagesReady = timeline.ready
 
-  const [store, setStore] = createStore({
-    bottomDockCached: false,
-    sideWidthMotion: false,
+  const [store, setStore] = createStore<{
+    timelineScrollbarHidden: boolean
+    sideMounted: boolean
+    mobileCached: string[]
+  }>({
     timelineScrollbarHidden: false,
-    sideHeightMotion: false,
-    sideRegionPresent: false,
-    sideTabsPresent: false,
-    sideDockPresent: false,
-    mobileDockCached: false,
+    sideMounted: false,
+    mobileCached: [],
   })
 
-  const [elements, setElements] = createStore<{
-    side?: HTMLDivElement
-    bottomDock?: HTMLDivElement
-  }>({})
+  const sideVisible = createMemo(() => isDesktop() && screen.side.open())
 
-  const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
-  const sideDockVisible = createMemo(() => isDesktop() && screen.dock.side() && screen.dock.open())
-  const bottomDockVisible = createMemo(() => isDesktop() && screen.dock.open() && screen.dock.bottom())
+  const location = {
+    directory: () => session.data.info()?.location.directory,
+    project: createMemo(() => {
+      const info = session.data.info()
 
-  const sidePresence = createAnimatedPresence(
-    () => sideVisible() || undefined,
-    () => elements.side ?? null,
-    session.layout.tabKey,
-  )
-
-  const bottomDockPresence = createAnimatedPresence(
-    () => bottomDockVisible() || undefined,
-    () => elements.bottomDock ?? null,
-    session.layout.tabKey,
-  )
-
-  const sideMotion = createMemo<{
-    key?: string
-    region: boolean
-    dock: boolean
-    animateRegion: boolean
-    animateDock: boolean
-  }>((previous) => {
-    const key = session.layout.tabKey()
-    const region = screen.side.region.open()
-    const dock = sideDockVisible()
-    const sameTab = previous?.key === key
-
-    return {
-      key,
-      region,
-      dock,
-      animateRegion: !!previous && sameTab && previous.region !== region,
-      animateDock: !!previous && sameTab && previous.dock !== dock,
-    }
-  })
-
-  const regionAnimating = () =>
-    sidePresence.animate() || sideMotion().animateRegion || sideMotion().animateDock || bottomDockPresence.animate()
-
-  const trackSideWidthMotion = (event: TransitionEvent) => {
-    if (event.currentTarget !== event.target || event.propertyName !== "width") return
-    setStore("sideWidthMotion", event.type === "transitionrun")
+      return info ? server.ctx.projects.forSession(info) : undefined
+    }),
   }
+
+  // The chat keeps its open width as the far end of a close's travel.
+  const chatOpenWidth = createMemo<string>((previous) => (sideVisible() ? screen.panel.width() : previous), "100%")
+  let chat: HTMLDivElement | undefined
+  let sidePresence: HTMLDivElement | undefined
+
+  // Once opened, the side region stays mounted and is skipped by content-visibility when a close settles, so neither
+  // direction mounts its contents mid-flight, and a reopen reuses their style and layout.
+  let sideContent: HTMLDivElement | undefined
+  let sideGlyph: SVGPathElement | undefined
+  let sideClosed = 0
+  // While the left sidebar moves the side panel's edge, its contents keep the width they land at, and centred content,
+  // like a Markdown preview, keeps its place rather than jumping by half the change.
+  holdLandingWidth(() => sideContent, "blocks")
+  // The toggle's pane fills from the panel's edge as far as the panel is open.
+  const paintSideGlyph = () => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - sideClosed))
+
+  const sideMotion = createPanelMotion({
+    open: sideVisible,
+    identity: session.layout.tabKey,
+    // The chat's real width moves the side panel's edge, whose contents keep their open width pinned to it.
+    paint: (closed) => {
+      sideClosed = closed
+      paintSideGlyph()
+
+      // Dims the contents as they leave and fades them in as they arrive.
+      if (sideContent) sideContent.style.opacity = panelOpacity(closed)
+
+      if (!chat) return
+      const open = chatOpenWidth()
+
+      if (closed === 1) {
+        chat.style.width = "100%"
+
+        return
+      }
+
+      chat.style.width = closed === 0 ? open : `calc(${open} + (100% - ${open}) * ${closed})`
+    },
+    element: () => sidePresence,
+    distance: screen.side.width,
+  })
 
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
 
   const revealTimelineScrollbar = (event: Event) => {
-    if (!store.timelineScrollbarHidden || store.sideWidthMotion) return
+    if (!store.timelineScrollbarHidden) return
 
     if (!(event.target instanceof Element) || !event.target.closest('[data-slot="session-timeline-scroll"]')) return
     setStore("timelineScrollbarHidden", false)
   }
 
   createEffect(() => {
-    if (sideDockVisible()) setStore("sideDockPresent", true)
-
-    if (bottomDockVisible()) setStore("bottomDockCached", true)
-
-    if (!sideVisible()) setStore("sideHeightMotion", false)
-
-    // A side panel restored without its entrance animation never fires the animationend that enables height motion.
-    if (sideVisible() && !sidePresence.animate()) setStore("sideHeightMotion", true)
-  })
-  createEffect(() => {
-    if (!isDesktop() || screen.dock.bottom()) setStore("sideDockPresent", false)
-
-    if (isDesktop() && screen.dock.side()) setStore("bottomDockCached", false)
-  })
-  createEffect(() => {
-    if (screen.side.region.open()) setStore("sideRegionPresent", true)
-
-    if (screen.side.tabs.open()) setStore("sideTabsPresent", true)
+    if (screen.side.open()) setStore("sideMounted", true)
   })
 
-  // The dock's narrow-screen view follows the dock's open state; other views are a selection.
-  const dockView = createMemo(() => mobile.entries().find((entry) => entry.provider.region === "dock"))
-
-  const mobileView = createMemo(() =>
-    screen.dock.open() ? (dockView()?.key ?? "session") : attachment.mobile.current(),
-  )
+  const mobileView = attachment.mobile.current
 
   const mobileEntry = createMemo(() => {
     const key = mobileView()
@@ -201,20 +215,16 @@ function SessionScreenContent(props: {
   })
 
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
+
+  // Narrow-screen views that ask to stay mounted once shown, e.g. a terminal that keeps its shell's screen.
   createEffect(() => {
-    if (!isDesktop() && screen.dock.open()) setStore("mobileDockCached", true)
+    const entry = mobileEntry()
+
+    if (isDesktop() || !entry?.mobile.cached || store.mobileCached.includes(entry.key)) return
+    setStore("mobileCached", (keys) => [...keys, entry.key])
   })
 
-  const selectMobile = (key: string) => {
-    if (key === dockView()?.key) {
-      session.layout.view().dock.open()
-
-      return
-    }
-
-    attachment.mobile.select(key)
-    session.layout.view().dock.close()
-  }
+  const cachedViews = createMemo(() => store.mobileCached.flatMap((key) => mobile.find(key) ?? []))
 
   const composer = createActiveSessionRegion({
     session,
@@ -225,15 +235,32 @@ function SessionScreenContent(props: {
   })
 
   props.bindBackground(composer.requests.background.tasks)
+  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus })
   useUsageExceededDialogs({
     selection: () => composer.active()?.composer.model.selection,
     onDone: () => composer.active()?.composer.restoreFocus(),
+  })
+
+  const quote = createTimelineQuote({
+    root: timeline.scroller,
+    sessionKey: session.identity.sessionKey,
+    enabled: () => conversationVisible() && composer.quote.available(),
+    add: composer.quote.add,
   })
 
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
 
     return <SessionErrorFallback error={cause} sessionID={session.identity.params.id} />
+  }
+
+  const platform = usePlatform()
+  const [headerGap, setHeaderGap] = createSignal<HTMLElement>()
+
+  const registerHeaderGap = (gap: HTMLElement) => {
+    setHeaderGap(gap)
+
+    return () => setHeaderGap((current) => (current === gap ? undefined : current))
   }
 
   const timelineView = createTimelineCache(
@@ -250,6 +277,7 @@ function SessionScreenContent(props: {
         <MessageTimeline
           active={active()}
           hideHeader={!isDesktop()}
+          registerHeaderGap={registerHeaderGap}
           session={source}
           view={own()}
           screen={props.screen}
@@ -268,8 +296,11 @@ function SessionScreenContent(props: {
           centered={screen.centered()}
           reserveReviewToggle={!sideVisible()}
           setContentRef={timeline.view.setContentRef}
+          bottomInset={timeline.inset()}
+          setVisibleRef={timeline.view.setVisibleRef}
           anchor={timeline.view.anchor}
           setRevealMessage={timeline.view.setRevealMessage}
+          setRevealPart={timeline.view.setRevealPart}
           reveal={timeline.view.reveal}
           setScrollToEnd={timeline.view.setScrollToEnd}
           search={
@@ -281,6 +312,7 @@ function SessionScreenContent(props: {
       )
     },
     () => conversationVisible() && messagesReady(),
+    (sessionID) => server.ctx.data.session.message.list(sessionID),
   )
 
   const mobileTabs = () => (
@@ -294,7 +326,7 @@ function SessionScreenContent(props: {
           current={mobileView()}
           session={props.view()}
           sidebar={sidebar}
-          onSelect={selectMobile}
+          onSelect={attachment.mobile.select}
         />
       )}
     </Show>
@@ -307,29 +339,56 @@ function SessionScreenContent(props: {
         input={composer.drop.input()}
         identity={session.layout.tabKey}
       />
+      <TimelineQuote controller={quote} />
       <Show when={!isDesktop() && !!session.identity.params.id && !bottomMobileTabs()}>{mobileTabs()}</Show>
+      {/* Narrow screens hide the timeline header, so the session's location gets its own bar. */}
+      <Show when={!isDesktop() && !!session.identity.params.id && mobileView() === "session"}>
+        <div
+          data-slot="session-location-bar"
+          class="flex h-9 shrink-0 items-center border-b border-v2-border-border-base px-2"
+        >
+          <SessionLocation
+            project={location.project()}
+            directory={location.directory()}
+            compact={!!session.data.info()?.parentID}
+            context={{
+              get session() {
+                return props.view()
+              },
+              screen: props.screen,
+            }}
+          />
+        </div>
+      </Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
         {(error) => {
           throw error()
         }}
       </Show>
-      <div class="relative flex-1 min-h-0 overflow-hidden">
-        <Show when={!isDesktop() && store.mobileDockCached}>
-          <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
-            <DockRegion
-              view={props.view()}
-              screen={props.screen}
-              sidebar={sidebar}
-              fill
-              embedded
-              present
-              contentHeight="100%"
-            />
-          </div>
+      <div class="relative isolate flex-1 min-h-0 overflow-hidden">
+        <Show when={!isDesktop() && session.identity.params.id}>
+          <For each={cachedViews()}>
+            {(entry) => (
+              <div
+                class="absolute inset-0"
+                classList={{ invisible: mobileView() !== entry.key }}
+                inert={mobileView() !== entry.key || undefined}
+              >
+                <MobilePanel
+                  screen={props.screen}
+                  entry={entry}
+                  view={props.view()}
+                  sidebar={sidebar}
+                  visible={mobileView() === entry.key}
+                  open={() => region.openFor(entry.extension)}
+                />
+              </div>
+            )}
+          </For>
         </Show>
         <Switch>
-          <Match when={!isDesktop() && mobileEntry()?.provider.region === "dock"}>
+          <Match when={!isDesktop() && mobileEntry()?.mobile.cached}>
             <></>
           </Match>
           <Match when={!isDesktop() && session.identity.params.id ? mobileEntry() : undefined}>
@@ -346,26 +405,28 @@ function SessionScreenContent(props: {
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>
-              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()}>
-                <SessionRunningMenu
-                  sessionID={session.identity.params.id}
-                  owner={composer.requests.background.running.sessionID()}
-                  blocking={composer.requests.background.running.blocking()}
-                  tasks={composer.requests.background.running.tasks()}
-                  title={session.data.parentID() ? session.data.info()?.title : undefined}
-                />
-              </SessionIdentityHeader>
+              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()} />
             </Show>
             <Show when={messagesReady() && session.identity.params.id}>{timelineView()}</Show>
           </Match>
         </Switch>
       </div>
 
-      <Show when={composer.active()} keyed>
-        {(model) => (
-          <ActiveSessionComposerRegion session={session} model={model} suggestionBoundary={timeline.scroller} />
-        )}
-      </Show>
+      {/* The composer region overflows this zero-height row upward, over a timeline that scrolls on underneath it. It
+          stays shallower than the timeline's observed elements, so their resizes from its inset arrive in the same
+          ResizeObserver pass. */}
+      <div class="relative z-[70] flex h-0 shrink-0 flex-col justify-end">
+        <Show when={composer.active()} keyed>
+          {(model) => (
+            <ActiveSessionComposerRegion
+              session={session}
+              model={model}
+              suggestionBoundary={timeline.visible}
+              onReveal={timeline.actions.revealPart}
+            />
+          )}
+        </Show>
+      </div>
       <Show when={!isDesktop() && !!session.identity.params.id && bottomMobileTabs()}>{mobileTabs()}</Show>
     </>
   )
@@ -373,7 +434,7 @@ function SessionScreenContent(props: {
   return (
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-        <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+        <div ref={screen.panel.ref} data-pane-row class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           {/* Keep the control outside panel animations. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
@@ -382,32 +443,32 @@ function SessionScreenContent(props: {
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
-              <SessionReviewToggle />
+              <SessionReviewToggle
+                onToggle={region.toggle}
+                glyph={(fill) => {
+                  sideGlyph = fill
+                  paintSideGlyph()
+                }}
+              />
             </div>
           </Show>
           <div
-            classList={{
-              "@container relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-              "duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width] motion-reduce:transition-none":
-                !screen.size.active() && sidePresence.animate(),
-              "transition-none": screen.size.active() || !sidePresence.animate(),
-            }}
+            ref={chat}
+            class="relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none"
             data-slot="session-chat-panel"
-            data-width-animating={store.sideWidthMotion}
-            data-scrollbar-hidden={store.timelineScrollbarHidden || store.sideWidthMotion}
+            data-scrollbar-hidden={store.timelineScrollbarHidden}
             onPointerMove={revealTimelineScrollbar}
             onPointerDown={revealTimelineScrollbar}
-            onWheel={revealTimelineScrollbar}
+            on:wheel={{ passive: true, handleEvent: revealTimelineScrollbar }}
             onKeyDown={revealTimelineScrollbar}
-            onTransitionRun={trackSideWidthMotion}
-            onTransitionEnd={trackSideWidthMotion}
-            onTransitionCancel={trackSideWidthMotion}
-            style={{ width: screen.panel.width() }}
           >
             <Show when={!!session.identity.params.id}>
               <SessionPanelFrame raised>
                 <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
               </SessionPanelFrame>
+            </Show>
+            <Show when={windowDragEnabled(platform)}>
+              <SessionHeaderDrag pane={chat} gap={headerGap()} />
             </Show>
 
             <Show when={screen.panel.resizable()}>
@@ -427,173 +488,100 @@ function SessionScreenContent(props: {
             </Show>
           </div>
 
-          <Show when={sidePresence.present() || store.sideTabsPresent || store.sideDockPresent}>
+          <Show when={sideMotion.present() || store.sideMounted}>
             <div
-              ref={(element) => setElements("side", element)}
+              ref={sidePresence}
               data-slot="session-side-panel-presence"
-              data-opened={sidePresence.animate() ? sidePresence.show() : undefined}
-              onAnimationEnd={(event) => {
-                if (event.currentTarget !== event.target) return
-
-                if (event.animationName !== "side-region-presence-in" || !sideVisible()) return
-                setStore("sideHeightMotion", true)
-              }}
-              classList={{
-                "relative z-0 min-w-0 h-full flex-1 overflow-visible": sidePresence.present(),
-                "absolute inset-y-0 end-0 z-0 w-0 invisible pointer-events-none overflow-visible":
-                  !sidePresence.present(),
-              }}
+              class={`z-0 min-w-0 h-full overflow-visible ${
+                !sideMotion.present()
+                  ? // Out of the row, so a closed panel takes no space or gap.
+                    "absolute inset-y-0 end-0 w-0 [content-visibility:hidden]"
+                  : "relative flex-1"
+              }`}
             >
               <div
+                ref={sideContent}
                 data-slot="session-side-panel-content"
-                class="absolute inset-y-0 start-0 size-full"
+                class="absolute inset-y-0 start-0 size-full [contain:layout_style] will-change-[opacity]"
                 style={{ "--session-side-content-width": screen.side.contentWidth() }}
               >
-                <div
-                  data-slot="session-side-region"
-                  classList={{
-                    "absolute inset-x-0 top-0 min-h-0 overflow-visible transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                    "will-change-[height]": !screen.size.active() && store.sideHeightMotion && regionAnimating(),
-                    "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
-                  }}
-                  style={{ height: sideVisible() ? screen.side.region.height() : "100%" }}
-                >
-                  <Show when={store.sideRegionPresent}>
-                    {/* A closed region stays mounted at zero height while the side dock is open. Once its close
-                        animation is over, hide it, or its frame's shadow draws a flat line over the dock's top edge. */}
-                    <div
-                      data-slot="session-side-region-presence"
-                      data-opened={sideMotion().animateRegion ? sideMotion().region : undefined}
-                      class="absolute inset-0"
-                      classList={{ invisible: !screen.side.region.open() && !sideMotion().animateRegion }}
-                      onAnimationEnd={(event) => {
-                        if (event.currentTarget !== event.target) return
-
-                        if (event.animationName !== "side-region-presence-out") return
-
-                        if (screen.side.region.open()) return
-
-                        if (sideDockVisible()) return
-                        setStore("sideRegionPresent", false)
-                        setStore("sideTabsPresent", false)
-                      }}
-                    >
+                <div data-slot="session-side-region" class="absolute inset-0 min-h-0 overflow-visible">
+                  <Show when={store.sideMounted}>
+                    <div data-slot="session-side-region-presence" class="absolute inset-0">
                       <SideRegion
                         screen={props.screen}
                         view={props.view()}
                         region={region}
                         sidebar={sidebar}
-                        fileTree={screen.files.open()}
-                        present={store.sideTabsPresent}
+                        present={sideMotion.present()}
                         size={screen.size}
-                        stacked={screen.side.layout().stacked}
+                        drag={drag}
                       />
                     </div>
                   </Show>
-                </div>
-                <div class="absolute start-0 bottom-0 flex flex-col" style={{ width: screen.side.contentWidth() }}>
-                  {/* The gap moves with both regions, so together they always fill the column and the review's
-                      bottom corners are never covered. */}
-                  <div
-                    data-slot="session-side-panel-gap"
-                    classList={{
-                      "relative z-0 shrink-0 overflow-visible bg-v2-background-bg-deep transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                      "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
-                    }}
-                    style={{ height: screen.side.gap.height() }}
-                    onPointerDown={() => screen.size.start()}
-                  >
-                    <Show when={screen.side.layout().stacked}>
-                      <ResizeHandle
-                        class="!relative !inset-auto !h-full !w-full !transform-none"
-                        direction="vertical"
-                        size={session.layout.view().dock.height()}
-                        min={100}
-                        max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                        collapseThreshold={50}
-                        onResize={(height) => {
-                          screen.size.touch()
-                          session.layout.view().dock.resize(height)
-                        }}
-                        onCollapse={() => session.layout.view().dock.close()}
-                      />
-                    </Show>
-                  </div>
-                  <div
-                    data-slot="session-side-terminal-region"
-                    classList={{
-                      "relative z-10 min-h-0 shrink-0 overflow-visible transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                      "will-change-[height]": !screen.size.active() && store.sideHeightMotion && regionAnimating(),
-                      "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
-                    }}
-                    style={{ height: screen.side.dock.height() }}
-                  >
-                    <Show when={store.sideDockPresent}>
-                      <div
-                        data-slot="side-terminal-panel-presence"
-                        data-opened={sideMotion().animateDock ? sideMotion().dock : undefined}
-                        class="absolute inset-0 rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
-                      >
-                        <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
-                          <DockRegion
-                            screen={props.screen}
-                            view={props.view()}
-                            sidebar={sidebar}
-                            fill
-                            framed={false}
-                            present={store.sideDockPresent}
-                            animate={sidePresence.animate() || sideMotion().animateDock}
-                            contentHeight={screen.side.dock.contentHeight()}
-                            reserve={!screen.side.region.open()}
-                          />
-                        </div>
-                      </div>
-                    </Show>
-                  </div>
                 </div>
               </div>
             </div>
           </Show>
         </div>
 
-        <Show when={isDesktop() && (bottomDockPresence.present() || store.bottomDockCached)}>
+        {/* Hidden rather than unmounted while the user hides it, so its terminals keep their screens. */}
+        <Show when={isDesktop() && !!session.identity.params.id && bottomTabs()}>
           <div
-            ref={(element) => setElements("bottomDock", element)}
-            data-slot="terminal-panel-presence"
-            data-opened={bottomDockPresence.animate() ? bottomDockPresence.show() : undefined}
-            classList={{
-              hidden: !bottomDockPresence.present(),
-              "relative min-h-0 shrink-0": isDesktop(),
-            }}
+            data-slot="session-bottom-pane"
+            class="relative shrink-0 min-h-0"
+            classList={{ hidden: !bottomOpen() }}
+            style={{ height: `${session.layout.view().bottom.height()}px` }}
           >
-            <Show when={isDesktop()}>
-              <div class="absolute z-10 -top-1 left-0 right-0 h-2" onPointerDown={() => screen.size.start()}>
-                <ResizeHandle
-                  class="!relative !inset-auto !h-full !w-full !transform-none"
-                  direction="vertical"
-                  size={session.layout.view().dock.height()}
-                  min={100}
-                  max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                  collapseThreshold={50}
-                  onResize={(height) => {
-                    screen.size.touch()
-                    session.layout.view().dock.resize(height)
-                  }}
-                  onCollapse={() => session.layout.view().dock.close()}
-                />
-              </div>
-            </Show>
-            <DockRegion
-              screen={props.screen}
-              view={props.view()}
-              sidebar={sidebar}
-              stacked={isDesktop()}
-              present={store.bottomDockCached}
-              animate={bottomDockPresence.animate()}
-            />
+            <div onPointerDown={() => screen.size.start()}>
+              <ResizeHandle
+                class="-top-1"
+                direction="vertical"
+                edge="start"
+                size={session.layout.view().bottom.height()}
+                min={BOTTOM_PANE_HEIGHT_MIN}
+                max={typeof window === "undefined" ? 600 : Math.round(window.innerHeight * 0.7)}
+                onResize={(height) => {
+                  screen.size.touch()
+                  session.layout.view().bottom.resize(height)
+                }}
+              />
+            </div>
+            <section
+              id="bottom-panel"
+              aria-label={language.t("session.panel.bottom")}
+              inert={!bottomOpen() || undefined}
+              class="size-full min-w-0 flex flex-col overflow-hidden bg-v2-background-bg-base rounded-[10px] shadow-[var(--v2-elevation-raised)]"
+            >
+              <PaneTabs
+                pane={region.pane("bottom")}
+                region={region}
+                view={props.view()}
+                screen={props.screen}
+                sidebar={sidebar}
+                shown={bottomOpen}
+                present={bottomOpen}
+                animate={() => !screen.size.active()}
+                drag={drag}
+                end={
+                  <Tooltip value={language.t("session.panel.bottom.hide")} placement="bottom">
+                    <IconButton
+                      icon={<Icon name="chevron-down" />}
+                      variant="ghost-muted"
+                      size="large"
+                      aria-label={language.t("session.panel.bottom.hide")}
+                      onClick={() => session.layout.view().bottom.setOpened(false)}
+                    />
+                  </Tooltip>
+                }
+              />
+            </section>
           </div>
         </Show>
       </div>
+      <drag.Layer />
     </>
   )
 }
+
+const BOTTOM_PANE_HEIGHT_MIN = 120

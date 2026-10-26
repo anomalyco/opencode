@@ -78,8 +78,6 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
    * tokens themselves.
    */
   cost: Schema.optional(Schema.Number),
-  /** USD of subscription allowance the request used, as OpenCode Go reports it in `usage.opencode.allowance`. */
-  allowance: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   /**

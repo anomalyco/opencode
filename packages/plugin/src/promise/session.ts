@@ -1,5 +1,5 @@
 import type { SessionApi } from "@opencode/client/promise/api"
-import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
+import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { PromptInput } from "@opencode/schema/prompt-input"
@@ -169,6 +169,7 @@ export type SessionDomain = Pick<
   | "move"
   | "wait"
   | "context"
+  | "instructions"
 > & {
   readonly hook: ModelHooks<SessionHooks>
 }

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ساریاں فائلاں",
-  "tree.empty": "کوئی فائل نئیں",
-  "tree.changes.one": "⁨{{count}}⁩ فائل بدلی گئی",
-  "tree.changes.other": "⁨{{count}}⁩ فائلاں بدلیاں گئیاں",
   "tab.notFound": "فائل نئیں ملی: ⁨{{name}}⁩",
   "mobile.title": "فائلاں",
   "mobile.openTabs": "کھلیاں فائلاں",

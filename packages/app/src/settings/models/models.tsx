@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Switch } from "@opencode/ui/switch"
-import { type Component, createEffect, createMemo, For, Show } from "solid-js"
+import { type Component, createEffect, createMemo, For, type JSX, Show } from "solid-js"
 
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -27,6 +27,7 @@ export const SettingsModels: Component<{
   active?: boolean
   provider?: string
   onReveal?: () => void
+  headerAction?: JSX.Element
 }> = (props) => {
   const language = useLanguage()
   const models = useModels()
@@ -142,10 +143,11 @@ export const SettingsModels: Component<{
     <>
       <div class="settings-tab-header settings-tab-header--stacked">
         <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.models.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.models.description")}</span>
           </div>
+          <div class="settings-tab-header-actions">{props.headerAction}</div>
         </div>
         <SettingsSearchField
           value={list.filter()}

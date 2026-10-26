@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { seed, sessionHref, type SeedInput } from "../utils/app"
+import { browseFiles, openFileLauncher } from "../utils/side-panel"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode } from "../utils/workspace"
 
@@ -8,7 +9,7 @@ const rows = 2
 
 async function openStress(page: Page, extra: SeedInput = {}) {
   await seed(page, {
-    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
+    usedProjects: { local: [fixture.project.id] },
     tabs: [fixture.sourceID, fixture.targetID],
     ...extra,
   })
@@ -21,7 +22,6 @@ for (const position of ["top", "bottom"] as const) {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockStressTimeline(page, { fileList: () => [], pty: {} })
     await openStress(page, {
-      lastProject: { local: fixture.directory },
       settings: { general: { mobileTitlebarPosition: position } },
     })
     await page.goto(sessionHref(fixture.targetID))
@@ -124,34 +124,29 @@ for (const position of ["top", "bottom"] as const) {
     await expect(details.locator('[data-slot="mobile-panel-header"]')).toHaveCount(0)
     await expect(details.getByRole("button", { name: "Close", exact: true })).toHaveCount(0)
     await expect(details.getByRole("heading", { name: "Session details", exact: true })).toHaveCSS("width", "1px")
-    await expect(details.getByText(fixture.project.name, { exact: true })).toBeVisible()
-    await expect(details.getByRole("button", { name: "No changes", exact: true })).toBeVisible()
+    await expect(details.getByRole("button", { name: "Local repository", exact: true })).toHaveCount(0)
+    await expect(details.getByRole("button", { name: "No changes", exact: true })).toHaveCount(0)
     await expect(details.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
     await page.locator('[data-slot="mobile-drawer-overlay"]').click({ position: { x: 10, y: 10 } })
     await expect(details).toBeHidden()
     await expect(more).toBeFocused()
     await more.click()
     await views.getByRole("button", { name: "Session details", exact: true }).click()
-    await expect(details.getByRole("button", { name: "No changes", exact: true })).toBeVisible()
+    await expect(details.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible()
     await expect(details).not.toHaveAttribute("data-transitioning")
     await page.keyboard.press("Escape")
     await expect(details).toBeHidden()
     await expect(more).toBeFocused()
-    await more.click()
-    await views.getByRole("button", { name: "Session details", exact: true }).click()
-    await details.getByRole("button", { name: "No changes", exact: true }).click()
-    await expect(details).toBeHidden()
+    await tabs.getByRole("tab", { name: "Session", exact: true }).click()
+    await page.locator('[data-slot="session-location-bar"] [data-slot="session-location-trigger"]').click()
+    const projectMenu = page.locator('[data-slot="session-location-card"]')
+    await projectMenu.getByRole("menuitem", { name: "No changes", exact: true }).click()
+    await expect(projectMenu).toBeHidden()
     await expect(picker).toHaveText("Changes")
     await expect(page.getByText("No uncommitted changes yet", { exact: true })).toBeVisible()
     await expect(page.locator('[data-slot="session-review-header"]')).toHaveCSS("height", "40px")
     await expect(page.locator('[data-slot="session-review-header"]')).toHaveCSS("padding-left", "8px")
     await expect(composer).toBeHidden()
-    await more.click()
-    await views.getByRole("button", { name: "Session details", exact: true }).click()
-    await details.getByRole("button", { name: "No changes", exact: true }).click()
-    await expect(details).toBeHidden()
-    await expect(picker).toHaveText("Changes")
-    await expect(page.getByText("No uncommitted changes yet", { exact: true })).toBeVisible()
 
     await more.click()
     await views.getByRole("button", { name: "Files", exact: true }).click()
@@ -165,7 +160,6 @@ for (const position of ["top", "bottom"] as const) {
     await views.getByRole("button", { name: "Terminal", exact: true }).click()
     await expect(views).toBeHidden()
     const panel = page.locator("#terminal-panel")
-    await expect(panel).toHaveAttribute("data-opened", "true")
     await expect(panel.getByRole("tab", { name: /Terminal 1/ })).toBeVisible()
     await expect(panel.locator('[data-component="terminal"]')).toBeVisible()
     await expect(panel.locator("textarea")).toBeEditable()
@@ -176,20 +170,15 @@ for (const position of ["top", "bottom"] as const) {
     await tabs.getByRole("tab", { name: "Session", exact: true }).click()
     await expect(message).toBeVisible()
     await expect(panel).toBeHidden()
-    await expect(panel).toHaveAttribute("inert", "")
     await expect(panel).toHaveAttribute("data-cache-probe", "original")
 
     await page.keyboard.press("Control+Backquote")
     await expect(picker).toHaveText("More...")
     await expect(panel).toBeVisible()
     await expect(panel).toHaveAttribute("data-cache-probe", "original")
-    await page.keyboard.press("Control+Backquote")
-    await expect(picker).toHaveText("Session")
+    await expect(panel.getByRole("tab", { name: /^Terminal/ })).toHaveCount(1)
 
-    await page.keyboard.press("Control+Backquote")
-    await expect(picker).toHaveText("More...")
-    await panel.getByRole("button", { name: "Close terminal", exact: true }).click()
-    await expect(picker).toHaveText("Session")
+    await tabs.getByRole("tab", { name: "Session", exact: true }).click()
     await expect(panel).toBeHidden()
 
     // The view resets to Session whenever the routed session changes, including through Home.
@@ -235,33 +224,32 @@ for (const position of ["top", "bottom"] as const) {
   })
 }
 
-test("the summary's changes row switches the view and keeps the side tabs", async ({ page }) => {
+test("the project menu's changes row switches the view and keeps the side tabs", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await mockStressTimeline(page, {
     fileList: (path) => (path ? [] : [fileNode(fixture.directory, "README.md")]),
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
   })
-  await openStress(page, { lastProject: { local: fixture.directory } })
+  await openStress(page)
   await page.goto(sessionHref(fixture.targetID))
 
   // One click previews the file in place of the Open file tab.
   const panel = page.locator("#review-panel")
   const readme = panel.getByRole("tab", { name: "README.md", exact: true })
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
-  await panel.getByRole("button", { name: "Open file", exact: true }).click()
-  await panel.getByRole("button", { name: "README.md", exact: true }).click()
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md", exact: true }).click()
   await expect(readme).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByRole("tab", { name: "Open file", exact: true })).toHaveCount(0)
 
   await page.setViewportSize({ width: 390, height: 844 })
   const tabs = page.getByRole("tablist", { name: "Session view", exact: true })
-  const details = page.getByRole("dialog", { name: "Session details", exact: true })
   const more = tabs.getByRole("tab", { name: "More...", exact: true })
   const views = page.getByRole("dialog", { name: "More options", exact: true })
-  await more.click()
-  await views.getByRole("button", { name: "Session details", exact: true }).click()
-  await details.getByRole("button", { name: "No changes", exact: true }).click()
-  await expect(details).toBeHidden()
+  await page.locator('[data-slot="session-location-bar"] [data-slot="session-location-trigger"]').click()
+  const projectMenu = page.locator('[data-slot="session-location-card"]')
+  await projectMenu.getByRole("menuitem", { name: "No changes", exact: true }).click()
+  await expect(projectMenu).toBeHidden()
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("Changes")
   await more.click()
   await views.getByRole("button", { name: "Files", exact: true }).click()
@@ -274,25 +262,26 @@ test("the summary's changes row switches the view and keeps the side tabs", asyn
 
   // After a reload forgets the preview, a stored Open file tab is still the slot a narrow-screen file open replaces.
   const launcher = panel.getByRole("tab", { name: "Open file", exact: true })
-  await panel.getByRole("button", { name: "Open file", exact: true }).click()
+  await browseFiles(page)
   await expect(launcher).toHaveAttribute("aria-selected", "true")
+  // The launcher opens beside the preview; closing the file leaves only the launcher stored.
+  await readme.click({ button: "middle" })
   await expect(readme).toHaveCount(0)
+  await expect(launcher).toHaveAttribute("aria-selected", "true")
   await page.reload()
   await expect(launcher).toHaveAttribute("aria-selected", "true")
   await page.setViewportSize({ width: 390, height: 844 })
   await more.click()
   await views.getByRole("button", { name: "Files", exact: true }).click()
   const files = page.locator('[data-slot="session-mobile-files"]')
-  await files.getByRole("button", { name: "README.md", exact: true }).click()
+  await files.getByRole("treeitem", { name: "README.md", exact: true }).click()
   await expect(files.getByText("contents:README.md", { exact: true })).toBeVisible()
   await page.setViewportSize({ width: 1280, height: 900 })
   await expect(readme).toHaveAttribute("aria-selected", "true")
   await expect(launcher).toHaveCount(0)
 })
 
-test("a narrow-screen palette pick keeps the view and dock, and the side region shows the file when wide", async ({
-  page,
-}) => {
+test("a narrow-screen palette pick keeps the view, and the side region shows the file when wide", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockStressTimeline(page, {
     fileList: (path) => (path ? [] : [fileNode(fixture.directory, "README.md")]),
@@ -300,7 +289,7 @@ test("a narrow-screen palette pick keeps the view and dock, and the side region 
     findFiles: ({ query }) => ("README.md".includes(query) ? [fileNode(fixture.directory, "README.md")] : []),
     pty: {},
   })
-  await openStress(page, { lastProject: { local: fixture.directory } })
+  await openStress(page)
   await page.goto(sessionHref(fixture.targetID))
 
   const tabs = page.getByRole("tablist", { name: "Session view", exact: true })
@@ -312,14 +301,13 @@ test("a narrow-screen palette pick keeps the view and dock, and the side region 
   await expect(terminal.locator("textarea")).toBeEditable()
   await page.keyboard.press("ControlOrMeta+p")
   const dialog = page.getByRole("dialog")
-  await dialog.getByRole("textbox").fill("README")
+  await dialog.getByRole("combobox").fill("README")
   await dialog.getByRole("option", { name: "/ README.md", exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("More...")
-  await expect(terminal).toHaveAttribute("data-opened", "true")
+  await expect(terminal).toBeVisible()
 
   await page.setViewportSize({ width: 1280, height: 900 })
-  await expect(terminal).toHaveAttribute("data-opened", "true")
   const panel = page.locator("#review-panel")
   await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()

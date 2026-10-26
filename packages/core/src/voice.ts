@@ -1,6 +1,6 @@
 export * as Voice from "./voice.js"
 
-import { type AIError } from "@opencode/ai"
+import { type AIError } from "@opencode/ai/effect"
 import {
   Realtime,
   type RealtimeSession,

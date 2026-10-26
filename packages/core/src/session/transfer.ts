@@ -117,7 +117,6 @@ const layer = Layer.effect(
                     .update(SessionTable)
                     .set({
                       cost: input.data.info.cost,
-                      allowance: input.data.info.allowance ?? 0,
                       tokens_input: input.data.info.tokens.input,
                       tokens_output: input.data.info.tokens.output,
                       tokens_reasoning: input.data.info.tokens.reasoning,

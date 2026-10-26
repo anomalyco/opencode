@@ -88,6 +88,15 @@ export const goModels: GoModel[] = [
     fresh: true,
     limitedTime: true,
   },
+  {
+    id: "iceman-contributor-free",
+    name: "Iceman Contributor Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    fresh: true,
+    limitedTime: true,
+  },
 ].sort((a, b) => a.requests - b.requests)
 
 // Go Plus limits are published per model in the Console, not a fixed multiplier of Go.
@@ -121,6 +130,7 @@ const plusLimits: Record<string, [number, number]> = {
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
   "beam-free": [Infinity, Infinity],
+  "iceman-contributor-free": [Infinity, Infinity],
 }
 
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.

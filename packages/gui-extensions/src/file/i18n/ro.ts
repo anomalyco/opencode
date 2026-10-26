@@ -1,9 +1,5 @@
 export default {
   "tree.all": "Toate fișierele",
-  "tree.empty": "Niciun fișier",
-  "tree.changes.one": "{{count}} fișier a fost modificat",
-  "tree.changes.few": "{{count}} fișiere modificate",
-  "tree.changes.other": "{{count}} de fișiere modificate",
   "tab.notFound": "Fișierul nu a fost găsit: {{name}}",
   "mobile.title": "Fișiere",
   "mobile.openTabs": "Deschideți fișierele",

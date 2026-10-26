@@ -1,6 +1,5 @@
 import { createMemo, Match, Show, Switch, untrack } from "solid-js"
 import type { JSX } from "solid-js"
-import { useSortable } from "@dnd-kit/solid/sortable"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
@@ -11,15 +10,18 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
 import { Contribution } from "./render"
 
-/** One side panel tab trigger. The extension supplies the content; the host owns close, drag, and ids. */
+/** One panel tab trigger. The extension supplies the content; the host owns close, drag, and ids. */
 export function PanelTrigger(props: {
   value: string
   extension: string
   tab: PanelTab
   session: MountedSession
-  index: number
   active: boolean
   preview: boolean
+  /** The tab is being dragged to another place. */
+  dragging?: boolean
+  /** Starts dragging the tab; pinned and non-draggable tabs never drag. */
+  onDragStart?: (event: PointerEvent) => void
   onClose: (value: string) => void
   onPromote: (value: string) => void
 }): JSX.Element {
@@ -106,81 +108,70 @@ export function PanelTrigger(props: {
   }
 
   return (
-    <Switch fallback={<SortableTrigger {...props} content={content()} close={close()} />}>
-      <Match when={props.tab.pinned}>
-        <Tabs.Trigger
-          value={props.value}
-          id={props.tab.dom?.tab}
-          aria-controls={props.active ? props.tab.dom?.panel : undefined}
-        >
-          {content()}
-        </Tabs.Trigger>
-      </Match>
-      <Match when={props.tab.draggable === false && props.tab.closable === "compact"}>
-        <Tabs.Trigger
-          value={props.value}
-          id={props.tab.dom?.tab}
-          onMiddleClick={() => props.onClose(props.value)}
-          closeButton={compactClose()}
-          hideCloseButton
-        >
-          {content()}
-        </Tabs.Trigger>
-      </Match>
-      <Match when={props.tab.draggable === false}>
-        <Tabs.Trigger
-          value={props.value}
-          id={props.tab.dom?.tab}
-          class="group"
-          onMiddleClick={props.tab.closable === false ? undefined : () => props.onClose(props.value)}
-          closeButton={close()}
-          hideCloseButton
-        >
-          {content()}
-        </Tabs.Trigger>
-      </Match>
-    </Switch>
-  )
-}
+    <div
+      data-pane-tab={props.value}
+      class="h-full flex items-center"
+      classList={{ "opacity-40": props.dragging }}
+      onPointerDown={(event) => {
+        if (props.tab.pinned || props.tab.draggable === false || !props.onDragStart) return
 
-function SortableTrigger(props: {
-  value: string
-  tab: PanelTab
-  index: number
-  active: boolean
-  preview: boolean
-  content: JSX.Element
-  close: JSX.Element | undefined
-  onClose: (value: string) => void
-  onPromote: (value: string) => void
-}): JSX.Element {
-  const sortable = useSortable({
-    get id() {
-      return props.value
-    },
-    get index() {
-      return props.index
-    },
-  })
-
-  return (
-    <div ref={sortable.ref} class="h-full flex items-center">
-      <div class="relative">
-        <Tabs.Trigger
-          value={props.value}
-          id={props.tab.dom?.tab}
-          aria-controls={props.active ? props.tab.dom?.panel : undefined}
-          aria-label={props.tab.missing ? props.tab.title : undefined}
-          onMiddleClick={props.tab.closable === false ? undefined : () => props.onClose(props.value)}
-          onDblClick={() => {
-            if (props.preview) props.onPromote(props.value)
-          }}
-          closeButton={props.close}
-          hideCloseButton
-        >
-          {props.content}
-        </Tabs.Trigger>
-      </div>
+        if (event.target instanceof Element && event.target.closest('input, [contenteditable="true"]')) return
+        props.onDragStart(event)
+      }}
+    >
+      <Switch
+        fallback={
+          <div class="relative">
+            <Tabs.Trigger
+              value={props.value}
+              id={props.tab.dom?.tab}
+              aria-controls={props.active ? props.tab.dom?.panel : undefined}
+              aria-label={props.tab.missing ? props.tab.title : undefined}
+              onMiddleClick={props.tab.closable === false ? undefined : () => props.onClose(props.value)}
+              onDblClick={() => {
+                if (props.preview) props.onPromote(props.value)
+              }}
+              closeButton={close()}
+              hideCloseButton
+            >
+              {content()}
+            </Tabs.Trigger>
+          </div>
+        }
+      >
+        <Match when={props.tab.pinned}>
+          <Tabs.Trigger
+            value={props.value}
+            id={props.tab.dom?.tab}
+            aria-controls={props.active ? props.tab.dom?.panel : undefined}
+          >
+            {content()}
+          </Tabs.Trigger>
+        </Match>
+        <Match when={props.tab.draggable === false && props.tab.closable === "compact"}>
+          <Tabs.Trigger
+            value={props.value}
+            id={props.tab.dom?.tab}
+            onMiddleClick={() => props.onClose(props.value)}
+            closeButton={compactClose()}
+            hideCloseButton
+          >
+            {content()}
+          </Tabs.Trigger>
+        </Match>
+        <Match when={props.tab.draggable === false}>
+          <Tabs.Trigger
+            value={props.value}
+            id={props.tab.dom?.tab}
+            class="group"
+            onMiddleClick={props.tab.closable === false ? undefined : () => props.onClose(props.value)}
+            closeButton={close()}
+            hideCloseButton
+          >
+            {content()}
+          </Tabs.Trigger>
+        </Match>
+      </Switch>
     </div>
   )
 }

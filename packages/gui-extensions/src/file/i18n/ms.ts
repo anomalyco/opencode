@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Semua fail",
-  "tree.empty": "Tiada fail",
-  "tree.changes.one": "{{count}} fail ditukar",
-  "tree.changes.other": "{{count}} fail ditukar",
   "tab.notFound": "Fail tidak dijumpai: {{name}}",
   "mobile.title": "Fail",
   "mobile.openTabs": "Buka fail",

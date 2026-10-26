@@ -381,7 +381,7 @@ const live = Symbol.for("opencode.extension.live")
  *
  * @example
  * ```ts
- * createKeyed(ctx.uses.changes, (changes) => changes.onReveal(refresh))
+ * createKeyed(ctx.uses.changes, (changes) => changes.watch(screen, "files"))
  * ```
  */
 export const Live = {

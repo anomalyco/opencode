@@ -1,5 +1,6 @@
 export * as Git from "./git.js"
 
+import os from "os"
 import path from "path"
 import { Cause, Context, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
@@ -80,6 +81,13 @@ export class OperationError extends Schema.TaggedError<OperationError>()("Git.Op
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+/** Git could not answer: the spawn failed or it exited with an unexpected status. */
+export class CommandError extends Schema.TaggedError<CommandError>()("Git.CommandError", {
+  args: Schema.Array(Schema.String),
+  exitCode: Schema.optional(Schema.Number),
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
 export class Worktree extends Schema.Class<Worktree>("Git.Worktree")({
   directory: AbsolutePath,
   kind: Schema.Literals(["main", "linked"]),
@@ -96,6 +104,11 @@ export class WorktreeError extends Schema.TaggedError<WorktreeError>()("Git.Work
 export interface Interface {
   readonly repo: {
     readonly discover: (input: AbsolutePath) => Effect.Effect<Repository | undefined>
+    /**
+     * Spawn-free stamp of the metadata that `discover`, `remote.get` and `history.rootCommits`
+     * read for the `.git` entry at `dotGit`: undefined when it isn't a readable repository.
+     */
+    readonly fingerprint: (dotGit: AbsolutePath) => Effect.Effect<string | undefined>
     readonly clone: (input: {
       remote: string
       directory: AbsolutePath
@@ -109,13 +122,15 @@ export interface Interface {
     }) => Effect.Effect<Repository, OperationError>
   }
   readonly remote: {
-    readonly get: (repository: Repository, name?: string) => Effect.Effect<string | undefined>
+    /** Undefined when the remote doesn't exist. */
+    readonly get: (repository: Repository, name?: string) => Effect.Effect<string | undefined, CommandError>
   }
   readonly history: {
     readonly head: (repository: Repository) => Effect.Effect<string | undefined>
     readonly branch: (repository: Repository) => Effect.Effect<string | undefined>
     readonly defaultRemoteBranch: (repository: Repository, remote?: string) => Effect.Effect<string | undefined>
-    readonly rootCommits: (repository: Repository) => Effect.Effect<readonly string[]>
+    /** Empty when HEAD is unborn. */
+    readonly rootCommits: (repository: Repository) => Effect.Effect<readonly string[], CommandError>
   }
   readonly sync: {
     readonly fetchRemotes: (repository: Repository, input?: { prune?: boolean }) => Effect.Effect<void, OperationError>
@@ -215,20 +230,77 @@ const layer = Layer.effect(
       })
     })
 
+    const stamp = (target: string) =>
+      fs.stat(target).pipe(
+        Effect.map((info) =>
+          [info.type, Option.getOrUndefined(info.ino), info.size, Option.getOrUndefined(info.mtime)?.getTime()].join(
+            ":",
+          ),
+        ),
+        Effect.orElseSucceed(() => "missing"),
+      )
+    const readText = (target: string) => fs.readFileStringSafe(target).pipe(Effect.orElseSucceed(() => undefined))
+
+    // Covers linked worktrees (gitdir file + commondir), HEAD and the ref it points at,
+    // loose/packed/reftable refs, repository/worktree/global/XDG/system config, and the
+    // cached `opencode` project id, so external `git init`, a first commit or `git remote`
+    // edits change the stamp.
+    const fingerprint = Effect.fn("Git.repo.fingerprint")(function* (dotGit: AbsolutePath) {
+      const dot = yield* fs.stat(dotGit).pipe(Effect.orElseSucceed(() => undefined))
+      if (!dot || (dot.type !== "File" && dot.type !== "Directory")) return undefined
+      const gitFile = dot.type === "File" ? (yield* readText(dotGit))?.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim() : ""
+      if (gitFile === undefined) return undefined
+      const gitDir = gitFile ? yield* fs.resolve(path.resolve(path.dirname(dotGit), gitFile)) : dotGit
+      const commondir = (yield* readText(path.join(gitDir, "commondir")))?.trim()
+      const commonDir = commondir ? yield* fs.resolve(path.resolve(gitDir, commondir)) : gitDir
+      const head = (yield* readText(path.join(gitDir, "HEAD")))?.trim()
+      if (head === undefined) return undefined
+      const ref = head.startsWith("ref:") ? head.slice(4).trim() : undefined
+
+      const home = process.env.HOME || os.homedir()
+      const nosystem = ["1", "true", "yes", "on"].includes((process.env.GIT_CONFIG_NOSYSTEM ?? "").toLowerCase())
+      const files = [
+        path.join(gitDir, "HEAD"),
+        path.join(commonDir, "config"),
+        path.join(commonDir, "config.worktree"),
+        path.join(gitDir, "config.worktree"),
+        path.join(commonDir, "packed-refs"),
+        path.join(commonDir, "reftable", "tables.list"),
+        path.join(commonDir, "opencode"),
+        ...(ref ? [path.join(commonDir, ref), path.join(gitDir, ref)] : []),
+        process.env.GIT_CONFIG_GLOBAL || path.join(home, ".gitconfig"),
+        path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "git", "config"),
+        ...(nosystem ? [] : [process.env.GIT_CONFIG_SYSTEM || "/etc/gitconfig"]),
+      ]
+      const stamps = yield* Effect.forEach([dotGit, ...files], stamp, { concurrency: "unbounded" })
+      return [gitDir, commonDir, head, ...files, ...stamps].join("\0")
+    })
+
+    const command = (cwd: string, args: string[]) =>
+      execute(cwd, proc, args).pipe(Effect.mapError((cause) => new CommandError({ args, cause })))
+
     const remote = Effect.fn("Git.remote.get")(function* (repository: Repository, name = "origin") {
-      const result = yield* run(repository.worktree, proc, ["remote", "get-url", name])
-      if (result.exitCode !== 0) return undefined
+      const args = ["remote", "get-url", name]
+      const result = yield* command(repository.worktree, args)
+      // Exit 2: no such remote.
+      if (result.exitCode === 2) return undefined
+      if (result.exitCode !== 0) return yield* new CommandError({ args, exitCode: result.exitCode })
       return result.text.trim() || undefined
     })
 
     const roots = Effect.fn("Git.history.rootCommits")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc, ["rev-list", "--max-parents=0", "HEAD"])
-      if (result.exitCode !== 0) return []
-      return result.text
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .toSorted()
+      const args = ["rev-list", "--max-parents=0", "HEAD"]
+      const result = yield* command(repository.worktree, args)
+      if (result.exitCode === 0)
+        return result.text
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .toSorted()
+      // `rev-parse -q --verify` exits 1 only when HEAD doesn't resolve, i.e. it is unborn.
+      const verify = yield* command(repository.worktree, ["rev-parse", "-q", "--verify", "HEAD"])
+      if (verify.exitCode === 1) return []
+      return yield* new CommandError({ args, exitCode: result.exitCode })
     })
 
     const head = Effect.fn("Git.history.head")(function* (repository: Repository) {
@@ -1291,7 +1363,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      repo: { discover, clone, create },
+      repo: { discover, fingerprint, clone, create },
       remote: { get: remote },
       history: { head, branch, defaultRemoteBranch: remoteHead, rootCommits: roots },
       sync: { fetchRemotes: fetch, fetchBranch, checkoutRemoteBranch: checkout, resetHard: reset },

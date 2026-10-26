@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/index.js"
+import { LLM, LLMRequest, Message } from "../../src/effect.js"
 import { LLMClient, WebSocketTransport } from "../../src/route.js"
 import { OpenAI } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"

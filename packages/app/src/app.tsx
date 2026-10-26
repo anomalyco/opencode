@@ -1,15 +1,18 @@
 import "@/index.css"
+import { VoiceProvider } from "@/voice/context"
+import { VoiceOverlay } from "@/voice/composer"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
-import { MetaProvider } from "@solidjs/meta"
+import { MetaProvider, Title } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
@@ -54,6 +57,7 @@ export function AppBaseProviders(
 ) {
   return (
     <MetaProvider>
+      <Title>OpenCode</Title>
       <Font />
       <ThemeProvider
         onThemeApplied={(_, mode, scheme) => {
@@ -96,12 +100,17 @@ export function AppInterface(props: {
   const Root = (rootProps: ParentProps) => (
     <TabsProvider>
       <GlobalProvider>
-        <BodyTypography />
-        <CommandProvider>
-          <DesktopCommands />
-          {props.children}
-          {rootProps.children}
-        </CommandProvider>
+        <ProjectIconsProvider>
+          <BodyTypography />
+          <CommandProvider>
+            <DesktopCommands />
+            <VoiceProvider>
+              {props.children}
+              {rootProps.children}
+              <VoiceOverlay />
+            </VoiceProvider>
+          </CommandProvider>
+        </ProjectIconsProvider>
       </GlobalProvider>
     </TabsProvider>
   )

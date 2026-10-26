@@ -62,6 +62,8 @@ type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
   url: string
+  /** The connection the API currently uses, which a managed server's reconnect may replace. */
+  http: ServerConnection.HttpBase
   api: ServerApi
   pty: ReturnType<typeof createPtyClient>
   connection: {
@@ -110,6 +112,9 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     get url() {
       return transport.url
     },
+    get http() {
+      return transport.http
+    },
     get api() {
       return transport.api
     },
@@ -121,12 +126,18 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   }
 }
 
-export function createServerTransport(input: { http: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }): {
+export type ServerTransport = {
   update(http: ServerConnection.HttpBase): ServerApi
   readonly url: string
+  readonly http: ServerConnection.HttpBase
   readonly api: ServerApi
   readonly pty: ReturnType<typeof createPtyClient>
-} {
+}
+
+export function createServerTransport(input: {
+  http: ServerConnection.HttpBase
+  fetch?: typeof globalThis.fetch
+}): ServerTransport {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
 
   const build = (http: ServerConnection.HttpBase) => {
@@ -145,6 +156,9 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
     },
     get url() {
       return state.current.http.url
+    },
+    get http() {
+      return state.current.http
     },
     get api() {
       return state.current.api

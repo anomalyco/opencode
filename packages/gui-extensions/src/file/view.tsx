@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -9,7 +9,6 @@ import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comm
 import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { createKeyed, useExtension, type LineRange, type MountedSession, type SessionScreen } from "../sdk"
 import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
@@ -173,7 +172,8 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
 
   const setViewport = (el: HTMLDivElement) => {
     state.scroll = el
-    restore()
+    // The ref runs before the file renders into the element.
+    onMount(restore)
   }
 
   onCleanup(() => {
@@ -448,14 +448,14 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     },
   )
 
-  const renderFile = (source: string) => (
+  const renderFile = () => (
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
         mode="text"
         file={{
           name: path() ?? "",
-          contents: source,
+          contents: contents(),
           cacheKey: cacheKey(),
         }}
         enableLineSelection
@@ -492,11 +492,18 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     </div>
   )
 
-  // The code view scrolls inside ScrollView so line state and scroll position persist per tab.
-  const codeView = (source: string) => (
-    <ScrollView class="min-h-0 flex-1" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
-      {renderFile(source)}
-    </ScrollView>
+  // The code view scrolls in its own container so line state and scroll position persist per tab.
+  // It reads the text itself: `Show` tracks its fallback, so passing the content in would rebuild the view, scrolled to
+  // the top, each time a reread stores a new content object.
+  const codeView = () => (
+    <div
+      data-scrollable
+      class="min-h-0 flex-1 overflow-y-auto"
+      ref={scrollSync.setViewport}
+      onScroll={scrollSync.handleScroll}
+    >
+      {renderFile()}
+    </div>
   )
 
   return (
@@ -504,13 +511,13 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
-            <Show when={artifact()} fallback={codeView(value().content)}>
+            <Show when={artifact()} fallback={codeView()}>
               <ArtifactView
                 session={props.session}
                 path={path() ?? ""}
                 content={value()}
                 cacheKey={cacheKey()}
-                source={codeView(value().content)}
+                source={codeView()}
               />
             </Show>
           )}

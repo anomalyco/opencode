@@ -29,7 +29,6 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
         status: (id: string) => (id === "child" ? "running" : "idle"),
         get: () => ({ id: "session", location: { directory: "/workspace" } }),
         cost: () => 1,
-        allowance: () => 0,
         message: { list: () => [] },
       },
       shell: {
@@ -88,7 +87,6 @@ test("prompt footer can hide details", async () => {
         status: () => "running",
         get: () => ({ id: "session", location: { directory: "/workspace" } }),
         cost: () => 1,
-        allowance: () => 0,
         message: {
           list: () => [
             {
@@ -140,39 +138,6 @@ test("prompt footer can hide details", async () => {
     setSessionID(undefined)
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("shift+tab agents")
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("prompt footer shows the allowance a subscription covered", async () => {
-  const color = RGBA.fromInts(200, 200, 200)
-  const context = {
-    location: { directory: "/workspace" },
-    theme: { text: { base: color, muted: color } },
-    keymap: { shortcuts: () => [] },
-    data: {
-      session: {
-        family: () => ["session"],
-        status: () => "idle",
-        get: () => ({ id: "session", location: { directory: "/workspace" } }),
-        cost: () => 0,
-        allowance: () => 0.42,
-        message: { list: () => [] },
-      },
-      shell: { list: () => [] },
-      location: { model: { list: () => [] } },
-    },
-  } as unknown as Context
-  const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
-    { width: 80, height: 1 },
-  )
-
-  try {
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("$0.42 allowance")
-    expect(app.captureCharFrame()).not.toContain("$0.00")
   } finally {
     app.renderer.destroy()
   }

@@ -3,6 +3,7 @@ import {
   createMemo,
   createResource,
   createSignal,
+  createUniqueId,
   For,
   onCleanup,
   onMount,
@@ -17,19 +18,17 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
-import { createAnimatedPresence } from "@/runtime/animated-presence"
-import { resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { Loader } from "@opencode/ui/loader"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
-import { CommentCard } from "@opencode/session-ui/comment-card"
+import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
 import { getFilename } from "@opencode/util/path"
 import { Skill } from "@opencode/schema/skill"
@@ -45,8 +44,11 @@ import type {
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
+import { QuoteCommentEditor } from "./quote-comment"
+import { formatKeybindParts } from "@/shell/commands/command"
 import "../attachments/attachments.css"
 import "./editor.css"
+import "@/shell/palette-menu.css"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
@@ -54,15 +56,7 @@ const MobilePanelDrawer = lazy(async () => {
   return { default: MobilePanelDrawer }
 })
 
-export type {
-  ComposerAttachment,
-  ComposerComment,
-  ComposerOption,
-  ComposerPersistedState,
-  ComposerSuggestion,
-} from "../types"
-
-export type ComposerMode = "normal" | "shell"
+type ComposerMode = "normal" | "shell"
 
 const COMPOSER_SUGGESTION_MAX_HEIGHT = 320
 
@@ -70,7 +64,7 @@ const COMPOSER_SUGGESTION_ROW_HEIGHT = 28
 
 const COMPOSER_SUGGESTION_ROW_PEEK = 18
 
-const COMPOSER_SUGGESTION_TOP_PADDING = 8
+const COMPOSER_SUGGESTION_TOP_PADDING = 6
 
 const COMPOSER_SUGGESTION_SEARCH_HEIGHT = 28
 
@@ -95,11 +89,35 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
+  const suggestionsID = createUniqueId()
+  let composer: HTMLFormElement | undefined
+  let content: HTMLDivElement | undefined
   let editor: HTMLDivElement | undefined
   let viewport: HTMLDivElement | undefined
   let controlsViewport!: HTMLDivElement
   let controlsContent!: HTMLDivElement
   const [overflow, setOverflow] = createStore({ start: false, end: false })
+  const [historyLayout, setHistoryLayout] = createStore<{ height?: number }>({})
+
+  createEffect(() => {
+    if (state.popover.type !== "history") setHistoryLayout("height", undefined)
+  })
+
+  createEffect(() => {
+    const preview = historyLayout.height !== undefined
+
+    if (preview) props.controller.parts()
+
+    // Show the beginning of each prompt; attachments remain accessible above it in the same viewport.
+    const frame = requestAnimationFrame(() => {
+      if (preview && content && editor)
+        content.scrollTop += editor.getBoundingClientRect().top - content.getBoundingClientRect().top
+
+      updateScroll()
+    })
+
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
 
   const updateOverflow = () => {
     const offset = Math.abs(controlsViewport.scrollLeft)
@@ -109,12 +127,29 @@ export function ComposerEditor(props: ComposerEditorProps) {
     })
   }
 
+  // The bottom fade shrinks with the remaining scroll so the last line ends clear of it.
+  const [fadeBottom, setFadeBottom] = createSignal(0)
+
+  const updateScroll = () => {
+    const scroller = historyLayout.height !== undefined ? content : viewport
+
+    if (!scroller) return
+    setFadeBottom(Math.min(16, Math.max(0, scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)))
+  }
+
   onMount(() => {
     const observer = new ResizeObserver(updateOverflow)
     observer.observe(controlsViewport)
     observer.observe(controlsContent)
     updateOverflow()
-    onCleanup(() => observer.disconnect())
+    // Typing and width changes both resize the editor, so it is the only element that needs watching.
+    const scrollObserver = new ResizeObserver(updateScroll)
+
+    if (editor) scrollObserver.observe(editor)
+    onCleanup(() => {
+      observer.disconnect()
+      scrollObserver.disconnect()
+    })
   })
   let localInput = false
 
@@ -147,16 +182,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
   // Kept out of JSX: an inline ternary prop compiles to a memo created on every read, and the popover reads
   // search from a ResizeObserver callback, where that memo has no owner and is never disposed.
-  const search = () =>
-    state.popover.type === "command-menu"
-      ? {
-          value: state.popover.query,
-          label: i18n.t("ui.promptInput.commands"),
-          placeholder: "/",
-          onValueChange: props.controller.setQuery,
-          onKeyDown: props.controller.onKeyDown,
-        }
-      : undefined
+  const search = () => {
+    if (state.popover.type !== "history" && state.popover.type !== "command-menu") return
+
+    if (state.popover.type === "history" && !state.popover.searching) return
+
+    return {
+      value: state.popover.query,
+      label: i18n.t(state.popover.type === "history" ? "ui.promptInput.history" : "ui.promptInput.commands"),
+      placeholder: state.popover.type === "history" ? i18n.t("ui.promptInput.history.search") : "/",
+      onValueChange: props.controller.setQuery,
+      onKeyDown: props.controller.onKeyDown,
+    }
+  }
 
   return (
     <div class={`relative size-full flex flex-col gap-0 ${props.class ?? ""}`}>
@@ -174,21 +212,30 @@ export function ComposerEditor(props: ComposerEditorProps) {
       />
       <Show when={!view.draftOnly && state.popover.type !== "closed"}>
         <ComposerEditorPopover
+          id={suggestionsID}
           emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
           items={props.controller.suggestions()}
           boundary={props.suggestionBoundary}
           activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
           search={search()}
+          history={state.popover.type === "history" ? state.mode : undefined}
+          historyBrowsing={state.popover.type === "history" && !state.popover.searching}
+          editor={() => editor}
+          onSearch={() => props.controller.dispatch({ type: "history.search" })}
+          onClose={() => props.controller.dispatch({ type: "popover.close" })}
           onActiveChange={(item) => props.controller.dispatch({ type: "popover.active", id: item.id })}
           onSelect={(item) => props.controller.dispatch({ type: "popover.select", item })}
         />
       </Show>
       <form
+        ref={composer}
         data-component="composer"
         data-dock-border-underlay={props.borderUnderlay ? "true" : undefined}
-        class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
+        class="group/composer relative w-full overflow-clip rounded-xl bg-v2-background-bg-base"
+        style={{ height: historyLayout.height === undefined ? undefined : `${historyLayout.height}px` }}
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
+          "flex flex-col": historyLayout.height !== undefined,
         }}
         onSubmit={(event) => {
           event.preventDefault()
@@ -200,116 +247,153 @@ export function ComposerEditor(props: ComposerEditorProps) {
         onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
-        <Show when={state.mode === "normal"}>
-          <ComposerAttachments
-            attachments={props.controller.attachments()}
-            uploads={props.controller.uploads()}
-            comments={props.controller.comments()}
-            files={props.controller.files()}
-            activeCommentID={state.activeContextID}
-            removeLabel={i18n.t("ui.promptInput.removeAttachment")}
-            onAttachmentClick={props.controller.openAttachment}
-            onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
-            onUploadCancel={(upload) => props.controller.cancelUpload(upload.id)}
-            onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
-            onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
-            onFileRemove={(file) => props.controller.removeContext(file.key)}
-          />
-        </Show>
-
-        <ScrollView
-          data-component="composer-scroll"
-          class="min-h-[60px] max-h-[180px]"
-          viewportRef={(element) => {
-            viewport = element
-            element.tabIndex = -1
-          }}
+        <div
+          ref={content}
+          data-slot="composer-content"
+          data-history-preview={historyLayout.height !== undefined ? "" : undefined}
+          class="min-h-0"
+          classList={{ "flex-1 overflow-y-auto no-scrollbar": historyLayout.height !== undefined }}
+          style={{ "--composer-fade-bottom": `${fadeBottom()}px` }}
+          onScroll={updateScroll}
         >
-          <div
-            ref={(element) => {
-              editor = element
-              props.controller.setEditor(element)
-            }}
-            data-component="composer-editor"
-            role="textbox"
-            aria-multiline="true"
-            aria-label={i18n.t("ui.promptInput.label")}
-            dir={state.mode === "normal" ? "auto" : "ltr"}
-            contenteditable={!props.disabled && !props.readOnly}
-            autocapitalize={state.mode === "normal" ? "sentences" : "off"}
-            autocorrect={state.mode === "normal" ? "on" : "off"}
-            spellcheck={state.mode === "normal"}
-            // @ts-expect-error
-            autocomplete="off"
-            class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
-            classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
-            style={{
-              "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
-              "text-align": "start",
-            }}
-            onInput={(event) => {
-              const cursor = composerCursor(event.currentTarget)
-              const prompt = parseComposerEditor(event.currentTarget)
-              const attachments = props.controller.parts().filter(isAttachment)
-              localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...attachments], cursor)
-            }}
-            onKeyDown={(event) => {
-              if (!view.draftOnly && props.controller.onKeyDown(event)) return
-              const mod = event.metaKey || event.ctrlKey
-
-              if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
-                if (view.submit.queue?.editFirst()) event.preventDefault()
-
-                return
-              }
-
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                event.preventDefault()
-
-                if (event.repeat) return
-                props.controller.submit(mod ? { alternate: true } : undefined)
-              }
-            }}
-            onKeyUp={updateCursor}
-            onPointerUp={updateCursor}
-            onPaste={(event) => {
-              props.controller.onPaste(event)
-              // Programmatic multiline insertion does not reliably reveal the caret.
-              requestAnimationFrame(() => {
-                const selection = window.getSelection()
-
-                if (!editor || !viewport || !selection?.isCollapsed || !selection.rangeCount) return
-
-                if (!editor.contains(selection.anchorNode)) return
-                const caret = selection.getRangeAt(0).getBoundingClientRect()
-
-                if (!caret.height) return
-                const bounds = viewport.getBoundingClientRect()
-
-                if (caret.bottom > bounds.bottom - 8) viewport.scrollTop += caret.bottom - bounds.bottom + 8
-
-                if (caret.top < bounds.top + 8) viewport.scrollTop += caret.top - bounds.top - 8
-              })
-            }}
-            onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
-          />
-          <Show when={!props.controller.value()}>
-            <div
-              dir={state.mode === "normal" ? "auto" : "ltr"}
-              class="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-              classList={{ "font-mono!": state.mode === "shell" }}
-              style={{ "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined, "text-align": "start" }}
-            >
-              {view.placeholder?.() ??
-                (state.mode === "shell"
-                  ? i18n.t("ui.promptInput.placeholder.shell")
-                  : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
-            </div>
+          <Show when={state.mode === "normal"}>
+            <ComposerAttachments
+              attachments={props.controller.attachments()}
+              uploads={props.controller.uploads()}
+              comments={props.controller.comments()}
+              files={props.controller.files()}
+              activeCommentID={state.activeContextID}
+              removeLabel={i18n.t("ui.promptInput.removeAttachment")}
+              onAttachmentClick={props.controller.openAttachment}
+              preview={props.controller.previewAttachment}
+              onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
+              onUploadCancel={(upload) => props.controller.cancelUpload(upload.id)}
+              onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
+              onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
+              onFileRemove={(file) => props.controller.removeContext(file.key)}
+              editingQuote={props.controller.editingQuote()}
+              onEditQuote={props.controller.editQuote}
+              onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
+              searchPaths={props.controller.searchPaths}
+            />
           </Show>
-        </ScrollView>
 
-        <div class="flex h-11 items-center px-2">
+          <div
+            data-component="composer-scroll"
+            data-scrollable
+            class="relative overflow-y-auto"
+            classList={{ "max-h-[180px]": historyLayout.height === undefined }}
+            onScroll={updateScroll}
+            ref={viewport}
+          >
+            <div
+              ref={(element) => {
+                editor = element
+                props.controller.setEditor(element)
+              }}
+              data-component="composer-editor"
+              role="textbox"
+              aria-multiline="true"
+              aria-label={i18n.t("ui.promptInput.label")}
+              aria-controls={state.popover.type === "history" ? suggestionsID : undefined}
+              aria-activedescendant={
+                state.popover.type === "history" && !state.popover.searching && state.popover.activeID
+                  ? `${suggestionsID}-${state.popover.activeID}`
+                  : undefined
+              }
+              dir={state.mode === "normal" ? "auto" : "ltr"}
+              contenteditable={!props.disabled && !props.readOnly}
+              autocapitalize={state.mode === "normal" ? "sentences" : "off"}
+              autocorrect={state.mode === "normal" ? "on" : "off"}
+              spellcheck={state.mode === "normal"}
+              // @ts-expect-error
+              autocomplete="off"
+              class="relative z-10 block w-full whitespace-pre-wrap bg-transparent ps-4 pe-[var(--composer-scroll-end)] pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+              classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell", "opacity-50": props.disabled }}
+              style={{
+                "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
+                "text-align": "start",
+              }}
+              onInput={(event) => {
+                const cursor = composerCursor(event.currentTarget)
+                const prompt = parseComposerEditor(event.currentTarget)
+                const attachments = props.controller.parts().filter(isAttachment)
+                localInput = true
+                props.controller.onInput(
+                  prompt.map((part) => part.content).join(""),
+                  [...prompt, ...attachments],
+                  cursor,
+                )
+              }}
+              onKeyDown={(event) => {
+                // Capture the opening footprint before the controller applies its first history preview.
+                const height =
+                  state.popover.type === "closed" && event.shiftKey && event.key === "ArrowUp"
+                    ? composer?.getBoundingClientRect().height
+                    : undefined
+
+                if (!view.draftOnly && props.controller.onKeyDown(event)) {
+                  if (height !== undefined && state.popover.type === "history") setHistoryLayout("height", height)
+
+                  return
+                }
+
+                const mod = event.metaKey || event.ctrlKey
+
+                if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
+                  if (view.submit.queue?.editFirst()) event.preventDefault()
+
+                  return
+                }
+
+                if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                  event.preventDefault()
+
+                  if (event.repeat) return
+                  props.controller.submit(mod ? { alternate: true } : undefined)
+                }
+              }}
+              onKeyUp={updateCursor}
+              onPointerUp={updateCursor}
+              onPaste={(event) => {
+                props.controller.onPaste(event)
+                // Programmatic multiline insertion does not reliably reveal the caret.
+                requestAnimationFrame(() => {
+                  const selection = window.getSelection()
+
+                  if (!editor || !viewport || !selection?.isCollapsed || !selection.rangeCount) return
+
+                  if (!editor.contains(selection.anchorNode)) return
+                  const caret = selection.getRangeAt(0).getBoundingClientRect()
+
+                  if (!caret.height) return
+                  const bounds = viewport.getBoundingClientRect()
+
+                  // Matches the viewport's 16px scroll-padding, which keeps the caret clear of the fades.
+                  if (caret.bottom > bounds.bottom - 16) viewport.scrollTop += caret.bottom - bounds.bottom + 16
+
+                  if (caret.top < bounds.top + 16) viewport.scrollTop += caret.top - bounds.top - 16
+                })
+              }}
+              onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
+            />
+            <Show when={!props.controller.value()}>
+              <div
+                dir={state.mode === "normal" ? "auto" : "ltr"}
+                class="pointer-events-none absolute inset-x-0 top-0 ps-4 pe-[var(--composer-scroll-end)] pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+                classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell" }}
+                style={{ "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined, "text-align": "start" }}
+              >
+                {view.placeholder?.() ??
+                  (state.mode === "shell"
+                    ? i18n.t("ui.promptInput.placeholder.shell")
+                    : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
+              </div>
+            </Show>
+          </div>
+        </div>
+
+        <div class="flex h-11 shrink-0 items-center px-2">
           <div
             class="flex shrink-0 items-center"
             aria-hidden={state.mode === "shell"}
@@ -338,11 +422,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
             data-overflow-end={overflow.end}
             class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
             onScroll={updateOverflow}
+            // Chromium leaves a partly visible control where it is when it takes focus, cut off by the edge.
+            onFocusIn={() => document.activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" })}
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
           >
-            <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-1">
+            <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-0.5">
               <Show when={view.agent} keyed>
                 {(control) => (
                   <ComposerEditorConfiguredSelect
@@ -398,6 +484,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             <ComposerEditorSubmitButton
               mode={state.mode}
               stopping={view.submit.stopping()}
+              held={view.submit.held?.() ?? false}
               disabled={!props.controller.canSubmit()}
               sendLabel={i18n.t("ui.promptInput.send")}
               stopLabel={i18n.t("ui.promptInput.stop")}
@@ -428,6 +515,8 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
       mention.style.unicodeBidi = "isolate"
       mention.dataset.mention =
         part.type === "file" && part.mime === "application/x-directory" ? "reference" : part.type
+
+      if (part.type === "session") mention.title = part.id
 
       if (part.type === "agent") mention.dataset.name = part.name
 
@@ -473,6 +562,13 @@ function parseComposerEditor(editor: HTMLDivElement) {
     flush()
     const content = element.textContent ?? ""
     const original = mentionParts.get(element)
+
+    if (original?.type === "session") {
+      parts.push({ ...original, content, start: position, end: position + content.length })
+      position += content.length
+
+      return
+    }
 
     if (element.dataset.mention === "agent") {
       const agent: ComposerAgentPart = {
@@ -576,7 +672,7 @@ function composerCursor(editor: HTMLDivElement) {
   return range.toString().length
 }
 
-export function ComposerAttachments(props: {
+function ComposerAttachments(props: {
   attachments: ComposerAttachment[]
   uploads?: Upload[]
   comments?: ComposerComment[]
@@ -584,15 +680,36 @@ export function ComposerAttachments(props: {
   files?: Extract<ComposerComment, { type: "file" }>[]
   activeCommentID?: string
   removeLabel: string
-  onAttachmentClick?: (attachment: ComposerAttachment) => void
+  onAttachmentClick?: (attachment: ComposerAttachment, origin: HTMLElement) => void
+  preview: (attachment: ComposerAttachment) => Promise<string | undefined>
   onAttachmentRemove: (attachment: ComposerAttachment) => void
   onUploadCancel?: (upload: Upload) => void
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
+  editingQuote?: string
+  onEditQuote?: (key?: string) => void
+  onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
+  searchPaths?: (query: string) => Promise<string[]>
 }) {
   const i18n = useI18n()
   const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
+  // A quote added with its editor open renders its chip in the same update, so the anchors are reactive.
+  const [anchors, setAnchors] = createStore<Record<string, HTMLElement | undefined>>({})
+
+  // Plain functions, not inline conditionals: the tooltip reads these from event handlers, outside any owner.
+  const quoteTitle = (comment: ComposerComment) => (comment.type === "quote" ? quoteTooltip(comment) : undefined)
+  const quoteHint = (comment: ComposerComment) => comment.type === "quote" && props.editingQuote !== comment.key
+
+  const commentActive = (comment: ComposerComment) =>
+    comment.key === props.activeCommentID || comment.key === props.editingQuote
+
+  const editing = createMemo(() =>
+    props.comments?.find(
+      (comment): comment is Extract<ComposerComment, { type: "quote" }> =>
+        comment.type === "quote" && comment.key === props.editingQuote,
+    ),
+  )
 
   return (
     <Show
@@ -610,27 +727,39 @@ export function ComposerAttachments(props: {
         >
           <For each={props.comments ?? []}>
             {(comment) => (
-              <div class="relative group shrink-0">
+              <div
+                ref={(element) => {
+                  setAnchors(comment.key, element)
+                  onCleanup(() => setAnchors(comment.key, undefined))
+                }}
+                class="relative group shrink-0"
+              >
                 <Tooltip
                   value={comment.comment}
                   placement="top"
                   openDelay={800}
+                  disabled={comment.type === "quote"}
                   contentClass="max-w-[300px] break-words"
                 >
                   <CommentCard
                     comment={comment.comment ?? ""}
-                    target={
-                      comment.type === "note"
-                        ? { type: "note", label: comment.label, icon: comment.icon }
-                        : { type: "file", path: comment.path, selection: comment.selection }
+                    target={commentCardTarget(comment)}
+                    title={quoteTitle(comment)}
+                    tooltip={quoteHint(comment)}
+                    active={commentActive(comment)}
+                    onClick={() =>
+                      comment.type === "quote"
+                        ? props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
+                        : props.onCommentClick?.(comment)
                     }
-                    active={comment.key === props.activeCommentID}
-                    onClick={() => props.onCommentClick?.(comment)}
                   />
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => props.onCommentRemove?.(comment)}
+                  onClick={() => {
+                    if (props.editingQuote === comment.key) props.onEditQuote?.()
+                    props.onCommentRemove?.(comment)
+                  }}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
@@ -669,52 +798,53 @@ export function ComposerAttachments(props: {
             )}
           </For>
           <For each={props.attachments}>
-            {(attachment) => (
-              <div class="relative group shrink-0">
-                <Tooltip
-                  value={attachment.type === "path" ? attachment.path : attachment.filename}
-                  placement="top"
-                  contentClass="break-all"
-                >
-                  <Show
-                    when={attachment.type === "image" && attachment.mime.startsWith("image/") ? attachment : undefined}
-                    fallback={
-                      <AttachmentCard title={attachment.filename}>
-                        {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
-                      </AttachmentCard>
-                    }
-                  >
-                    {(image) => {
-                      // Restored drafts and history carry image ids only; bytes load when shown.
-                      const [url] = createResource(() => image().blob, resolveBlobUrl)
+            {(attachment) => {
+              const image = attachment.mime.startsWith("image/")
+              // Restored drafts and history carry image ids only, and path attachments carry no bytes; both load when shown.
+              const [url] = createResource(() => image && attachment, props.preview)
+              // Read state rather than the resource so loading never suspends; the route boundary would detach the screen and drop editor focus.
+              const src = () => (url.state === "ready" ? url() : undefined)
+              const missing = () => url.state === "errored" || (url.state === "ready" && !url())
 
-                      return (
-                        <>
-                          {/* Keep loading local; the route boundary would detach the screen and drop editor focus. */}
-                          <Suspense fallback={<div class="w-[58px] h-[46px]" />}>
-                            <img
-                              src={url() ?? ""}
-                              alt={attachment.filename}
-                              class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                              onClick={() => props.onAttachmentClick?.(attachment)}
-                            />
-                          </Suspense>
-                          <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
-                        </>
-                      )
-                    }}
-                  </Show>
-                </Tooltip>
-                <button
-                  type="button"
-                  onClick={() => props.onAttachmentRemove(attachment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
-                  aria-label={props.removeLabel}
-                >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
-                </button>
-              </div>
-            )}
+              return (
+                <div class="relative group shrink-0">
+                  <Tooltip
+                    value={attachment.type === "path" ? attachment.path : attachment.filename}
+                    placement="top"
+                    contentClass="break-all"
+                  >
+                    <Show
+                      when={image && !missing()}
+                      fallback={
+                        <AttachmentCard title={attachment.filename}>
+                          {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
+                        </AttachmentCard>
+                      }
+                    >
+                      <Show when={src()} fallback={<div class="w-[58px] h-[46px]" />}>
+                        {(value) => (
+                          <img
+                            src={value()}
+                            alt={attachment.filename}
+                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                            onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
+                          />
+                        )}
+                      </Show>
+                      <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                    </Show>
+                  </Tooltip>
+                  <button
+                    type="button"
+                    onClick={() => props.onAttachmentRemove(attachment)}
+                    class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                    aria-label={props.removeLabel}
+                  >
+                    <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  </button>
+                </div>
+              )
+            }}
           </For>
           <For each={props.uploads ?? []}>
             {(upload) => (
@@ -747,12 +877,32 @@ export function ComposerAttachments(props: {
           data-slot="composer-attachments-fade-right"
           class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
         />
+        <Show when={editing()} keyed>
+          {(current) => (
+            <Show when={anchors[current.key]}>
+              {(anchor) => (
+                <QuoteCommentEditor
+                  anchor={anchor()}
+                  text={current.text}
+                  icon={current.source?.icon}
+                  comment={current.comment ?? ""}
+                  mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
+                  onSubmit={(comment) => {
+                    props.onQuoteComment?.(current, comment)
+                    props.onEditQuote?.()
+                  }}
+                  onClose={() => props.onEditQuote?.()}
+                />
+              )}
+            </Show>
+          )}
+        </Show>
       </div>
     </Show>
   )
 }
 
-export function ComposerEditorAddMenu(props: {
+function ComposerEditorAddMenu(props: {
   disabled?: boolean
   title: string
   keybind?: string[]
@@ -766,6 +916,8 @@ export function ComposerEditorAddMenu(props: {
   onContext: () => void
   onShell: () => void
 }) {
+  const focus = pointerFocusReturn()
+
   return (
     <Tooltip
       placement="top"
@@ -778,6 +930,7 @@ export function ComposerEditorAddMenu(props: {
     >
       <Menu gutter={6} modal={false} placement="top-start">
         <Menu.Trigger
+          {...focus.trigger}
           as={IconButton}
           data-action="composer-attach"
           type="button"
@@ -789,6 +942,7 @@ export function ComposerEditorAddMenu(props: {
         />
         <Menu.Portal>
           <Menu.Content
+            onCloseAutoFocus={focus.onCloseAutoFocus}
             class="[&_[data-slot=menu-v2-item-shortcut]]:w-5 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
             style={{ "min-width": "180px" }}
           >
@@ -810,6 +964,34 @@ export function ComposerEditorAddMenu(props: {
       </Menu>
     </Tooltip>
   )
+}
+
+/**
+ * A menu returns focus to its trigger when it closes. Closing with Escape counts as keyboard use, so Chromium would
+ * ring a trigger the pointer opened; restore focus without the ring and keep it for keyboard opens.
+ */
+function pointerFocusReturn() {
+  let pointer: HTMLElement | undefined
+
+  return {
+    trigger: {
+      onPointerDown: (event: PointerEvent & { currentTarget: HTMLElement }) => {
+        pointer = event.currentTarget
+      },
+      onKeyDown: (event: KeyboardEvent) => {
+        if (event.key !== "Escape") pointer = undefined
+      },
+    },
+    onCloseAutoFocus: (event: Event) => {
+      if (!pointer) return
+      event.preventDefault()
+      const active = document.activeElement
+
+      // An outside press already moved focus where it belongs.
+      if (active && active !== document.body && !active.closest('[role="menu"]')) return
+      pointer.focus({ preventScroll: true, focusVisible: false })
+    },
+  }
 }
 
 function ComposerEditorConfiguredSelect(props: {
@@ -841,7 +1023,7 @@ function ComposerEditorConfiguredSelect(props: {
   )
 }
 
-export function ComposerEditorSelect(props: {
+function ComposerEditorSelect(props: {
   mobileDrawer?: boolean
   title: string
   keybind?: string[]
@@ -854,6 +1036,7 @@ export function ComposerEditorSelect(props: {
 }) {
   const mobile = createMediaQuery("(max-width: 767px)")
   const [store, setStore] = createStore({ open: false, loaded: false })
+  const focus = pointerFocusReturn()
   let trigger: HTMLButtonElement | undefined
 
   const setOpen = (open: boolean) => {
@@ -895,6 +1078,7 @@ export function ComposerEditorSelect(props: {
         fallback={
           <Menu gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
             <Menu.Trigger
+              {...focus.trigger}
               as={Button}
               variant="ghost-muted"
               size="normal"
@@ -904,7 +1088,7 @@ export function ComposerEditorSelect(props: {
               {content()}
             </Menu.Trigger>
             <Menu.Portal>
-              <Menu.Content>
+              <Menu.Content onCloseAutoFocus={focus.onCloseAutoFocus}>
                 <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
                   <For each={props.options}>
                     {(option) => (
@@ -971,10 +1155,16 @@ export function ComposerEditorSelect(props: {
   )
 }
 
-export function ComposerEditorPopover(props: {
+function ComposerEditorPopover(props: {
+  id?: string
   emptyLabel: string
   items: ComposerSuggestion[]
   activeID?: string
+  history?: ComposerMode
+  historyBrowsing?: boolean
+  editor?: () => HTMLElement | undefined
+  onSearch?: () => void
+  onClose?: () => void
   search?: {
     value: string
     label: string
@@ -986,10 +1176,44 @@ export function ComposerEditorPopover(props: {
   onActiveChange: (item: ComposerSuggestion) => void
   onSelect: (item: ComposerSuggestion) => void
 }) {
+  const i18n = useI18n()
+  const listID = props.id ?? createUniqueId()
+  let container: HTMLDivElement | undefined
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
 
   const resize = (height: number) =>
-    setStore("maxHeight", composerSuggestionMaxHeight(height, props.search !== undefined))
+    setStore(
+      "maxHeight",
+      composerSuggestionMaxHeight(height, props.search !== undefined || !!props.history, !!props.history),
+    )
+
+  createEffect(() => {
+    if (!props.history || !props.activeID) return
+
+    const frame = requestAnimationFrame(() =>
+      container?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" }),
+    )
+
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
+
+  createEffect(() => {
+    if (!props.history) return
+
+    const dismiss = (event: Event) => {
+      if (!(event.target instanceof Node) || container?.contains(event.target)) return
+
+      if (event.type === "focusin" && props.historyBrowsing && props.editor?.()?.contains(event.target)) return
+      props.onClose?.()
+    }
+
+    document.addEventListener("pointerdown", dismiss)
+    document.addEventListener("focusin", dismiss)
+    onCleanup(() => {
+      document.removeEventListener("pointerdown", dismiss)
+      document.removeEventListener("focusin", dismiss)
+    })
+  })
 
   // A detached boundary (e.g. the previous session's timeline while the next one loads) measures 0px.
   const boundary = () => {
@@ -1003,75 +1227,155 @@ export function ComposerEditorPopover(props: {
 
   return (
     <div
+      ref={container}
       data-component="composer-suggestions"
-      class="absolute inset-x-0 -top-2 z-40 flex -translate-y-full scroll-pb-[18px] flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      class="absolute inset-x-0 -top-2 z-40 flex -translate-y-full scroll-pb-[18px] flex-col rounded-xl bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      classList={{ "overflow-auto": !props.history, "overflow-hidden": !!props.history }}
       style={{ "max-height": `${store.maxHeight}px` }}
       onMouseDown={(event) => event.preventDefault()}
     >
-      <Show when={props.search}>
-        {(search) => (
-          <div class="shrink-0 px-2 py-1">
-            <input
-              ref={(element) => requestAnimationFrame(() => element.focus())}
-              value={search().value}
-              aria-label={search().label}
-              placeholder={search().placeholder}
-              class="w-full bg-transparent text-[13px] leading-5 text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-              onInput={(event) => search().onValueChange(event.currentTarget.value)}
-              onKeyDown={(event) => search().onKeyDown(event)}
-              onMouseDown={(event) => event.stopPropagation()}
-            />
-          </div>
-        )}
-      </Show>
-      <Show
-        when={props.items.length > 0}
-        fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
-      >
-        <For each={props.items}>
-          {(item) => (
-            <button
-              type="button"
-              data-suggestion-id={item.id}
-              data-active={props.activeID === item.id ? "" : undefined}
-              class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
-              classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
-              onPointerMove={() => props.onActiveChange(item)}
-              onClick={() => props.onSelect(item)}
-            >
-              <div class="flex min-w-0 flex-1 items-center gap-2">
-                <ComposerSuggestionIcon item={item} />
-                <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
-                  {item.label}
-                </bdi>
-                <Show when={item.description}>
-                  <span class="min-w-0 truncate text-v2-text-text-muted">{item.description}</span>
-                </Show>
-              </div>
-              <Show when={item.keybind?.length}>
-                <span class="shrink-0 text-v2-text-text-muted">{item.keybind?.join("+")}</span>
-              </Show>
-            </button>
+      <Show when={props.history}>
+        <Show when={props.search}>
+          {(search) => (
+            <div class="shrink-0 px-2 py-1">
+              <input
+                ref={(element) => requestAnimationFrame(() => element.isConnected && element.focus())}
+                value={search().value}
+                aria-label={search().label}
+                placeholder={search().placeholder}
+                autocomplete="off"
+                spellcheck={false}
+                class="w-full bg-transparent text-[13px] leading-5 text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                role="combobox"
+                aria-expanded="true"
+                aria-autocomplete="list"
+                aria-controls={listID}
+                aria-activedescendant={props.activeID ? `${listID}-${props.activeID}` : undefined}
+                onInput={(event) => search().onValueChange(event.currentTarget.value)}
+                onKeyDown={(event) => search().onKeyDown(event)}
+                onMouseDown={(event) => event.stopPropagation()}
+              />
+            </div>
           )}
-        </For>
+        </Show>
+        <Show when={props.historyBrowsing}>
+          <button
+            type="button"
+            class="flex h-7 shrink-0 items-center justify-between gap-2 rounded-md px-2 text-[13px] leading-4 text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover"
+            onClick={props.onSearch}
+          >
+            <span>{i18n.t("ui.promptInput.history.searchAction")}</span>
+            <Keybind keys={formatKeybindParts("mod+f")} variant="ghost" />
+          </button>
+        </Show>
+        <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
+          <div id={listID} role="listbox" aria-label={i18n.t("ui.promptInput.history")} class="flex flex-col">
+            <Show
+              when={props.items.length}
+              fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
+            >
+              <For each={props.items}>
+                {(item) => (
+                  <button
+                    id={`${listID}-${item.id}`}
+                    type="button"
+                    role="option"
+                    aria-selected={props.activeID === item.id}
+                    tabindex={-1}
+                    data-suggestion-id={item.id}
+                    data-active={props.activeID === item.id ? "" : undefined}
+                    class="palette-menu-row"
+                    data-size="compact"
+                    onPointerMove={(event) => {
+                      if (event.movementX || event.movementY) props.onActiveChange(item)
+                    }}
+                    onClick={() => props.onSelect(item)}
+                  >
+                    <bdi
+                      dir={props.history === "shell" ? "ltr" : "auto"}
+                      class="palette-menu-title flex-1 text-start"
+                      style={
+                        props.history === "shell"
+                          ? { "font-family": "var(--font-family-mono)", "font-weight": 440 }
+                          : undefined
+                      }
+                    >
+                      {item.label || item.description || i18n.t("ui.promptInput.history.contextOnly")}
+                    </bdi>
+                    <Show when={item.description}>
+                      <Icon name="file-document" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </Show>
+      <Show when={!props.history}>
+        <Show when={props.search}>
+          {(search) => (
+            <div class="shrink-0 px-2 py-1">
+              <input
+                ref={(element) => requestAnimationFrame(() => element.focus())}
+                value={search().value}
+                aria-label={search().label}
+                placeholder={search().placeholder}
+                class="w-full bg-transparent text-[13px] leading-5 text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                onInput={(event) => search().onValueChange(event.currentTarget.value)}
+                onKeyDown={(event) => search().onKeyDown(event)}
+                onMouseDown={(event) => event.stopPropagation()}
+              />
+            </div>
+          )}
+        </Show>
+        <Show
+          when={props.items.length > 0}
+          fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
+        >
+          <For each={props.items}>
+            {(item) => (
+              <button
+                type="button"
+                data-suggestion-id={item.id}
+                data-active={props.activeID === item.id ? "" : undefined}
+                class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
+                classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
+                onPointerMove={() => props.onActiveChange(item)}
+                onClick={() => props.onSelect(item)}
+              >
+                <div class="flex min-w-0 flex-1 items-center gap-2">
+                  <ComposerSuggestionIcon item={item} />
+                  <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
+                    {item.label}
+                  </bdi>
+                  <Show when={item.description}>
+                    <span class="min-w-0 truncate text-v2-text-text-muted">{item.description}</span>
+                  </Show>
+                </div>
+                <Show when={item.keybind?.length}>
+                  <span class="shrink-0 text-v2-text-text-muted">{item.keybind?.join("+")}</span>
+                </Show>
+              </button>
+            )}
+          </For>
+        </Show>
       </Show>
     </div>
   )
 }
 
-function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean) {
+function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean, history = false) {
   const reserve = Math.min(COMPOSER_SUGGESTION_CONTEXT_RESERVE, boundaryHeight / 4)
   const limit = Math.min(COMPOSER_SUGGESTION_MAX_HEIGHT, boundaryHeight - reserve)
-  const chrome = COMPOSER_SUGGESTION_TOP_PADDING + (search ? COMPOSER_SUGGESTION_SEARCH_HEIGHT : 0)
+  // History has padding on both edges and shows whole rows below the pinned search control.
+  const chrome = COMPOSER_SUGGESTION_TOP_PADDING * (history ? 2 : 1) + (search ? COMPOSER_SUGGESTION_SEARCH_HEIGHT : 0)
+  const row = COMPOSER_SUGGESTION_ROW_HEIGHT
+  const peek = history ? 0 : COMPOSER_SUGGESTION_ROW_PEEK
 
-  if (limit < chrome + COMPOSER_SUGGESTION_ROW_HEIGHT + COMPOSER_SUGGESTION_ROW_PEEK) return limit
+  if (limit < chrome + row + peek) return limit
 
-  return (
-    chrome +
-    Math.floor((limit - chrome - COMPOSER_SUGGESTION_ROW_PEEK) / COMPOSER_SUGGESTION_ROW_HEIGHT) *
-      COMPOSER_SUGGESTION_ROW_HEIGHT +
-    COMPOSER_SUGGESTION_ROW_PEEK
-  )
+  return chrome + Math.floor((limit - chrome - peek) / row) * row + peek
 }
 
 // "Steer ⌘⏎" / "Queue ⌘⏎" hint next to the submit button: submits with the
@@ -1092,24 +1396,17 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
     return queue.alternate()
   })
 
-  const [button, setButton] = createSignal<HTMLButtonElement>()
-  const presence = createAnimatedPresence(action, () => button() ?? null)
-
+  // Appears and leaves on the same frame as the placeholder, so typing never shows a fade.
   return (
-    <Show when={presence.present() && presence.value()} keyed>
+    <Show when={action()} keyed>
       {(delivery) => (
         <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
           <Button
-            ref={setButton}
             data-action="composer-alternate-delivery"
             type="button"
             variant="ghost-faint"
             size="small"
-            class="me-3 gap-1.5 px-1.5 ![font-weight:530] duration-150 motion-reduce:animate-none"
-            classList={{
-              "animate-in fade-in": presence.animate() && presence.show(),
-              "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
-            }}
+            class="me-3 gap-1.5 px-1.5 ![font-weight:530]"
             onClick={() => props.controller.submit({ alternate: true })}
           >
             {delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}
@@ -1123,9 +1420,10 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
   )
 }
 
-export function ComposerEditorSubmitButton(props: {
+function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
+  held?: boolean
   disabled: boolean
   sendLabel: string
   stopLabel: string
@@ -1143,7 +1441,14 @@ export function ComposerEditorSubmitButton(props: {
         type="button"
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
-        icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
+        icon={
+          props.held && !props.stopping ? (
+            <Loader class="size-4" />
+          ) : (
+            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
+          )
+        }
+        aria-busy={props.held && !props.stopping}
         variant="submit"
         class="size-7 rounded-md p-[6px]"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
@@ -1165,6 +1470,8 @@ export function ComposerEditorSubmitButton(props: {
 }
 
 function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
+  if (props.item.kind === "session") return <Icon name="speech-bubble" size="small" class="shrink-0" />
+
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
 
   if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />

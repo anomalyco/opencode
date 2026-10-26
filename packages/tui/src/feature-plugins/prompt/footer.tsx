@@ -43,12 +43,9 @@ export function PromptFooter(props: {
       session.revert?.messageID,
     )
     const cost = props.context.data.session.cost(props.sessionID)
-    // A subscription such as OpenCode Go covers its requests from an allowance, so they cost nothing.
-    const allowance = props.context.data.session.allowance(props.sessionID)
     return [
       usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
       cost > 0 ? money.format(cost) : undefined,
-      allowance > 0 ? `${money.format(allowance)} allowance` : undefined,
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))

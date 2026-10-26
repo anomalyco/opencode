@@ -148,32 +148,6 @@ export interface ISerializeRange {
   end: number
 }
 
-export interface IHTMLSerializeOptions {
-  /**
-   * The number of rows in the scrollback buffer to serialize, starting from
-   * the bottom of the scrollback buffer.
-   */
-  scrollback?: number
-  /**
-   * Whether to only serialize the selection.
-   * Default: false
-   */
-  onlySelection?: boolean
-  /**
-   * Whether to include the global background of the terminal.
-   * Default: false
-   */
-  includeGlobalBackground?: boolean
-  /**
-   * The range to serialize. This is prioritized over onlySelection.
-   */
-  range?: {
-    startLine: number
-    endLine: number
-    startCol: number
-  }
-}
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -204,11 +178,25 @@ function equalFlags(cell1: IBufferCell, cell2: IBufferCell): boolean {
 }
 
 // ============================================================================
-// Base Serialize Handler
+// String Serialize Handler
 // ============================================================================
 
-abstract class BaseSerializeHandler {
-  constructor(protected readonly _buffer: IBuffer) {}
+class StringSerializeHandler {
+  private _rowIndex: number = 0
+  private _allRows: string[] = []
+  private _allRowSeparators: string[] = []
+  private _currentRow: string = ""
+  private _nullCellCount: number = 0
+  private _cursorStyle: IBufferCell
+  private _firstRow: number = 0
+  private _lastContentCursorRow: number = 0
+
+  constructor(
+    private readonly _buffer: IBuffer,
+    private readonly _terminal: ITerminalCore,
+  ) {
+    this._cursorStyle = this._buffer.getNullCell()
+  }
 
   public serialize(range: IBufferRange, excludeFinalCursorPosition?: boolean): string {
     let oldCell = this._buffer.getNullCell()
@@ -234,7 +222,7 @@ abstract class BaseSerializeHandler {
             continue
           }
 
-          this._nextCell(c, oldCell, row, col)
+          this._nextCell(c, oldCell, row)
           oldCell = c
         }
       }
@@ -242,43 +230,10 @@ abstract class BaseSerializeHandler {
       this._rowEnd(row, row === endRow)
     }
 
-    this._afterSerialize()
-
     return this._serializeString(excludeFinalCursorPosition)
   }
 
-  protected _nextCell(_cell: IBufferCell, _oldCell: IBufferCell, _row: number, _col: number): void {}
-  protected _rowEnd(_row: number, _isLastRow: boolean): void {}
-  protected _beforeSerialize(_rows: number, _startRow: number, _endRow: number): void {}
-  protected _afterSerialize(): void {}
-  protected _serializeString(_excludeFinalCursorPosition?: boolean): string {
-    return ""
-  }
-}
-
-// ============================================================================
-// String Serialize Handler
-// ============================================================================
-
-class StringSerializeHandler extends BaseSerializeHandler {
-  private _rowIndex: number = 0
-  private _allRows: string[] = []
-  private _allRowSeparators: string[] = []
-  private _currentRow: string = ""
-  private _nullCellCount: number = 0
-  private _cursorStyle: IBufferCell
-  private _firstRow: number = 0
-  private _lastContentCursorRow: number = 0
-
-  constructor(
-    buffer: IBuffer,
-    private readonly _terminal: ITerminalCore,
-  ) {
-    super(buffer)
-    this._cursorStyle = this._buffer.getNullCell()
-  }
-
-  protected _beforeSerialize(rows: number, start: number, _end: number): void {
+  private _beforeSerialize(rows: number, start: number, _end: number): void {
     this._allRows = Array.from<string>({ length: rows })
     this._allRowSeparators = Array.from<string>({ length: rows })
     this._rowIndex = 0
@@ -437,7 +392,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
     )
   }
 
-  protected _nextCell(cell: IBufferCell, _oldCell: IBufferCell, row: number, col: number): void {
+  private _nextCell(cell: IBufferCell, _oldCell: IBufferCell, row: number): void {
     const isPlaceHolderCell = cell.getWidth() === 0
 
     if (isPlaceHolderCell) {

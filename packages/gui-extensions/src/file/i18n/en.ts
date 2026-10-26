@@ -1,8 +1,5 @@
 export default {
   "tree.all": "All files",
-  "tree.empty": "No files",
-  "tree.changes.one": "{{count}} file changed",
-  "tree.changes.other": "{{count}} files changed",
   "tab.notFound": "File not found: {{name}}",
   "mobile.title": "Files",
   "mobile.openTabs": "Open files",
@@ -11,8 +8,8 @@ export default {
   "view.source": "Source",
   "view.openInBrowser": "Open in browser",
   "view.fullscreen": "Enter full screen",
-  "view.exitFullscreen": "Exit full screen",
   "view.binary": "Binary file · {{size}}",
+  "view.loadFailed": "Couldn't load this file.",
   "view.table.rows.one": "{{count}} row",
   "view.table.rows.other": "{{count}} rows",
   "view.table.columns.one": "{{count}} column",

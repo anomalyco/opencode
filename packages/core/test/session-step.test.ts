@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LanguageModel, LLM, LLMEvent } from "@opencode/ai"
+import { LanguageModel, LLM, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -159,7 +159,7 @@ for (const fixture of [
   )
 }
 
-it.effect("records the cost and allowance the endpoint reports instead of the catalog price", () =>
+it.effect("records the cost the endpoint reports instead of the catalog price", () =>
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const llm = yield* TestLLM.Test
@@ -198,7 +198,7 @@ it.effect("records the cost and allowance the endpoint reports instead of the ca
     yield* llm.push(
       TestLLM.complete({
         reason: { normalized: "stop" },
-        usage: { inputTokens: 10, outputTokens: 4, nonCachedInputTokens: 10, cost: 0, allowance: 0.25 },
+        usage: { inputTokens: 10, outputTokens: 4, nonCachedInputTokens: 10, cost: 0 },
       }),
     )
     yield* steps.attempt({
@@ -223,10 +223,7 @@ it.effect("records the cost and allowance the endpoint reports instead of the ca
       .from(SessionMessageTable)
       .where(eq(SessionMessageTable.id, assistantMessageID))
       .get()
-    expect(message?.data).toMatchObject({ finish: "stop", cost: 0, allowance: 0.25 })
-    expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({
-      cost: 0,
-      allowance: 0.25,
-    })
+    expect(message?.data).toMatchObject({ finish: "stop", cost: 0 })
+    expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({ cost: 0 })
   }),
 )
