@@ -309,6 +309,7 @@ test("all indexed client controls resolve to visible production controls", async
   const view = await open(page)
 
   for (const entry of clientSettings.filter((entry) => entry.target && !entry.available)) {
+    // SAFETY: catalog labels are typed as i18n keys, and English holds every key.
     await view.search.fill(en[entry.label as keyof typeof en])
     const result = view.results.locator(`[data-setting-target="${entry.target}"]`)
     await expect(result).toHaveCount(1)
