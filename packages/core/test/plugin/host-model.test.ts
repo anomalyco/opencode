@@ -27,6 +27,7 @@ it.effect("lists other model types for plugins only when they ask for them", () 
 
     const chat = ids((yield* host.model.list()).data)
     expect(chat).not.toContain(imageID)
+    expect(ids((yield* host.model.list({ types: [] })).data)).toEqual(chat)
     expect(ids((yield* host.model.list({ types: ["image"] })).data)).toEqual([imageID])
     expect(ids((yield* host.model.list({ types: ["chat", "image"] })).data)).toEqual([...chat, imageID])
   }),
