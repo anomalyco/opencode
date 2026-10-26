@@ -700,13 +700,14 @@ it.effect("summary compaction past the ceiling keeps the conversation unchanged 
 )
 
 it.effect(
-  "summary compaction sends the history before the tail unchanged when the whole conversation does not fit",
+  "summary compaction flattens the whole conversation when nothing can be kept beside the summary",
   () =>
     Effect.gen(function* () {
       requests = []
       const session = yield* insertSession(Session.ID.make("ses_compaction_older_fallback"))
-      // About 190k estimated tokens in total, past the 184k left for the summary. The 160k before the retained
-      // 30k latest exchange fits the 170k ceiling.
+      // About 190k estimated tokens in total, past the 184k left for the summary. The newest exchange
+      // alone is over the keep allowance, so it is summarized too and the history reaches the summary
+      // request as flattened, clipped text.
       const messages = [
         ["older", 640_000],
         ["latest", 120_000],
@@ -722,9 +723,87 @@ it.effect(
       expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
       expect(requests).toHaveLength(1)
       expect(requests[0].messages).toHaveLength(2)
-      expect(requests[0].messages[0].content).toEqual([{ type: "text", text: messages[0].text }])
+      const text = requests[0].messages[0].content
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("")
+      expect(text).toContain("[User]: older ")
+      expect(text).toContain("[User]: latest ")
+      expect(text).toContain("characters omitted")
       expect(requests[0].messages[1].content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(false) }])
     }),
+)
+
+it.effect(
+  "manual compaction does not keep an oversized newest turn verbatim beside the summary",
+  () =>
+    Effect.gen(function* () {
+      requests = []
+      const session = yield* insertSession(Session.ID.make("ses_compaction_oversized_newest"))
+      const assistant = (text: string) =>
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.create(),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: { id: Model.ID.make("summary-model"), providerID: Provider.ID.make("test") },
+          content: [SessionMessage.AssistantText.make({ type: "text", text })],
+          time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(0) },
+        })
+      // The last exchange is a single ~60k-token autonomous reply, far over the default 15k keep
+      // allowance: it belongs to the summary, not to the verbatim tail.
+      const messages = [
+        textUser("question 1"),
+        assistant("short reply 1"),
+        textUser("question 2"),
+        assistant("short reply 2"),
+        textUser("start the long task"),
+        assistant(`BIG-TURN ${"x".repeat(240_000)}`),
+      ]
+      yield* storeMessages(session.id, messages)
+
+      expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+
+      const store = yield* SessionStore.Service
+      const stored = (yield* store.context(session.id))[0]
+      expect(stored).toMatchObject({ type: "compaction", status: "completed" })
+      const metadata = stored?.type === "compaction" ? stored.metadata : undefined
+      expect(metadata?.keepID).toBeUndefined()
+      expect(metadata?.recent ?? "").not.toContain("BIG-TURN")
+    }),
+)
+
+it.effect("the kept tail starts mid-run rather than walking back past the keep allowance", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.make("ses_compaction_midrun_tail"))
+    const assistant = (text: string) =>
+      SessionMessage.Assistant.make({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: { id: Model.ID.make("summary-model"), providerID: Provider.ID.make("test") },
+        content: [SessionMessage.AssistantText.make({ type: "text", text })],
+        time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(0) },
+      })
+    // One huge reply followed by a short one after the last user message: walking the tail back to
+    // that user message would keep both replies whole (~60k), so the tail starts at the newest reply.
+    const messages = [
+      textUser("question 1"),
+      assistant("short reply 1"),
+      textUser("start the long task"),
+      assistant(`older big reply ${"y".repeat(240_000)}`),
+      assistant("final short reply"),
+    ]
+    yield* storeMessages(session.id, messages)
+
+    expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+
+    const store = yield* SessionStore.Service
+    const stored = (yield* store.context(session.id))[0]
+    expect(stored).toMatchObject({ type: "compaction", status: "completed" })
+    const recent = stored?.type === "compaction" ? (stored.metadata?.recent ?? "") : ""
+    expect(recent).toContain("[Assistant]: final short reply")
+    expect(recent).not.toContain("older big reply")
+  }),
 )
 
 it.effect("compaction lowers the output limit when it sends a request it could not shrink", () =>

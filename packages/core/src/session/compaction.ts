@@ -977,22 +977,32 @@ const recentStart = (
   previous: SessionMessage.CompactionCompleted | undefined,
 ) => {
   // Drop the oldest entries until the rest fit the allowance, but always keep the newest one.
-  const dropped = Math.min(
-    oldestToDrop(entries, (entry) => Token.estimate(entry.text), keep),
-    entries.length - 1,
-  )
+  const fitsAt = oldestToDrop(entries, (entry) => Token.estimate(entry.text), keep)
+  const dropped = Math.min(fitsAt, entries.length - 1)
 
-  // Start at a user message so an assistant's tool calls and results stay together.
+  // Start at a user message so an assistant's tool calls and results stay together — but only when the
+  // walk back stays inside the allowance. A long autonomous run after the last user message would
+  // otherwise be kept verbatim whole beside the summary and dwarf it.
   const userBoundary = entries.findLastIndex((entry, index) => index <= dropped && entry.message.type === "user")
-  if (userBoundary > 0) return userBoundary
+  if (userBoundary > 0 && fitsAt <= userBoundary) return userBoundary
+
+  // The newest entries alone are over the allowance, so nothing can be kept verbatim within it; the
+  // summary already covers the whole conversation.
+  if (fitsAt >= entries.length) return entries.length
 
   // Everything fits. Keep only the latest exchange rather than duplicating the whole conversation beside the summary.
   const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")
-  if (latestUser > 0) return latestUser
+  if (latestUser > 0 && fitsAt <= latestUser) return latestUser
 
-  // One exchange, nothing older. Summarize it all and keep nothing, unless a previous summary already
-  // kept recent text, in which case keep everything and summarize only the summary before it.
-  return previous && SessionRecentText.kept(previous) ? 0 : entries.length
+  if (latestUser <= 0) {
+    // One exchange, nothing older. Summarize it all and keep nothing, unless a previous summary already
+    // kept recent text, in which case keep everything and summarize only the summary before it.
+    return previous && SessionRecentText.kept(previous) ? 0 : entries.length
+  }
+
+  // Walking back to a user message would exceed the allowance: keep the newest messages that fit,
+  // starting mid-run rather than beside a verbatim tail that dwarfs the summary.
+  return dropped
 }
 
 const oldestToDrop = <T>(items: ReadonlyArray<T>, size: (item: T) => number, budget: number) => {
