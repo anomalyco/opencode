@@ -1,10 +1,11 @@
-import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { ErrorBoundary, createEffect, createMemo, onCleanup, Show, type ParentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { DataProvider } from "@opencode/session-ui/context"
 import { SessionUserMessage } from "@opencode/session-ui/message"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
@@ -39,6 +40,7 @@ export function TargetSessionRouteContent() {
   return (
     <>
       <MarkSessionViewed sessionID={() => params.id} />
+      <SessionDocumentTitle sessionID={() => params.id} />
       <ModelsProvider directory={directory()}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
@@ -203,6 +205,22 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 
     if (!sessionID || !focus.window) return
     notification.session.markViewed(sessionID)
+  })
+
+  return null
+}
+
+// Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
+function SessionDocumentTitle(props: { sessionID: () => string }) {
+  const data = useData()
+
+  createEffect(() => {
+    const title = data.session.get(props.sessionID())?.title
+
+    document.title = isFallbackTitle(title) ? "OpenCode" : `${title} · OpenCode`
+  })
+  onCleanup(() => {
+    document.title = "OpenCode"
   })
 
   return null
