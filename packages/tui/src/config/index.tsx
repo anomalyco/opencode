@@ -3,7 +3,7 @@ export * as Config from "."
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { createContext, onCleanup, type JSX, useContext } from "solid-js"
+import { batch, createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
 import path from "path"
@@ -267,7 +267,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
-  cursor?: {
+  cursor: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
@@ -315,12 +315,10 @@ export function resolve(
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
-    cursor: input.cursor
-      ? {
-          style: input.cursor.style ?? "block",
-          blinking: input.cursor.blinking ?? true,
-        }
-      : undefined,
+    cursor: {
+      style: input.cursor?.style ?? "block",
+      blinking: input.cursor?.blinking ?? true,
+    },
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
@@ -352,7 +350,14 @@ export function ConfigProvider(props: {
 }) {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
-  const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
+  const apply = (info: Info) => {
+    const next = resolve(info, props.options ?? { terminalSuspend: true })
+    batch(() => {
+      setConfig(reconcile(next))
+      // reconcile preserves cursor identity; replace it so Solid reapplies cursorStyle to mounted inputs.
+      setConfig({ cursor: next.cursor })
+    })
+  }
   const update = async (update: (draft: any) => void) => {
     if (!host) throw new Error("Config updates are not available")
     const info = await host.update(update)

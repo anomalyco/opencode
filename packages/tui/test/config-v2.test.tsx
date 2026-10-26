@@ -9,6 +9,16 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
+test.each([
+  [{}, { style: "block", blinking: true }],
+  [{ cursor: {} }, { style: "block", blinking: true }],
+  [{ cursor: { style: "line" } }, { style: "line", blinking: true }],
+  [{ cursor: { blinking: false } }, { style: "block", blinking: false }],
+  [{ cursor: { style: "default", blinking: false } }, { style: "default", blinking: false }],
+] as const)("resolves cursor config %j", (input, expected) => {
+  expect(resolve(input, { terminalSuspend: true }).cursor).toEqual(expected)
+})
+
 test("validates the explicit diff source defaults", () => {
   for (const source of ["branch", "committed", "working", "turn"] as const) {
     expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
