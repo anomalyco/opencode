@@ -259,16 +259,29 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
-  const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
-    publishMutation(
+  const steer = Effect.fn("SessionInbox.steer")(function* (input: PendingRef) {
+    const row = yield* find(db, input.id)
+    if (row?.sessionID === input.sessionID && row.type === "user") {
+      const payload = decodeUser(row.payload)
+      const session = yield* db
+        .select({ agent: SessionTable.agent })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, input.sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      // An agent-changing prompt must stay queued: promoting it as a steer would
+      // apply the selection mid-turn and reconfigure the running turn.
+      if (payload.agent !== undefined && payload.agent !== (session?.agent ?? undefined)) return
+    }
+    yield* publishMutation(
       input,
       bus.publish(SessionEvent.InboxDeliveryChanged, {
         sessionID: input.sessionID,
         inboxID: input.id,
         delivery: "steer",
       }),
-    ),
-  )
+    )
+  })
 
   const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) =>
     publishMutation(
@@ -546,8 +559,10 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
         return Effect.die(new LifecycleConflict({ id: row.id }))
       return Effect.gen(function* () {
         // Promotion is a turn boundary, the only safe point to apply a prompt's agent
-        // selection: the projector persists it before the message becomes visible.
-        if (row.type === "user") {
+        // selection: the projector persists it before the message becomes visible. Only
+        // queued rows apply it — a steered row delivers into the running turn, whose
+        // agent must not change mid-flight.
+        if (row.type === "user" && row.delivery === "queue") {
           const payload = decodeUser(row.payload)
           if (payload.agent) {
             const session = yield* db

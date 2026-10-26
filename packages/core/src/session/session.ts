@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 
 import { DateTime, Effect, Fiber, Scope } from "effect"
-import type { Agent } from "@opencode/schema/agent"
+import { Agent } from "../agent.js"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
 import { Event } from "@opencode/schema/event"
@@ -157,22 +157,28 @@ export const make = Effect.fn("Session.make")(function* () {
       Effect.gen(function* () {
         const session = yield* get(sessionID)
         const messageID = input.id ?? SessionMessage.ID.create()
-        // A prompt that selects a different agent must never deliver mid-turn: an agent
-        // change reconfigures permissions and tools, which is only safe at a turn boundary.
-        // Queueing it defers the selection to the idle boundary where promotion applies it.
-        const request =
-          input.agent !== undefined && input.agent !== session.agent ? { ...input, delivery: "queue" as const } : input
         const admitted = yield* Effect.gen(function* () {
           const existing = yield* admission.reconcile({
             id: messageID,
             sessionID: session.id,
             type: "user",
-            delivery: request.delivery ?? "steer",
+            delivery: input.delivery ?? "steer",
           })
           if (existing) return existing
           // Preparation, the staged revert commit and admission share one acquisition of the session's location
           // services, so projections see its config whoever called prompt.
           return yield* Effect.gen(function* () {
+            // A prompt that selects a different agent must never deliver mid-turn: an agent
+            // change reconfigures permissions and tools, which is only safe at a turn boundary.
+            // Queueing it defers the selection to the idle boundary where promotion applies it.
+            // Sessions without a stored agent compare against the configured default, so SDK
+            // sessions still steer prompts carrying that default.
+            const agents = yield* Agent.Service
+            const effective = session.agent ?? (yield* agents.select()).id
+            const request =
+              input.agent !== undefined && input.agent !== effective
+                ? { ...input, delivery: "queue" as const }
+                : input
             const item = yield* restore(SessionPrompt.prepare({ session, messageID, input: request }))
             // Commit a staged revert only after preparation succeeds, before admitting new work.
             if (session.revert) yield* SessionRevert.commit(bus, session)

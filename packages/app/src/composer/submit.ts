@@ -537,13 +537,16 @@ async function applySelection(
   selection: ComposerSelection,
   track?: ModelSelection["trackSessionCommit"],
   beforeModel?: () => Promise<void>,
+  applyAgent = true,
 ) {
   const cancel = track?.(session.id, selection)
 
   try {
     const current = session.current()
 
-    if (current?.agent !== selection.agent) {
+    // The agent can also ride the admitted prompt, where the server defers it to
+    // the delivery boundary; only the model still commits here in that case.
+    if (applyAgent && current?.agent !== selection.agent) {
       await session.api.switchAgent({ sessionID: session.id, agent: selection.agent })
     }
 
@@ -591,7 +594,7 @@ async function sendPrompt(
 
   const agentChanged = session.current()?.agent !== value.selection.agent
   const commit = () =>
-    value.delivery === "steer" && !agentChanged ? applySelection(session, value.selection, track, settle) : settle()
+    value.delivery === "steer" ? applySelection(session, value.selection, track, settle, !agentChanged) : settle()
   // The data layer admits the prompt locally before it commits the selection, so a steer shows as pending while the
   // selection commits. A staged revert settles before admission instead: its committed echo removes every local row
   // from its boundary on. Only an idle session stages one, and a prompt into it starts work rather than showing as

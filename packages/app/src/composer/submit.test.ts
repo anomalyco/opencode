@@ -209,10 +209,10 @@ describe("Composer submission", () => {
 
   test.each([
     // The agent selection rides the admission: the server defers a change to the
-    // delivery boundary, so a differing selection makes no switch requests now.
+    // delivery boundary. The model still switches now, as any steered model change does.
     {
       current: { agent: "plan", model: { id: "old", providerID: "old" } },
-      calls: ["admit", "send"],
+      calls: ["admit", "switch-model", "send"],
     },
     // An unchanged selection sends without a model request to wait on.
     {
@@ -223,7 +223,7 @@ describe("Composer submission", () => {
     // settles before admission, whose row it would also delete.
     {
       current: { agent: "plan", model: { id: "old", providerID: "old" }, revert: { messageID: "msg_reverted" } },
-      calls: ["revert-commit", "admit", "send"],
+      calls: ["revert-commit", "switch-model", "admit", "send"],
     },
   ])("admits the prompt with its selection before sending one captured value: $calls", async (row) => {
     const state = createMemoryComposerState({ prompt: "ship it" }).capture()
@@ -504,9 +504,11 @@ describe("Composer submission", () => {
     expect(attempts).toHaveLength(4)
     expect(new Set(attempts).size).toBe(1)
     // The selection rides the admission, so a retry re-admits the same payload:
-    // two submissions, each admitted twice (the auto-retry after the failure).
-    const submitted = ["admit", "send"]
-    expect(calls).toEqual([...submitted, ...submitted, ...submitted, ...submitted])
+    // two submissions, each admitted twice (the auto-retry after the failure). The
+    // retried admission reuses the first commit, so it switches the model only once.
+    const submitted = ["admit", "switch-model", "send"]
+    const retried = ["admit", "send"]
+    expect(calls).toEqual([...submitted, ...retried, ...submitted, ...retried])
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
     expect(state.context.items()).toMatchObject([
@@ -646,7 +648,7 @@ describe("Composer submission", () => {
       const run = running()
 
       await run.submit()
-      expect(run.calls).toEqual(["admit", "send", "background"])
+      expect(run.calls).toEqual(["admit", "switch-model", "send", "background"])
 
       await run.submit()
       expect(run.calls.filter((call) => call === "background")).toHaveLength(1)

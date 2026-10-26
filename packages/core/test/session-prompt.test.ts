@@ -96,7 +96,7 @@ const locations = makeGlobalNode({
             // Every real instance has its own config, so the caller's never shows through.
             ref.directory === mediaDirectory ? mediaBlob : Config.testLayer([]),
             ref.directory === brokenDirectory ? Layer.effectDiscard(Effect.die("instance boot failed")) : Layer.empty,
-            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
+            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node, Agent.node]), {
               replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
             }),
             Layer.mock(Image.Service, {
@@ -981,6 +981,22 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("steers a prompt carrying the default agent into a session without a stored agent", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+
+      const same = yield* session.prompt({
+        sessionID,
+        text: "Steer the turn",
+        agent: Agent.ID.make("build"),
+        resume: false,
+      })
+
+      expect(same).toMatchObject({ type: "user", delivery: "steer" })
+    }),
+  )
+
   it.effect("wakes execution when an exact prompt retry recovers a committed message", () =>
     Effect.gen(function* () {
       yield* setup
@@ -1537,6 +1553,27 @@ describe("Session.inbox", () => {
       expect(wakeCalls).toEqual([])
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(2)
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxCancelled.type, 1))).toBe(1)
+    }),
+  )
+
+  it.effect("keeps an agent-changing prompt queued when it is steered", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const queued = yield* session.prompt({
+        sessionID,
+        text: "Follow up as reviewer",
+        agent: Agent.ID.make("reviewer"),
+        resume: false,
+      })
+      expect(queued).toMatchObject({ delivery: "queue" })
+
+      yield* session.steerInbox({ sessionID, inboxID: queued.id })
+
+      // Steered promotion would apply the selection mid-turn, so the row stays
+      // queued and its agent applies at the idle boundary instead.
+      expect(yield* session.inbox(sessionID)).toMatchObject([{ id: queued.id, delivery: "queue" }])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(0)
     }),
   )
 })
