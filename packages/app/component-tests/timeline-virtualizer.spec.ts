@@ -59,53 +59,51 @@ for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
 ]) {
-  story(
-    `reveals ready measured rows after an ${input.name} reconnect${input.name === "offset-only" ? " @quarantine" : ""}`,
-    async ({ page }) => {
-      await page.evaluate(
-        async ({ fixture, input }) => {
-          const { mountTimelineVirtualizer } = await import(fixture)
-          mountTimelineVirtualizer(input)
-        },
-        { fixture, input },
-      )
-      const root = page.getByTestId("timeline-virtualizer-fixture")
-      const content = root.locator("[data-timeline-virtual-content]")
-      await expect(root).toHaveAttribute("data-observed-height", "180")
-      await expect(content).toHaveCSS("visibility", "hidden")
-      await expect(content.locator("[data-timeline-key]")).toHaveCount(1)
+  story(`reveals ready measured rows after an ${input.name} reconnect`, async ({ page }) => {
+    await page.evaluate(
+      async ({ fixture, input }) => {
+        const { mountTimelineVirtualizer } = await import(fixture)
+        mountTimelineVirtualizer(input)
+      },
+      { fixture, input },
+    )
+    const root = page.getByTestId("timeline-virtualizer-fixture")
+    const content = root.locator("[data-timeline-virtual-content]")
+    await expect(root).toHaveAttribute("data-observed-height", "180")
+    await expect(content).toHaveCSS("visibility", "hidden")
+    await expect(content.locator("[data-timeline-key]")).toHaveCount(1)
 
-      if (input.name === "offset-only") {
-        await expect(root).toHaveAttribute("data-last-scroll-top", "484")
-        await root.locator("[data-scrollable]").dispatchEvent("wheel", { deltaY: -1 })
-        await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
-      }
+    if (input.name === "offset-only") {
+      // Pinned to the end: the 600px row and the virtualizer's 82px tail, less the 180px viewport.
+      await expect(root).toHaveAttribute("data-last-scroll-top", "502")
+      await root.locator("[data-scrollable]").dispatchEvent("wheel", { deltaY: -1 })
+      await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
+    }
 
-      if (input.name === "zero-height") {
-        await root.getByRole("button", { name: "Hide viewport", exact: true }).click()
-        // Wait for ResizeObserver to clear the actual range, not just for display:none.
-        await expect(root).toHaveAttribute("data-observed-height", "0")
-        await expect(content.locator("[data-timeline-key]")).toHaveCount(0)
-      }
+    if (input.name === "zero-height") {
+      await root.getByRole("button", { name: "Hide viewport", exact: true }).click()
+      // Wait for ResizeObserver to clear the actual range, not just for display:none.
+      await expect(root).toHaveAttribute("data-observed-height", "0")
+      await expect(content.locator("[data-timeline-key]")).toHaveCount(0)
+    }
 
-      await expect(root).not.toHaveAttribute("data-first-reveal")
-      const resizes = await root.getAttribute("data-viewport-resizes")
-      await root.getByRole("button", { name: "Reconnect ready rows", exact: true }).click()
-      await expect(content).toHaveCSS("visibility", "visible")
-      await expect(root).toHaveAttribute("data-first-reveal", /.+/)
-      expect(await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))).toMatchObject({
-        rows: input.count === 1 ? [0] : [0, 1, 2, 3],
-        pendingMarkdown: 0,
-        clipped: [],
-        viewportHeight: 180,
-        ...input.reveal,
-      })
+    await expect(root).not.toHaveAttribute("data-first-reveal")
+    const resizes = await root.getAttribute("data-viewport-resizes")
+    await root.getByRole("button", { name: "Reconnect ready rows", exact: true }).click()
+    await expect(content).toHaveCSS("visibility", "visible")
+    await expect(root).toHaveAttribute("data-first-reveal", /.+/)
+    expect(await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))).toMatchObject({
+      rows: input.count === 1 ? [0] : [0, 1, 2, 3],
+      pendingMarkdown: 0,
+      clipped: [],
+      viewportHeight: 180,
+      ...input.reveal,
+    })
 
-      if (input.name === "offset-only") {
-        // This repair must not depend on another native scroll or resize delivery.
-        await expect(root).toHaveAttribute("data-scrolls", "0")
-        await expect(root).toHaveAttribute("data-viewport-resizes", resizes!)
-      }
-    },
-  )
+    if (input.name === "offset-only") {
+      // This repair must not depend on another native scroll or resize delivery.
+      await expect(root).toHaveAttribute("data-scrolls", "0")
+      await expect(root).toHaveAttribute("data-viewport-resizes", resizes!)
+    }
+  })
 }
