@@ -341,7 +341,12 @@ interface LoweringOptions {
   readonly assistant?: (source: LLMRequest["messages"][number], message: OpenAIChatMessage) => OpenAIChatMessage
 }
 
-const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStrictMode: boolean): OpenAIChatTool => ({
+const lowerTool = (
+  tool: ToolDefinition,
+  options: LoweringOptions,
+  supportsStrictMode: boolean,
+  supportsToolCacheControl: boolean,
+): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
@@ -349,7 +354,7 @@ const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStric
     parameters: tool.inputSchema,
     ...(supportsStrictMode ? { strict: false } : {}),
   },
-  cache_control: options.cacheControl?.(tool.cache),
+  cache_control: supportsToolCacheControl ? options.cacheControl?.(tool.cache) : undefined,
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -808,6 +813,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const supportsStore = request.model.compatibility?.supportsStore ?? detectSupportsStore(provider, baseURL)
   const supportsStrictMode =
     request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
+  const supportsToolCacheControl = request.model.compatibility?.supportsToolCacheControl !== false
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
@@ -821,7 +827,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         ? hasHistory
           ? []
           : undefined
-        : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode)),
+        : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode, supportsToolCacheControl)),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...((request.model.compatibility?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),

@@ -236,6 +236,8 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
   /** Supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.optional(Schema.Boolean),
+  /** Supports cache_control on Anthropic tool definitions. Defaults to true. */
+  supportsToolCacheControl: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {

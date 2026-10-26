@@ -650,6 +650,7 @@ export type ModelCompatibility = {
   cacheFormat?: ModelCacheFormat
   supportsThinkingBlockBinding?: boolean
   supportsEffortUpdates?: boolean
+  supportsToolCacheControl?: boolean
 }
 
 export type ProviderCompatibility = {
@@ -661,6 +662,7 @@ export type ProviderCompatibility = {
   supportsPromptCacheKey?: boolean
   streamUsage?: boolean
   cacheFormat?: ModelCacheFormat
+  supportsToolCacheControl?: boolean
 }
 
 export type ModelCost = {

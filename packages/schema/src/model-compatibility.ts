@@ -33,6 +33,8 @@ export const Compatibility = Schema.Struct({
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
   /** Supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.Boolean.pipe(optional),
+  /** Supports cache_control on Anthropic tool definitions. Defaults to true. */
+  supportsToolCacheControl: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 // Provider defaults inherited by its models. Model-version features stay model-only.

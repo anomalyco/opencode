@@ -162,8 +162,8 @@ const markMessages = (
   return next
 }
 
-const countHints = (request: LLMRequest) =>
-  countToolHints(request.tools) +
+const countHints = (request: LLMRequest, supportsToolCacheControl: boolean) =>
+  (supportsToolCacheControl ? countToolHints(request.tools) : 0) +
   request.system.reduce((count, part) => count + (part.cache === undefined ? 0 : 1), 0) +
   request.messages.reduce(
     (count, message) =>
@@ -180,8 +180,9 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)
-  const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
-  const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
+  const supportsToolCacheControl = request.model.compatibility?.supportsToolCacheControl !== false
+  const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request, supportsToolCacheControl)) }
+  const tools = policy.tools && supportsToolCacheControl ? markLastTool(request.tools, hint, budget) : request.tools
   const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
 

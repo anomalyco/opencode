@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, CompactionPart, LLM, Message, ProviderID, ToolCallPart } from "../src/effect.js"
+import { CacheHint, CompactionPart, LanguageModel, LLM, Message, ProviderID, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {
@@ -350,6 +350,102 @@ describe("applyCachePolicy", () => {
       expect(prepared.body).toMatchObject({
         tools: [{ name: "t1", cache_control: { type: "ephemeral" } }],
         system: [{ type: "text", text: "Sys", cache_control: undefined }],
+      })
+    }),
+  )
+
+  it.effect("tool cache compatibility preserves system and message markers", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(anthropicModel, {
+        compatibility: { supportsToolCacheControl: false },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: "Sys",
+          tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+          cache: "auto",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ name: "t1", cache_control: undefined }],
+        system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
+      })
+    }),
+  )
+
+  it.effect("tool cache compatibility suppresses manual tool hints", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(anthropicModel, {
+        compatibility: { supportsToolCacheControl: false },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral" }),
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({ tools: [{ name: "t1", cache_control: undefined }] })
+    }),
+  )
+
+  it.effect("tool cache compatibility suppresses manual tool hints on OpenAI-compatible routes", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(openaiModel, {
+        compatibility: { cacheFormat: "anthropic", supportsToolCacheControl: false },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral" }),
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ function: { name: "t1" }, cache_control: undefined }],
+      })
+    }),
+  )
+
+  it.effect("tool cache compatibility keeps tool hints by default on OpenAI-compatible routes", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(openaiModel, {
+        compatibility: { cacheFormat: "anthropic" },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral" }),
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ function: { name: "t1" }, cache_control: { type: "ephemeral" } }],
       })
     }),
   )
