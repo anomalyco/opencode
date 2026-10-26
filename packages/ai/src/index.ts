@@ -137,6 +137,7 @@ export const make = (options: Options = {}) => {
         run(LLM.generate(input), options),
       stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
         iterate(LLM.stream(input), options),
+      /** Stream model calls, running their tool calls, until the model stops calling tools or `stopWhen` is true. */
       loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: RunOptions) =>
         iterate(LLM.loop(input), options),
     },

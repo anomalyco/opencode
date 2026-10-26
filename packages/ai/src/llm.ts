@@ -58,26 +58,26 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
   "tools"
 > & {
   readonly tools: ExecutableTools
-  /** Safety cap on model calls. Defaults to 10. */
-  readonly maxSteps?: number
+  /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
+  readonly stopWhen?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
 }
 
 /**
  * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls or
- * `maxSteps` is reached. Each step's `step-start` and `step-finish` carry its step index.
+ * `stopWhen` returns `true`. Each step's `step-start` and `step-finish` carry its step index.
  */
 export function loop<const Model extends LanguageModel>(
   input: LoopInput<Model>,
   options?: StreamOptions,
 ): Stream.Stream<LLMEvent, AIError, Service>
 export function loop(input: LoopInput, options?: StreamOptions) {
-  const { tools, maxSteps = 10, ...rest } = input
-  const step = (request: LLMRequest, index: number): Stream.Stream<LLMEvent, AIError, Service> =>
+  const { tools, stopWhen, ...rest } = input
+  const step = (request: LLMRequest, steps: ReadonlyArray<LLMResponse>): Stream.Stream<LLMEvent, AIError, Service> =>
     Stream.suspend(() => {
       const events: LLMEvent[] = []
       return LLMClient.stream(request, options).pipe(
         Stream.map((event) =>
-          event.type === "step-start" || event.type === "step-finish" ? { ...event, index } : event,
+          event.type === "step-start" || event.type === "step-finish" ? { ...event, index: steps.length } : event,
         ),
         Stream.tap((event) => Effect.sync(() => events.push(event))),
         Stream.concat(
@@ -85,7 +85,9 @@ export function loop(input: LoopInput, options?: StreamOptions) {
             Effect.gen(function* () {
               const response = LLMResponse.fromEvents(events)
               const calls = response?.toolCalls.filter((call) => call.providerExecuted !== true) ?? []
-              if (!response || calls.length === 0 || index + 1 >= maxSteps) return Stream.empty
+              if (!response || calls.length === 0) return Stream.empty
+              const done = [...steps, response]
+              if (stopWhen?.({ steps: done })) return Stream.empty
               const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call), {
                 concurrency: "unbounded",
               })
@@ -105,7 +107,7 @@ export function loop(input: LoopInput, options?: StreamOptions) {
                 ],
               })
               return Stream.fromIterable(results.flatMap((result) => result.events)).pipe(
-                Stream.concat(step(next, index + 1)),
+                Stream.concat(step(next, done)),
               )
             }),
           ),
@@ -113,7 +115,7 @@ export function loop(input: LoopInput, options?: StreamOptions) {
       )
     })
   return Stream.unwrap(
-    requestEffect({ ...rest, tools: toDefinitions(tools) }).pipe(Effect.map((request) => step(request, 0))),
+    requestEffect({ ...rest, tools: toDefinitions(tools) }).pipe(Effect.map((request) => step(request, []))),
   )
 }
 

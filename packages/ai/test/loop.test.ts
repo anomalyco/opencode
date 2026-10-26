@@ -16,8 +16,8 @@ const read_file = Tool.make({
     path === "missing.txt" ? new ToolFailure({ message: `No such file: ${path}` }) : Effect.succeed("hello"),
 })
 
-const collect = (maxSteps?: number) =>
-  LLM.loop({ model, prompt: "Read the file.", tools: { read_file }, maxSteps }).pipe(
+const collect = (stopWhen?: LLM.LoopInput["stopWhen"]) =>
+  LLM.loop({ model, prompt: "Read the file.", tools: { read_file }, stopWhen }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )
@@ -78,13 +78,19 @@ describe("LLM.loop", () => {
     }),
   )
 
-  it.effect("stops after maxSteps model calls without running the last step's tools", () =>
+  it.effect("stops when stopWhen returns true without running that step's tools", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       yield* client.always(TestLLM.tool("call-1", "read_file", { path: "a.txt" }))
+      const seen: number[] = []
 
-      const events = yield* collect(2)
+      const events = yield* collect(({ steps }) => {
+        seen.push(steps.length)
+        expect(steps.at(-1)?.toolCalls.map((call) => call.id)).toEqual(["call-1"])
+        return steps.length >= 2
+      })
 
+      expect(seen).toEqual([1, 2])
       expect(yield* client.requests()).toHaveLength(2)
       expect(events.filter(LLMEvent.is.toolResult)).toHaveLength(1)
       expect(events.at(-1)?.type).toBe("finish")
