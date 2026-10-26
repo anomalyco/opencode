@@ -5057,18 +5057,28 @@
             "explode": true
           },
           {
-            "name": "type",
+            "name": "types",
             "in": "query",
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Model.Type"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Model.Type"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Model.Type"
+                      }
+                    }
+                  ]
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Model type to list. Defaults to chat, the only type offered for sessions."
+              "description": "Only list models of these types. Defaults to chat, the only type offered for sessions."
             },
             "required": false
           }
@@ -5139,7 +5149,7 @@
             }
           }
         },
-        "description": "Retrieve the current snapshot of available models of one type, chat by default, ordered by release date. The snapshot may precede initial plugin settlement.",
+        "description": "Retrieve the current snapshot of available models of the requested types, chat by default, ordered by release date within each type. The snapshot may precede initial plugin settlement.",
         "summary": "List models"
       }
     },

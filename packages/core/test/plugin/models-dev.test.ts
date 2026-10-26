@@ -758,9 +758,12 @@ describe("ModelsDevPlugin", () => {
       expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
       expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
       expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
-      expect(ids(yield* modelState.available("decision"))).toEqual([Model.ID.make("jev-1.13")])
-      expect(ids(yield* modelState.available("image"))).toEqual([Model.ID.make("gpt-image-2")])
-      expect(yield* modelState.available("embedding")).toEqual([])
+      expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
+      expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
+      expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
+        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
+      )
+      expect(yield* modelState.available(["embedding"])).toEqual([])
     }),
   )
 

@@ -230,7 +230,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
     },
     model: {
-      list: () => response(models.available()),
+      list: (input) => response(models.available(input?.types)),
       default: () => response(models.default()),
       reload: models.reload,
       transform: (callback) =>

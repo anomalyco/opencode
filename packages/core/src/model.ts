@@ -77,8 +77,8 @@ export interface Editor {
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (providerID: Provider.ID, modelID: ID) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<readonly Info[]>
-  /** Enabled chat models, or enabled models of another type. Only chat models are offered for sessions. */
-  readonly available: (type?: Model.Type) => Effect.Effect<readonly Info[]>
+  /** Enabled models of the given types, chat by default. Only chat models are offered for sessions. */
+  readonly available: (types?: readonly Model.Type[]) => Effect.Effect<readonly Info[]>
   readonly default: () => Effect.Effect<Info | undefined>
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>
 }
@@ -286,10 +286,14 @@ const layer = Layer.effect(
         read().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
       ),
       all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
-      available: Effect.fn("Model.available")((type?: Model.Type) =>
+      available: Effect.fn("Model.available")((types?: readonly Model.Type[]) =>
         read().pipe(
           Effect.map((value) =>
-            type === undefined || type === "chat" ? value.available : (value.other.get(type) ?? []),
+            types === undefined
+              ? value.available
+              : [...new Set(types)].flatMap((type) =>
+                  type === "chat" ? value.available : (value.other.get(type) ?? []),
+                ),
           ),
         ),
       ),

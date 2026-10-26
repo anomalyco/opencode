@@ -12,7 +12,7 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
         Effect.fn(function* (ctx) {
           yield* awaitPlugins
           const models = yield* Model.Service
-          return yield* response(models.available(ctx.query.type))
+          return yield* response(models.available(ctx.query.types))
         }),
       )
       .handle(

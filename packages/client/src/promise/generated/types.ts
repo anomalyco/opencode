@@ -3618,7 +3618,7 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly type?: ("chat" | "decision" | "image" | (string & {})) | undefined
+  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | (string & {})> | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
