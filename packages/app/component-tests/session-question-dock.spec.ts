@@ -115,6 +115,44 @@ story("moves only the highlight with Up and Down and marks it with Space", async
   await expect(wide).toBeChecked()
 })
 
+story("shows the highlight only for hover or the arrow keys, never for a click", async ({ mount, page }) => {
+  const component = await mount("app-current-session-surface--question-request")
+  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const focused = question.getByRole("radio", { name: /Focused/ })
+  const wide = question.getByRole("radio", { name: /Wide/ })
+  const highlight = question.locator('[data-slot="question-highlight"]')
+  const clip = () => highlight.evaluate((element) => element.style.clipPath)
+  await expect(focused).toBeFocused()
+  await expect(highlight).toBeHidden()
+
+  await wide.hover()
+  await expect(highlight).toBeVisible()
+  const hovered = await clip()
+  await expect.poll(() => highlight.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe("0s")
+
+  await wide.click()
+  await expect(wide).toBeChecked()
+  await expect(highlight).toBeVisible()
+  expect(await clip()).toBe(hovered)
+
+  await page.mouse.move(0, 0)
+  await expect(highlight).toBeHidden()
+
+  await focused.click()
+  await page.mouse.move(0, 0)
+  await expect(focused).toBeChecked()
+  await expect(highlight).toBeHidden()
+
+  await page.keyboard.press("ArrowDown")
+  await expect(highlight).toBeVisible()
+  await page.mouse.move(0, 0)
+  await expect(highlight).toBeVisible()
+
+  await focused.hover()
+  await page.mouse.move(0, 0)
+  await expect(highlight).toBeHidden()
+})
+
 story("Enter picks the highlighted answer and moves on", async ({ mount, page }) => {
   const component = await mount("app-current-session-surface--question-request")
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')

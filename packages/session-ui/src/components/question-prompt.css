@@ -213,8 +213,8 @@
     isolation: isolate;
   }
 
-  /* One highlight for the whole list, painted under the answers. It glides to the highlighted answer by its clip; the
-     pick itself shows only on the answer's key. */
+  /* One highlight for the whole list, painted under the answers. It jumps to the hovered or keyboard-highlighted answer
+     by its clip, and shows only while the pointer hovers or the keys drive; the pick itself shows only on the key. */
   [data-slot="question-highlight"] {
     position: absolute;
     inset: 0;
@@ -224,7 +224,10 @@
       var(--v2-background-bg-layer-01);
     clip-path: inset(0 0 100% round 6px);
     pointer-events: none;
-    transition: clip-path var(--question-settle) var(--question-spring);
+
+    &[data-shown="false"] {
+      visibility: hidden;
+    }
   }
 
   [data-slot="question-option"] {
@@ -474,10 +477,6 @@
 
   /* Reduced motion keeps the fades and drops the movement. */
   :root[data-motion="reduce"] & {
-    [data-slot="question-highlight"] {
-      transition: none;
-    }
-
     [data-slot="question-progress-bar"]::before {
       transform: none;
       opacity: 0;

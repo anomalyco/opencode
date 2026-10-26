@@ -114,6 +114,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     customOn: cached?.customOn ?? [],
     editing: false,
     focus: 0,
+    lit: "none" as "none" | "hover" | "keys",
     minimized: false,
     listHeight: 0,
   })
@@ -270,8 +271,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     onCleanup(() => observer.disconnect())
   })
 
-  // One highlight card glides between answers by its clip, so only one answer ever looks highlighted. It lands at once
-  // on a new question, and under reduced motion it fades in at its new answer instead of gliding.
+  // One highlight card jumps between answers by its clip, so only one answer ever looks highlighted. Under reduced
+  // motion it fades in at its new answer.
   let placed = { tab: -1, index: -1 }
   createEffect(() => {
     const el = highlightRef
@@ -280,24 +281,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     void store.listHeight
 
     if (!el || !row || !listRef) return
-    const clip = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
-    const fresh = placed.tab !== store.tab
-    const moved = fresh || placed.index !== index
-    const reduced = prefersReducedMotion()
+    const moved = placed.tab !== store.tab || placed.index !== index
     placed = { tab: store.tab, index }
+    el.style.clipPath = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
 
-    if (!fresh && !reduced) {
-      el.style.clipPath = clip
-
-      return
-    }
-
-    el.style.transition = "none"
-    el.style.clipPath = clip
-    void el.offsetHeight
-    el.style.removeProperty("transition")
-
-    if (reduced && moved && el.animate)
+    if (prefersReducedMotion() && moved && el.animate)
       el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "linear" })
   })
 
@@ -415,6 +403,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   // The pointer moves the highlight like the arrows do, but never takes focus from the custom answer's field.
   const hover = (i: number, event: PointerEvent) => {
     if (event.pointerType !== "mouse" || store.editing || sending()) return
+    setStore("lit", "hover")
     setStore("focus", i)
   }
 
@@ -483,6 +472,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     }
 
     if (store.minimized || sending()) return
+
+    setStore("lit", "keys")
 
     if (intent.type === "number") {
       event.preventDefault()
@@ -585,6 +576,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     // The highlight's index moves before the question does, so it lands on the new question's answer instead of
     // gliding from the old one.
     setStore("focus", pickFocus(tab))
+    if (store.lit === "hover") setStore("lit", "none")
     setStore("tab", tab)
     setStore("editing", false)
 
@@ -755,8 +747,19 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
             if (where === "option" || where === "custom") event.preventDefault()
           }}
         >
-          <div data-slot="question-options-list" ref={(el) => (listRef = el)}>
-            <span data-slot="question-highlight" ref={(el) => (highlightRef = el)} aria-hidden="true" />
+          <div
+            data-slot="question-options-list"
+            ref={(el) => (listRef = el)}
+            onPointerLeave={() => {
+              if (store.lit === "hover") setStore("lit", "none")
+            }}
+          >
+            <span
+              data-slot="question-highlight"
+              data-shown={store.lit !== "none"}
+              ref={(el) => (highlightRef = el)}
+              aria-hidden="true"
+            />
             <For each={options()}>
               {(opt, i) => (
                 <Option
