@@ -168,16 +168,20 @@ export const make = Effect.gen(function* () {
 
         if (overflowFailure) yield* publisher.publish(overflowFailure)
         const recorded = publisher.record()
-        const unknownFinish =
-          Exit.isSuccess(stream) && recorded.finish?.finish === "unknown"
+        const invalidFinish =
+          Exit.isSuccess(stream) &&
+          (recorded.finish?.finish === "unknown" || (recorded.finish?.finish === "stop" && !recorded.hasContent))
             ? new AIError({
                 reason: new InvalidProviderOutputError({
-                  message: "The provider response ended with an unknown finish reason.",
+                  message:
+                    recorded.finish?.finish === "unknown"
+                      ? "The provider response ended with an unknown finish reason."
+                      : "The provider response ended without text or tool calls.",
                   classification: "incomplete-stream",
                 }),
               })
             : undefined
-        const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
+        const llmFailure = streamFailure instanceof AIError ? streamFailure : invalidFinish
         const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
         if (
           input.recoverContinuation &&
