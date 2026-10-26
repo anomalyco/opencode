@@ -123,6 +123,7 @@ export const responsesModel: ProviderPackage.Definition<
   Settings<ResponsesOptionsInput>,
   ResponsesOptionsInput
 >["model"] = (id, input) => fromSettings(input).responses(id)
+export const imageModel = (id: string, input: Settings) => fromSettings(input).image(id)
 
 function fromSettings(input: Settings<Config["providerOptions"]>) {
   const { body, ...rest } = input

@@ -259,6 +259,8 @@ export const responsesModel: ProviderPackage.Definition<Settings, ProviderOption
 ) => fromSettings(settings).responses(modelID)
 export const chatModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
   fromSettings(settings).chat(modelID)
+export const imageModel = (modelID: string, settings: Settings) => fromSettings(settings).image(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
 
 function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
   return configure({

@@ -65,16 +65,18 @@ export const provider = configure()
 export const image = provider.image
 export const chat = provider.chat
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
+export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => fromSettings(settings).image(modelID)
+
+function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return configure({
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  })
+}
 
 export * as ZAI from "./zai.js"

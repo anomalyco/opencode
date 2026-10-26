@@ -94,7 +94,12 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => fromSettings(settings).image(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
+
+function fromSettings(settings: Settings) {
   const { accountId: _, apiKey, baseURL: _url, body, headers, ...providerOptions } = settings
   return configure({
     apiKey,
@@ -102,7 +107,7 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  })
 }
 
 export * as CloudflareWorkersAI from "./cloudflare-workers-ai.js"

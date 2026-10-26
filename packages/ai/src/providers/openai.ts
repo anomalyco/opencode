@@ -178,6 +178,8 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptio
   modelID,
   settings,
 ) => configure(config(settings)).chat(modelID)
+export const imageModel = (modelID: string, settings: Settings) => configure(config(settings)).image(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => configure(config(settings)).decision(modelID)
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image

@@ -47,7 +47,9 @@ const decisionProtocol = DecisionRoute.protocol({
   id: "baseten-system-one",
   body: {
     from: (request) =>
-      SystemOne.encodeBody(request, "state.messages").pipe(Effect.map((body) => ({ ...body, model: request.model.id }))),
+      SystemOne.encodeBody(request, "state.messages").pipe(
+        Effect.map((body) => ({ ...body, model: request.model.id })),
+      ),
   },
 })
 
@@ -81,16 +83,18 @@ export const configure = (input: LanguageModelOptions = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).model(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
+
+function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return configure({
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  })
+}
 
 export * as Baseten from "./baseten.js"

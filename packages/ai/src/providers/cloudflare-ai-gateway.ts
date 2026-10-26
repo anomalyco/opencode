@@ -162,24 +162,25 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  {
-    accountId,
-    apiKey,
-    baseURL: configuredBaseURL,
-    body,
-    cacheKey,
-    cacheTtl,
-    collectLog,
-    gatewayApiKey,
-    gatewayId,
-    headers,
-    metadata,
-    skipCache,
-    ...providerOptions
-  },
-) => {
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).model(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
+
+function fromSettings({
+  accountId,
+  apiKey,
+  baseURL: configuredBaseURL,
+  body,
+  cacheKey,
+  cacheTtl,
+  collectLog,
+  gatewayApiKey,
+  gatewayId,
+  headers,
+  metadata,
+  skipCache,
+  ...providerOptions
+}: Settings) {
   const connection = configuredBaseURL === undefined ? { accountId: accountId ?? "" } : { baseURL: configuredBaseURL }
   return configure({
     ...connection,
@@ -194,7 +195,7 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     metadata,
     providerOptions,
     skipCache,
-  }).model(modelID)
+  })
 }
 
 export * as CloudflareAIGateway from "./cloudflare-ai-gateway.js"
