@@ -34,14 +34,15 @@ async function firstLine(enabled: boolean) {
   )
   try {
     await app.renderOnce()
-    return app.captureCharFrame().split("\n")[0]!
+    const f = app.captureCharFrame()
+    return f.split("\n")[0]!
   } finally {
     app.renderer.destroy()
   }
 }
 
 test("the prompt starts with a dollar sign in screen reader mode", async () => {
-  expect(await firstLine(true)).toContain("$ ")
+  expect(await firstLine(true)).toStartWith("$ ")
 })
 
 test("the prompt has no dollar sign outside screen reader mode", async () => {

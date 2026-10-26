@@ -269,10 +269,10 @@ export function RunPromptBody(props: {
   return (
     <box width="100%" paddingTop={props.layout().padding} paddingBottom={props.layout().padding}>
       <box
-        border={["left"]}
+        border={screenReader.enabled ? [] : ["left"]}
         borderColor={props.rail()}
-        customBorderChars={{ ...EmptyBorder, vertical: props.mono ? "|" : "┃" }}
-        paddingLeft={1}
+        customBorderChars={screenReader.enabled ? undefined : { ...EmptyBorder, vertical: props.mono ? "|" : "┃" }}
+        paddingLeft={screenReader.enabled ? 0 : 1}
         paddingRight={2}
         onSizeChange={props.onSizeChange}
       >
