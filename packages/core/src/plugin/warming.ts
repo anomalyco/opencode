@@ -3,7 +3,7 @@ export * as WarmingPlugin from "./warming.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Session } from "@opencode/schema/session"
-import { Clock, Duration, Effect, Scope } from "effect"
+import { Clock, Duration, Effect, Scope, Stream } from "effect"
 import { Config } from "../config.js"
 
 const defaults = {
@@ -28,6 +28,25 @@ export const Plugin = define({
 
     const scope = yield* Scope.Scope
     const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
+    // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
+    const requesting = new Set<Session.ID>()
+    yield* ctx.event
+      .subscribe({ types: ["session.step.started", "session.step.streamed", "session.step.failed"] })
+      .pipe(
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            if (event.type === "session.step.started") {
+              requesting.add(event.data.sessionID)
+              return
+            }
+            requesting.delete(event.data.sessionID)
+            // Count the next interval from the end of the response, not from when a long request started.
+            const current = sessions.get(event.data.sessionID)
+            if (current) current.last = yield* Clock.currentTimeMillis
+          }),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
     const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
       function* (sessionID) {
         const current = sessions.get(sessionID)
@@ -42,6 +61,10 @@ export const Plugin = define({
         if (now >= current.expires) {
           sessions.delete(sessionID)
           return
+        }
+        if (requesting.has(sessionID)) {
+          yield* Effect.sleep(current.settings.interval)
+          return yield* loop(sessionID)
         }
 
         const last = current.last
