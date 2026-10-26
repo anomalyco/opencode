@@ -109,6 +109,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           port,
           cors: options.cors ?? config.cors,
           password,
+          // Service and stdio clients authenticate with the default username, so only a manually run server adopts it.
+          username: options.mode === "default" ? yield* Env.username : undefined,
           pty: { handoff },
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {

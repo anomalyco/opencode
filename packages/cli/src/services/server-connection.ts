@@ -31,7 +31,9 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     const password = yield* Env.password
     const endpoint = {
       url: server,
-      auth: password ? { type: "basic" as const, username: "opencode", password: Redacted.value(password) } : undefined,
+      auth: password
+        ? { type: "basic" as const, username: yield* Env.username, password: Redacted.value(password) }
+        : undefined,
     } satisfies Endpoint
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const health = yield* Effect.tryPromise({
@@ -94,7 +96,7 @@ function connectError(endpoint: Endpoint, cause: unknown) {
     return new Error(
       endpoint.auth === undefined
         ? `Server at ${endpoint.url} requires a password; set OPENCODE_PASSWORD`
-        : `Server at ${endpoint.url} rejected the password`,
+        : `Server at ${endpoint.url} rejected the username or password`,
       { cause },
     )
   }
