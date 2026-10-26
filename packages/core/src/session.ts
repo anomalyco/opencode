@@ -405,24 +405,31 @@ const layer = Layer.effect(
           input.cursor === undefined
             ? input
             : yield* ListCursor.parse(input.cursor).pipe(Effect.mapError(() => new InvalidListCursorError()))
-        const data = yield* store.list({ ...filter, limit: input.limit ?? DefaultListLimit })
+        const limit = input.limit ?? DefaultListLimit
+        const backward = "anchor" in filter && filter.anchor.direction === "previous"
+        // One extra row reveals whether another page exists; a backward page arrives reversed, so it sits first.
+        const rows = yield* store.list({ ...filter, limit: limit + 1 })
+        const more = rows.length > limit
+        const data = more && backward ? rows.slice(1) : rows.slice(0, limit)
         const first = data[0]
         const last = data.at(-1)
         return {
           data,
           cursor: {
-            previous: first
-              ? ListCursor.make({
-                  ...filter,
-                  anchor: { id: first.id, time: DateTime.toEpochMillis(first.time.updated), direction: "previous" },
-                })
-              : undefined,
-            next: last
-              ? ListCursor.make({
-                  ...filter,
-                  anchor: { id: last.id, time: DateTime.toEpochMillis(last.time.updated), direction: "next" },
-                })
-              : undefined,
+            previous:
+              first && (more || !backward)
+                ? ListCursor.make({
+                    ...filter,
+                    anchor: { id: first.id, time: DateTime.toEpochMillis(first.time.updated), direction: "previous" },
+                  })
+                : undefined,
+            next:
+              last && (more || backward)
+                ? ListCursor.make({
+                    ...filter,
+                    anchor: { id: last.id, time: DateTime.toEpochMillis(last.time.updated), direction: "next" },
+                  })
+                : undefined,
           },
         }
       }),
