@@ -754,7 +754,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       : {
           ...track(live, -dir * reach, moving, options, v.launch()),
           tab: store.tab,
-          els: [copy(detailsRef, detailsFrame), copy(listRef, optionsTrack)],
+          // The answers box scrolls back to the top for the new question, so the copy keeps its place on screen.
+          els: [copy(detailsRef, detailsFrame), copy(listRef, optionsTrack, -(optionsRef?.scrollTop ?? 0))],
           details: content.details,
           list: content.list,
         }
@@ -921,6 +922,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       setStore("editing", false)
     })
     optsRef.length = options().length
+
+    if (optionsRef) optionsRef.scrollTop = 0
 
     const reduced = !questionMotion()
 
@@ -1119,22 +1122,22 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                   </Button>
                 </Tooltip>
               </div>
-              {/* Next and Submit share one place; the one not in use lies under it, inert. */}
-              <div data-slot="question-advance">
-                <div
-                  data-slot="question-advance-face"
-                  data-active={!last()}
-                  inert={last()}
-                  ref={(el) => (nextFace = el)}
-                >
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <>
-                        {language.t("ui.common.next")}
-                        <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
-                      </>
-                    }
+              {/* Next and Submit share one place and one tooltip; the one not in use lies under it, inert. */}
+              <Tooltip
+                placement="top"
+                value={
+                  <>
+                    {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
+                    <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
+                  </>
+                }
+              >
+                <div data-slot="question-advance">
+                  <div
+                    data-slot="question-advance-face"
+                    data-active={!last()}
+                    inert={last()}
+                    ref={(el) => (nextFace = el)}
                   >
                     <Button
                       variant="neutral"
@@ -1150,22 +1153,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                         </span>
                       </span>
                     </Button>
-                  </Tooltip>
-                </div>
-                <div
-                  data-slot="question-advance-face"
-                  data-active={last()}
-                  inert={!last()}
-                  ref={(el) => (submitFace = el)}
-                >
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <>
-                        {language.t("ui.common.submit")}
-                        <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
-                      </>
-                    }
+                  </div>
+                  <div
+                    data-slot="question-advance-face"
+                    data-active={last()}
+                    inert={!last()}
+                    ref={(el) => (submitFace = el)}
                   >
                     <Button
                       variant="submit"
@@ -1181,9 +1174,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                         </span>
                       </span>
                     </Button>
-                  </Tooltip>
+                  </div>
                 </div>
-              </div>
+              </Tooltip>
             </div>
           </>
         }
@@ -1419,7 +1412,7 @@ function mask(el: HTMLElement, cut: number, shown: number, sliding: boolean) {
 
 // A still copy of `el` laid over it in `host`, after the live content so it never comes first in the DOM, inert and
 // hidden from assistive tech. Ids are dropped so they stay unique, and typed text is carried over.
-function copy(el: HTMLElement, host: HTMLElement) {
+function copy(el: HTMLElement, host: HTMLElement, top = 0) {
   // SAFETY: a deep clone of an element is an element of the same kind.
   const clone = el.cloneNode(true) as HTMLElement
   clone.removeAttribute("id")
@@ -1432,7 +1425,7 @@ function copy(el: HTMLElement, host: HTMLElement) {
   clone.inert = true
   clone.setAttribute("aria-hidden", "true")
   clone.style.position = "absolute"
-  clone.style.top = "0"
+  clone.style.top = `${top}px`
   clone.style.insetInline = "var(--question-gutter)"
   clone.style.pointerEvents = "none"
   host.append(clone)

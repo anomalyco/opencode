@@ -259,7 +259,8 @@ story("switches questions with Left and Right outside the text field", async ({ 
 // question text is moved, scaled and blurred, how far the count's last digit is rolled (in digit heights, down
 // positive), where the progress row's bar is, and the footer: how visible Back is and whether a click at its middle
 // reaches it, how visible the Next and Submit faces are, how visible the fainter of their two words is, and how wide
-// the button they share shows.
+// the button they share shows. It also keeps the header's text and, for the count's last digit, each digit drawn and
+// how visible it is.
 const play = (question: Locator, keys: { key: string; after?: number }[]) =>
   question.evaluate(async (root, keys) => {
     const opacity = (el: Element) => {
@@ -275,6 +276,22 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
       [...root.querySelectorAll(`[data-slot="${slot}"]`)].reduce((sum, el) => sum + opacity(el), 0)
 
     const live = () => root.querySelector('[data-slot="question-details"]:not([data-ghost])')
+
+    const mask = () =>
+      ["question-details-frame", "question-options"].some((slot) =>
+        (root.querySelector<HTMLElement>(`[data-slot="${slot}"]`)?.style.maskImage ?? "").includes("to right"),
+      )
+
+    const glyphs = () =>
+      [
+        ...root.querySelectorAll<HTMLElement>(
+          '[data-component="rolling-number"] [data-slot="rolling-number-digit"]:last-child [data-slot="rolling-number-glyph"]',
+        ),
+      ].flatMap((el) => {
+        const text = el.dataset.leaving ?? el.textContent ?? ""
+
+        return text === "" ? [] : [{ text, shown: opacity(el) }]
+      })
 
     const roll = () => {
       const glyph = root.querySelector(
@@ -315,8 +332,21 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
         }),
       )
 
-    // `click:N` clicks the Nth progress dash instead of pressing a key.
+    // `click:N` clicks the Nth progress dash, `next` clicks the Next or Submit button in use, and `mod+Enter` presses the
+    // submit shortcut.
+    const mac = /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+
     const press = (key: string) => {
+      if (key === "next")
+        return root
+          .querySelector<HTMLElement>('[data-slot="question-advance-face"][data-active="true"] button')
+          ?.click()
+
+      if (key === "mod+Enter")
+        return (document.activeElement ?? root).dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", metaKey: mac, ctrlKey: !mac, bubbles: true, cancelable: true }),
+        )
+
       const dash = /^click:(\d+)$/.exec(key)?.[1]
 
       if (dash)
@@ -346,6 +376,8 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
       highlights: number
       footer: boolean
       animations: number
+      title: string
+      glyphs: { text: string; shown: number }[]
     }[] = []
 
     const queue = [...keys]
@@ -372,7 +404,7 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
           x: matrix.m41,
           scale: matrix.m11,
           blur: (style?.filter ?? "none") !== "none",
-          mask: (style?.maskImage ?? "none") !== "none",
+          mask: mask(),
           digit: roll(),
           bar: bar(),
           back: getComputedStyle(back).visibility === "hidden" ? 0 : opacity(back),
@@ -390,6 +422,8 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
           highlights: root.querySelectorAll('[data-slot="question-highlight"]').length,
           footer: !!back.getAttribute("style") || faces.some((face) => !!face.getAttribute("style")),
           animations: document.getAnimations().length,
+          title: root.querySelector('[data-slot="question-header-title"]')?.textContent ?? "",
+          glyphs: glyphs(),
         }
 
         frames.push(frame)
@@ -509,7 +543,71 @@ story.describe("with the question dock's motion on", () => {
     expect(Math.max(...backward.map((frame) => frame.digit))).toBeLessThanOrEqual(0)
 
     for (const frames of [forward, backward]) expect(frames.at(-1)?.digit).toBe(0)
-    await expect(question.locator('[data-slot="rolling-number-glyph"][data-leaving]')).toHaveText("")
+    await expect(question.locator('[data-slot="rolling-number-glyph"][data-leaving]')).toHaveAttribute(
+      "data-leaving",
+      "",
+    )
+  })
+
+  story("takes Next clicks and the submit shortcut while the footer is still moving", async ({ mount }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const title = question.locator('[data-slot="question-header-title"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+
+    // Two Next clicks and two submit shortcuts, two frames apart, each landing while Back is still fading in.
+    const frames = await play(question, [
+      { key: "next" },
+      { key: "next", after: 2 },
+      { key: "mod+Enter", after: 2 },
+      { key: "mod+Enter", after: 2 },
+    ])
+
+    expect([2, 4, 6].every((index) => frames[index - 1]?.footer)).toBe(true)
+    await expect(question.getByRole("button", { name: "Submit", exact: true })).toBeVisible()
+    await expect(title).toHaveText("5 of 5 questions")
+  })
+
+  story("rolls the count on from where it is when it changes again mid-roll", async ({ mount }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const title = question.locator('[data-slot="question-header-title"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+
+    // 1 → 2 → 3 and 1 → 2 → 1, the second change a few frames into the first roll.
+    for (const [second, end] of [
+      ["ArrowRight", "3"],
+      ["ArrowLeft", "1"],
+    ] as const)
+      for (const after of [1, 2, 4]) {
+        const frames = await play(question, [{ key: "ArrowRight" }, { key: second, after }])
+        const label = `1 → 2 → ${end} after ${after} frames`
+
+        const shown = (frame: (typeof frames)[number], text: string) =>
+          frame.glyphs.filter((glyph) => glyph.text === text).reduce((sum, glyph) => sum + glyph.shown, 0)
+
+        // The digits drawn always add up to at least one whole digit, and the header's text never doubles a digit.
+        expect(
+          Math.min(...frames.map((frame) => frame.glyphs.reduce((sum, glyph) => sum + glyph.shown, 0))),
+          label,
+        ).toBeGreaterThanOrEqual(0.95)
+        expect(
+          frames.every((frame) => /^\d of 5 questions$/.test(frame.title.replace(/\s+/g, " ").trim())),
+          label,
+        ).toBe(true)
+
+        // A 2 that had barely appeared goes back out and never crosses the middle. The frame sampled right after the
+        // second key shows the digits where the change found them; going back always sends the 2 out.
+        const at = shown(frames[after]!, "2")
+
+        if (second === "ArrowLeft" || at < 0.45)
+          expect(Math.max(...frames.slice(after).map((frame) => shown(frame, "2"))), label).toBeLessThanOrEqual(
+            at + 0.02,
+          )
+        expect(frames.at(-1)?.glyphs, label).toEqual([{ text: end, shown: 1 }])
+        await expect(title).toHaveText(`${end} of 5 questions`)
+        await play(question, [{ key: "click:0" }])
+      }
   })
 
   // Where the bar sits against each dash, from the inline start of the progress row.
@@ -730,21 +828,6 @@ story("switches questions, folds and submits on the same frame with the dock's m
   expect(submitted).toEqual(Array(3).fill({ dock: false, moving: false, animations: 0 }))
 })
 
-story("takes Next clicks and the submit shortcut while the footer is still moving", async ({ mount, page }) => {
-  const component = await mount("session-question-switch--question-series")
-  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-  const title = question.locator('[data-slot="question-header-title"]')
-  await expect(question.getByRole("radio").first()).toBeFocused()
-
-  await question.getByRole("button", { name: "Next", exact: true }).click()
-  await question.getByRole("button", { name: "Next", exact: true }).click()
-  await page.keyboard.press("ControlOrMeta+Enter")
-  await expect(title).toHaveText("4 of 5 questions")
-  await page.keyboard.press("ControlOrMeta+Enter")
-  await expect(question.getByRole("button", { name: "Submit", exact: true })).toBeVisible()
-  await expect(title).toHaveText("5 of 5 questions")
-})
-
 story("toggles checkboxes with Space on key down and moves focus with arrows", async ({ mount, page }) => {
   const component = await mount("app-current-session-surface--question-request")
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
@@ -852,9 +935,11 @@ story("shows question navigation shortcuts in buttons and tooltips", async ({ mo
   await expect(submit.locator('[data-slot="question-submit-shortcut"]')).toBeVisible()
   await expect(submit.locator('[data-slot="question-submit-shortcut"]')).toHaveText(shortcut)
   await expect(submit).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter")
+  // Pressing the button closes its tooltip until the pointer comes back to it.
+  await page.mouse.move(0, 0)
   await submit.hover()
-  // Next stays in place under Submit, so its tooltip may still be fading out.
-  await expect(page.getByRole("tooltip", { name: /Submit/ })).toContainText(shortcut)
+  await expect(page.getByRole("tooltip")).toContainText("Submit")
+  await expect(page.getByRole("tooltip")).toContainText(shortcut)
   const back = component.getByRole("button", { name: "Back", exact: true })
   await expect(back).toHaveText("Back")
   await expect(back).toHaveAttribute("aria-keyshortcuts", mac ? "Meta+[" : "Alt+ArrowLeft")
