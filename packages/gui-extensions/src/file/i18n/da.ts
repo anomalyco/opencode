@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Alle filer",
-  "tree.empty": "Ingen filer",
-  "tree.changes.one": "{{count}} fil ændret",
-  "tree.changes.other": "{{count}} filer ændret",
   "tab.notFound": "Filen blev ikke fundet: {{name}}",
   "mobile.title": "Filer",
   "mobile.openTabs": "Åbne filer",

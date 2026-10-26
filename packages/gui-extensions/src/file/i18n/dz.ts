@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ཡིག་སྣོད་ཆ་མཉམ།",
-  "tree.empty": "ཡིག་སྣོད་ཚུ་མེད།",
-  "tree.changes.one": "{{count}} ཡིག་སྣོད་བསྒྱུར་བཅོས་འབད་ཡོདཔ།",
-  "tree.changes.other": "{{count}} ཡིག་སྣོད་ཚུ་བསྒྱུར་བཅོས་འབད་ཡོདཔ།",
   "tab.notFound": "ཡིག་སྣོད་འཚོལ་མ་ཐོབ།: {{name}}",
   "mobile.title": "ཡིག་སྣོད་ཚུ།",
   "mobile.openTabs": "ཡིག་སྣོད་ཚུ་ཁ་ཕྱེ།",

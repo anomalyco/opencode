@@ -10,6 +10,12 @@ import "@/settings/settings.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 
+const reduceMotionOptions = [
+  { value: "system" as const, label: "settings.appearance.row.reduceMotion.system" as const },
+  { value: "on" as const, label: "settings.appearance.row.reduceMotion.on" as const },
+  { value: "off" as const, label: "settings.appearance.row.reduceMotion.off" as const },
+]
+
 const fontSettings = {
   ui: {
     action: "settings-ui-font",
@@ -128,6 +134,22 @@ export const SettingsAppearance: Component = () => {
             <FontSetting kind="ui" fonts={appearance.fonts} />
             <FontSetting kind="code" fonts={appearance.fonts} />
             <FontSetting kind="terminal" fonts={appearance.fonts} />
+
+            <SettingsRow
+              title={language.t("settings.appearance.row.reduceMotion.title")}
+              description={language.t("settings.appearance.row.reduceMotion.description")}
+            >
+              <Select
+                data-action="settings-reduce-motion"
+                options={reduceMotionOptions}
+                current={reduceMotionOptions.find((option) => option.value === appearance.reduceMotion.current())}
+                placement="bottom-end"
+                gutter={6}
+                value={(option) => option.value}
+                label={(option) => language.t(option.label)}
+                onSelect={(option) => option && appearance.reduceMotion.select(option.value)}
+              />
+            </SettingsRow>
           </SettingsList>
         </div>
       </div>

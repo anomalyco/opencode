@@ -66,12 +66,19 @@ test("counts every subagent page in a root session's cost", async () => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
       requests.push(`${url.pathname}?${url.searchParams}`)
 
-      if (url.pathname === "/api/session/ses_root") return Response.json({ data: { ...session(0), id: "ses_root", cost: 0.5 } })
+      if (url.pathname === "/api/session/ses_root")
+        return Response.json({ data: { ...session(0), id: "ses_root", cost: 0.5 } })
 
       if (url.searchParams.get("cursor") === "page_2")
-        return Response.json({ data: Array.from({ length: 50 }, (_, index) => child(200 + index)), cursor: { next: "page_3" } })
+        return Response.json({
+          data: Array.from({ length: 50 }, (_, index) => child(200 + index)),
+          cursor: { next: "page_3" },
+        })
 
-      return Response.json({ data: Array.from({ length: 200 }, (_, index) => child(index)), cursor: { next: "page_2" } })
+      return Response.json({
+        data: Array.from({ length: 200 }, (_, index) => child(index)),
+        cursor: { next: "page_2" },
+      })
     },
   })
   const setup = createRoot((dispose) => ({

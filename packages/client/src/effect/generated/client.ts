@@ -1627,7 +1627,13 @@ const EndpointVcsBranchList = (raw: RawClient["server.vcs"]) => (input?: VcsBran
 const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) =>
   preserveEffect<VcsDiffOutput>()(
     raw["vcs.diff"]({
-      query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
+      query: {
+        location: input["location"],
+        mode: input["mode"],
+        base: input["base"],
+        context: input["context"],
+        untracked: input["untracked"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

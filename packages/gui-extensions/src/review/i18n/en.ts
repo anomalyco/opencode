@@ -1,7 +1,11 @@
 export default {
   "tab.title": "Review",
-  "tab.count.one": "{{count}} file changed",
-  "tab.count.other": "{{count}} files changed",
+  "tab.count.one": "Files Changed {{count}}",
+  "tab.count.other": "Files Changed {{count}}",
+  "menu.count.one": "{{count}} file changed",
+  "menu.count.other": "{{count}} files changed",
+  "folder.more": "{{count}} · more not shown",
+  "command.open": "Open review",
   "mobile.title.one": "Change",
   "mobile.title.other": "Changes",
   "empty.git": "No uncommitted changes yet",

@@ -304,9 +304,12 @@ const CacheMeta = Schema.Struct({
 })
 const defaultSource = "https://models.opencode.ai"
 
+export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map(normalize))
+
 // Bundled snapshot of https://models.opencode.ai/api.json, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
-// `bun run script/update-models-snapshot.ts`. Decoded and normalized once per
+// `bun run script/update-models-snapshot.ts`. Release builds bundle the live
+// catalog in its place when it can be fetched. Decoded and normalized once per
 // isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
@@ -314,9 +317,9 @@ let bundledCache: readonly Snapshot[] | undefined
 const bundledSnapshot = Effect.suspend(() =>
   bundledCache
     ? Effect.succeed(bundledCache)
-    : decodeCatalog(snapshotText).pipe(
-        Effect.map((catalog) => {
-          bundledCache = normalize(catalog)
+    : decodeSnapshot(snapshotText).pipe(
+        Effect.map((snapshot) => {
+          bundledCache = snapshot
           return bundledCache
         }),
       ),

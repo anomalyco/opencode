@@ -1,9 +1,5 @@
 export default {
   "tree.all": "Tots els fitxers",
-  "tree.empty": "No hi ha fitxers",
-  "tree.changes.one": "{{count}} fitxer ha canviat",
-  "tree.changes.many": "{{count}} fitxers han canviat",
-  "tree.changes.other": "S'han canviat {{count}} fitxers",
   "tab.notFound": "No s'ha trobat el fitxer: {{name}}",
   "mobile.title": "Fitxers",
   "mobile.openTabs": "Obre els fitxers",

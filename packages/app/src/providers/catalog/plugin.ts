@@ -1,6 +1,6 @@
 import type { PluginInfo } from "@opencode/client"
 
-export function pluginLabel(plugin: PluginInfo) {
+function pluginLabel(plugin: PluginInfo) {
   if (plugin.id) return plugin.id
 
   if (plugin.source.type === "package") return plugin.source.target

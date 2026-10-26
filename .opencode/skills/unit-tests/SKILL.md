@@ -13,7 +13,7 @@ Read these first; this skill does not repeat them:
 - `packages/app/AGENTS.md` Tests (`packages/desktop` and `packages/gui-extensions` follow it): one owner per contract, and no production seams for tests.
 - `packages/ai/AGENTS.md`: cassettes. The `effect` skill: `it.effect` and `it.live`.
 
-Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-tests` (Playwright in `packages/app/e2e`), `component-tests` (Storybook Playwright). This skill owns cli subprocess and service tests.
+Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-tests` (Playwright in `packages/app/e2e`), `component-tests` (Playwright on stories, `packages/stories`). This skill owns cli subprocess and service tests.
 
 ## Know the budget
 

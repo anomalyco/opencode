@@ -2264,6 +2264,7 @@ export type VcsDiffInput = {
   readonly mode: Vcs.Mode
   readonly base?: string | undefined
   readonly context?: number | undefined
+  readonly untracked?: Vcs.Untracked | undefined
 }
 export type VcsDiffOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileDiff.Info> }
 export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect<VcsDiffOutput, E>

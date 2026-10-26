@@ -32,6 +32,8 @@ export type FatalRendererErrorLog = {
 }
 
 type PlatformBase = {
+  requestMicrophone?(): Promise<boolean>
+  setVoiceCallActive?(active: boolean): Promise<void>
   /** App version */
   version?: string
 
@@ -85,6 +87,9 @@ type PlatformBase = {
 
   /** Whether the native desktop window is fullscreen */
   windowFullscreen?: Accessor<boolean>
+
+  /** Move the native macOS traffic lights' top-left corner, in window points (desktop only) */
+  setTrafficLightsPosition?(position: { x: number; y: number }): Promise<void>
 
   /** Get whether native pinch/Ctrl-scroll zoom gestures are enabled (desktop only) */
   getPinchZoomEnabled?(): Promise<boolean> | boolean

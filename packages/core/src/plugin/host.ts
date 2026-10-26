@@ -19,6 +19,7 @@ import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
+import { InstructionEntry } from "../session/instruction-entry.js"
 import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -69,6 +70,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
+  const instructionEntries = yield* InstructionEntry.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
@@ -587,6 +589,24 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      instructions: {
+        entry: {
+          list: Effect.fn(function* (input) {
+            yield* sessions.get(input.sessionID)
+            return yield* instructionEntries.list(input.sessionID)
+          }),
+          put: Effect.fn(function* (input) {
+            const key = yield* Schema.decodeUnknownEffect(InstructionEntry.Key)(input.key)
+            yield* sessions.get(input.sessionID)
+            yield* instructionEntries.put({ ...input, key })
+          }),
+          remove: Effect.fn(function* (input) {
+            const key = yield* Schema.decodeUnknownEffect(InstructionEntry.Key)(input.key)
+            yield* sessions.get(input.sessionID)
+            yield* instructionEntries.remove({ ...input, key })
+          }),
+        },
+      },
     },
   }
   return context
@@ -616,6 +636,7 @@ export const requirements = LayerNode.group([
   Permission.node,
   PluginHooks.node,
   Session.node,
+  InstructionEntry.node,
   PersistentPty.node,
   LocationServiceMap.node,
 ])

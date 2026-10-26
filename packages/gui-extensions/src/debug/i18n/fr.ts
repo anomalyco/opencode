@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Afficher ou masquer la barre de débogage",
-  "status.toggle": "Afficher ou masquer les outils de débogage",
   ariaLabel: "Diagnostics de performance de développement",
   providerAriaLabel: "Diagnostic des performances du fournisseur",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Temps entre l’envoi de la requête au fournisseur et la première sortie du modèle.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Temps entre l’envoi de la requête au fournisseur et le premier texte de réponse.",
+  "duration.label": "TIME",
+  "duration.tip": "Temps entre l'invite qui a lancé le dernier tour et la fin de la réponse.",
   "tps.label": "TPS",
-  "tps.tip": "Jetons de sortie par seconde après la première sortie du modèle.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Temps entre l’envoi de la requête au fournisseur et la fin du flux de réponse.",
+  "tps.tip":
+    "Jetons de sortie et de raisonnement par seconde sur les requêtes au modèle du dernier tour, hors temps des outils.",
   "nav.label": "NAV",
   "nav.tip":
     "Dernière transition de route terminée touchant une page de session, mesurée du début du routeur jusqu'au premier affichage après stabilisation.",

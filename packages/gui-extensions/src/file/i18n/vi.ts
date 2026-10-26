@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Tất cả tệp",
-  "tree.empty": "Không có tệp",
-  "tree.changes.one": "{{count}} tệp đã thay đổi",
-  "tree.changes.other": "{{count}} tệp đã thay đổi",
   "tab.notFound": "Không tìm thấy tệp: {{name}}",
   "mobile.title": "Tập tin",
   "mobile.openTabs": "Mở tập tin",

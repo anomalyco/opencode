@@ -25,6 +25,7 @@ export function createExtensionBridge(): Bridge {
         dispatch({ type: "available", ipc: event.ipc, available: event.available }),
       ),
       listen("ExtensionsChanged", (event) => dispatch({ type: "extensions", list: event.list })),
+      listen("WindowFocusChanged", (event) => dispatch({ type: "focus", focused: event.focused })),
       listen("ExtensionMenubarItemsChanged", (event) => {
         menubar.revision++
         dispatch({ type: "menubarItems", items: event.items })

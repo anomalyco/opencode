@@ -2,6 +2,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { projectSearchCommand } from "@/shell/titlebar/titlebar"
 
 export function useNewSessionCommands(input: {
   restoreFocus: () => void
@@ -19,7 +20,7 @@ export function useNewSessionCommands(input: {
   const language = useLanguage()
 
   useSettingsCommand()
-  command.register("new-session", () => [
+  command.register("palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
@@ -29,6 +30,8 @@ export function useNewSessionCommands(input: {
         void dialog.show(() => <DialogCommandPalette />)
       },
     },
+  ])
+  command.register("new-session", () => [
     {
       id: "input.focus",
       title: language.t("command.input.focus"),
@@ -37,10 +40,9 @@ export function useNewSessionCommands(input: {
       onSelect: input.restoreFocus,
     },
     {
-      id: "project.select",
+      ...projectSearchCommand,
       title: language.t("session.new.project.search"),
       category: language.t("command.category.project"),
-      keybind: "mod+shift+o",
       disabled: input.project.empty(),
       onSelect: input.project.open,
     },

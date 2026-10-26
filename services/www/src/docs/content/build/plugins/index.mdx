@@ -837,10 +837,19 @@ the next step boundary by default. Pass `delivery: "queue"` to preserve queue or
 const compaction = await ctx.session.compact({ sessionID })
 ```
 
+Attach, list, or remove keyed session instruction entries with `instructions.entry`. Entries render as `<context key="...">` blocks in the session's instructions, and updates or removals are announced at the next step boundary without queuing a message turn.
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
 #### Reference
 
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
-[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
 
 ```ts
 interface SessionContext {
@@ -848,6 +857,16 @@ interface SessionContext {
   get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
   remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
   context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: SessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: SessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: SessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
   switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
   switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
   update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>

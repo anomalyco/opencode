@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Ҳама файлҳо",
-  "tree.empty": "Файл нест",
-  "tree.changes.one": "{{count}} файл тағйир ёфт",
-  "tree.changes.other": "{{count}} файл тағйир ёфтанд",
   "tab.notFound": "Файл ёфт нашуд: {{name}}",
   "mobile.title": "Файлҳо",
   "mobile.openTabs": "Файлҳои кушода",

@@ -858,9 +858,24 @@ effect: (ctx) =>
   }),
 ```
 
+Attach, list, or remove keyed session instruction entries with `instructions.entry`. Entries render as `<context key="...">` blocks in the session's instructions, and updates or removals are announced at the next step boundary without queuing a message turn.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry
+      .put({ sessionID: created.id, key: "deploy-target", value: "production" })
+      .pipe(Effect.orDie)
+    const entries = yield* ctx.session.instructions.entry.list({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry.remove({ sessionID: created.id, key: "deploy-target" }).pipe(Effect.orDie)
+  }),
+```
+
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User),
-[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
+[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info).
 
 ```ts
 type SessionDomain = Pick<
@@ -881,6 +896,7 @@ type SessionDomain = Pick<
   | "move"
   | "wait"
   | "context"
+  | "instructions"
 >
 ```
 

@@ -11,6 +11,8 @@ import {
   compactionStarted,
   completedAssistantInfo,
   directory,
+  inboxDelivered,
+  inboxEnqueued,
   messageUpdated,
   partUpdated,
   reasoningPart,
@@ -75,11 +77,16 @@ test.describe("static projection", () => {
     const notices = page.locator('[data-slot="session-timeline-notice"]')
     await expect(notices).toHaveCount(4)
     await expect(notices.nth(0)).toHaveText(/^Agent changed\s*Explore$/)
-    await expect(notices.nth(1)).toContainText("explore finished · Search code")
+    await expect(notices.nth(1)).toContainText("Explore finished · Search code")
     await expect(notices.nth(2)).toContainText("Continuing after restart")
     await expect(notices.nth(3)).toContainText("Skill · Review")
-    await expect(notices).toHaveClass([/text-text-weak/, /text-text-weak/, /text-text-weak/, /text-text-weak/])
-    await expect(notices.locator(".text-text-strong")).toHaveCount(0)
+    await expect(notices).toHaveClass([
+      /text-v2-text-text-faint/,
+      /text-v2-text-text-faint/,
+      /text-v2-text-text-faint/,
+      /text-v2-text-text-faint/,
+    ])
+    await expect(notices.locator(".text-v2-text-text-base")).toHaveCount(0)
     expect(ownerWarnings).toEqual([])
   })
 
@@ -548,6 +555,209 @@ for (const shellDefault of ["collapsed", "expanded"] as const) {
   })
 }
 
+test("shows a background subagent's outcome as its own row where it finished", async ({ page }) => {
+  const childID = "ses_background_outcome"
+  const after = assistantMessage([], { id: "msg_after", completed: false })
+
+  const timeline = await setupTimeline(page, {
+    sessionMessages: [
+      user,
+      {
+        id: "msg_launch",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_background",
+            name: "subagent",
+            state: {
+              status: "completed",
+              input: { description: "Map the inbox", agent: "explore", background: true },
+              content: [{ type: "text", text: "working" }],
+              metadata: { sessionID: childID, status: "running" },
+            },
+            time: { created: 2, completed: 3 },
+          },
+          {
+            type: "tool",
+            id: "call_read_before",
+            name: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "README.md" },
+              content: [{ type: "text", text: "ok" }],
+              metadata: {},
+            },
+            time: { created: 2, completed: 3 },
+          },
+        ],
+        time: { created: 2, completed: 3 },
+      },
+    ],
+    sessions: [session(), session({ id: childID, parentID: sessionID, title: "Map the inbox" })],
+  })
+
+  await expect(page.getByText(/^Used\s*1\s*Read$/)).toBeVisible()
+
+  await timeline.send([
+    inboxEnqueued({
+      sessionID,
+      inboxID: "msg_outcome",
+      item: {
+        type: "synthetic",
+        payload: {
+          text: '<subagent state="completed">done</subagent>',
+          description: "Map the inbox",
+          metadata: { source: "subagent", childID, agent: "explore", state: "completed" },
+        },
+        delivery: "steer",
+      },
+    }),
+    inboxDelivered({ sessionID, inboxID: "msg_outcome" }),
+    stepStarted(after),
+    ...partUpdated({
+      ...toolPart("call_read_after", "read", "completed", { filePath: "AGENTS.md" }),
+      messageID: after.id,
+    }),
+    messageUpdated(completedAssistantInfo(after)),
+  ])
+
+  // The outcome sits between the work before and after it instead of folding into either group.
+  const notice = page.locator('[data-slot="session-timeline-notice"]')
+  await expect(page.getByText(/^Used\s*1\s*Read$/).or(notice)).toHaveText([
+    /^Used\s*1\s*Read$/,
+    /^Explore finished · Map the inbox$/,
+    /^Used\s*1\s*Read$/,
+  ])
+  await expect(notice).toHaveAttribute("data-outcome", "completed")
+
+  // The outcome icon starts at the column edge like the subagent card, in a 16px box centered on the text line and
+  // clear of the label; the exact gap is styling.
+  await expect
+    .poll(async () => {
+      const [card, icon, label] = await Promise.all([
+        page.locator('[data-component="task-tool-card"]').boundingBox(),
+        notice.locator('[data-slot="icon-svg"]').boundingBox(),
+        notice.locator(":scope > bdi").boundingBox(),
+      ])
+
+      return {
+        inset: icon!.x - card!.x,
+        size: [icon!.width, icon!.height],
+        separated: label!.x - icon!.x - icon!.width > 0,
+        centered: Math.abs(icon!.y + icon!.height / 2 - (label!.y + label!.height / 2)) <= 0.5,
+      }
+    })
+    .toEqual({ inset: 0, size: [16, 16], separated: true, centered: true })
+  await notice.click()
+  await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
+})
+
+test("holds undelivered input still while live status above it comes and goes", async ({ page }) => {
+  const timeline = await setupTimeline(page, {
+    sessionStatus: { [sessionID]: { type: "busy" } },
+    messages: [
+      userMessage(),
+      // Streaming text stands in for Working, so live status has nothing to show.
+      assistantMessage([textPart("prt_streaming_answer", "It ships as soon as it's ready.")], { completed: false }),
+    ],
+  })
+
+  const answer = page.getByText("It ships as soon as it's ready.", { exact: true })
+  const working = page.locator('[data-component="session-working"]')
+  const activity = page.locator('[data-timeline-key="activity"]')
+  const lane = async () => (await activity.boundingBox())?.height
+
+  const outcome = (id: string, description: string) =>
+    inboxEnqueued({
+      sessionID,
+      inboxID: id,
+      item: {
+        type: "synthetic",
+        payload: {
+          text: '<subagent state="completed">done</subagent>',
+          description,
+          metadata: { source: "subagent", agent: "general", state: "completed" },
+        },
+        delivery: "steer",
+      },
+    })
+
+  const first = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: "Audit constraints" })
+
+  const gap = async () => {
+    const [above, below] = await Promise.all([answer.boundingBox(), first.boundingBox()])
+
+    return above && below ? Math.round(below.y - above.y - above.height) : undefined
+  }
+
+  await expect(answer).toBeVisible()
+  await timeline.send(outcome("msg_pending_outcome", "Audit constraints"))
+  await expect(first).toHaveText(/^General finished · Audit constraints$/)
+  await expect(working).toHaveCount(0)
+  // Live status moves above the waiting notice, but takes no room while it has nothing to show.
+  await expect.poll(lane).toBe(0)
+  const pending = await gap()
+
+  await timeline.send(inboxDelivered({ sessionID, inboxID: "msg_pending_outcome" }))
+  await expect(activity).toHaveCount(0)
+  await expect.poll(gap).toBe(pending)
+
+  await timeline.send(outcome("msg_pending_review", "Review copy"))
+  await expect(page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: "Review copy" })).toBeVisible()
+  await expect.poll(lane).toBe(0)
+
+  // A finished read keeps Working on; the next streaming text hides it again. Once shown, the lane stays.
+  await timeline.send(partUpdated(toolPart("prt_live_read", "read", "completed", { filePath: "README.md" })))
+  await expect(working).toBeVisible()
+  await expect.poll(lane).toBe(36)
+  await timeline.send(partUpdated(textPart("prt_live_text", "Checking the copy next.")))
+  await expect(page.getByText("Checking the copy next.", { exact: true })).toBeVisible()
+  await expect(working).toHaveCount(0)
+  await expect.poll(lane).toBe(36)
+})
+
+test("jumps from a finished shell's notice to its call", async ({ page }) => {
+  await setupTimeline(page, {
+    settings: { timelineDetail: detailed },
+    sessionMessages: [
+      userMessage(),
+      assistantMessage([
+        ...searches(0, 2),
+        toolPart(
+          "prt_notice_shell",
+          "shell",
+          "completed",
+          { command: "bun serve.ts" },
+          { output: "listening", metadata: { shellID: "shell_notice" } },
+        ),
+        ...searches(2, 2),
+        textPart("prt_notice_notes", notes("Later", 80)),
+      ]),
+      {
+        id: "msg_shell_finished",
+        type: "synthetic",
+        text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
+        time: { created: 1700000003000 },
+      },
+    ],
+  })
+
+  const notice = page.getByRole("button", { name: /^Shell finished/ })
+  const shellTrigger = page.locator('[data-timeline-part-id="prt_notice_shell"] [data-slot="collapsible-trigger"]')
+
+  await expect(notice).toBeInViewport()
+  await expect(shellTrigger).toHaveCount(0)
+  await notice.click()
+
+  await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
+  await expect(shellTrigger).toBeInViewport()
+})
+
 test.describe("Working", () => {
   test("shows Working between busy and reasoning states", async ({ page }) => {
     const timeline = await setupTimeline(page, {
@@ -582,7 +792,9 @@ test.describe("Working", () => {
     await expect(working).toHaveCount(0)
   })
 
-  test("keeps Working instead of Used 1 Thought while reasoning is the only activity", async ({ page }) => {
+  test("shows an expandable live Thinking in place of Working while reasoning is the only activity", async ({
+    page,
+  }) => {
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -591,15 +803,37 @@ test.describe("Working", () => {
       settings: { timelineDetail: detailed },
     })
 
+    // reasoningPart starts at 1700000001000, so the pause lands 8m 12s into the thought.
+    await page.clock.install({ time: 1700000001000 })
+    await page.reload()
+    await timeline.transport.waitForConnection()
+
     const working = page.locator('[data-component="session-working"]')
     const group = page.locator('[data-component="collapsed-tool-group"]')
-    await expect(working).toBeVisible()
-    await expect(group).toHaveCount(0)
+    const trigger = group.locator('[data-component="context-tool-group-trigger"]')
+    const elapsed = trigger.locator('[data-slot="basic-tool-tool-subtitle"]')
+    await expect(group).toHaveAttribute("data-timeline-part-ids", `${assistantID}:reasoning:0`)
+    // The jump below fires the 60 s timeout of any request still in flight, so the busy status must land first.
+    await expect(trigger).toHaveAttribute("aria-label", "Thinking")
+    await page.clock.pauseAt(1700000001000 + 492_000)
+    await expect(trigger.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+    await expect(elapsed).toHaveText("8m 12s")
+    await expect(working).toHaveCount(0)
     await expect(page.getByRole("button", { name: "Used 1 Thought" })).toHaveCount(0)
 
+    await page.clock.fastForward(1_000)
+    await expect(elapsed).toHaveText("8m 13s")
+
+    await trigger.click()
+    await expect(group.getByText("Still considering the answer.", { exact: true })).toBeVisible()
+
+    // Event delivery schedules timers, so let time run again before streaming the next part.
+    await page.clock.resume()
+
     await timeline.send(partUpdated(toolPart("prt_after_thought", "read", "running", { filePath: "package.json" })))
-    await expect(group).toBeVisible()
     await expect(group).toHaveAttribute("data-timeline-part-ids", `${assistantID}:reasoning:0,prt_after_thought`)
+    await expect(trigger).toHaveAttribute("aria-label", "Used 1 Read")
+    await expect(elapsed).toHaveCount(0)
     await expect(working).toBeVisible()
   })
 
@@ -679,7 +913,9 @@ test.describe("Working", () => {
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "running", { path: "src/four.ts" })))
-    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("one.ts, two.ts, three.ts, four.ts")
+    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(
+      "one.ts, two.ts, three.ts, four.ts",
+    )
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "completed", { path: "src/four.ts" })))
@@ -706,6 +942,18 @@ test.describe("Working", () => {
             ],
             { completed: false },
           ),
+        ],
+        shellCommands: [
+          {
+            id: "sh_working_background",
+            status: "running",
+            command: "sleep 10",
+            cwd: directory,
+            shell: "bash",
+            file: "/tmp/working-background.out",
+            metadata: { sessionID },
+            time: { started: 2 },
+          },
         ],
       })
       const working = page.locator('[data-component="session-working"]')
@@ -804,7 +1052,7 @@ test.describe("background shortcut", () => {
     await expectBackgroundRequest(page)
   })
 
-  for (const name of ["read", "shell", "subagent"] as const) {
+  for (const name of ["read", "shell"] as const) {
     test(`keeps Working and the shortcut for a grouped running ${name}`, async ({ page }) => {
       await setupTimeline(page, {
         viewport: { width: name === "shell" ? 390 : 1400, height: 900 },
@@ -818,11 +1066,7 @@ test.describe("background shortcut", () => {
                 "prt_grouped_active",
                 name,
                 "running",
-                {
-                  read: { filePath: "src/working.ts" },
-                  shell: { command: "sleep 10" },
-                  subagent: { agent: "general", description: "Inspect the timeline", prompt: "Inspect it." },
-                }[name],
+                { read: { filePath: "src/working.ts" }, shell: { command: "sleep 10" } }[name],
               ),
             ],
             { completed: false },
@@ -835,26 +1079,139 @@ test.describe("background shortcut", () => {
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeInViewport()
 
-      if (name !== "read") {
+      if (name === "shell") {
         await expect(backgroundHint(page)).toBeInViewport()
         await expect(page.locator('[data-component="session-background-hint-row"]')).toHaveCSS("height", "24px")
       }
 
       await trigger.click()
       await expect(trigger).toHaveAttribute("aria-expanded", "true")
-
-      if (name === "subagent") await expect(group.getByText("Inspect the timeline", { exact: true })).toBeVisible()
-
-      if (name !== "subagent")
-        await expect(group.locator('[data-component="text-shimmer"][data-active="true"]')).toBeVisible()
+      await expect(group.locator('[data-component="text-shimmer"][data-active="true"]')).toBeVisible()
       await expect(working).toBeVisible()
       await trigger.click()
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
 
-      if (name !== "read") await expectBackgroundRequest(page)
+      if (name === "shell") await expectBackgroundRequest(page)
     })
   }
+
+  for (const placement of ["right", "center"] as const) {
+    test(`anchors the activity panel to a ${placement}-placed capsule`, async ({ page }) => {
+      await setupTimeline(page, {
+        settings: { timelineDetail: detailed, backgroundActivity: placement },
+        sessionMessages: [
+          user,
+          {
+            id: "msg_backgrounded",
+            type: "assistant",
+            agent: "build",
+            model: { id: "model", providerID: "provider" },
+            content: [
+              {
+                type: "tool",
+                id: "call_shell_backgrounded",
+                name: "shell",
+                state: {
+                  status: "completed",
+                  input: { command: "sleep 120" },
+                  content: [{ type: "text", text: "working" }],
+                  metadata: { shellID: "shell_backgrounded", status: "running" },
+                },
+                time: { created: 2, completed: 3 },
+              },
+            ],
+            time: { created: 2, completed: 3 },
+          },
+        ],
+        shellCommands: [
+          {
+            id: "shell_backgrounded",
+            status: "running",
+            command: "sleep 120",
+            cwd: directory,
+            shell: "bash",
+            file: "/tmp/background.out",
+            metadata: { sessionID },
+            time: { started: 2 },
+          },
+        ],
+      })
+
+      // The open menu hides the rest of the page from the accessibility tree, the capsule included.
+      const capsule = page.getByRole("button", { name: "1 shell", exact: true, includeHidden: true })
+      const list = page.getByRole("menu", { name: "1 shell", exact: true })
+      const closed = (await capsule.boundingBox())!
+      const inset = (await capsule.locator("svg").boundingBox())!.x - closed.x
+
+      await capsule.click()
+      // Right placement shares the capsule's end edge and mirrors its inset there; centre placement shares its centre.
+      await expect
+        .poll(async () => {
+          const panel = (await list.boundingBox())!
+          const anchor = (await capsule.boundingBox())!
+
+          const end = await list
+            .getByRole("menuitem")
+            .locator('[data-slot="session-activity-elapsed"]')
+            .evaluate((element) => element.getBoundingClientRect().right)
+
+          return (
+            panel.y + panel.height <= anchor.y &&
+            Math.abs(panel.x + panel.width - end - inset) < 0.5 &&
+            (placement === "right"
+              ? Math.abs(panel.x + panel.width - (anchor.x + anchor.width)) < 0.5
+              : Math.abs(panel.x + panel.width / 2 - (anchor.x + anchor.width / 2)) < 0.5)
+          )
+        })
+        .toBe(true)
+    })
+  }
+
+  test("counts a backgrounded subagent while its session runs, not while its call still reads running", async ({
+    page,
+  }) => {
+    const childID = "ses_background_stale_call"
+
+    // As after a lost completion notice: the call still reads running, while the child session has finished.
+    const timeline = await setupTimeline(page, {
+      settings: { timelineDetail: detailed },
+      sessionMessages: [
+        user,
+        {
+          id: "msg_stale_call",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [
+            {
+              type: "tool",
+              id: "call_stale",
+              name: "subagent",
+              state: {
+                status: "completed",
+                input: { description: "Stale task", agent: "explore", background: true },
+                content: [{ type: "text", text: "working" }],
+                metadata: { sessionID: childID, status: "running" },
+              },
+              time: { created: 2, completed: 3 },
+            },
+          ],
+          time: { created: 2, completed: 3 },
+        },
+      ],
+      sessions: [session(), session({ id: childID, parentID: sessionID, title: "Stale task", agent: "explore" })],
+    })
+
+    const capsule = page.locator('[data-slot="session-activity-chip"]')
+
+    await expect(page.locator('[data-timeline-part-id="call_stale"]')).toContainText("Stale task (background)")
+    await expect(capsule).toHaveCount(0)
+    await timeline.transport.send(status("busy", 1, childID))
+    await expect(page.getByRole("button", { name: "1 subagent", exact: true })).toBeVisible()
+    await timeline.transport.send(status("idle", 1, childID))
+    await expect(capsule).toHaveCount(0)
+  })
 
   test("separates blocking and already-backgrounded work into two rows", async ({ page }) => {
     const backgroundID = "ses_background_existing"
@@ -949,20 +1306,68 @@ test.describe("background shortcut", () => {
       },
     })
     const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
+    const blockingCard = page.locator('[data-timeline-part-id="call_blocking"]')
     await expect(backgroundHint(page)).toBeVisible()
+    await expect(backgroundCard).toContainText("Background task (background)")
+    await expect(blockingCard).toContainText("Foreground task")
+    await expect(blockingCard).not.toContainText("(background)")
 
     const used = page
-      .locator('[data-timeline-part-ids="call_backgrounded,call_shell_backgrounded,call_blocking"]')
+      .locator('[data-timeline-part-ids="call_shell_backgrounded"]')
       .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-    await expect(used).toHaveText(/^Used\s*3\s*Agent, Shell$/)
+    await expect(used).toHaveText(/^Used\s*1\s*Shell$/)
     await expect(used).toHaveAttribute("aria-expanded", "false")
-    await page.getByRole("button", { name: "3 running", exact: true }).click()
-    const list = page.getByRole("menu", { name: "3 running", exact: true })
+    const activity = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true })
+    const list = page.getByRole("menu", { name: "2 subagents · 1 shell", exact: true })
+    // The open menu hides the rest of the page from the accessibility tree, the capsule included.
+    const capsule = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true, includeHidden: true })
+    const label = capsule.getByText("2 subagents · 1 shell", { exact: true })
+    const glyph = await capsule.locator("svg").boundingBox()
+    const text = await label.boundingBox()
+    const inset = glyph!.x - (await capsule.boundingBox())!.x
+
+    await activity.click()
+    await expect(list.locator('[data-slot="menu-v2-group-label"], [data-slot="menu-v2-separator"]')).toHaveCount(0)
+    await expect(list.getByText("2 subagents · 1 shell", { exact: true })).toHaveCount(0)
+    await expect(label).toBeVisible()
+
+    // The panel opens above the capsule on its grid: row glyphs on the capsule's glyph, names and commands on its
+    // label, and run times ending as far from the panel's end as the glyphs start from its start.
+    await expect
+      .poll(async () => {
+        const panel = await list.boundingBox()
+        const anchor = await capsule.boundingBox()
+
+        const rows = await list.getByRole("menuitem").evaluateAll((items) =>
+          items.map((item) => {
+            const content = item.querySelector('[data-slot="menu-v2-item-content"]')
+
+            return [
+              content?.querySelector(":scope > svg")?.getBoundingClientRect().left ?? NaN,
+              content?.querySelector(":scope > span:not([data-slot])")?.getBoundingClientRect().left ?? NaN,
+              item.querySelector('[data-slot="session-activity-elapsed"]')?.getBoundingClientRect().right ?? NaN,
+            ]
+          }),
+        )
+
+        return (
+          panel!.y + panel!.height <= anchor!.y &&
+          rows.length === 3 &&
+          rows.every(
+            ([left, start, end]) =>
+              Math.abs(left - glyph!.x) < 0.5 &&
+              Math.abs(start - text!.x) < 0.5 &&
+              Math.abs(panel!.x + panel!.width - end - inset) < 0.5,
+          )
+        )
+      })
+      .toBe(true)
     await expect(list.getByRole("menuitem")).toHaveText([
-      /^Build\s*Foreground task$/,
-      /^Explore\s*Background task$/,
-      /^Shell\s*sleep 120$/,
+      // The fixture starts every task near the epoch, so each row ends with an hours-long run time.
+      /^Build\s*Foreground task\d+h \d{2}m$/,
+      /^Explore\s*Background task\d+h \d{2}m$/,
+      /^sleep 120\d+h \d{2}m$/,
     ])
     await list.getByRole("menuitem", { name: /sleep 120/ }).click()
     await expect(list).toHaveCount(0)
@@ -971,7 +1376,7 @@ test.describe("background shortcut", () => {
     await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
     await expect(shellCall).toBeInViewport()
 
-    await page.getByRole("button", { name: "3 running", exact: true }).click()
+    await activity.click()
 
     const interrupt = page.waitForRequest(
       (request) =>
@@ -1083,9 +1488,9 @@ test.describe("background shortcut", () => {
         fixture.after ? page.getByText(`Follow-up note ${fixture.after}.`, { exact: true }) : group,
       ).toBeInViewport()
       await expect(shellTrigger).toHaveCount(0)
-      await page.getByRole("button", { name: "1 running", exact: true }).click()
+      await page.getByRole("button", { name: "1 shell", exact: true }).click()
       await page
-        .getByRole("menu", { name: "1 running", exact: true })
+        .getByRole("menu", { name: "1 shell", exact: true })
         .getByRole("menuitem", { name: /sleep 120/ })
         .click()
 
@@ -1105,7 +1510,7 @@ test.describe("background shortcut", () => {
     })
   }
 
-  test("hides the running switcher when viewing the only running subagent", async ({ page }) => {
+  test("shows a running subagent's working indicator beside its title", async ({ page }) => {
     const childID = "ses_only_running_child"
 
     const timeline = await setupTimeline(page, {
@@ -1118,13 +1523,11 @@ test.describe("background shortcut", () => {
     })
 
     const header = page.locator("[data-session-title]")
-    const trigger = header.getByRole("button", { name: "1 working", exact: true })
 
-    await trigger.click()
+    await page.getByRole("button", { name: "1 subagent", exact: true }).click()
     await page.getByRole("menuitem", { name: /Only running task/ }).click()
     await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
     await expect(header.getByRole("heading")).toHaveText("Only running task")
-    await expect(trigger).toHaveCount(0)
 
     const working = header.getByRole("status", { name: "Working", exact: true })
 
@@ -1140,7 +1543,7 @@ test.describe("background shortcut", () => {
 
     expect(gap).toBe(8)
 
-    const title = header.getByRole("heading").locator('span[dir="auto"]')
+    const title = header.getByRole("heading")
     const before = await title.boundingBox()
     const exit = await pauseExitAnimations(working)
 
@@ -1162,243 +1565,6 @@ test.describe("background shortcut", () => {
     await exit.dispose()
     await header.locator('[data-slot="session-title-parent"]').click()
     await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
-    await expect(trigger).toHaveCount(0)
-  })
-
-  test("keeps the running menu closed when work restarts after all subagents finish", async ({ page }) => {
-    const childID = "ses_restarted_child"
-    const otherID = "ses_counted_child"
-
-    const timeline = await setupTimeline(page, {
-      sessionMessages: [user, completed],
-      sessions: [
-        session(),
-        session({ id: childID, parentID: sessionID, title: "Restarted task", agent: "explore" }),
-        session({ id: otherID, parentID: sessionID, title: "Other task", agent: "build" }),
-      ],
-      sessionStatus: {},
-    })
-
-    const trigger = page.locator("[data-session-title]").getByRole("button", { name: /^[12] working$/ })
-    const menu = page.getByRole("menu", { name: "1 working", exact: true })
-
-    await timeline.transport.send(status("busy", 1, childID))
-    await expect(trigger).toHaveAccessibleName("1 working")
-    await timeline.transport.send(status("busy", 1, otherID))
-    await expect(trigger).toHaveAccessibleName("2 working")
-    await expect(trigger.locator("..")).toHaveCSS("animation-name", "none")
-    await timeline.transport.send(status("idle", 1, otherID))
-    await expect(trigger).toHaveAccessibleName("1 working")
-    // Inspect the update itself, not the settled state after a replayed fade finishes.
-    expect(await trigger.evaluate((element) => getComputedStyle(element.parentElement!).animationName)).toBe("none")
-
-    await trigger.click()
-    await expect(menu.getByRole("menuitem", { name: /Restarted task/ })).toBeVisible()
-    await timeline.transport.send(status("idle", 1, childID))
-    await expect(trigger).toHaveCount(0)
-    await expect(menu).toHaveCount(0)
-    await timeline.transport.send(status("busy", 1, childID))
-    await expect(trigger).toBeEnabled()
-    await expect(trigger).toHaveAttribute("aria-expanded", "false")
-    await expect(menu).toHaveCount(0)
-    await trigger.click()
-    await expect(menu.getByRole("menuitem", { name: /Restarted task/ })).toBeVisible()
-  })
-
-  test("keeps the subagent title anchored when its additional count disappears", async ({ page }) => {
-    const childID = "ses_collapsing_viewed"
-    const otherID = "ses_collapsing_sibling"
-
-    const timeline = await setupTimeline(page, {
-      sessionMessages: [user, completed],
-      sessions: [
-        session(),
-        session({ id: childID, parentID: sessionID, title: "Viewed task", agent: "explore" }),
-        session({ id: otherID, parentID: sessionID, title: "Other task", agent: "build" }),
-      ],
-      sessionStatus: { [childID]: { type: "busy" }, [otherID]: { type: "busy" } },
-    })
-
-    const header = page.locator("[data-session-title]")
-    await header.getByRole("button", { name: "2 working", exact: true }).click()
-    await page.getByRole("menuitem", { name: /Viewed task/ }).click()
-    await expect(header.getByRole("heading")).toHaveAccessibleName("Viewed task")
-
-    const trigger = header.getByRole("button", { name: "Viewed task +1 working", exact: true })
-    const title = header.getByRole("heading").locator('span[dir="auto"]')
-
-    await expect(trigger).toBeEnabled()
-
-    const before = await title.boundingBox()
-    const exit = await pauseExitAnimations(trigger.locator('[data-component="text-shimmer"]').locator(".."))
-
-    await timeline.transport.send(status("idle", 1, otherID))
-    await expect.poll(() => exit.evaluate((animations) => animations.length)).toBeGreaterThan(0)
-    await exit.evaluate((animations) => animations.forEach((animation) => (animation.currentTime = 75)))
-
-    const midway = await title.boundingBox()
-
-    expect(midway!.x).toBeCloseTo(before!.x, 0)
-    await exit.evaluate((animations) => animations.forEach((animation) => animation.finish()))
-    await expect(trigger).toHaveCount(0)
-
-    const after = await title.boundingBox()
-
-    expect(after!.x).toBeCloseTo(before!.x, 0)
-    await expect(header.getByRole("button", { name: "Viewed task", exact: true })).toBeDisabled()
-    await exit.dispose()
-  })
-
-  test("moves between siblings and to the parent's shell from inside a subagent", async ({ page }) => {
-    const siblings = [
-      { id: "ses_sibling_one", agent: "explore", description: "Draft TUI proposal" },
-      { id: "ses_sibling_two", agent: "build", description: "Fix context controls" },
-    ]
-
-    const timeline = await setupTimeline(page, {
-      settings: { timelineDetail: detailed },
-      sessionMessages: [
-        user,
-        {
-          id: "msg_sibling_shell",
-          type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
-          content: [
-            {
-              type: "tool",
-              id: "call_sibling_shell",
-              name: "shell",
-              state: {
-                status: "completed",
-                input: { command: "sleep 120" },
-                content: [{ type: "text", text: "working" }],
-                metadata: { shellID: "shell_sibling", status: "running" },
-              },
-              time: { created: 2, completed: 3 },
-            },
-          ],
-          time: { created: 2, completed: 3 },
-        },
-        {
-          id: "msg_siblings",
-          type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
-          content: siblings.map((item) => ({
-            type: "tool" as const,
-            id: `call_${item.id}`,
-            name: "subagent",
-            state: {
-              status: "running" as const,
-              input: { description: item.description, agent: item.agent },
-              metadata: { sessionID: item.id },
-            },
-            time: { created: 2 },
-          })),
-          time: { created: 2 },
-        },
-      ],
-      sessions: [
-        session(),
-        ...siblings.map((item) =>
-          session({ id: item.id, parentID: sessionID, title: item.description, agent: item.agent }),
-        ),
-      ],
-      sessionStatus: Object.fromEntries(
-        [sessionID, ...siblings.map((item) => item.id)].map((id) => [id, { type: "busy" }]),
-      ),
-    })
-
-    await timeline.transport.send({
-      id: "evt_sibling_shell_created",
-      created: 3,
-      type: "shell.created",
-      location: { directory },
-      data: {
-        info: {
-          id: "shell_sibling",
-          status: "running",
-          command: "sleep 120",
-          cwd: directory,
-          shell: "bash",
-          file: "/tmp/sibling.out",
-          metadata: { sessionID },
-          time: { started: 2 },
-        },
-      },
-    })
-
-    const header = page.locator("[data-session-title]")
-    const trigger = header.getByRole("button", { name: /(?:^3 running$|\+2 running$)/ })
-    const list = page.getByRole("menu", { name: /(?:^3 running$|\+2 running$)/ })
-
-    await trigger.click()
-    await list.getByRole("menuitem", { name: /Draft TUI proposal/ }).click()
-    await expect(page).toHaveURL(/\/session\/ses_sibling_one$/)
-    await expect(list).toHaveCount(0)
-    await expect(header.getByRole("heading")).toHaveAccessibleName("Draft TUI proposal")
-    await expect(trigger.locator('[data-component="text-shimmer"]')).toHaveCSS("font-variant-numeric", "tabular-nums")
-
-    const countGap = await trigger.evaluate((element) => {
-      const title = document.createRange()
-
-      title.selectNodeContents(element.querySelector('span[dir="auto"]')!)
-
-      return (
-        element.querySelector('[data-component="text-shimmer"]')!.getBoundingClientRect().left -
-        title.getBoundingClientRect().right
-      )
-    })
-
-    expect(countGap).toBe(8)
-
-    const breadcrumbOrder = await header
-      .locator('[data-slot="session-title-parent"], [data-slot="session-title-child"]')
-      .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-slot")))
-
-    expect(breadcrumbOrder).toEqual(["session-title-parent", "session-title-child"])
-    await expect(header.locator('[data-slot="session-title-separator"]')).toHaveCount(1)
-    await expect(header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" })).toBeEnabled()
-
-    await trigger.click()
-    await expect(list.getByRole("menuitem")).toHaveText([
-      /^Explore\s*Draft TUI proposal/,
-      /^Build\s*Fix context controls/,
-      /^Shell\s*sleep 120/,
-    ])
-    await expect(list.getByRole("menuitem", { name: /Draft TUI proposal/ })).toHaveAttribute("aria-current", "page")
-    await expect(list.getByRole("menuitem", { name: /Fix context controls/ })).not.toHaveAttribute("aria-current")
-
-    const requested = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
-
-    await page.route(
-      (url) => url.pathname === "/api/session/ses_sibling_two/message",
-      async (route) => {
-        requested.resolve()
-        await release.promise
-        await route.fallback()
-      },
-    )
-    await list.getByRole("menuitem", { name: /Fix context controls/ }).click()
-    await requested.promise
-    await Promise.all([
-      expect(page).toHaveURL(/\/session\/ses_sibling_two$/),
-      expect(header.getByRole("heading")).toHaveAccessibleName("Fix context controls"),
-      expect(trigger).toBeEnabled(),
-    ]).finally(() => release.resolve())
-    await expect(list).toHaveCount(0)
-
-    // The shell call lives in the parent: the row opens it there, expanded.
-    await trigger.click()
-    await list.getByRole("menuitem", { name: /sleep 120/ }).click()
-    await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
-
-    const shellCall = page.locator('[data-timeline-part-id="call_sibling_shell"]')
-
-    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
-    await expect(shellCall).toBeInViewport()
   })
 })
 
@@ -1481,9 +1647,7 @@ test.describe("compaction", () => {
     await expect(compaction).not.toContainText("Partial automatic summary.")
     await expect(compaction).not.toContainText("Session compaction started")
 
-    await timeline.send(
-      compactionEnded({ sessionID, reason: "auto", text: "## Checkpoint\n\nAutomatic details." }),
-    )
+    await timeline.send(compactionEnded({ sessionID, reason: "auto", text: "## Checkpoint\n\nAutomatic details." }))
     await expect(divider).toHaveAttribute("data-state", "done")
     await expect(divider).toHaveAccessibleName("Compacted")
     await expect(compaction).not.toContainText("Automatic details.")
@@ -1837,6 +2001,523 @@ test.describe("shell completion", () => {
       "Checking project\nCheck finished\nCommand exited with code 0.",
     )
   })
+})
+
+test("quotes plain timeline text into the composer, with or without a comment", async ({ page }) => {
+  const prompts: string[] = []
+  await setupTimeline(page, {
+    messages: [
+      userMessage([userText("Explain the build", { id: "prt_quote_user" })]),
+      assistantMessage([textPart("prt_quote_answer", "It has **two** steps:\n\n- compile\n- bundle")]),
+    ],
+    onPrompt: (input) => void prompts.push(String(input.body.text)),
+  })
+
+  const user = '[data-slot="user-message-text"]'
+  const answer = `[data-timeline-part-id="${renderedPartID("prt_quote_answer")}"] [data-slot="text-part-body"]`
+  await expect(page.locator(answer).getByText("bundle", { exact: true })).toBeVisible()
+
+  const select = (from: string, to: string) =>
+    page.evaluate(
+      (selectors) => {
+        const [start, end] = selectors.map((selector) => document.querySelector(selector))
+
+        if (!start || !end) throw new Error("Selection target is missing")
+        const range = document.createRange()
+        range.setStart(start, 0)
+        range.setEnd(end, end.childNodes.length)
+        window.getSelection()?.removeAllRanges()
+        window.getSelection()?.addRange(range)
+      },
+      [from, to],
+    )
+
+  // A selection across the user's message and the answer quotes their text, not the controls between them.
+  await select(user, answer)
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(toolbar).toHaveCount(0)
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(chips).toHaveCount(1)
+  await expect(chips).toContainText("Explain the build")
+
+  // A quote's chip takes its comment; saving an emptied comment clears it again.
+  await select(answer, answer)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(2)
+  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
+  await chips.nth(1).click()
+  await comment.fill("Why three?")
+  await comment.press("Enter")
+  await expect(comment).toHaveCount(0)
+  await expect(chips.nth(1)).toContainText("Why three?")
+  await chips.nth(1).click()
+  await expect(comment).toHaveValue("Why three?")
+  await comment.fill("")
+  await comment.press("Enter")
+  await expect(chips.nth(1)).not.toContainText("Why three?")
+  await chips.nth(1).click()
+  await comment.fill("Why two?")
+  await comment.press("Escape")
+  await expect(chips.nth(1)).not.toContainText("Why two?")
+  await chips.nth(1).click()
+  await comment.fill("Why two?")
+  await comment.press("Enter")
+  await expect(chips.nth(1)).toContainText("Why two?")
+
+  // The shell turns selection off, so select all in the timeline selects its conversation and offers to quote it.
+  await page.locator(answer).getByText("bundle", { exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+a")
+  await expect(toolbar).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(toolbar).toHaveCount(0)
+
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.press("Enter")
+  await expect
+    .poll(() => prompts)
+    .toEqual([
+      [
+        "The user quoted the following from earlier in the conversation:",
+        "> Explain the build",
+        "> ",
+        "> It has two steps:",
+        "> compile",
+        "> bundle",
+        "The user quoted the following from earlier in the conversation:",
+        "> It has two steps:",
+        "> compile",
+        "> bundle",
+        "",
+        "The user made the following comment regarding this quote: Why two?",
+      ].join("\n"),
+    ])
+  await expect(chips).toHaveCount(0)
+})
+
+test("quotes table rows and diff lines selected across a diff viewer", async ({ page }) => {
+  const prompts: string[] = []
+  await setupTimeline(page, {
+    settings: { editToolPartsExpanded: true },
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_quote_table", "| File | Change |\n| --- | --- |\n| a.ts | rename |"),
+        toolPart(
+          "prt_quote_edit",
+          "edit",
+          "completed",
+          { path: "src/a.ts", oldString: "export const value = 'before'", newString: "export const value = 'after'" },
+          {
+            output: "Edited src/a.ts",
+            title: "src/a.ts",
+            metadata: {
+              files: [
+                {
+                  file: "src/a.ts",
+                  patch: createTwoFilesPatch(
+                    "a/src/a.ts",
+                    "b/src/a.ts",
+                    "export const value = 'before'\n",
+                    "export const value = 'after'\n",
+                  ),
+                  additions: 1,
+                  deletions: 1,
+                  status: "modified",
+                },
+              ],
+            },
+          },
+        ),
+      ]),
+    ],
+    onPrompt: (input) => void prompts.push(String(input.body.text)),
+  })
+
+  const removed = page.locator('[data-line-type="change-deletion"][data-line]')
+  const added = page.locator('[data-line-type="change-addition"][data-line]')
+  await expect(added).toHaveText("export const value = 'after'")
+
+  const drag = async (from: Locator, to: Locator) => {
+    const start = await from.boundingBox()
+    const end = await to.boundingBox()
+
+    if (!start || !end) throw new Error("Selection target is not laid out")
+    await page.mouse.move(start.x + 1, start.y + start.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(end.x + end.width - 1, end.y + end.height / 2, { steps: 10 })
+    await page.mouse.up()
+  }
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+
+  // A drag from the table into the diff viewer quotes both, table cells by tabs and diff lines with their markers.
+  await drag(page.locator("th").getByText("File", { exact: true }), added)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(1)
+
+  // The quote stops where a selection inside the diff viewer ends.
+  await drag(page.locator("td").getByText("a.ts", { exact: true }), removed)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(2)
+
+  await page.locator('[data-component="composer-editor"]').press("Enter")
+  await expect
+    .poll(() => prompts)
+    .toEqual([
+      [
+        "The user quoted the following from earlier in the conversation:",
+        "> File\tChange",
+        "> a.ts\trename",
+        "> ",
+        "> -export const value = 'before'",
+        "> +export const value = 'after'",
+        "The user quoted the following from earlier in the conversation:",
+        "> a.ts\trename",
+        "> ",
+        "> -export const value = 'before'",
+      ].join("\n"),
+    ])
+})
+
+test("places the quote action by the end a selection was made towards", async ({ page }) => {
+  const paragraph = Array.from(
+    { length: 14 },
+    (_, index) => `Sentence ${index} explains one more part of the build.`,
+  ).join(" ")
+
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_place_short", "A short line with a word."),
+        textPart("prt_place_long", Array.from({ length: 10 }, () => paragraph).join("\n\n")),
+      ]),
+    ],
+  })
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+  const first = page.locator(`[data-timeline-part-id="${renderedPartID("prt_place_long")}"] p`).first()
+  await expect(first).toBeVisible()
+
+  const box = async (locator: Locator) => {
+    const value = await locator.boundingBox()
+
+    if (!value) throw new Error("Element is not laid out")
+
+    return value
+  }
+
+  const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 10 })
+    await page.mouse.up()
+    await expect(toolbar).toBeVisible()
+
+    return box(toolbar)
+  }
+
+  // The middle of the selected text, whose right edge is ragged where its lines wrap.
+  const middle = () =>
+    page.evaluate(() => {
+      const rects = [...(window.getSelection()?.getRangeAt(0).getClientRects() ?? [])].filter((rect) => rect.width > 0)
+
+      return (Math.min(...rects.map((rect) => rect.left)) + Math.max(...rects.map((rect) => rect.right))) / 2
+    })
+
+  // Pressing inside a selection drags its text, so each case starts from no selection.
+  const clear = async () => {
+    await page.keyboard.press("Escape")
+    await expect(toolbar).toHaveCount(0)
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  }
+
+  await first.scrollIntoViewIfNeeded()
+  const lines = await box(first)
+  const start = { x: lines.x + 1, y: lines.y + 8 }
+  const end = { x: lines.x + lines.width - 1, y: lines.y + lines.height - 8 }
+
+  // A short selection keeps the action above it, even when dragged down.
+  const short = await drag(start, { x: lines.x + 200, y: lines.y + 30 })
+  expect(short.y + short.height).toBeLessThanOrEqual(lines.y)
+  expect(Math.abs(short.x + short.width / 2 - (await middle()))).toBeLessThan(2)
+  await clear()
+
+  // A tall downward selection puts the action below its last line, centred on the lines.
+  const down = await drag(start, end)
+  expect(down.y).toBeGreaterThanOrEqual(lines.y + lines.height)
+  expect(Math.abs(down.x + down.width / 2 - (await middle()))).toBeLessThan(2)
+  await clear()
+
+  // A tall upward one puts it above its first line.
+  const up = await drag(end, start)
+  expect(up.y + up.height).toBeLessThanOrEqual(lines.y)
+  expect(Math.abs(up.x + up.width / 2 - (await middle()))).toBeLessThan(2)
+  await clear()
+
+  // A single line keeps it above the selection, centred on it, whichever way it was made.
+  const word = page.getByText("A short line with a word.", { exact: true })
+
+  // The paragraph spans the column; the text inside it is narrower.
+  const line = await word.evaluate((element) => {
+    element.scrollIntoView({ block: "center" })
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const rect = range.getBoundingClientRect()
+
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+  })
+
+  const single = await drag(
+    { x: line.x + line.width - 1, y: line.y + line.height / 2 },
+    { x: line.x + 1, y: line.y + line.height / 2 },
+  )
+
+  expect(single.y + single.height).toBeLessThanOrEqual(line.y)
+  expect(Math.abs(single.x + single.width / 2 - (line.x + line.width / 2))).toBeLessThan(2)
+  await clear()
+
+  // A narrower timeline, as when a side panel opens, moves the action with the reflowed text.
+  const scroll = page.locator('[data-slot="session-timeline-scroll"]')
+
+  const centre = async () => {
+    const action = await box(toolbar)
+
+    return Math.abs(action.x + action.width / 2 - (await middle())) < 2
+  }
+
+  await word.click({ clickCount: 3, position: { x: 4, y: line.height / 2 } })
+  await expect(toolbar).toBeVisible()
+  await expect.poll(centre).toBe(true)
+  await scroll.evaluate((element) => (element.style.width = "60%"))
+  await expect.poll(centre).toBe(true)
+  await scroll.evaluate((element) => (element.style.width = ""))
+  await clear()
+
+  // A selection running past both edges of the timeline pins the action to its bottom.
+  await first.click()
+  await page.keyboard.press("ControlOrMeta+a")
+  await expect(toolbar).toBeVisible()
+  await scroller.evaluate((element) => (element.scrollTop = (element.scrollHeight - element.clientHeight) / 2))
+  const view = await box(scroller)
+  await expect
+    .poll(async () => Math.round((await box(toolbar)).y + (await box(toolbar)).height))
+    .toBe(Math.round(view.y + view.height - 8))
+})
+
+test("keeps the quote action by a triple-clicked paragraph whose selection runs on to the next message", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage([userText("Highlight what?", { id: "prt_triple_ask" })], { id: "msg_1000_triple_user" }),
+      assistantMessage(
+        [
+          textPart(
+            "prt_triple_text",
+            "Highlight **visible prompt bubbles only**, or else the turn whose reply is being read.",
+          ),
+          toolPart("prt_triple_read", "read", "completed", { path: "src/a.ts" }, { output: "a", title: "src/a.ts" }),
+          toolPart("prt_triple_grep", "grep", "completed", { pattern: "a" }, { output: "a", title: "a" }),
+        ],
+        { id: "msg_1001_triple_assistant", parentID: "msg_1000_triple_user" },
+      ),
+      userMessage([userText("have you finished?", { id: "prt_triple_next" })], {
+        id: "msg_1002_triple_user",
+        created: 1700000005000,
+      }),
+    ],
+  })
+
+  const paragraph = page.getByText("or else the turn whose reply is being read", { exact: false })
+  await expect(paragraph).toBeVisible()
+  // The selection ends at the start of the next message, past the tools between them.
+  await paragraph.click({ clickCount: 3, position: { x: 4, y: 8 } })
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  await expect(toolbar).toBeVisible()
+  const text = await paragraph.boundingBox()
+  const action = await toolbar.boundingBox()
+
+  if (!text || !action) throw new Error("Element is not laid out")
+  // One line, so the action sits just above it rather than below the tools the selection runs past.
+  expect(action.y + action.height).toBeLessThanOrEqual(text.y)
+  expect(action.y + action.height).toBeGreaterThanOrEqual(text.y - 10)
+
+  // A press on unselectable space, which leaves the selection to the page, clears it before the button is released.
+  const view = await page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport').boundingBox()
+
+  if (!view) throw new Error("Element is not laid out")
+  await page.mouse.move(view.x + 30, text.y + 4)
+  await page.mouse.down()
+  await expect(toolbar).toHaveCount(0)
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("")
+  await page.mouse.up()
+})
+
+for (const input of [
+  { name: "a narrow window with a mouse anchors it to the selection", touch: false },
+  { name: "a touch screen docks it to the timeline's bottom", touch: true },
+])
+  test(`places the quote action: ${input.name}`, async ({ browser }) => {
+    const context = await browser.newContext({ hasTouch: input.touch })
+    const page = await context.newPage()
+    await setupTimeline(page, {
+      viewport: { width: 390, height: 844 },
+      messages: [userMessage(), assistantMessage([textPart("prt_dock_text", "A short line to quote.")])],
+    })
+
+    const text = page.getByText("A short line to quote.", { exact: true })
+    await expect(text).toBeVisible()
+    await text.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+    const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+    await expect(toolbar).toBeVisible()
+    const line = await text.boundingBox()
+    const view = await page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport').boundingBox()
+    const action = await toolbar.boundingBox()
+
+    if (!line || !view || !action) throw new Error("Element is not laid out")
+
+    if (input.touch) expect(Math.round(action.y + action.height)).toBe(Math.round(view.y + view.height - 8))
+    else expect(action.y + action.height).toBeLessThanOrEqual(line.y)
+    await context.close()
+  })
+
+test("opens a quote's comment with Alt-click", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_alt_first", "The first sentence to quote."),
+        textPart("prt_alt_second", "The second sentence to quote."),
+      ]),
+    ],
+  })
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
+
+  const select = async (text: string) => {
+    await page
+      .locator('[data-slot="text-part-body"]')
+      .getByText(text, { exact: true })
+      .evaluate((element) => window.getSelection()?.selectAllChildren(element))
+    await expect(toolbar).toBeVisible()
+  }
+
+  // A plain click adds the quote, leaves the comment closed, and returns the caret to where the draft left it.
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.click()
+  await page.keyboard.type("Draft")
+  await select("The first sentence to quote.")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(1)
+  await expect(comment).toHaveCount(0)
+  await expect(editor).toBeFocused()
+  await page.keyboard.type(" follow-up")
+  await expect(editor).toHaveText("Draft follow-up")
+  await chips.nth(0).hover()
+  await page.getByRole("button", { name: "Remove attachment" }).click()
+  await expect(chips).toHaveCount(0)
+
+  // A slow tooltip names the action and its shortcut.
+  await select("The first sentence to quote.")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).hover()
+  const tooltip = page.locator('[data-component="tooltip-v2"]', { hasText: "Quote and comment" })
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText([/^(⌥|Alt)$/])
+
+  // Alt-click opens the new quote's comment, focused.
+  await page.keyboard.down("Alt")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await page.keyboard.up("Alt")
+  await expect(chips).toHaveCount(1)
+  await expect(comment).toBeFocused()
+  await page.keyboard.type("Why first?")
+  await page.keyboard.press("Enter")
+  await expect(comment).toHaveCount(0)
+  await expect(chips.nth(0)).toContainText("Why first?")
+
+  // Enter on an empty comment keeps the quote without one.
+  await select("The second sentence to quote.")
+  await page.keyboard.down("Alt")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await page.keyboard.up("Alt")
+  await expect(comment).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(comment).toHaveCount(0)
+  await expect(chips).toHaveCount(2)
+  await expect(chips.nth(1)).toContainText("The second sentence to quote.")
+  await expect(chips.nth(1)).toContainText("Quote")
+})
+
+test("reaches the quote action from the keyboard and blocks a selection over the limit", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_quote_short", "Short answer."),
+        textPart("prt_quote_long", Array.from({ length: 3_000 }, (_, index) => `word${index}`).join(" ")),
+      ]),
+    ],
+  })
+
+  const short = page.getByText("Short answer.", { exact: true })
+  await expect(short).toBeVisible()
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+
+  // A drag released where no pointerup arrives, such as outside the window, still lets the selection settle.
+  await short.click()
+  await page.mouse.down()
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
+
+  await page.keyboard.press("Tab")
+  await expect(toolbar.getByRole("button", { name: "Quote", exact: true })).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(toolbar).toHaveCount(0)
+  await expect(page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')).toBeFocused()
+
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+  const composer = page.locator('[data-component="composer-editor"]')
+
+  // Select all from the app menu covers the whole window; with focus in the timeline it keeps to the conversation.
+  await page.evaluate(() => window.getSelection()?.selectAllChildren(document.body))
+  await expect(toolbar).toBeVisible()
+  await expect
+    .poll(() =>
+      scroller.evaluate((element) => {
+        const range = window.getSelection()?.getRangeAt(0)
+
+        return !!range && element.contains(range.startContainer) && element.contains(range.endContainer)
+      }),
+    )
+    .toBe(true)
+
+  // Over the limit, the action is disabled and Tab moves on as usual.
+  await expect(toolbar.getByText("Selection too long", { exact: true })).toBeVisible()
+  await expect(toolbar.getByRole("button", { name: "Quote", exact: true })).toBeDisabled()
+  await scroller.focus()
+  await page.keyboard.press("Tab")
+  await expect(scroller).not.toBeFocused()
+  await expect(toolbar.getByRole("button", { name: "Quote", exact: true })).not.toBeFocused()
+
+  // Tab from a control inside the timeline keeps its usual order while a quote is offered.
+  await page.keyboard.press("Escape")
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  const copy = page.getByRole("button", { name: "Copy message" })
+  await copy.focus()
+  await expect(toolbar).toBeVisible()
+  await page.keyboard.press("Tab")
+  await expect(copy).not.toBeFocused()
+  expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
+  await expect(composer).toHaveCount(1)
 })
 
 function pauseExitAnimations(locator: Locator) {

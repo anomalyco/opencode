@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Next",
   "releaseNotes.action.hideFuture": "Don't show these in the future",
   "releaseNotes.media.alt": "Release preview",
+  "beta.title": "What's new",
+  "beta.since.one": "Since build {{build}} · {{count}} change",
+  "beta.since.other": "Since build {{build}} · {{count}} changes",
+  "beta.added": "New",
+  "beta.fixed": "Fixes",
+  "beta.viewAll": "View all",
+  "beta.page.description": "Every change in this build.",
+  "beta.github": "History on GitHub",
+  "beta.done": "Got it",
 }

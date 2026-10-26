@@ -77,7 +77,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-slot="mobile-drawer-content"][data-transitioning],
   [data-slot="mobile-drawer-content"][data-closing] {
     transition: none;

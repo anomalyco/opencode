@@ -14,6 +14,11 @@ export class WindowFullscreenChanged extends Schema.TaggedClass<WindowFullscreen
   fullscreen: Schema.Boolean,
 }) {}
 
+// The BrowserWindow's own focus: focus moving into one of its embeds keeps it.
+export class WindowFocusChanged extends Schema.TaggedClass<WindowFocusChanged>()("WindowFocusChanged", {
+  focused: Schema.Boolean,
+}) {}
+
 export class WindowPinchZoomChanged extends Schema.TaggedClass<WindowPinchZoomChanged>()("WindowPinchZoomChanged", {
   enabled: Schema.Boolean,
 }) {}
@@ -60,6 +65,7 @@ export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
   MenuCommandTriggered,
   WindowFullscreenChanged,
+  WindowFocusChanged,
   WindowPinchZoomChanged,
   WindowZoomChanged,
   StorageChanged,
