@@ -40,6 +40,24 @@ describe("KV", () => {
     }),
   )
 
+  it.effect("skips malformed stored values while scanning", () =>
+    Effect.gen(function* () {
+      const kv = yield* KV.Service
+      const db = (yield* Database.Service).db
+      yield* kv.set("scan:broken/a", 1)
+      yield* db.run(
+        sql`insert into kv (key, value, time_created, time_updated) values ('scan:broken/b', '{"digest":"\\&"}', 0, 0)`,
+      )
+      yield* kv.set("scan:broken/c", 3)
+
+      const first = yield* kv.scan({ prefix: "scan:broken/", limit: 2 })
+      expect(first).toEqual({ entries: [{ key: "scan:broken/a", value: 1 }], next: "scan:broken/b" })
+      expect(yield* kv.scan({ prefix: "scan:broken/", after: first.next })).toEqual({
+        entries: [{ key: "scan:broken/c", value: 3 }],
+      })
+    }),
+  )
+
   it.effect("scans prefixes in deterministic pages", () =>
     Effect.gen(function* () {
       const kv = yield* KV.Service
