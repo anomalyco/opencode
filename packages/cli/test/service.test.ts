@@ -17,6 +17,7 @@ import { ServiceConfig } from "../src/services/service-config"
 import { ServiceRegistration } from "../src/services/service-registration"
 import { isolatedEnv, transpilerCache } from "./fixture/environment"
 import { testEffect } from "../../core/test/lib/effect"
+import { tmpdir } from "../../core/test/fixture/tmpdir"
 
 const it = testEffect(NodeFileSystem.layer)
 
@@ -338,53 +339,64 @@ test("service config migration rejects invalid sources and preserves an existing
   }
 })
 
-test("only latest adopts an older named prod registration without replacing shared discovery", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-prod-registration-"))
-  const legacy = path.join(root, "service-prod.json")
-  const target = path.join(root, "service.json")
-  const registration = {
-    id: "old-prod",
-    version: "2.0.32+501b15a",
-    url: "http://127.0.0.1:13420",
-    pid: 123,
-    password: "private",
-  }
-  const text = JSON.stringify(registration)
-  const migrate = (channel: string) =>
-    Effect.runPromise(
-      ServiceConfig.migrateRegistration(legacy, target, channel, "2.1.4+new").pipe(Effect.provide(NodeFileSystem.layer)),
-    )
-  try {
-    await fs.writeFile(legacy, text)
-    for (const channel of ["beta", "dev", "preview-a"]) {
-      await migrate(channel)
-      expect(await Bun.file(target).exists()).toBe(false)
-    }
-    await fs.mkdir(path.join(root, "other"))
-    await Effect.runPromise(
-      ServiceConfig.migrateRegistration(legacy, path.join(root, "other", "service.json"), "latest", "2.1.4+new").pipe(
-        Effect.provide(NodeFileSystem.layer),
-      ),
-    )
-    expect(await Bun.file(path.join(root, "other", "service.json")).exists()).toBe(false)
+const formerProd = {
+  id: "old-prod",
+  version: "2.0.32+501b15a",
+  url: "http://127.0.0.1:13420",
+  pid: 123,
+  password: "private",
+}
 
-    expect(await migrate("latest")).toBe(registration.url)
-    expect(await Bun.file(target).json()).toEqual(registration)
-    expect(await Bun.file(legacy).text()).toBe(text)
-    expect(await migrate("latest")).toBe(registration.url)
+const migrateRegistration = (legacy: string, target: string, channel = "latest") =>
+  Effect.runPromise(
+    ServiceConfig.migrateRegistration(legacy, target, channel, "2.1.4+new").pipe(Effect.provide(NodeFileSystem.layer)),
+  )
 
-    const shared = JSON.stringify({ ...registration, id: "shared", version: "2.1.4+new" })
-    await fs.writeFile(target, shared)
-    expect(await migrate("latest")).toBeUndefined()
-    expect(await Bun.file(target).text()).toBe(shared)
+test("latest adopts former prod discovery idempotently without changing its source", async () => {
+  await using root = await tmpdir("opencode-service-prod-adopt-")
+  const legacy = path.join(root.path, "service-prod.json")
+  const target = path.join(root.path, "service.json")
+  const text = JSON.stringify(formerProd)
+  await fs.writeFile(legacy, text)
 
-    await fs.rm(target)
-    await fs.writeFile(legacy, JSON.stringify({ ...registration, pid: 0 }))
-    await migrate("latest")
-    expect(await Bun.file(target).exists()).toBe(false)
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
+  expect(await migrateRegistration(legacy, target)).toBe(formerProd.url)
+  expect(await Bun.file(target).json()).toEqual(formerProd)
+  expect(await migrateRegistration(legacy, target)).toBe(formerProd.url)
+  expect(await Bun.file(legacy).text()).toBe(text)
+})
+
+test.each([
+  { name: "beta channel", channel: "beta" },
+  { name: "dev channel", channel: "dev" },
+  { name: "preview channel", channel: "preview-a" },
+  { name: "another directory", directory: "other" },
+  { name: "ambiguous filename", source: "service-old-hash.json" },
+  { name: "invalid registration", pid: 0 },
+])("registration alias rejects $name", async (input) => {
+  await using root = await tmpdir("opencode-service-prod-reject-")
+  const sample = { channel: "latest", directory: "", source: "service-prod.json", pid: formerProd.pid, ...input }
+  const legacy = path.join(root.path, sample.source)
+  const target = path.join(root.path, sample.directory, "service.json")
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  await fs.writeFile(legacy, JSON.stringify({ ...formerProd, pid: sample.pid }))
+
+  expect(await migrateRegistration(legacy, target, sample.channel)).toBeUndefined()
+  expect(await Bun.file(target).exists()).toBe(false)
+})
+
+test.each([
+  { name: "different owner", text: JSON.stringify({ ...formerProd, id: "shared", version: "2.1.4+new" }) },
+  { name: "empty file", text: "{}" },
+  { name: "malformed file", text: "invalid shared registration" },
+])("migration preserves existing shared discovery: $name", async (input) => {
+  await using root = await tmpdir("opencode-service-prod-shared-")
+  const legacy = path.join(root.path, "service-prod.json")
+  const target = path.join(root.path, "service.json")
+  await fs.writeFile(legacy, JSON.stringify(formerProd))
+  await fs.writeFile(target, input.text)
+
+  expect(await migrateRegistration(legacy, target)).toBeUndefined()
+  expect(await Bun.file(target).text()).toBe(input.text)
 })
 
 test("preview registration migration never moves stable discovery", async () => {
