@@ -163,4 +163,31 @@ describe("Session.family", () => {
       expect(yield* session.family(missing).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
     }),
   )
+
+  it.effect("resolves the roots of many Sessions with the same root rule", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const root = yield* session.create({ location: project })
+      const child = yield* session.create({ parentID: root.id })
+      const grandchild = yield* session.create({ parentID: child.id })
+      const orphanParent = yield* session.create({ location: project })
+      const orphan = yield* session.create({ parentID: orphanParent.id })
+      const cycleA = yield* session.create({ location: project })
+      const cycleB = yield* session.create({ parentID: cycleA.id })
+      const missing = Session.ID.make("ses_missing")
+      yield* update(orphanParent.id, { parent_id: missing })
+      yield* update(cycleA.id, { parent_id: cycleB.id })
+
+      const roots = yield* store.roots([root.id, child.id, grandchild.id, orphan.id, cycleB.id, missing])
+
+      expect(Object.fromEntries(roots)).toEqual({
+        [root.id]: root.id,
+        [child.id]: root.id,
+        [grandchild.id]: root.id,
+        [orphan.id]: orphanParent.id,
+      })
+      expect((yield* store.roots([])).size).toBe(0)
+    }),
+  )
 })

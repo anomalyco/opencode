@@ -42,6 +42,7 @@ import { PublicSessionMessage } from "./message.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
+  rootID: Session.ID,
 }).annotate({ identifier: "SessionActive" })
 
 const PublicSessionInfo = Schema.Struct({
@@ -231,7 +232,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.active",
           summary: "List active sessions",
           description:
-            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Each entry's `rootID` is the root of the family that contains the Session: the Session itself when it is a root.",
         }),
       ),
     )
