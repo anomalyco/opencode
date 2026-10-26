@@ -322,6 +322,7 @@ export function SearchList<T>(props: {
               id={typeahead.listID}
               data-slot="search-list-results"
               role="listbox"
+              hidden={rows().length === 0}
               aria-label={props.label ?? props.placeholder}
             >
               <For each={sectionKeys()}>

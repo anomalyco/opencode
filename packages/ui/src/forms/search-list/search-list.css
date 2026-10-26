@@ -93,6 +93,11 @@
     display: flex;
     flex-direction: column;
     padding: 6px 6px 8px;
+
+    /* Its padding would sit above the empty state and push it below the centre. */
+    &[hidden] {
+      display: none;
+    }
   }
 
   [data-slot="search-list-section"] {

@@ -132,6 +132,22 @@ test("the narrow layout floats the results in the shared search list popover", a
   await expect(body.locator('[data-slot="search-list-empty"]').getByRole("status")).toHaveText(
     'No results for "zzzzzzzzzz"',
   )
+
+  // The message's text, not just its box, sits in the middle of the popover.
+  const offset = await body.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element.querySelector('[role="status"]')!)
+    const text = range.getBoundingClientRect()
+    const box = element.getBoundingClientRect()
+
+    return {
+      x: text.left + text.width / 2 - (box.left + box.width / 2),
+      y: text.top + text.height / 2 - (box.top + box.height / 2),
+    }
+  })
+
+  expect(Math.abs(offset.x)).toBeLessThan(1)
+  expect(Math.abs(offset.y)).toBeLessThan(1)
 })
 
 test("a category's results stay under one run of headers when its groups interleave by rank", async ({ page }) => {
