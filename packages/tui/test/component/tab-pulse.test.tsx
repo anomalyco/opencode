@@ -73,13 +73,16 @@ test("an attention glow becomes idle after ignition", async () => {
 })
 
 test.each([
-  // A requested frame runs on the next 5 ms clock step, so these frames come about 52 ms apart.
-  { name: "alone", other: 0, frames: 19 },
-  { name: "beside a 25 fps animation", other: 40, frames: 25 },
-  { name: "beside a 50 fps animation", other: 20, frames: 50 },
+  // A requested frame draws asynchronously, on the same 5 ms clock step or a later one depending on the event loop,
+  // so frames alone come 50 to 55 ms apart.
+  { name: "alone", other: 0, min: 18, max: 20 },
+  { name: "beside a 25 fps animation", other: 40, min: 25, max: 25 },
+  { name: "beside a 50 fps animation", other: 20, min: 50, max: 50 },
 ])("a running pulse adds frames only up to 20 fps, $name", async (item) => {
   await using pulse = await mount(() => ({ active: true }))
-  expect(await pulse.run(1000, item.other)).toBe(item.frames)
+  const frames = await pulse.run(1000, item.other)
+  expect(frames).toBeGreaterThanOrEqual(item.min)
+  expect(frames).toBeLessThanOrEqual(item.max)
   expect(pulse.renderer.root.liveCount).toBe(0)
 })
 
