@@ -3,6 +3,7 @@ import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { Mcp } from "@opencode/schema/mcp"
 import type { Session } from "@opencode/schema/session"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { ACPClient } from "./client"
@@ -26,6 +27,8 @@ export interface Interface {
   ) => Effect.Effect<{ readonly attached: Attached; readonly configOptions: SessionConfigOption[] }, ACPError.Failure>
   readonly detach: (sessionID: string) => Effect.Effect<void>
   readonly release: (attached: Attached) => Effect.Effect<void>
+  // Adds the session's MCP servers again if their location shut down since they were added.
+  readonly restoreMcp: (attached: Attached) => Effect.Effect<void, ACPError.Failure>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
   readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
   readonly select: (attached: Attached, change: Change) => Effect.Effect<void, ACPError.Error>
@@ -48,11 +51,23 @@ export const make = Effect.fnUntraced(function* (input: {
   const sessions = new Map<string, Entry>()
   // Outlives entries so re-attaching does not re-add servers.
   const registeredMcpBySession = new Map<string, Map<string, Mcp.ServerConfig>>()
+  // Runtime MCP servers live in location services, so a location shutdown (idle eviction or reload) drops them.
+  // These sessions add their servers again before their next attach or prompt.
+  const unloadedMcpSessions = new Set<string>()
   const connected = yield* Deferred.make<void>()
+
+  const unloadMcp = (directory: string | undefined) =>
+    Effect.sync(() => {
+      const target = directory === undefined ? undefined : FSUtil.resolve(directory)
+      for (const [sessionID, entry] of sessions) {
+        if (target === undefined || FSUtil.resolve(entry.attached.cwd) === target) unloadedMcpSessions.add(sessionID)
+      }
+    })
 
   // Subscribe before any attach so a switch right after `sessions.set` reaches the session.
   yield* input.client.event.subscribe().pipe(
     Stream.tap((event) => (event.type === "server.connected" ? Deferred.succeed(connected, undefined) : Effect.void)),
+    Stream.tap((event) => (event.type === "location.shutdown" ? unloadMcp(event.location?.directory) : Effect.void)),
     Stream.filter(
       (event): event is SelectedEvent =>
         event.type === "session.model.selected" || event.type === "session.agent.selected",
@@ -94,16 +109,19 @@ export const make = Effect.fnUntraced(function* (input: {
     Effect.suspend(() => {
       const registered = registeredMcpBySession.get(attached.id) ?? new Map<string, Mcp.ServerConfig>()
       registeredMcpBySession.set(attached.id, registered)
+      const unloaded = unloadedMcpSessions.delete(attached.id)
+      const configs = new Map(unloaded ? registered : [])
+      if (unloaded) registered.clear()
+      servers.forEach((server) => configs.set(server.name, mcpConfig(server)))
       return Effect.forEach(
-        servers,
-        (server) =>
+        configs,
+        ([name, config]) =>
           Effect.suspend(() => {
-            const config = mcpConfig(server)
-            if (isDeepStrictEqual(registered.get(server.name), config)) return Effect.void
-            registered.set(server.name, config)
-            return input.client.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
+            if (isDeepStrictEqual(registered.get(name), config)) return Effect.void
+            registered.set(name, config)
+            return input.client.mcp.add({ server: name, location: { directory: attached.cwd }, config }).pipe(
               Effect.catch(ACPClient.classify),
-              Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
+              Effect.onError(() => Effect.sync(() => registered.delete(name))),
               Effect.uninterruptible,
             )
           }),
@@ -116,6 +134,7 @@ export const make = Effect.fnUntraced(function* (input: {
       if (sessions.get(sessionID) === entry) {
         sessions.delete(sessionID)
         registeredMcpBySession.delete(sessionID)
+        unloadedMcpSessions.delete(sessionID)
       }
       return Scope.close(entry.scope, Exit.void)
     })
@@ -170,6 +189,8 @@ export const make = Effect.fnUntraced(function* (input: {
       const entry = sessions.get(attached.id)
       if (entry?.attached === attached) yield* remove(attached.id, entry)
     }),
+    restoreMcp: (attached) =>
+      Effect.suspend(() => (unloadedMcpSessions.has(attached.id) ? registerMcp(attached, []) : Effect.void)),
     require: Effect.fnUntraced(function* (sessionID) {
       const entry = sessions.get(sessionID)
       if (!entry) return yield* new ACPError.SessionNotFoundError({ sessionId: sessionID })

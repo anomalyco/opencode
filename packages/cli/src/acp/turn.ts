@@ -351,6 +351,7 @@ export const make = Effect.fnUntraced(function* (input: {
   // Forked uninterruptible: interruption lands only in `execute` and the last check in `settle`, so a response follows.
   const run = Effect.fn("cli.acp.turn.run")(function* (params: PromptRequest) {
     const attached = yield* input.sessions.require(params.sessionId)
+    yield* input.sessions.restoreMcp(attached)
     const prompt = yield* ACPPrompt.prepare(yield* input.catalog.get(attached.cwd), params.prompt)
     const capabilities = yield* Ref.get(input.capabilities)
     const state = yield* Ref.make(ACPTranslate.initial)
