@@ -1,6 +1,6 @@
 export * as Provider from "./provider.js"
 
-import { Context, Effect, Layer, Option, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -183,20 +183,14 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-// Both key sets come from the settings schema, so a new OpenCode setting never reaches provider packages.
-// `fetch` is a custom fetch function a plugin can set; it is not data, so it is not in the schema.
-const OPENCODE_KEYS = new Set([...Object.keys(Provider.SettingsFields), "fetch"])
-const PROVIDER_ONLY_KEYS = new Set(
-  Object.keys(Provider.SettingsFields).filter((key) => !(key in Provider.ModelSettingsFields)),
-)
-
-/** Provider options: every settings key OpenCode doesn't read itself. */
-export function nativeSettings(settings: Readonly<Record<string, unknown>>): Settings {
-  return Object.fromEntries(Object.entries(settings).filter(([key]) => !OPENCODE_KEYS.has(key)))
+/** The provider options: every settings key OpenCode doesn't read itself. */
+export function nativeSettings(settings: Settings) {
+  return Struct.omit(settings, Struct.keys(Provider.SettingsFields))
 }
 
+/** Settings a model inherits from its provider. */
 export function modelSettings(settings: Settings | undefined) {
-  return settings && Object.fromEntries(Object.entries(settings).filter(([key]) => !PROVIDER_ONLY_KEYS.has(key)))
+  return settings && Struct.omit(settings, Struct.keys(Provider.ProviderOnlySettingsFields))
 }
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)

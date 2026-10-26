@@ -15440,14 +15440,14 @@
               }
             ]
           },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
+          },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
           "cache": {
             "$ref": "#/components/schemas/Provider.Cache"
-          },
-          "transport": {
-            "$ref": "#/components/schemas/Provider.Transport"
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
@@ -18987,14 +18987,14 @@
               }
             ]
           },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
+          },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
           "cache": {
             "$ref": "#/components/schemas/Provider.Cache"
-          },
-          "transport": {
-            "$ref": "#/components/schemas/Provider.Transport"
           },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"

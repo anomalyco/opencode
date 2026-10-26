@@ -33,7 +33,7 @@ import {
 import { Auth, Endpoint, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
 import { ProviderShared } from "@opencode/ai/protocols/shared"
 import { isRecord } from "@opencode/ai/utils/record"
-import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
@@ -450,14 +450,16 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   return providerID
 }
 
-// Connection settings configure the SDK provider, not individual requests.
-const CONNECTION_KEYS = new Set(["accessToken", "apiKey", "authToken", "baseURL"])
-
-function requestSettings(settings: Readonly<Record<string, unknown>> | undefined) {
+function requestSettings(settings: Provider.Settings | undefined) {
   if (settings === undefined) return undefined
-  const result = Object.fromEntries(
-    Object.entries(Provider.nativeSettings(settings)).filter(([key]) => !CONNECTION_KEYS.has(key)),
-  )
+  // These configure the SDK provider when it is created, not each request.
+  const result = Struct.omit(Provider.nativeSettings(settings), [
+    "accessToken",
+    "apiKey",
+    "authToken",
+    "baseURL",
+    "fetch",
+  ])
   return Object.keys(result).length === 0 ? undefined : result
 }
 
