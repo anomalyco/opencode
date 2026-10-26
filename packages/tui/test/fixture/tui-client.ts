@@ -1,3 +1,4 @@
+import { Event } from "@opencode/schema/event"
 import { OpenCode, type OpenCodeEvent } from "@opencode/client"
 
 export const worktree = "/tmp/opencode"
@@ -55,7 +56,11 @@ export function createEventStream() {
       send(v2, pending, event)
     },
     v2() {
-      return response(v2, pending, { id: "evt_connected", type: "server.connected", data: {} })
+      return response(v2, pending, {
+        id: Event.ID.make("evt_connected", { disableChecks: true }),
+        type: "server.connected",
+        data: {},
+      })
     },
     disconnect() {
       for (const controller of v2) controller.close()
