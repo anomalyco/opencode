@@ -874,22 +874,6 @@
     display: none;
   }
 
-  .settings-search[data-expanded="false"] .settings-search-matches {
-    display: none;
-  }
-
-  .settings-search-matches {
-    position: absolute;
-    inset-block-start: calc(100% + 8px);
-    inset-inline: 0;
-    z-index: 12;
-    max-height: 45vh;
-    padding-block: 8px;
-    border-radius: 8px;
-    background: var(--v2-background-bg-base);
-    box-shadow: var(--v2-elevation-raised);
-  }
-
   .settings-screen > .settings > .settings-sidebar[data-searchable="false"] {
     display: none;
   }

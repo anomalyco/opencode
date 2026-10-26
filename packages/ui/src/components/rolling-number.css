@@ -16,5 +16,9 @@
 
   [data-slot="rolling-number-glyph"][data-leaving] {
     pointer-events: none;
+
+    &::before {
+      content: attr(data-leaving);
+    }
   }
 }

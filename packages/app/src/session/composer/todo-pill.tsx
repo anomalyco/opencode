@@ -100,7 +100,7 @@ function TodoList(props: { todos: readonly Todo[] }) {
           <div
             data-slot="session-todo-row"
             data-status={todo.status}
-            class="flex min-h-7 items-start gap-2 rounded-[4px] px-1.5 py-1.5"
+            class="flex min-h-7 shrink-0 items-start gap-2 rounded-[4px] px-1.5 py-1.5"
           >
             <TodoGlyph status={todo.status} />
             <span

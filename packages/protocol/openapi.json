@@ -15544,6 +15544,9 @@
           "modelID": {
             "type": "string"
           },
+          "type": {
+            "$ref": "#/components/schemas/Model.Type"
+          },
           "family": {
             "type": "string"
           },
@@ -17366,6 +17369,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
           },
           "metadata": {
             "type": "object"

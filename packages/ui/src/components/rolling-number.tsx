@@ -46,12 +46,14 @@ function Digit(props: { digit: string; dir: number; spring: DurationOptions }) {
   let from = 0
   let to = 0
 
+  const progress = () => (spring ? Math.max(0, Math.min(1, spring.value)) : 1)
+
   const paint = () => {
-    const p = spring ? Math.max(0, Math.min(1, spring.value)) : 1
+    const p = progress()
     roll(incoming, enter * (1 - p))
     roll(outgoing, from + (to - from) * p)
 
-    if (!spring && outgoing) outgoing.textContent = ""
+    if (!spring && outgoing) outgoing.dataset.leaving = ""
   }
 
   const tick = (dt: number) => {
@@ -76,20 +78,30 @@ function Digit(props: { digit: string; dir: number; spring: DurationOptions }) {
         last = next
 
         if (!incoming || !outgoing || next === prev) return
-        incoming.textContent = next
 
         if (prefersReducedMotion() || !incoming.isConnected) {
+          incoming.textContent = next
           spring = undefined
           paint()
 
           return
         }
 
-        // A change mid-roll sends the digit on screen out from where it is.
-        from = enter * (1 - (spring ? Math.max(0, Math.min(1, spring.value)) : 1))
+        // A change mid-roll carries on from where both digits are, so together they never show less than one digit.
+        // Going back to the digit still leaving brings it back from where it is, and the arriving one leaves the way it
+        // came. Otherwise the digit nearer the middle leaves from there, and the new one comes in as far out as the
+        // other was, so a digit that had barely appeared never crosses the middle.
+        const p = progress()
+        const now = { in: enter * (1 - p), out: from + (to - from) * p }
+        const back = !!spring && next === outgoing.dataset.leaving
+        const near = back || Math.abs(now.in) <= Math.abs(now.out)
+        const far = !spring ? 1 : Math.min(1, Math.abs(near ? now.out : now.in))
+
+        if (near) outgoing.dataset.leaving = prev
+        from = near ? now.in : now.out
         to = -props.dir
-        enter = props.dir
-        outgoing.textContent = prev
+        enter = back ? now.out : props.dir * far
+        incoming.textContent = next
         spring = Spring.fromDuration(0, props.spring).set(1)
         paint()
         stop ??= frameLoop.add(tick)
@@ -109,6 +121,7 @@ function Digit(props: { digit: string; dir: number; spring: DurationOptions }) {
           el.textContent = props.digit
         }}
       />
+      {/* The leaving digit is drawn from its attribute, so the number's text is only ever the value it shows. */}
       <span data-slot="rolling-number-glyph" data-leaving="" aria-hidden="true" ref={(el) => (outgoing = el)} />
     </span>
   )

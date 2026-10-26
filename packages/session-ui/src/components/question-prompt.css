@@ -1,7 +1,7 @@
 [data-component="dock-prompt"][data-kind="question"] {
   --v2-question-answer-bg-selected: light-dark(#f5f8ff, #7698fd26);
-  /* A bounce-0 spring sampled for CSS: every selection, focus and progress change eases on it, so two answers trading
-     places always cross in the same frames. */
+  /* A bounce-0 spring sampled for CSS: with the dock's motion on, every pick and progress change eases on it, so two
+     answers trading places always cross in the same frames. */
   --question-spring: linear(
     0,
     0.04,
@@ -26,7 +26,6 @@
     1
   );
   --question-pick: 120ms;
-  --question-quick: 200ms;
   --question-settle: 300ms;
 
   max-block-size: var(--question-prompt-max-height, 100dvh);
@@ -202,7 +201,6 @@
       background-color: var(--v2-background-bg-accent);
       transform: scaleX(0);
       transform-origin: left;
-      transition: transform var(--question-settle) var(--question-spring);
     }
 
     &:dir(rtl)::before {
@@ -322,9 +320,6 @@
     font-weight: 530;
     line-height: 1;
     font-variant-numeric: tabular-nums;
-    transition:
-      color var(--question-pick) var(--question-spring),
-      box-shadow var(--question-pick) var(--question-spring);
 
     &::before {
       content: "";
@@ -334,7 +329,6 @@
       border-radius: inherit;
       background-color: var(--v2-background-bg-accent);
       opacity: 0;
-      transition: opacity var(--question-pick) var(--question-spring);
     }
 
     &[data-type="checkbox"] {
@@ -547,16 +541,28 @@
     }
   }
 
-  /* Reduced motion keeps the fades and drops the movement. */
-  :root[data-motion="reduce"] & {
+  /* Without the dock's motion there is no sliding bar, so the current question's dash lights itself. */
+  [data-component="session-question-dock"][data-animated="false"] & {
+    [data-slot="question-progress-segment"][data-active="true"] [data-slot="question-progress-bar"]::before {
+      background-color: var(--v2-icon-icon-base);
+      transform: scaleX(1);
+    }
+  }
+
+  /* Picks and answered dashes ease only while the dock's motion is on; otherwise they change on the same frame. */
+  [data-component="session-question-dock"][data-animated="true"] & {
     [data-slot="question-progress-bar"]::before {
-      transform: none;
-      opacity: 0;
-      transition: opacity var(--question-quick) linear;
+      transition: transform var(--question-settle) var(--question-spring);
     }
 
-    [data-slot="question-progress-segment"][data-answered="true"] [data-slot="question-progress-bar"]::before {
-      opacity: 1;
+    [data-slot="question-option-key"] {
+      transition:
+        color var(--question-pick) var(--question-spring),
+        box-shadow var(--question-pick) var(--question-spring);
+
+      &::before {
+        transition: opacity var(--question-pick) var(--question-spring);
+      }
     }
   }
 }

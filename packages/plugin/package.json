@@ -69,5 +69,10 @@
     "solid-js": "catalog:",
     "typescript": "catalog:",
     "@typescript/native": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/plugin"
   }
 }

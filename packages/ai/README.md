@@ -50,6 +50,26 @@ Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`
 `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+### Raw provider events
+
+Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
+before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
+are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+
+```ts
+import { Stream } from "effect"
+import { LLM, LLMEvent } from "@opencode/ai/effect"
+
+const flagged = (data: unknown) =>
+  typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
+
+const events = LLM.stream({ model, prompt: "Say hello.", includeRaw: true }).pipe(
+  Stream.map((event) =>
+    event.type === "raw" && flagged(event.data) ? LLMEvent.providerError({ message: "Flagged by moderation" }) : event,
+  ),
+)
+```
+
 ### Google Interactions
 
 `Google.configure({ apiKey }).interactions(modelID)` selects the Interactions API; `.model(modelID)` still selects

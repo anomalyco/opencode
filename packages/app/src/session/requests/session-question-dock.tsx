@@ -8,13 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
-import {
-  frameLoop,
-  observeReducedMotion,
-  prefersReducedMotion,
-  Spring,
-  type DurationOptions,
-} from "@opencode/ui/motion"
+import { frameLoop, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
 import { showToast } from "@/shell/notifications/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode/client/promise"
@@ -25,6 +19,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
 import { useCommand } from "@/shell/commands/command"
 import { questionKey, type QuestionKeyZone } from "./question-keys"
+import { questionMotion } from "./question-motion"
 
 const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
 
@@ -156,9 +151,10 @@ const footer = {
   }),
 }
 
-const fade: DurationOptions = { duration: 0.2, bounce: 0 }
-
 const minimizing: DurationOptions = { duration: 0.3, bounce: 0 }
+
+// How far a list that scrolls fades out at an edge with more answers past it.
+const feather = 24
 
 // Where a copy of the question sits on screen relative to its place at rest, how much of it shows, and how close it is
 // to sharp and full size.
@@ -170,8 +166,9 @@ const rest: Pose = { x: 0, shown: 1, settle: 1 }
 // to 1 along the way.
 type Track = { from: Pose; to: number; spring: Spring }
 
-// The question being left: inert copies of its text and its answers, and how tall they are.
-type Ghost = Track & { tab: number; els: HTMLElement[]; details: number; list: number }
+// The question being left: inert copies of its text and its answers, how tall they are, and how far its answers were
+// scrolled.
+type Ghost = Track & { tab: number; els: HTMLElement[]; details: number; list: number; scroll: number }
 
 type QuestionField = FormStringField | FormMultiselectField
 
@@ -301,7 +298,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const last = createMemo(() => store.tab >= total() - 1)
   // The question text and the answers box follow their measured heights on springs, so the dock grows and shrinks with
   // each question, and the answers box folds away when the dock is minimized. One frame job steps these springs and the
-  // switch between questions, and writes the results straight to the elements. Under reduced motion heights land at once.
+  // switch between questions, and writes the results straight to the elements. Without the dock's motion (its knob is
+  // off by default, and reduced motion turns it off) every spring lands on its target and is painted at once.
   const content = { details: 0, list: 0 }
   const boxes = { details: new Spring(0), list: new Spring(0), folded: new Spring(0) }
   let ghost: Ghost | undefined
@@ -349,30 +347,53 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     setStore("answers", store.tab, next ? [next] : [])
   }
 
+  // The dock's heights from its last measure: at most, and of everything but the question text and the answers box.
+  // The answers box takes what the question text leaves, and opens only to the room it will have at rest, so it never
+  // grows past it and springs back.
+  const limit = { max: Infinity, chrome: 0 }
+  const cap = () => limit.max - limit.chrome
+  // The room the answers box has now, while the question text springs to its height, and once it is there.
+  const room = () => cap() - boxes.details.value
+  const settled = (details = content.details) => cap() - details
+  const scroll = { top: 0, view: 0 }
+
   const measure = () => {
     if (!root) return
 
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
 
+    // The timeline starts under its sticky header, or at its own top when it has none.
     const top =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-
-    if (!top) {
-      root.style.removeProperty("--question-prompt-max-height")
-
-      return
-    }
+      head instanceof HTMLElement && head.classList.contains("sticky")
+        ? head.getBoundingClientRect().bottom
+        : scroller instanceof HTMLElement
+          ? scroller.getBoundingClientRect().top
+          : 0
 
     const dock = root.closest('[data-component="session-composer-dock"]')
+    // The dock sits at the foot of the column it shares with the timeline, in the app inside a zero-height row that it
+    // overflows upward. Grown past the column it spills out of it, so the column bounds it, not the dock's own edge.
+    const column = bounds(dock?.parentElement)
+    const bottom = Math.min(window.innerHeight, column?.bottom ?? window.innerHeight)
 
-    if (!(dock instanceof HTMLElement)) return
+    // Whatever the dock holds besides the question, above it or below, takes from the same height.
+    const around =
+      dock instanceof HTMLElement
+        ? Math.max(0, dock.getBoundingClientRect().height - root.getBoundingClientRect().height)
+        : 0
 
-    const dockBottom = dock.getBoundingClientRect().bottom
-    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
     const gap = 8
-    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
-    root.style.setProperty("--question-prompt-max-height", `${max}px`)
+    const height = bottom - Math.max(0, top, column?.top ?? 0) - around
+    limit.max = Math.max(240, Math.floor(height - gap))
+
+    // Minimized, the answers box is gone, so only an open dock is measured.
+    if (!store.minimized && optionsRef && detailsFrame)
+      limit.chrome = root.offsetHeight - optionsRef.offsetHeight - detailsFrame.offsetHeight
+    root.style.setProperty("--question-prompt-max-height", `${limit.max}px`)
+
+    if (content.list > 0) boxes.list.snap(Math.min(content.list, settled()))
+    paint()
   }
 
   const clamp = (i: number) => Math.max(0, Math.min(count() - 1, i))
@@ -395,7 +416,28 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     if (store.editing) return
     const el = next === options().length ? customRef : optsRef[next]
-    el?.focus(how)
+    el?.focus({ preventScroll: true })
+
+    if (!how?.preventScroll) reveal(rowAt(next))
+  }
+
+  const rowAt = (i: number) => (i === options().length ? customRow : optsRef[i])
+
+  // A list that scrolls follows the highlighted answer at once, keeping it clear of the feathered edges.
+  const reveal = (row: HTMLElement | undefined, view = optionsRef?.clientHeight ?? 0) => {
+    if (!row || !optionsRef || !listRef) return
+    const top = row.offsetTop + listRef.offsetTop
+    const edge = Math.min(feather, view / 4)
+    optionsRef.scrollTop = Math.min(top - edge, Math.max(optionsRef.scrollTop, top + row.offsetHeight + edge - view))
+    scroll.top = optionsRef.scrollTop
+    pin()
+  }
+
+  // The leaving copy of the answers stays where they were on screen however far the live list scrolls under it.
+  const pin = () => {
+    const answers = ghost?.els[1]
+
+    if (ghost && answers) answers.style.top = `${scroll.top - ghost.scroll}px`
   }
 
   // Measuring reads layout, so it waits while the dock's own springs are moving and runs once they come to rest.
@@ -410,7 +452,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }
 
   onMount(() => {
-    requestMeasure()
+    measure()
 
     makeEventListener(window, "resize", requestMeasure)
 
@@ -432,18 +474,27 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     if (!list || !details) return
 
     const observer = new ResizeObserver((entries) => {
+      const fresh = { details: content.details === 0, list: content.list === 0 }
+
       entries.forEach((entry) => {
         const size = entry.borderBoxSize[0]?.blockSize
 
         if (size === undefined) return
         const key = entry.target === list ? "list" : "details"
-        const spring = boxes[key]
-
-        if (content[key] === 0 || prefersReducedMotion()) spring.snap(size)
-        else tune(spring, resize()).set(size)
         content[key] = size
 
         if (key === "list") setStore("listHeight", size)
+      })
+
+      // The answers box opens only as far as the room the new question text leaves it at rest.
+      ;(["details", "list"] as const).forEach((key) => {
+        const spring = boxes[key]
+        const size = key === "list" ? Math.min(content.list, settled()) : content.details
+
+        if (spring.target === size) return
+
+        if (fresh[key] || !questionMotion()) spring.snap(size)
+        else tune(spring, resize()).set(size)
       })
       wake()
     })
@@ -453,24 +504,15 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     onCleanup(() => observer.disconnect())
   })
 
-  // One highlight card jumps between answers by its clip, so only one answer ever looks highlighted. Under reduced
-  // motion it fades in at its new answer.
-  let placed = { tab: -1, index: -1 }
+  // One highlight card jumps between answers by its clip, so only one answer ever looks highlighted.
   createEffect(() => {
     const el = highlightRef
     const index = store.focus
-    const row = index === options().length ? customRow : optsRef[index]
+    const row = rowAt(index)
     void store.listHeight
 
     if (!el || !row || !listRef) return
     el.style.clipPath = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
-
-    if (lit() === "none") return
-    const moved = placed.tab !== store.tab || placed.index !== index
-    placed = { tab: store.tab, index }
-
-    if (prefersReducedMotion() && moved && el.animate)
-      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "linear" })
   })
 
   onCleanup(() => {
@@ -769,9 +811,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       : {
           ...track(live, -dir * reach, moving, options, v.launch()),
           tab: store.tab,
-          els: [copy(detailsRef, detailsFrame), copy(listRef, optionsTrack)],
+          // The answers box scrolls back to the top for the new question, so the copy keeps its place on screen.
+          els: [copy(detailsRef, detailsFrame), copy(listRef, optionsTrack, -scroll.top)],
           details: content.details,
           list: content.list,
+          scroll: scroll.top,
         }
     into = back
       ? track(leaving(back, v, into), 0, speed(back), options, v.launch())
@@ -797,33 +841,48 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     }
 
     const folded = Math.max(0, Math.min(1, boxes.folded.value))
-    const reduced = prefersReducedMotion()
+    // Without motion the boxes keep their natural heights, so a new question lays out at its size on the same frame.
+    const sized = questionMotion()
 
     if (detailsFrame && content.details > 0) {
       const shown = boxes.details.value
-      detailsFrame.style.height = `${shown.toFixed(2)}px`
-      mask(detailsFrame, Math.max(content.details, ghost?.details ?? 0) - shown, shown, sliding)
+      detailsFrame.style.height = sized ? `${shown.toFixed(2)}px` : ""
+      mask(detailsFrame, 0, Math.max(content.details, ghost?.details ?? 0) - shown, shown, sliding)
     }
 
     if (optionsRef && content.list > 0) {
-      const shown = boxes.list.value
-      const open = reduced ? 1 - boxes.folded.target : 1 - folded
-      optionsRef.style.height = `${(shown * open).toFixed(2)}px`
-      mask(optionsRef, Math.max(content.list, ghost?.list ?? 0) - shown, shown, sliding)
+      // Without motion the dock's max height caps the answers box, which scrolls inside the room it leaves.
+      const shown = sized
+        ? Math.min(boxes.list.value, room()) * (1 - folded)
+        : folded > 0
+          ? 0
+          : Math.min(content.list, room())
+
+      optionsRef.style.height = sized ? `${shown.toFixed(2)}px` : folded > 0 ? "0px" : ""
+      scroll.view = shown
+      feathers()
     }
 
     if (optionsRef) {
       optionsRef.style.opacity = folded > 0 ? (1 - folded).toFixed(4) : ""
-      optionsRef.style.visibility = folded > 0.98 ? "hidden" : ""
+      // Restoring shows the answers again at once, so the highlighted one can take focus.
+      optionsRef.style.visibility = folded > 0.98 && boxes.folded.target > 0 ? "hidden" : ""
     }
 
-    const turn = reduced ? boxes.folded.target : folded
-
-    if (chevron) chevron.style.transform = turn > 0 ? `rotate(${(turn * 180).toFixed(2)}deg)` : ""
+    if (chevron) chevron.style.transform = folded > 0 ? `rotate(${(folded * 180).toFixed(2)}deg)` : ""
 
     if (pip) pip.style.transform = `translate3d(${bar.value.toFixed(2)}px,0,0)`
 
     paintFooter()
+  }
+
+  // The answers fade out at whichever edge has more of them past it, while they open or scroll.
+  // It reads where the list is scrolled from the last scroll, never from layout, since it runs every frame.
+  const feathers = () => {
+    if (!optionsRef) return
+    const above = scroll.top
+    const shown = scroll.view
+    mask(optionsRef, above, Math.max(content.list, ghost?.list ?? 0) - above - shown, shown, !!(into || ghost))
   }
 
   const paintFooter = () => {
@@ -897,22 +956,30 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }
 
   const wake = () => {
+    if (!questionMotion()) return still()
     stop ??= frameLoop.add(tick)
   }
 
-  onCleanup(
-    observeReducedMotion(() => {
-      if (!prefersReducedMotion() || !stop) return
-      dropSwitch()
-      ;[...Object.values(boxes), ...Object.values(foot), bar].forEach((spring) => spring.snap(spring.target))
-      paint()
-    }),
-  )
+  // Everything lands where it is going, now: no frame job runs.
+  const still = () => {
+    stop?.()
+    stop = undefined
+    dropSwitch()
+    ;[...Object.values(boxes), ...Object.values(foot), bar].forEach((spring) => spring.snap(spring.target))
+    paint()
+  }
+
+  // Turning the knob off also lands any running pick or dash transition.
+  createEffect(() => {
+    if (questionMotion()) return
+    still()
+    root?.getAnimations({ subtree: true }).forEach((animation) => animation.cancel())
+  })
   onCleanup(() => stop?.())
 
   const jump = (tab: number) => {
     if (sending() || tab === store.tab) return
-    const animate = !store.minimized && !prefersReducedMotion()
+    const animate = !store.minimized && questionMotion()
 
     if (animate) depart(tab)
     else dropSwitch()
@@ -932,7 +999,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     })
     optsRef.length = options().length
 
-    const reduced = prefersReducedMotion()
+    if (optionsRef) optionsRef.scrollTop = scroll.top = 0
+
+    const reduced = !questionMotion()
 
     if (reduced) bar.snap(dash(tab))
     else tune(bar, tuning.spring()).set(dash(tab))
@@ -957,10 +1026,14 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       return
     }
 
-    // The answers box is still springing to the new list's height, so focusing must not scroll it.
+    // The answers box is still springing to the new list's height, so the answer that takes focus comes into view of
+    // the height it will rest at.
     focus(pickFocus(tab), { preventScroll: true })
 
-    if (animate) wake()
+    if (optionsRef && detailsRef)
+      reveal(rowAt(store.focus), Math.min(optionsRef.scrollHeight, settled(detailsRef.offsetHeight)))
+
+    wake()
   }
 
   const cycle = (by: number) => {
@@ -999,16 +1072,21 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     if (sending()) return
     setStore("minimized", false)
     fold(0)
-    focus(pickFocus())
+    paint()
+    // The answers box is still opening, so its answer comes into view of the height it will rest at.
+    const index = pickFocus()
+    focus(index, { preventScroll: true })
+
+    if (detailsRef) reveal(rowAt(index), Math.min(content.list, settled(detailsRef.offsetHeight)))
   }
 
   const fold = (target: number) => {
-    tune(boxes.folded, prefersReducedMotion() ? fade : minimizing).set(target)
+    tune(boxes.folded, minimizing).set(target)
     wake()
   }
 
   return (
-    <div data-component="session-question-dock">
+    <div data-component="session-question-dock" data-animated={questionMotion()}>
       <DockPrompt
         kind="question"
         ref={(el) => (root = el)}
@@ -1020,7 +1098,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 <bdi>
                   {summary()[0]}
                   <Show when={summary().length > 1}>
-                    <RollingNumber value={current()} spring={tuning.spring()} />
+                    <Show when={questionMotion()} fallback={current()}>
+                      <RollingNumber value={current()} spring={tuning.spring()} />
+                    </Show>
                     {summary().slice(1).join("")}
                   </Show>
                 </bdi>
@@ -1028,19 +1108,23 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
               <div data-slot="question-header-actions">
                 <Show when={total() > 1}>
                   <div data-slot="question-progress">
-                    <div data-slot="question-progress-track" aria-hidden="true">
-                      <span
-                        data-slot="question-progress-current"
-                        ref={(el) => {
-                          pip = el
-                          // Dashes have their places once the row is laid out.
-                          queueMicrotask(() => {
-                            bar.snap(dash(store.tab))
-                            paint()
-                          })
-                        }}
-                      />
-                    </div>
+                    {/* Without motion there is no sliding bar: the current question's dash lights instead. */}
+                    <Show when={questionMotion()}>
+                      <div data-slot="question-progress-track" aria-hidden="true">
+                        <span
+                          data-slot="question-progress-current"
+                          ref={(el) => {
+                            pip = el
+                            onCleanup(() => (pip = undefined))
+                            // Dashes have their places once the row is laid out.
+                            queueMicrotask(() => {
+                              bar.snap(dash(store.tab))
+                              paint()
+                            })
+                          }}
+                        />
+                      </div>
+                    </Show>
                     <For each={questions()}>
                       {(_, i) => (
                         <button
@@ -1123,22 +1207,22 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                   </Button>
                 </Tooltip>
               </div>
-              {/* Next and Submit share one place; the one not in use lies under it, inert. */}
-              <div data-slot="question-advance">
-                <div
-                  data-slot="question-advance-face"
-                  data-active={!last()}
-                  inert={last()}
-                  ref={(el) => (nextFace = el)}
-                >
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <>
-                        {language.t("ui.common.next")}
-                        <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
-                      </>
-                    }
+              {/* Next and Submit share one place and one tooltip; the one not in use lies under it, inert. */}
+              <Tooltip
+                placement="top"
+                value={
+                  <>
+                    {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
+                    <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
+                  </>
+                }
+              >
+                <div data-slot="question-advance">
+                  <div
+                    data-slot="question-advance-face"
+                    data-active={!last()}
+                    inert={last()}
+                    ref={(el) => (nextFace = el)}
                   >
                     <Button
                       variant="neutral"
@@ -1154,22 +1238,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                         </span>
                       </span>
                     </Button>
-                  </Tooltip>
-                </div>
-                <div
-                  data-slot="question-advance-face"
-                  data-active={last()}
-                  inert={!last()}
-                  ref={(el) => (submitFace = el)}
-                >
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <>
-                        {language.t("ui.common.submit")}
-                        <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
-                      </>
-                    }
+                  </div>
+                  <div
+                    data-slot="question-advance-face"
+                    data-active={last()}
+                    inert={!last()}
+                    ref={(el) => (submitFace = el)}
                   >
                     <Button
                       variant="submit"
@@ -1185,9 +1259,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                         </span>
                       </span>
                     </Button>
-                  </Tooltip>
+                  </div>
                 </div>
-              </div>
+              </Tooltip>
             </div>
           </>
         }
@@ -1199,6 +1273,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
           aria-label={question()?.question}
           inert={store.minimized}
           aria-hidden={store.minimized ? "true" : undefined}
+          onScroll={(event) => {
+            scroll.top = event.currentTarget.scrollTop
+            pin()
+            feathers()
+          }}
           // Space already acted on key down; its release must not click the button again.
           onKeyUp={(event) => {
             if (event.key !== " ") return
@@ -1407,13 +1486,15 @@ function place(el: HTMLElement, look: Look) {
 
 // While a switch is under way, content sliding into a box's side gutters fades out there. While a box is shorter than
 // what it holds, its bottom fades instead of ending hard, over no more than a third of the box.
-function mask(el: HTMLElement, cut: number, shown: number, sliding: boolean) {
-  const bottom = Math.min(24, cut, shown / 3)
+function mask(el: HTMLElement, above: number, below: number, shown: number, sliding: boolean) {
+  const top = Math.min(feather, above, shown / 3)
+  const bottom = Math.min(feather, below, shown / 3)
 
   const layers = [
     sliding
       ? "linear-gradient(to right, transparent, #000 var(--question-gutter), #000 calc(100% - var(--question-gutter)), transparent)"
       : "",
+    top > 0.5 ? `linear-gradient(to bottom, transparent, #000 ${top.toFixed(2)}px)` : "",
     bottom > 0.5 ? `linear-gradient(to top, transparent, #000 ${bottom.toFixed(2)}px)` : "",
   ].filter(Boolean)
 
@@ -1423,7 +1504,7 @@ function mask(el: HTMLElement, cut: number, shown: number, sliding: boolean) {
 
 // A still copy of `el` laid over it in `host`, after the live content so it never comes first in the DOM, inert and
 // hidden from assistive tech. Ids are dropped so they stay unique, and typed text is carried over.
-function copy(el: HTMLElement, host: HTMLElement) {
+function copy(el: HTMLElement, host: HTMLElement, top = 0) {
   // SAFETY: a deep clone of an element is an element of the same kind.
   const clone = el.cloneNode(true) as HTMLElement
   clone.removeAttribute("id")
@@ -1436,10 +1517,18 @@ function copy(el: HTMLElement, host: HTMLElement) {
   clone.inert = true
   clone.setAttribute("aria-hidden", "true")
   clone.style.position = "absolute"
-  clone.style.top = "0"
+  clone.style.top = `${top}px`
   clone.style.insetInline = "var(--question-gutter)"
   clone.style.pointerEvents = "none"
   host.append(clone)
 
   return clone
+}
+
+// The nearest of `el` and its ancestors that has a height.
+function bounds(el: Element | null | undefined): DOMRect | undefined {
+  if (!el) return undefined
+  const rect = el.getBoundingClientRect()
+
+  return rect.height >= 1 ? rect : bounds(el.parentElement)
 }

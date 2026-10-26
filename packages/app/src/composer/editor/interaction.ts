@@ -161,12 +161,13 @@ export function createComposerEditor(input: {
     )
   }
 
-  const [found, setFound] = createStore<{ query: string; files: ComposerSuggestion[] }>({ query: "", files: [] })
+  const [found, setFound] = createStore<{ files: ComposerSuggestion[] }>({ files: [] })
   let fileQuery: string | undefined
   let fileAbort = new AbortController()
   onCleanup(() => abort(fileAbort))
 
   // Debounced and abortable: each keystroke or close replaces the pending file search instead of queueing behind it.
+  // The last results stay listed until the next ones arrive, so the menu keeps its rows and height while typing.
   const findFiles = (query?: string) => {
     if (query === fileQuery) return
     abort(fileAbort)
@@ -174,14 +175,16 @@ export function createComposerEditor(input: {
     fileQuery = query
     fileAbort = controller
 
-    if (query === undefined) return
+    if (query === undefined || !query.trim() || /\s/.test(query)) {
+      if (found.files.length) setFound("files", [])
 
-    if (!query.trim() || /\s/.test(query)) return
+      return
+    }
 
     const timer = setTimeout(
       () =>
         void Promise.resolve(input.searchContextFiles(query, controller.signal)).then(
-          (files) => !controller.signal.aborted && setFound({ query, files }),
+          (files) => !controller.signal.aborted && setFound("files", files),
           () => undefined,
         ),
       150,
@@ -210,9 +213,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      const files = found.query === query ? found.files : []
-
-      return [...fixed, ...sessions, ...recent, ...files.filter((item) => !seen.has(item.id))]
+      return [...fixed, ...sessions, ...recent, ...found.files.filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],

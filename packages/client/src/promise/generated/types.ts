@@ -2306,6 +2306,7 @@ export type ConfigEntry =
             models?: {
               [x: string]: {
                 modelID?: string
+                type?: ModelType
                 family?: string
                 name?: string
                 releaseDate?: string
@@ -2611,6 +2612,7 @@ export type SessionEventDurable =
 export type IntegrationInfo = {
   id: IntegrationID
   name: string
+  configured?: boolean
   metadata?: { [x: string]: any }
   methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
