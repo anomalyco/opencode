@@ -43,12 +43,44 @@ describe("Session.list", () => {
       const first = yield* session.list({ ...filter, limit: 2 })
       const second = yield* session.list({ cursor: first.cursor.next, limit: 2 })
       const back = yield* session.list({ cursor: second.cursor.previous, limit: 2 })
-      const end = yield* session.list({ cursor: second.cursor.next, limit: 2 })
 
       expect(expected).toHaveLength(3)
       expect([...first.data, ...second.data].map((item) => item.id)).toEqual(expected)
+      expect(second.cursor.next).toBeUndefined()
       expect(back.data.map((item) => item.id)).toEqual(expected.slice(0, 2))
-      expect(end).toEqual({ data: [], cursor: { previous: undefined, next: undefined } })
+    }),
+  )
+
+  it.effect("offers a cursor in the direction of travel only while more sessions exist", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      yield* Effect.forEach(Array.from({ length: 6 }), () => session.create({ location: project }), { discard: true })
+      const filter = { directory: project.directory, order: "asc" as const }
+      const store = yield* SessionStore.Service
+      const expected = (yield* store.list(filter)).map((item) => item.id)
+      const ids = (page: { data: ReadonlyArray<Session.Info> }) => page.data.map((item) => item.id)
+
+      const first = yield* session.list({ ...filter, limit: 2 })
+      const second = yield* session.list({ cursor: first.cursor.next, limit: 2 })
+      const last = yield* session.list({ cursor: second.cursor.next, limit: 2 })
+      const back = yield* session.list({ cursor: last.cursor.previous, limit: 2 })
+      const start = yield* session.list({ cursor: back.cursor.previous, limit: 2 })
+
+      expect(expected).toHaveLength(6)
+      expect([ids(first), ids(second), ids(last), ids(back), ids(start)]).toEqual([
+        expected.slice(0, 2),
+        expected.slice(2, 4),
+        expected.slice(4, 6),
+        expected.slice(2, 4),
+        expected.slice(0, 2),
+      ])
+      expect([first, second, last, back, start].map((page) => [!!page.cursor.previous, !!page.cursor.next])).toEqual([
+        [true, true],
+        [true, true],
+        [true, false],
+        [true, true],
+        [false, true],
+      ])
     }),
   )
 
