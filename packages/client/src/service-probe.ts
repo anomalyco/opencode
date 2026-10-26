@@ -67,14 +67,22 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
     url: info.url,
     auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
+  const startedAt = Date.now()
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
+  const result = await fetch(new URL("/api/info", info.url), {
+    // A socket left over from a suspend can time out without reaching the recovered service.
+    headers: { ...headers(endpoint), connection: "close" },
+    signal,
+  })
     .then(async (response) => ({
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),
     }))
     .catch(() => undefined)
-  if (result === undefined) return { service: undefined, timedOut: signal.aborted }
+  if (result === undefined) {
+    const stalled = Date.now() - startedAt > timeout + 1_000
+    return { service: undefined, timedOut: signal.aborted && !stalled, stalled }
+  }
   const response = result.response
   // A missing health endpoint identifies protocol incompatibility, not an older
   // version. Only an unmet version requirement lets ensure replace this owner.
@@ -88,11 +96,13 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
         compatible: false,
       } satisfies LocalService,
       timedOut: false,
+      stalled: false,
     }
   const serverInfo = decodeInfo(result.body)
-  if (serverInfo === undefined) return { service: undefined, timedOut: false }
-  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
-  if (info.version !== undefined && serverInfo.version !== info.version) return { service: undefined, timedOut: false }
+  if (serverInfo === undefined) return { service: undefined, timedOut: false, stalled: false }
+  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false, stalled: false }
+  if (info.version !== undefined && serverInfo.version !== info.version)
+    return { service: undefined, timedOut: false, stalled: false }
   return {
     service: {
       info,
@@ -102,6 +112,7 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       compatible: true,
     } satisfies LocalService,
     timedOut: false,
+    stalled: false,
   }
 }
 

@@ -1,6 +1,7 @@
 import { readFile, rm } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
+import { recoveryPolicy } from "../service-recovery.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
@@ -29,6 +30,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
+  const recovery = recoveryPolicy(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
 
@@ -59,8 +61,26 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         // /api/info unanswered well past the probe timeout, and on Windows SIGTERM ends the
         // process at once with no shutdown. Wait for it, and do not race it with new contenders.
         // Only a contender this call started, or a registration whose process is gone, yields.
-        if (!pool.owns(owner.pid) && alive(owner.pid)) {
+        const ownerAlive = !pool.owns(owner.pid) && alive(owner.pid)
+        if (
+          ownerAlive &&
+          !recovery.observe({
+            now: performance.now(),
+            info: owner,
+            timedOut: registration.timedOut,
+            stalled: registration.stalled,
+            alive: ownerAlive,
+          })
+        ) {
           waitingOnOwner = true
+          timeouts = undefined
+        } else if (ownerAlive) {
+          announce("missing")
+          console.warn("Background service is unresponsive; replacing its registration")
+          await abandon(owner, options)
+          pool.evict(owner.pid)
+          pool.recruitNow()
+          recovery.replaced()
           timeouts = undefined
         } else {
           timeouts = {
@@ -77,7 +97,16 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
             timeouts = undefined
           }
         }
-      } else timeouts = undefined
+      } else {
+        recovery.observe({
+          now: performance.now(),
+          info: registration.info,
+          timedOut: registration.timedOut,
+          stalled: registration.stalled,
+          alive: false,
+        })
+        timeouts = undefined
+      }
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -134,8 +163,17 @@ async function read(file?: string) {
 
 async function registered(file?: string, timeout?: number) {
   const info = await read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  if (info === undefined) return { info: undefined, service: undefined, timedOut: false, stalled: false }
   return { info, ...(await probeResult(info, timeout)) }
+}
+
+async function abandon(info: Info, options: { readonly file?: string }) {
+  const current = await read(options.file)
+  if (current === undefined || !same(current, info)) return
+  // A stale registration can name a PID that now belongs to an unrelated process. Removing the
+  // registration lets a new service take over without risking a signal to that process.
+  await PtyHandoff.clear(options.file ?? fallback())
+  await rm(options.file ?? fallback(), { force: true })
 }
 
 function signal(pid: number, name: NodeJS.Signals) {

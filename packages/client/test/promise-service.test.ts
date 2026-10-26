@@ -244,6 +244,46 @@ test("keeps a busy registered service alive and reuses it when it answers", asyn
   expect((await Bun.file(registration).json()).pid).toBe(original.pid)
 }, 10_000)
 
+test("replaces an unresponsive registered service after the recovery window", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("hanging")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: fixture.command("delayed", "10"),
+  })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(existing.exitCode).toBe(null)
+  expect(replacement.pid).not.toBe(original.pid)
+  expect(endpoint.url).toBe(replacement.url)
+}, 10_000)
+
+test("replaces a timed-out registration with a reused PID without signalling it", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  fixture.spawn("hanging")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  await Bun.write(registration, JSON.stringify({ ...original, pid: process.pid }))
+
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: fixture.command("delayed", "10"),
+  })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(replacement.pid).not.toBe(process.pid)
+  expect(endpoint.url).toBe(replacement.url)
+}, 10_000)
+
 test("recovers when the starting service it waits for is stopped", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

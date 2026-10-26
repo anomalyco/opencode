@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
+import { recoveryPolicy } from "../service-recovery.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
@@ -52,6 +53,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
+  const recovery = recoveryPolicy(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
@@ -81,8 +83,26 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       // /api/info unanswered well past the probe timeout, and on Windows SIGTERM ends the
       // process at once with no shutdown. Wait for it, and do not race it with new contenders.
       // Only a contender this call started, or a registration whose process is gone, yields.
-      if (!pool.owns(info.pid) && alive(info.pid)) {
+      const ownerAlive = !pool.owns(info.pid) && alive(info.pid)
+      if (
+        ownerAlive &&
+        !recovery.observe({
+          now: performance.now(),
+          info,
+          timedOut: registration.timedOut,
+          stalled: registration.stalled,
+          alive: ownerAlive,
+        })
+      ) {
         waitingOnOwner = true
+        timeouts = undefined
+      } else if (ownerAlive) {
+        yield* announce("missing")
+        yield* Effect.logWarning("Background service is unresponsive; replacing its registration")
+        yield* abandon(info, options)
+        pool.evict(info.pid)
+        pool.recruitNow()
+        recovery.replaced()
         timeouts = undefined
       } else {
         timeouts = {
@@ -99,7 +119,16 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
           timeouts = undefined
         }
       }
-    } else timeouts = undefined
+    } else {
+      recovery.observe({
+        now: performance.now(),
+        info,
+        timedOut: registration.timedOut,
+        stalled: registration.stalled,
+        alive: false,
+      })
+      timeouts = undefined
+    }
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
@@ -173,8 +202,18 @@ const read = Effect.fnUntraced(function* (file?: string) {
 
 const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
   const info = yield* read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  if (info === undefined) return { info: undefined, service: undefined, timedOut: false, stalled: false }
   return { info, ...(yield* Effect.promise(() => probeResult(info, timeout))) }
+})
+
+const abandon = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }) {
+  const current = yield* read(options.file)
+  if (current === undefined || !same(current, info)) return
+  // A stale registration can name a PID that now belongs to an unrelated process. Removing the
+  // registration lets a new service take over without risking a signal to that process.
+  yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback())).pipe(Effect.ignore)
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each ensure
