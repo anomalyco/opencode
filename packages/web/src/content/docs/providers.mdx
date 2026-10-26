@@ -1901,15 +1901,17 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ### LLM Gateway
 
-1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
+LLM Gateway has two providers: **DevPass (LLM Gateway)** (`llmgateway`) bills your DevPass subscription, and **LLM Gateway** (`llmgateway-providers`) bills pay-as-you-go credits.
 
-2. Run the `/connect` command and search for LLM Gateway.
+1. Run the `/connect` command and search for LLM Gateway.
 
    ```txt
    /connect
    ```
 
-3. Enter the API key for the provider.
+2. Select **Log in with browser** and approve OpenCode on the LLM Gateway dashboard. The API key it creates is saved automatically, so you can skip to step 4.
+
+3. Or create an API key in the [LLM Gateway dashboard](https://llmgateway.io/dashboard) and enter it.
 
    ```txt
    ┌ API key
