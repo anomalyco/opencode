@@ -20,6 +20,7 @@ import { messagePrompt } from "./session.shared"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
+import { screenReader } from "./screen-reader"
 import type {
   FooterApi,
   FooterPatch,
@@ -604,6 +605,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     files: SessionMessageUser["files"],
     skills: FooterQueuedPrompt["skills"],
     render = true,
+    working = false,
   ) => {
     const visible = state.messageIDs.has(messageID)
     state.messageIDs.add(messageID)
@@ -615,6 +617,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         ? [{ kind: "user", source: "system", text, phase: "start", messageID } as const]
         : []),
       ...images,
+      // The footer is hidden in screen reader mode, so nothing else says that work started.
+      ...(working && !visible && screenReader.enabled
+        ? [{ kind: "system", source: "system", text: "Working...", phase: "final" } as const]
+        : []),
     ])
   }
 
@@ -622,7 +628,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const prompt = pendingPrompt(item)
     if (!prompt) return
     if (state.promotedMessages.has(prompt.messageID)) {
-      renderUser(prompt.messageID, prompt.prompt.text, prompt.files, prompt.skills)
+      renderUser(prompt.messageID, prompt.prompt.text, prompt.files, prompt.skills, true, true)
       return
     }
     state.admitted.add(prompt.messageID)
@@ -1026,8 +1032,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return
     const client = attempt.client
     if (catalogEvents.has(event.type)) {
-      if (input.location && event.location && event.location.directory !== input.location.directory)
-        return
+      if (input.location && event.location && event.location.directory !== input.location.directory) return
       void refreshCatalog(attempt)
       return
     }
@@ -1073,7 +1078,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const pending = state.pending.get(event.data.inboxID)
       state.pending.delete(event.data.inboxID)
       syncPending()
-      if (pending) renderUser(pending.messageID, pending.prompt.text, pending.files, pending.skills)
+      if (pending) renderUser(pending.messageID, pending.prompt.text, pending.files, pending.skills, true, true)
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }

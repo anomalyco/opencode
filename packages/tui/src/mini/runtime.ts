@@ -914,7 +914,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     }
     const mod = await import("./runtime.queue")
     const createSession = input.createSession
-    const screenReader = (await tuiConfigTask).screen_reader
     await mod.runPromptQueue({
       footer,
       initialInput: input.initialInput,
@@ -1064,9 +1063,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         }
 
         await state.switching?.catch(() => {})
-
-        // The footer is hidden in screen reader mode, so nothing else says that work started.
-        if (screenReader) footer.append({ kind: "system", text: "Working...", phase: "final", source: "system" })
 
         try {
           const next = await ensureStream()
