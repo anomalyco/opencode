@@ -81,6 +81,7 @@
     "./*": "./src/components/*.tsx",
     "./i18n/*": "./src/i18n/*.ts",
     "./hooks": "./src/hooks/index.ts",
+    "./mobile-layout": "./src/hooks/mobile-layout.ts",
     "./context": "./src/context/index.ts",
     "./context/*": "./src/context/*.tsx",
     "./storybook/scaffold": "./src/storybook/scaffold.tsx",

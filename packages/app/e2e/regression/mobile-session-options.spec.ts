@@ -3,6 +3,9 @@ import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { sessionHref } from "../utils/app"
 import { openWithDirection } from "../utils/direction"
 
+// The mobile layout is for touch screens; a narrow window with a mouse keeps the desktop layout.
+test.use({ hasTouch: true, isMobile: true })
+
 for (const scheme of ["light", "dark"] as const) {
   for (const direction of ["ltr", "rtl"] as const) {
     test(`mobile session options are compact and readable in ${scheme} ${direction}`, async ({ page }, testInfo) => {

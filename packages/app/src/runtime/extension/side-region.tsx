@@ -1,16 +1,6 @@
-import {
-  For,
-  Show,
-  createEffect,
-  createMemo,
-  createSignal,
-  on,
-  onCleanup,
-  type Accessor,
-  type JSX,
-} from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Tabs } from "@opencode/ui/tabs"
@@ -58,7 +48,7 @@ export function SideRegion(props: {
   const language = useLanguage()
   const { view, params } = useSessionLayout()
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isDesktop = () => !isMobileLayout()
   const tabsOpen = createMemo(() => isDesktop() && view().side.opened())
   const tabsVisible = createMemo(() => tabsOpen() || !!props.present)
   // Once shown, the contents stay mounted while the region is hidden, so reopening doesn't rebuild them mid-flight.
@@ -67,9 +57,7 @@ export function SideRegion(props: {
 
   // Opening the side region with no tabs shows a new tab view, once per opening and session. Keyed by the session, not
   // the item, whose object changes with every routed session.
-  const starting = createMemo(() =>
-    tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined,
-  )
+  const starting = createMemo(() => (tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined))
 
   createEffect(on(starting, (key) => key && props.region.openNewTab("side")))
 

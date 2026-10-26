@@ -1,5 +1,5 @@
 import { Component, Show, createMemo, createResource } from "solid-js"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
@@ -141,6 +141,7 @@ const FollowUpBehaviorSetting: Component = () => {
 const BackgroundActivitySetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: BackgroundActivity; label: string }[] => [
     { value: "off", label: language.t("settings.timeline.row.backgroundActivity.off") },
     { value: "left", label: language.t("settings.timeline.row.backgroundActivity.left") },
@@ -171,6 +172,7 @@ const BackgroundActivitySetting = () => {
 const TimelineWidthSetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: TimelineWidth; label: string }[] => [
     { value: "focused", label: language.t("settings.timeline.row.width.focused") },
     { value: "comfortable", label: language.t("settings.timeline.row.width.comfortable") },
@@ -230,7 +232,7 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
   const desktop = createMemo(() => platform.platform === "desktop")
 
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(

@@ -3,6 +3,9 @@ import { fixture, installStressSessionTabs, mockStressTimeline } from "../utils/
 import { sessionHref, draftHref } from "../utils/app"
 import { openWithDirection } from "../utils/direction"
 
+// The mobile layout is for touch screens; a narrow window with a mouse keeps the desktop layout.
+test.use({ hasTouch: true, isMobile: true })
+
 for (const direction of ["ltr", "rtl"] as const) {
   test(`bottom mobile navigation adds no extra top panel gutter in ${direction}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })

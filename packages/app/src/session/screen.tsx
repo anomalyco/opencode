@@ -14,6 +14,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
@@ -167,6 +168,15 @@ function SessionScreenContent(props: {
   // The toggle's pane fills from the panel's edge as far as the panel is open.
   const paintSideGlyph = () => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - sideClosed))
 
+  // A sheet slides over the chat from the trailing edge, past its own shadow, and leaves the chat's width alone.
+  const paintSheet = () => {
+    if (!sidePresence) return
+
+    const rtl = document.documentElement.dir === "rtl"
+    sidePresence.style.transform =
+      sideSheet() && sideClosed > 0 ? `translateX(calc(${rtl ? -1 : 1} * (100% + 16px) * ${sideClosed}))` : ""
+  }
+
   const sideMotion = createPanelMotion({
     open: sideVisible,
     identity: session.layout.tabKey,
@@ -178,10 +188,12 @@ function SessionScreenContent(props: {
       // Dims the contents as they leave and fades them in as they arrive.
       if (sideContent) sideContent.style.opacity = panelOpacity(closed)
 
+      paintSheet()
+
       if (!chat) return
       const open = chatOpenWidth()
 
-      if (closed === 1) {
+      if (closed === 1 || sideSheet()) {
         chat.style.width = "100%"
 
         return
@@ -191,6 +203,26 @@ function SessionScreenContent(props: {
     },
     element: () => sidePresence,
     distance: screen.side.width,
+  })
+
+  // Decided while open and kept through a close's flight, so the sheet slides back out rather than dropping into the
+  // row, and a docked panel doesn't turn into a sheet as the sidebar docks again on its way out.
+  const sideSheet = createMemo<boolean>(
+    (previous) => (sideVisible() ? screen.side.sheet() : previous && sideMotion.present()),
+    false,
+  )
+
+  // Escape closes the side panel's sheet, unless a dialog, a terminal, or a field beside the sheet, like the composer,
+  // wants the key.
+  makeEventListener(document, "keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented || !screen.side.sheet()) return
+    const target = event.target instanceof Element ? event.target : undefined
+
+    if (target?.closest('[role="dialog"], .xterm')) return
+
+    if (!target?.closest("#review-panel") && target?.closest("input, textarea, [contenteditable]")) return
+    event.preventDefault()
+    region.toggle()
   })
 
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
@@ -434,7 +466,12 @@ function SessionScreenContent(props: {
   return (
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-        <div ref={screen.panel.ref} data-pane-row class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+        <div
+          ref={screen.panel.ref}
+          data-pane-row
+          class="relative flex-1 min-h-0 flex gap-2"
+          classList={{ "flex-row": isDesktop(), "flex-col": !isDesktop() }}
+        >
           {/* Keep the control outside panel animations. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
@@ -454,7 +491,8 @@ function SessionScreenContent(props: {
           </Show>
           <div
             ref={chat}
-            class="relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none"
+            class="relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full"
+            classList={{ "flex-1": !isDesktop(), "flex-none": isDesktop() }}
             data-slot="session-chat-panel"
             data-scrollbar-hidden={store.timelineScrollbarHidden}
             onPointerMove={revealTimelineScrollbar}
@@ -490,14 +528,22 @@ function SessionScreenContent(props: {
 
           <Show when={sideMotion.present() || store.sideMounted}>
             <div
-              ref={sidePresence}
+              // A sheet mounting mid-open starts where the flight is, not at its landing for the frame before the first step.
+              ref={(element) => {
+                sidePresence = element
+                paintSheet()
+              }}
               data-slot="session-side-panel-presence"
-              class={`z-0 min-w-0 h-full overflow-visible ${
+              data-sheet={sideMotion.present() && sideSheet() ? "" : undefined}
+              class={`min-w-0 h-full overflow-visible ${
                 !sideMotion.present()
                   ? // Out of the row, so a closed panel takes no space or gap.
-                    "absolute inset-y-0 end-0 w-0 [content-visibility:hidden]"
-                  : "relative flex-1"
+                    "z-0 absolute inset-y-0 end-0 w-0 [content-visibility:hidden]"
+                  : sideSheet()
+                    ? "z-20 absolute inset-y-0 end-0 rounded-[10px] shadow-[var(--v2-elevation-floating)]"
+                    : "z-0 relative flex-1"
               }`}
+              style={{ width: sideSheet() ? screen.side.contentWidth() : undefined }}
             >
               <div
                 ref={sideContent}

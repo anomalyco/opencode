@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema } from "effect"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -219,7 +219,7 @@ export function createRegion(input: {
   }
 
   // Narrow screens never select a transient tab: a stored one falls back like a missing tab.
-  const desktop = createMediaQuery("(min-width: 768px)")
+  const desktop = () => !isMobileLayout()
 
   const active = createMemo(() => {
     const value = input.tabs().active()

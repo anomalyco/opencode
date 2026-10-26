@@ -470,7 +470,7 @@ div.session-mcp-row {
   outline: none;
 }
 
-@media (max-width: 767px) {
+@media (hover: none) and (pointer: coarse) and (max-width: 767px) {
   [data-component="session-summary-panel"] .session-summary-row,
   .session-service-pane .session-service-row,
   .session-service-pane .session-service-config,

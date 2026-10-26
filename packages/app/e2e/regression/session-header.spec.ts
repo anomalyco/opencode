@@ -380,7 +380,7 @@ test.describe("location", () => {
   })
 
   test.describe("touch", () => {
-    test.use({ hasTouch: true })
+    test.use({ hasTouch: true, isMobile: true })
 
     test("shows the location bar under the mobile view tabs and opens path actions on tap", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 })

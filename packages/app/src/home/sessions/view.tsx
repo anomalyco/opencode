@@ -10,6 +10,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { prefersReducedMotion } from "@opencode/ui/motion"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -46,7 +47,7 @@ const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: /(Mac|iPod|iPhone|iPad)/.test(globalThis.navigator?.platform ?? ""),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -952,8 +953,13 @@ function HomeSessionSkeleton(props: { visible: boolean; showProjectName: boolean
         <For each={HOME_SESSION_PLACEHOLDER_WIDTHS}>
           {(width) => (
             <div
-              class="flex h-10 min-w-0 items-center ps-1.5 pe-3 md:ps-3 md:pe-10"
-              classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "max-md:h-12": props.showProjectName }}
+              class="flex min-w-0 items-center ps-1.5 pe-3 md:ps-3 md:pe-10"
+              classList={{
+                "gap-1.5": props.desktop,
+                "gap-2": !props.desktop,
+                "h-12": props.showProjectName && isMobileLayout(),
+                "h-10": !props.showProjectName || !isMobileLayout(),
+              }}
             >
               <span class="size-4 shrink-0 rounded-[4px] bg-v2-background-bg-layer-02" />
               <span class="h-2 rounded-full bg-v2-background-bg-layer-02" style={{ width: `${width}%` }} />

@@ -4,6 +4,9 @@ import { sessionHref } from "../utils/app"
 import { openWithDirection } from "../utils/direction"
 import { mockOpenCodeServer } from "../utils/mock-server"
 
+// The mobile layout is for touch screens; a narrow window with a mouse keeps the desktop layout.
+test.use({ hasTouch: true, isMobile: true })
+
 for (const { width, direction } of [
   { width: 390, direction: "ltr" },
   { width: 390, direction: "rtl" },

@@ -1,6 +1,6 @@
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
@@ -92,7 +92,7 @@ function ComposerModelControl(props: {
 }) {
   // A preview paints the chip in its resting state, and the loaded names replace it in place.
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? (props.loading && !props.preview))
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
   const dialog = useDialog()
   const settings = useSettings()
   const managed = createMemo(() => consoleModelGroup(props.model.list()))

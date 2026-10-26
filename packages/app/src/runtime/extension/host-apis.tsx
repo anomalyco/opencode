@@ -43,7 +43,7 @@ import { sessionPaneTab, sessionTabPane, type SessionPane } from "@/shell/state/
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
 import { formatKeybindParts, useCommand } from "@/shell/commands/command"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { closedEntry, createClosedTabs } from "./closed-tabs"
@@ -87,7 +87,7 @@ export function createHostApis() {
   const dialog = useDialog()
   const language = useLanguage()
   // The session screen's breakpoint, negated, so no fractional width is both narrow and desktop.
-  const desktop = createMediaQuery("(min-width: 768px)")
+  const desktop = () => !isMobileLayout()
   const narrow = () => !desktop()
   const [attached, setAttached] = createSignal<Attached>()
   const removed = new Set<(value: { server: string; directory: string }) => void>()
@@ -377,7 +377,7 @@ export function createExtensionAttachment(apis: HostApis) {
   const command = useCommand()
   const location = useLocation()
   const menu = createSessionPanelMenu()
-  const desktop = createMediaQuery("(min-width: 768px)")
+  const desktop = () => !isMobileLayout()
   const narrow = () => !desktop()
   // The mounted session screen, from its first render, and its object for the session it routes once it has mounted;
   // one screen is mounted at a time.

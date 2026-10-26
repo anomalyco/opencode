@@ -1,5 +1,5 @@
 import type { SessionInfo, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { createMemo } from "solid-js"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
@@ -26,7 +26,7 @@ export function useSessionModel() {
   const shellTabs = useTabs()
   const layout = useSessionLayout()
   const location = useWorkspaceLocation()
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isDesktop = () => !isMobileLayout()
   const sessionID = createMemo(() => layout.params.id)
 
   const info = createMemo(() => {

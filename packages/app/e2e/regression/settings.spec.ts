@@ -49,6 +49,17 @@ async function openProject(page: Page, name = "Settings demo") {
   await expect(settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
 }
 
+type Box = { x: number; width: number }
+
+// How far the anchor sits from where the alignment places it in the box.
+function offset(alignment: string, anchor: Box, box: Box) {
+  if (alignment === "Center") return anchor.x + anchor.width / 2 - box.x - box.width / 2
+
+  if (alignment === "Left") return anchor.x - box.x
+
+  return anchor.x + anchor.width - box.x - box.width
+}
+
 const patched = (page: Page) =>
   page.waitForRequest(
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/project/${projectID}`,
@@ -102,6 +113,7 @@ for (const locale of ["en", "ar"]) {
     page.on("request", (request) => {
       if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/interrupt"))
         stopped.push(request.url())
+
       if (request.method() === "DELETE" && new URL(request.url()).pathname.startsWith("/api/shell/"))
         stopped.push(request.url())
     })
@@ -113,7 +125,7 @@ for (const locale of ["en", "ar"]) {
       ],
       sessionStatus: { [id]: { type: "busy" }, [childID]: { type: "busy" } },
       seed: { locale },
-      pageMessages: (): { items: SessionMessageInfo[] } => ({
+      pageMessages: () => ({
         items: [
           { id: "msg_activity_user", type: "user", text: "Inspect the activity capsule", time: { created: 1 } },
           {
@@ -148,7 +160,7 @@ for (const locale of ["en", "ar"]) {
             ],
             time: { created: 2 },
           },
-        ],
+        ] satisfies SessionMessageInfo[],
       }),
       shellCommands: [
         {
@@ -179,24 +191,22 @@ for (const locale of ["en", "ar"]) {
       await options.getByRole("option", { name: value, exact: true }).click()
       await expect(control).toHaveText(value)
       await page.goBack()
+
       if (value === "Hidden") {
         await expect(capsule).toHaveCount(0)
         await expect(panel).toHaveCount(0)
         continue
       }
+
       await expect(capsule).toBeVisible()
       await expect
         .poll(async () => {
           const anchor = await capsule.boundingBox()
           const container = await page.locator('[data-component="session-composer-lane"]').boundingBox()
+
           if (!anchor || !container) return Infinity
-          return Math.abs(
-            value === "Center"
-              ? anchor.x + anchor.width / 2 - container.x - container.width / 2
-              : value === "Left"
-                ? anchor.x - container.x
-                : anchor.x + anchor.width - container.x - container.width,
-          )
+
+          return Math.abs(offset(value, anchor, container))
         })
         .toBeLessThan(1)
       await capsule.click()
@@ -205,18 +215,15 @@ for (const locale of ["en", "ar"]) {
         .poll(async () => {
           const anchor = await capsule.boundingBox()
           const bounds = await panel.boundingBox()
+
           if (!anchor || !bounds) return Infinity
-          return Math.abs(
-            value === "Center"
-              ? anchor.x + anchor.width / 2 - bounds.x - bounds.width / 2
-              : value === "Left"
-                ? anchor.x - bounds.x
-                : anchor.x + anchor.width - bounds.x - bounds.width,
-          )
+
+          return Math.abs(offset(value, anchor, bounds))
         })
         .toBeLessThan(1)
       await page.keyboard.press("Escape")
     }
+
     expect(stopped).toEqual([])
     await expect
       .poll(() =>
@@ -585,6 +592,7 @@ test("shortcuts list Search sessions once and unbind a shortcut while recording 
   await expect(binding).toHaveText("Press keys")
   await expect(unbind).toHaveCount(0)
 })
+
 for (const own of [false, true]) {
   test(`shortcuts list a command that shares Close tab only with its own shortcut: ${own}`, async ({ page }) => {
     const { settings } = await open(page, {
@@ -621,6 +629,7 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
     plugins: [{ id: "demo-plugin", source: { type: "package", target: "demo-plugin" } }],
     skills: [{ name: "demo-skill", description: "Demo skill", path: "/skills/demo/SKILL.md" }],
   })
+
   await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
   await expect(settings.getByRole("switch", { name: "demo-mcp", exact: true })).toBeChecked()
   const mcp = settings.getByRole("tabpanel", { name: "MCPs", exact: true }).locator(".settings-extension-row")
@@ -1674,90 +1683,96 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 720, bottom: false },
   { name: "mobile", width: 390, height: 844, bottom: true },
 ]) {
-  test(`settings layout (${viewport.name}): every page scrolls inside its panel with room below`, async ({ page }) => {
-    await page.route("https://api.github.com/repos/anomalyco/opencode/contributors?*", (route) =>
-      route.fulfill({ json: [] }),
-    )
-    const { settings } = await open(page)
-    await page.setViewportSize(viewport)
-    const panel = settings.locator(".settings-content > .settings-panel:visible")
-    const main = page.getByRole("main")
+  test.describe(viewport.name, () => {
+    test.use({ hasTouch: viewport.bottom, isMobile: viewport.bottom })
 
-    if (viewport.bottom) {
-      const toggle = settings.locator('[data-action="settings-mobile-titlebar-bottom"]')
-      await toggle.locator('[data-slot="switch-control"]').click()
-      await expect(toggle.getByRole("switch")).toBeChecked()
-    }
+    test(`settings layout (${viewport.name}): every page scrolls inside its panel with room below`, async ({
+      page,
+    }) => {
+      await page.route("https://api.github.com/repos/anomalyco/opencode/contributors?*", (route) =>
+        route.fulfill({ json: [] }),
+      )
+      const { settings } = await open(page)
+      await page.setViewportSize(viewport)
+      const panel = settings.locator(".settings-content > .settings-panel:visible")
+      const main = page.getByRole("main")
 
-    // Wheel over the outer gutter must not move the entire settings screen.
-    await main.hover({ position: { x: 1, y: 200 } })
-    await page.mouse.wheel(0, 10000)
-    await expect(main).toHaveJSProperty("scrollTop", 0)
-
-    if (viewport.name === "desktop") {
-      // Wheel over the settings gutter scrolls the page beside it.
-      await settings.hover({ position: { x: 16, y: 200 } })
-      await page.mouse.wheel(0, 200)
-      await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-    }
-
-    const pages = [
-      "Preferences",
-      "Appearance",
-      "Notifications",
-      "Shortcuts",
-      "Projects",
-      "Worktrees",
-      "Providers",
-      "Models",
-      "Extensions",
-      "Server",
-      "About",
-    ]
-
-    for (const [index, name] of pages.entries()) {
-      if (viewport.width >= 816) await settings.getByRole("tab", { name, exact: true }).click()
-
-      if (viewport.width < 816) {
-        await settings.getByRole("button", { name: pages[Math.max(0, index - 1)], exact: true }).click()
-        await page.getByRole("menuitemradio", { name, exact: true }).click()
+      if (viewport.bottom) {
+        const toggle = settings.locator('[data-action="settings-mobile-titlebar-bottom"]')
+        await toggle.locator('[data-slot="switch-control"]').click()
+        await expect(toggle.getByRole("switch")).toBeChecked()
       }
 
-      if (name === "About") await expect(panel.getByText("Released under the MIT License")).toBeVisible()
-
-      if (name !== "About")
-        await expect(
-          panel.getByRole("heading", { name: name === "Shortcuts" ? "Keyboard shortcuts" : name, exact: true }),
-        ).toBeVisible()
-
-      if (name === "Worktrees") {
-        const last = settings.getByText("Workspace 12 session", { exact: true })
-        await last.scrollIntoViewIfNeeded()
-        await expect(last).toBeInViewport()
-
-        if (!viewport.bottom) await expect(settings.getByRole("button", { name: "Back to app" })).toBeInViewport()
-      }
-
-      await panel.hover()
+      // Wheel over the outer gutter must not move the entire settings screen.
+      await main.hover({ position: { x: 1, y: 200 } })
       await page.mouse.wheel(0, 10000)
-      await expect
-        .poll(() => panel.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
-        .toBeLessThanOrEqual(1)
-      await expect
-        .poll(
-          () =>
-            panel.evaluate((element) => {
-              const body = element.querySelector(".settings-tab-body, .settings-about-content")!
-
-              return element.getBoundingClientRect().bottom - body.lastElementChild!.getBoundingClientRect().bottom
-            }),
-          { message: `${name} bottom clearance` },
-        )
-        .toBeGreaterThanOrEqual(viewport.bottom ? 119.5 : 79.5)
       await expect(main).toHaveJSProperty("scrollTop", 0)
-      await expect
-        .poll(() => main.evaluate((element) => element.scrollWidth - element.clientWidth))
-        .toBeLessThanOrEqual(1)
-    }
+
+      if (viewport.name === "desktop") {
+        // Wheel over the settings gutter scrolls the page beside it.
+        await settings.hover({ position: { x: 16, y: 200 } })
+        await page.mouse.wheel(0, 200)
+        await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      }
+
+      const pages = [
+        "Preferences",
+        "Appearance",
+        "Notifications",
+        "Shortcuts",
+        "Projects",
+        "Worktrees",
+        "Providers",
+        "Models",
+        "Extensions",
+        "Server",
+        "About",
+      ]
+
+      for (const [index, name] of pages.entries()) {
+        if (viewport.width >= 816) await settings.getByRole("tab", { name, exact: true }).click()
+
+        if (viewport.width < 816) {
+          await settings.getByRole("button", { name: pages[Math.max(0, index - 1)], exact: true }).click()
+          await page.getByRole("menuitemradio", { name, exact: true }).click()
+        }
+
+        if (name === "About") await expect(panel.getByText("Released under the MIT License")).toBeVisible()
+
+        if (name !== "About")
+          await expect(
+            panel.getByRole("heading", { name: name === "Shortcuts" ? "Keyboard shortcuts" : name, exact: true }),
+          ).toBeVisible()
+
+        if (name === "Worktrees") {
+          const last = settings.getByText("Workspace 12 session", { exact: true })
+          await last.scrollIntoViewIfNeeded()
+          await expect(last).toBeInViewport()
+
+          if (!viewport.bottom) await expect(settings.getByRole("button", { name: "Back to app" })).toBeInViewport()
+        }
+
+        await panel.hover()
+        await page.mouse.wheel(0, 10000)
+        await expect
+          .poll(() => panel.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+          .toBeLessThanOrEqual(1)
+        await expect
+          .poll(
+            () =>
+              panel.evaluate((element) => {
+                const body = element.querySelector(".settings-tab-body, .settings-about-content")!
+
+                return element.getBoundingClientRect().bottom - body.lastElementChild!.getBoundingClientRect().bottom
+              }),
+            { message: `${name} bottom clearance` },
+          )
+          .toBeGreaterThanOrEqual(viewport.bottom ? 119.5 : 79.5)
+        await expect(main).toHaveJSProperty("scrollTop", 0)
+        await expect
+          .poll(() => main.evaluate((element) => element.scrollWidth - element.clientWidth))
+          .toBeLessThanOrEqual(1)
+      }
+    })
   })
 }

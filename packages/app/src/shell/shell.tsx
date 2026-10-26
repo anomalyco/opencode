@@ -1,6 +1,7 @@
-import { Show, startTransition, Suspense, type ParentProps } from "solid-js"
+import { createEffect, createMemo, Show, startTransition, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { prefersReducedMotion } from "@opencode/ui/motion"
@@ -26,6 +27,7 @@ import {
 import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
+import { room, roomHysteresis, setRoom } from "@/shell/room"
 
 // How far Home steps along a peek's header to clear the collapsed toggle: to the toggle's end, from the sidebar's 18px
 // start padding.
@@ -45,23 +47,58 @@ export default function Layout(props: ParentProps) {
   const global = useGlobal()
   const servers = useServers()
   const tabs = useTabs()
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
 
   const [state, setState] = createStore<{
     tabsWidth: number
     tabsMount: HTMLElement | undefined
     tabsAside: HTMLElement | undefined
     tabsPanel: HTMLElement | undefined
+    room: number | undefined
   }>({
     tabsWidth: 276,
     tabsMount: undefined,
     tabsAside: undefined,
     tabsPanel: undefined,
+    room: undefined,
   })
 
   const verticalTabs = () => preferences.appearance.tabLayout() !== "horizontal" && !mobile()
 
-  const toggleSidebar = () => preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen())
+  // The shell's row less main's inline insets, which the docked sidebar and the routed screen share.
+  const inner = () => (state.room === undefined ? undefined : state.room - 16)
+
+  // Too narrow to dock the sidebar beside what the routed screen needs, it hides and floats when called instead. The
+  // saved preference stays as it is, so widening the window docks it again.
+  const hidesAt = (width: number | undefined, hidden: boolean) =>
+    verticalTabs() &&
+    width !== undefined &&
+    width - 16 - state.tabsWidth < room.contentMinimum + (hidden ? roomHysteresis : 0)
+
+  const autoHidden = createMemo<boolean>((hidden) => hidesAt(state.room, hidden), false)
+
+  const docked = () => preferences.appearance.sidebarOpen() && !autoHidden()
+
+  createEffect(() => setRoom("sidebarAutoHidden", autoHidden()))
+  createEffect(() => setRoom("inner", inner()))
+
+  let row: HTMLDivElement | undefined
+  createResizeObserver(
+    () => row,
+    ({ width }) => {
+      // A resize docks or hides the sidebar at once; only toggling it moves.
+      const hidden = hidesAt(width, autoHidden())
+
+      if (hidden !== autoHidden()) sidebarMotion.sync(preferences.appearance.sidebarOpen() && !hidden)
+      setState("room", width)
+    },
+  )
+
+  // While hidden for room, the sidebar's toggle floats it over the content rather than changing the preference.
+  const toggleSidebar = () => {
+    if (autoHidden()) return peek.toggle()
+    preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen())
+  }
 
   // How far closed the docked sidebar is, and how far in its peek has it, undefined while it isn't peeking.
   const sidebar: SidebarPose = {
@@ -109,7 +146,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const sidebarMotion = createPanelMotion({
-    open: preferences.appearance.sidebarOpen,
+    open: docked,
     // The aside's real width moves main's edge with the sidebar's; its contents keep their width, pinned to that edge.
     paint: (closed) => {
       sidebar.closed = closed
@@ -128,8 +165,8 @@ export default function Layout(props: ParentProps) {
   })
 
   const peek = createSidebarPeek({
-    available: () => verticalTabs() && !preferences.appearance.sidebarOpen() && !sidebarMotion.present(),
-    open: preferences.appearance.sidebarOpen,
+    available: () => verticalTabs() && !docked() && !sidebarMotion.present(),
+    open: docked,
     aside: () => state.tabsAside,
     panel: () => state.tabsPanel,
     paint: (shown) => {
@@ -141,7 +178,7 @@ export default function Layout(props: ParentProps) {
 
   guardClosingFocus({
     root: () => state.tabsAside,
-    closing: () => !preferences.appearance.sidebarOpen() && sidebarMotion.present(),
+    closing: () => !docked() && sidebarMotion.present(),
     // The toggle that reopens the sidebar, outside it.
     target: () =>
       [...document.querySelectorAll<HTMLElement>('button[aria-controls="vertical-tabs-sidebar"]')].find(
@@ -222,7 +259,7 @@ export default function Layout(props: ParentProps) {
       }}
     >
       <Titlebar verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined} />
-      <div class="relative flex flex-1 min-h-0 min-w-0 flex-row">
+      <div ref={row} class="relative flex flex-1 min-h-0 min-w-0 flex-row">
         {/* The empty inset above the panels moves the window, as the titlebar does. */}
         <Show when={dragInset()}>
           <div
@@ -236,7 +273,7 @@ export default function Layout(props: ParentProps) {
           <aside
             id="vertical-tabs-sidebar"
             data-slot="vertical-tabs-sidebar"
-            data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
+            data-state={docked() ? "open" : "closed"}
             data-peek={peek.shown() ? "" : undefined}
             style={{ "--sidebar-peek-width": `${state.tabsWidth}px` }}
             ref={(element) => setState("tabsAside", element)}
@@ -270,17 +307,15 @@ export default function Layout(props: ParentProps) {
               />
             </div>
             {/* Takes the pointer while the sidebar closes, without restyling its contents. */}
-            <div
-              class="absolute inset-0 z-20"
-              classList={{ hidden: preferences.appearance.sidebarOpen() || !sidebarMotion.present() }}
-            />
-            <Show when={preferences.appearance.sidebarOpen()}>
+            <div class="absolute inset-0 z-20" classList={{ hidden: docked() || !sidebarMotion.present() }} />
+            <Show when={docked()}>
               <ResizeHandle
                 class="-end-1"
                 direction="horizontal"
                 size={state.tabsWidth}
                 min={136}
-                max={640}
+                // Stops short of the width that would hide it.
+                max={Math.max(136, Math.min(640, (inner() ?? Infinity) - room.contentMinimum))}
                 onResize={(width) => setState("tabsWidth", width)}
               />
             </Show>

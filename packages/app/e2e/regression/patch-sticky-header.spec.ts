@@ -151,113 +151,118 @@ for (const scenario of scenarios) {
     [900, "ltr"],
     [390, "rtl"],
   ] as const) {
-    test(`${scenario.name}: file headers stay flush at ${width}px in ${direction}`, async ({ page }, info) => {
-      await setupTimeline(page, {
-        messages: [
-          userMessage(),
-          assistantMessage([...scenario.tools, textPart("prt_after_patch", "Following explanation.\n\n".repeat(60))]),
-        ],
-        settings: {
-          timelineDetail: {
-            ...timelinePresets[2].value,
-            edit: { placement: scenario.placement, details: "collapsed" },
+    test.describe(() => {
+      // The mobile layout is for touch screens; a narrow window with a mouse keeps the desktop layout.
+      test.use(width < 768 ? { hasTouch: true, isMobile: true } : {})
+
+      test(`${scenario.name}: file headers stay flush at ${width}px in ${direction}`, async ({ page }, info) => {
+        await setupTimeline(page, {
+          messages: [
+            userMessage(),
+            assistantMessage([...scenario.tools, textPart("prt_after_patch", "Following explanation.\n\n".repeat(60))]),
+          ],
+          settings: {
+            timelineDetail: {
+              ...timelinePresets[2].value,
+              edit: { placement: scenario.placement, details: "collapsed" },
+            },
           },
-        },
-        reducedMotion: true,
-        viewport: { width, height: 900 },
-      })
-      await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
-
-      if (scenario.placement === "grouped") {
-        await page.locator('[data-component="context-tool-group-trigger"]').click()
-      }
-
-      const patch = page.locator('[data-scope="apply-patch"]')
-      await expect(patch).toHaveCount(1)
-      const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
-      const toolTitle = scroller.locator('[data-slot="collapsible-trigger"][data-locked]')
-      await expect(toolTitle).toHaveCount(scenario.title ? 1 : 0)
-      await expect(scroller.locator("[data-session-title]")).toHaveCount(width >= 768 ? 1 : 0)
-
-      for (const file of scenario.files) {
-        const name = new RegExp(`${file}\\.ts`)
-        const trigger = patch.getByRole("button", { name })
-        const header = patch.getByRole("heading", { name })
-        await expect(trigger).toHaveAttribute("aria-expanded", "false")
-        await trigger.click()
-        await expect(trigger).toHaveAttribute("aria-expanded", "true")
-        const content = patch.getByRole("region", { name })
-        await expect
-          .poll(() => content.evaluate((element) => element.getBoundingClientRect().height))
-          .toBeGreaterThan(900)
-
-        // Leave follow-latest mode before positioning the viewport inside this file.
-        await scroller.hover()
-        await page.mouse.wheel(0, -100)
-        await content.evaluate((element) => {
-          const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
-          viewport.scrollTop += element.getBoundingClientRect().top - viewport.getBoundingClientRect().top + 160
+          reducedMotion: true,
+          viewport: { width, height: 900 },
         })
-        await expect
-          .poll(() =>
-            content.evaluate((element) => {
-              const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+        await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
 
-              return element.getBoundingClientRect().top - viewport.getBoundingClientRect().top
-            }),
-          )
-          .toBeLessThan(0)
-
-        for (const [index, offset] of scenario.offsets.entries()) {
-          if (index)
-            await scroller.evaluate(
-              (element, step) => (element.scrollTop += step),
-              offset - scenario.offsets[index - 1]!,
-            )
-          await expect
-            .poll(() =>
-              header.evaluate((element) => {
-                const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
-                const title = viewport.querySelector("[data-session-title]")?.firstElementChild
-
-                const toolTitle = element
-                  .closest('[data-component="edit-tool"]')
-                  ?.querySelector('[data-slot="collapsible-trigger"][data-locked]')
-
-                // Grouped file headers stack below the stuck Used header.
-                const group = element
-                  .closest('[data-component="collapsed-tool-group"]')
-                  ?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-
-                const sessionTop = viewport.getBoundingClientRect().top + (title?.getBoundingClientRect().height ?? 0)
-                const top = sessionTop + (group?.getBoundingClientRect().height ?? 0)
-                const rect = element.getBoundingClientRect()
-                const trigger = element.querySelector("button")!
-
-                // The header stuck directly below the session title sits where the title's fade starts.
-                const hits = (target: Element, box: DOMRect) =>
-                  [box.top + 1, box.top + box.height / 2].every((y) =>
-                    target.contains(document.elementFromPoint(box.left + box.width / 2, y)),
-                  )
-
-                return {
-                  gap: Math.abs(rect.top - top - (toolTitle?.getBoundingClientRect().height ?? 0)),
-                  groupGap: group ? Math.abs(group.getBoundingClientRect().top - sessionTop) : 0,
-                  titleGap: toolTitle ? Math.abs(toolTitle.getBoundingClientRect().top - top) : 0,
-                  clickable: hits(trigger, rect) && (!group || hits(group, group.getBoundingClientRect())),
-                }
-              }),
-            )
-            .toEqual({ gap: 0, groupGap: 0, titleGap: 0, clickable: true })
+        if (scenario.placement === "grouped") {
+          await page.locator('[data-component="context-tool-group-trigger"]').click()
         }
 
-        await page.screenshot({ path: info.outputPath(`${file}.png`) })
-      }
+        const patch = page.locator('[data-scope="apply-patch"]')
+        await expect(patch).toHaveCount(1)
+        const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+        const toolTitle = scroller.locator('[data-slot="collapsible-trigger"][data-locked]')
+        await expect(toolTitle).toHaveCount(scenario.title ? 1 : 0)
+        await expect(scroller.locator("[data-session-title]")).toHaveCount(width >= 768 ? 1 : 0)
 
-      await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
-      await expect(
-        patch.getByRole("heading", { name: new RegExp(`${scenario.files.at(-1)}\\.ts`) }),
-      ).not.toBeInViewport()
+        for (const file of scenario.files) {
+          const name = new RegExp(`${file}\\.ts`)
+          const trigger = patch.getByRole("button", { name })
+          const header = patch.getByRole("heading", { name })
+          await expect(trigger).toHaveAttribute("aria-expanded", "false")
+          await trigger.click()
+          await expect(trigger).toHaveAttribute("aria-expanded", "true")
+          const content = patch.getByRole("region", { name })
+          await expect
+            .poll(() => content.evaluate((element) => element.getBoundingClientRect().height))
+            .toBeGreaterThan(900)
+
+          // Leave follow-latest mode before positioning the viewport inside this file.
+          await scroller.hover()
+          await page.mouse.wheel(0, -100)
+          await content.evaluate((element) => {
+            const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+            viewport.scrollTop += element.getBoundingClientRect().top - viewport.getBoundingClientRect().top + 160
+          })
+          await expect
+            .poll(() =>
+              content.evaluate((element) => {
+                const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+
+                return element.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+              }),
+            )
+            .toBeLessThan(0)
+
+          for (const [index, offset] of scenario.offsets.entries()) {
+            if (index)
+              await scroller.evaluate(
+                (element, step) => (element.scrollTop += step),
+                offset - scenario.offsets[index - 1]!,
+              )
+            await expect
+              .poll(() =>
+                header.evaluate((element) => {
+                  const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+                  const title = viewport.querySelector("[data-session-title]")?.firstElementChild
+
+                  const toolTitle = element
+                    .closest('[data-component="edit-tool"]')
+                    ?.querySelector('[data-slot="collapsible-trigger"][data-locked]')
+
+                  // Grouped file headers stack below the stuck Used header.
+                  const group = element
+                    .closest('[data-component="collapsed-tool-group"]')
+                    ?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
+                  const sessionTop = viewport.getBoundingClientRect().top + (title?.getBoundingClientRect().height ?? 0)
+                  const top = sessionTop + (group?.getBoundingClientRect().height ?? 0)
+                  const rect = element.getBoundingClientRect()
+                  const trigger = element.querySelector("button")!
+
+                  // The header stuck directly below the session title sits where the title's fade starts.
+                  const hits = (target: Element, box: DOMRect) =>
+                    [box.top + 1, box.top + box.height / 2].every((y) =>
+                      target.contains(document.elementFromPoint(box.left + box.width / 2, y)),
+                    )
+
+                  return {
+                    gap: Math.abs(rect.top - top - (toolTitle?.getBoundingClientRect().height ?? 0)),
+                    groupGap: group ? Math.abs(group.getBoundingClientRect().top - sessionTop) : 0,
+                    titleGap: toolTitle ? Math.abs(toolTitle.getBoundingClientRect().top - top) : 0,
+                    clickable: hits(trigger, rect) && (!group || hits(group, group.getBoundingClientRect())),
+                  }
+                }),
+              )
+              .toEqual({ gap: 0, groupGap: 0, titleGap: 0, clickable: true })
+          }
+
+          await page.screenshot({ path: info.outputPath(`${file}.png`) })
+        }
+
+        await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
+        await expect(
+          patch.getByRole("heading", { name: new RegExp(`${scenario.files.at(-1)}\\.ts`) }),
+        ).not.toBeInViewport()
+      })
     })
   }
 }

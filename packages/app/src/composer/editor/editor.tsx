@@ -14,7 +14,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -1034,7 +1034,7 @@ function ComposerEditorSelect(props: {
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
   const [store, setStore] = createStore({ open: false, loaded: false })
   const focus = pointerFocusReturn()
   let trigger: HTMLButtonElement | undefined

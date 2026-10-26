@@ -1,4 +1,4 @@
-@media (max-width: 767px) {
+@media (hover: none) and (pointer: coarse) and (max-width: 767px) {
   [data-component="home-session-row-container"][data-project-name="true"],
   [data-component="home-session-row-container"][data-project-name="true"] [data-component="home-session-row"],
   [data-component="home-session-row-container"][data-project-name="true"] [data-slot="home-session-editor"],

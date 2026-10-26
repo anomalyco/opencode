@@ -111,7 +111,7 @@ story("drops a pending footer at once on delivery with and without hover", async
   await expect(footer).toHaveCSS("opacity", "0")
 })
 
-story("marks pending metadata without badging delivered, starting, or queued prompts", async ({ mount, page }) => {
+story("marks pending metadata without badging delivered, starting, or queued prompts", async ({ mount }) => {
   const timeline = await mount("current-prompt-message--pending")
   const indicator = timeline.locator('[data-slot="user-message-meta"] [data-slot="user-message-pending"]')
   const text = timeline.locator('[data-slot="user-message-text"]')
@@ -191,14 +191,22 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   ).toBeVisible()
   await expect(timeline.getByRole("img", { name: "Pending", exact: true })).toHaveCount(0)
   await timeline.getByLabel("Grouped prompts", { exact: true }).uncheck()
-  await page.setViewportSize({ width: 390, height: 844 })
-  await expect(indicator).toBeVisible()
-  await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveCount(0)
   await timeline.getByLabel("Prompt text", { exact: true }).uncheck()
   await expect(timeline.getByText("notes.json", { exact: true })).toBeVisible()
   await expect(indicator).toBeVisible()
   await timeline.getByRole("button", { name: "Move to queue", exact: true }).click()
   await expect(indicator).toBeHidden()
+})
+
+story.describe("touch", () => {
+  story.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+
+  story("leaves a pending prompt's agent and model to the composer", async ({ mount }) => {
+    const timeline = await mount("current-prompt-message--pending")
+    await timeline.getByLabel("Delivery state").selectOption("steering")
+    await expect(timeline.locator('[data-slot="user-message-meta"] [data-slot="user-message-pending"]')).toBeVisible()
+    await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveCount(0)
+  })
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-collapse-state.spec.ts

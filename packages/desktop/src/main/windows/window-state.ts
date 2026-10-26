@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import type { BrowserWindow, Rectangle } from "electron"
+import { Option, Schema } from "effect"
 
 // Remembers a window's bounds and maximized / fullscreen flags across launches in the same JSON
 // file electron-window-state wrote, so existing profiles restore where they were.
@@ -15,18 +16,40 @@ export type WindowState = {
   isFullScreen?: boolean
 }
 
+const Bounds = Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number })
+
+// What a previous launch saved. A maximized or fullscreen window may have saved no bounds.
+const SavedWindowState = Schema.Struct({
+  x: Schema.optionalKey(Schema.Number),
+  y: Schema.optionalKey(Schema.Number),
+  width: Schema.optionalKey(Schema.Number),
+  height: Schema.optionalKey(Schema.Number),
+  displayBounds: Schema.optionalKey(Bounds),
+  isMaximized: Schema.optionalKey(Schema.Boolean),
+  isFullScreen: Schema.optionalKey(Schema.Boolean),
+})
+
+export type SavedWindowState = typeof SavedWindowState.Type
+
+const decodeSaved = Schema.decodeUnknownOption(Schema.fromJsonString(SavedWindowState))
+
 export type Displays = {
   all: () => Rectangle[]
   primary: () => Rectangle
   matching: (bounds: Rectangle) => Rectangle
 }
 
+// The smallest window the desktop layout is built for; narrower than this the chat column can't hold its controls.
+const windowMinimum = { width: 480, height: 480 }
+
 // Bounds are only trusted when they still fit on one of the current displays; otherwise the window
 // falls back to the default size on the primary display. A saved maximized or fullscreen state
 // without bounds is kept so manage() can restore it.
-export function resolveWindowState(saved: unknown, defaults: { width: number; height: number }, displays: Displays) {
-  const state = isState(saved) ? saved : undefined
-
+export function resolveWindowState(
+  state: SavedWindowState | undefined,
+  defaults: { width: number; height: number },
+  displays: Displays,
+) {
   if (!state) return { width: defaults.width, height: defaults.height } satisfies WindowState
 
   if (!hasBounds(state)) {
@@ -35,10 +58,16 @@ export function resolveWindowState(saved: unknown, defaults: { width: number; he
       : ({ width: defaults.width, height: defaults.height } satisfies WindowState)
   }
 
-  if (!state.displayBounds) return state
-  const visible = displays.all().some((bounds) => within(state, bounds))
+  const sized = {
+    ...state,
+    width: Math.max(state.width, windowMinimum.width),
+    height: Math.max(state.height, windowMinimum.height),
+  } satisfies WindowState
 
-  if (visible) return state
+  if (!sized.displayBounds) return sized
+  const visible = displays.all().some((bounds) => within(sized, bounds))
+
+  if (visible) return sized
 
   return {
     width: defaults.width,
@@ -53,20 +82,17 @@ export function windowStateFile(id: string) {
   return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function readWindowState(file: string): unknown {
+export function readWindowState(file: string) {
   if (!existsSync(file)) return undefined
 
-  try {
-    return JSON.parse(readFileSync(file, "utf8"))
-  } catch {
-    return undefined
-  }
+  return Option.getOrUndefined(decodeSaved(readFileSync(file, "utf8")))
 }
 
 // Tracks the window until it closes and writes the final state then. Bounds are recorded while
 // the window is in its normal state so a maximized window restores to its previous size.
 export function manageWindowState(win: BrowserWindow, file: string, initial: WindowState, displays: Displays) {
   const state = { ...initial }
+  win.setMinimumSize(windowMinimum.width, windowMinimum.height)
 
   if (state.isMaximized) win.maximize()
 
@@ -111,18 +137,16 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
   win.on("closed", closed)
 }
 
-function isState(value: unknown): value is WindowState {
-  return typeof value === "object" && value !== null
-}
-
-function hasBounds(state: WindowState): state is WindowState & Required<Pick<WindowState, "x" | "y">> {
+function hasBounds(
+  state: SavedWindowState,
+): state is SavedWindowState & Required<Pick<WindowState, "x" | "y" | "width" | "height">> {
   return (
     Number.isInteger(state.x) &&
     Number.isInteger(state.y) &&
     Number.isInteger(state.width) &&
-    state.width > 0 &&
+    (state.width ?? 0) > 0 &&
     Number.isInteger(state.height) &&
-    state.height > 0
+    (state.height ?? 0) > 0
   )
 }
 

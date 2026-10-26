@@ -24,7 +24,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
@@ -102,7 +102,7 @@ type ViewProps = {
 export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
   const active = () => input.active?.() !== false
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isDesktop = () => !isMobileLayout()
   const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
   const ownerSessionKey = input.sessionKey()
   const entry = cache.get(ownerSessionKey)
@@ -969,7 +969,10 @@ export function createTimelineVirtualizer(input: Input) {
           class="relative min-w-0 w-full h-full"
           style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
         >
-          <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
+          <Show
+            when={input.showHeader()}
+            fallback={<div aria-hidden="true" class="h-4" classList={{ hidden: isDesktop() }} />}
+          >
             {props.header}
           </Show>
           <div

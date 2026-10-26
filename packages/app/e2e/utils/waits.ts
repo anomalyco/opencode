@@ -8,7 +8,8 @@ export async function expectAppVisible(locator: Locator) {
 }
 
 export async function expectSessionTitle(page: Page, title: string) {
-  if ((page.viewportSize()?.width ?? 1280) < 768) {
+  // The phone layout follows the input: only a narrow touch screen without hover gets the mobile tabs.
+  if (await page.evaluate(() => matchMedia("(hover: none) and (pointer: coarse) and (max-width: 767px)").matches)) {
     const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
     await expectAppVisible(trigger)
     await expect(trigger.locator('span[dir="auto"]')).toHaveText(title, { timeout: APP_READY_TIMEOUT })

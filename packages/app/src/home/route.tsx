@@ -1,5 +1,5 @@
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { Show } from "solid-js"
 import { createHomeController } from "./model"
 import { createHomeProjectsController } from "./projects/controller"
@@ -11,7 +11,7 @@ import { createHomeSessionsController } from "./sessions/controller"
 import { HomeSessions } from "./sessions/region"
 
 export function Home() {
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
   const sessions = createHomeSessionsController(home)
@@ -40,9 +40,10 @@ export function Home() {
       >
         <div
           class={`
-            mx-auto grid min-h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-4 px-3
-            max-md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6
+            mx-auto grid min-h-full w-full max-w-[1080px] gap-4 px-3
+            lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6
           `}
+          classList={{ "grid-rows-[minmax(0,1fr)]": mobile(), "grid-rows-[auto_minmax(0,1fr)]": !mobile() }}
         >
           <Show when={!mobile()}>
             <HomeProjects projects={projects} scroll={scroll} />
@@ -50,7 +51,7 @@ export function Home() {
           <HomeSessions sessions={sessions} search={search} scroll={scroll} />
         </div>
       </ScrollView>
-      <div class="hidden shrink-0 px-3 py-2 md:block lg:hidden">
+      <div class="shrink-0 px-3 py-2 lg:hidden" classList={{ hidden: mobile() }}>
         <HomeUtilityNav
           class="flex"
           onOpenSettings={projects.utility.settings}

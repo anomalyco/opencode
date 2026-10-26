@@ -16,19 +16,37 @@ const displays = {
 
 describe("window state", () => {
   test("keeps bounds that still fit on a display", () => {
-    const saved = { x: 2000, y: 100, width: 1000, height: 700, displayBounds: { x: 1920, y: 0, width: 2560, height: 1440 } }
+    const saved = {
+      x: 2000,
+      y: 100,
+      width: 1000,
+      height: 700,
+      displayBounds: { x: 1920, y: 0, width: 2560, height: 1440 },
+    }
+
     expect(resolveWindowState(saved, defaults, displays)).toEqual(saved)
   })
 
   test("falls back to the default size on the primary display when the saved display is gone", () => {
-    const saved = { x: 5000, y: 100, width: 1000, height: 700, displayBounds: { x: 4480, y: 0, width: 1920, height: 1080 } }
+    const saved = {
+      x: 5000,
+      y: 100,
+      width: 1000,
+      height: 700,
+      displayBounds: { x: 4480, y: 0, width: 1920, height: 1080 },
+    }
+
     expect(resolveWindowState(saved, defaults, displays)).toEqual({ ...defaults, x: 0, y: 0, displayBounds: primary })
+  })
+
+  test("grows a saved size below the window minimum", () => {
+    const saved = { x: 100, y: 100, width: 320, height: 300, displayBounds: primary }
+    expect(resolveWindowState(saved, defaults, displays)).toEqual({ ...saved, width: 480, height: 480 })
   })
 
   test("uses defaults without a position when nothing usable was saved", () => {
     expect(resolveWindowState(undefined, defaults, displays)).toEqual(defaults)
     expect(resolveWindowState({ width: 0, height: -1 }, defaults, displays)).toEqual(defaults)
-    expect(resolveWindowState("junk", defaults, displays)).toEqual(defaults)
   })
 
   test("keeps a maximized flag even without bounds", () => {
@@ -52,6 +70,8 @@ describe("window state", () => {
       isFullScreen: false,
     })
     writeFileSync(file, "{oops")
+    expect(readWindowState(file)).toBeUndefined()
+    writeFileSync(file, '"junk"')
     expect(readWindowState(file)).toBeUndefined()
     expect(readWindowState(path.join(dir, "missing.json"))).toBeUndefined()
   })

@@ -4,6 +4,9 @@ import { browseFiles, openFileLauncher } from "../utils/side-panel"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode } from "../utils/workspace"
 
+// The mobile layout is for touch screens; a narrow window with a mouse keeps the desktop layout.
+test.use({ hasTouch: true, isMobile: true })
+
 // The source and target sessions; the child session is not a home row.
 const rows = 2
 

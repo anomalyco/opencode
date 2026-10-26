@@ -9,11 +9,24 @@ export const SESSION_PANEL_WIDTH_MIN = 320
 
 const SIDE_PANE_WIDTH_MIN = 320
 
-const SESSION_PANEL_WIDTH_FIT = 450
+export const SESSION_PANEL_WIDTH_FIT = 450
 
 const REVIEW_PANE_WIDTH_FIT = 480
 
 const REVIEW_PANE_WIDTH_FIT_SPLIT = 800
+
+// The narrowest pane row that docks the side panel beside the chat, across their 8px gap; narrower, it floats as a
+// sheet over the chat.
+export const SIDE_PANE_DOCK_ROW = SESSION_PANEL_WIDTH_FIT + 8 + SIDE_PANE_WIDTH_MIN
+
+// The floating side panel's widest, and the chat it leaves showing beside it.
+const SIDE_SHEET_WIDTH_MAX = REVIEW_PANE_WIDTH_FIT
+
+const SIDE_SHEET_CHAT_REVEAL = 72
+
+export function sideSheetWidth(row: number) {
+  return Math.min(SIDE_SHEET_WIDTH_MAX, row, Math.max(300, row - SIDE_SHEET_CHAT_REVEAL))
+}
 
 export function sessionPanelWidthMax(input: { available: number; split: boolean; resized: boolean }) {
   if (input.resized) return Math.max(SESSION_PANEL_WIDTH_MIN, input.available - SIDE_PANE_WIDTH_MIN)

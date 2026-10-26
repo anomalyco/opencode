@@ -1,8 +1,8 @@
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { Show } from "solid-js"
 
 export function SessionHeaderSpacer(props: { visible: boolean }) {
-  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const isDesktop = () => !isMobileLayout()
 
   return (
     <Show when={isDesktop() && props.visible}>

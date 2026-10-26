@@ -19,7 +19,7 @@ import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -72,7 +72,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const dialog = useDialog()
   const navigate = useNavigate()
   const location = useLocation()
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
   const bottom = createMemo(() => mobile() && settings.general.mobileTitlebarPosition() === "bottom")
   const mobileTop = createMemo(() => platform.platform === "web" && mobile() && !bottom())
 

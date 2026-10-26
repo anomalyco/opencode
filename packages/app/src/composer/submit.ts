@@ -8,6 +8,7 @@ import { clonePrompt, promptLength, serializePrompt } from "./prompt-parts"
 import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest, noteComment, quoteComment } from "./request"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { isAttachment } from "./prompt-parts"
@@ -401,7 +402,7 @@ function clearSubmission(input: ComposerSubmitInput, submission: ReturnType<type
   input.setMode("normal")
   input.closePopover()
 
-  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
+  if (isMobileLayout()) input.editor()?.blur()
 }
 
 function restoreSubmission(

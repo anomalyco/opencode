@@ -83,6 +83,8 @@ export function createSidebarPeek(input: {
   let keyboard = false
   // Whether the sidebar last docked from a peek, which already shows it.
   let handedOff = false
+  // Called by its toggle rather than the pointer, the peek stays until Escape, a press outside it, or the toggle again.
+  let summoned = false
   let viewport = window.innerWidth
   // Where the edge zone starts, and the box spanning the toggle and the sidebar, until the layout next changes.
   let edgeTop: number | undefined
@@ -147,6 +149,7 @@ export function createSidebarPeek(input: {
     motion.snap(0)
     toggle = undefined
     corridor = undefined
+    summoned = false
 
     if (!shown()) return
     setShown(false)
@@ -157,14 +160,23 @@ export function createSidebarPeek(input: {
     cancelClose()
 
     if (!shown() || input.open()) return
+    summoned = false
     clearInterval(watch)
     watch = undefined
     const aside = input.aside()
 
     if (aside?.contains(document.activeElement)) {
-      if (focus && toggle?.isConnected) toggle.focus({ preventScroll: true })
+      // Called by a shortcut, no toggle was hovered, so focus returns to the toggle that's showing.
+      const button = toggle?.isConnected
+        ? toggle
+        : [...document.querySelectorAll<HTMLElement>(toggles)].find(
+            (element) => !aside.contains(element) && element.getClientRects().length > 0,
+          )
 
-      if (!focus && document.activeElement instanceof HTMLElement) document.activeElement.blur()
+      if (focus && button) button.focus({ preventScroll: true })
+
+      if (document.activeElement instanceof HTMLElement && aside.contains(document.activeElement))
+        document.activeElement.blur()
     }
 
     run(0)
@@ -249,6 +261,8 @@ export function createSidebarPeek(input: {
   function check() {
     if (!shown() || input.open() || !watch) return
 
+    if (summoned) return cancelClose()
+
     if ((pointer && inside(pointer)) || held()) return cancelClose()
     closing ??= setTimeout(() => {
       closing = undefined
@@ -303,6 +317,9 @@ export function createSidebarPeek(input: {
 
         if (!button || input.aside()?.contains(button)) return
 
+        // Moving between the toggle's own parts isn't arriving at it, so a click that closes the peek stays closed.
+        if (event.relatedTarget instanceof Node && button.contains(event.relatedTarget)) return
+
         if (toggle !== button) corridor = undefined
         toggle = button
 
@@ -340,6 +357,11 @@ export function createSidebarPeek(input: {
         keyboard = false
         pressed = event.pointerType !== "touch"
         cancelOpen()
+
+        if (!summoned || !(event.target instanceof Element)) return
+
+        if (input.aside()?.contains(event.target) || event.target.closest(`${toggles}, ${menus}`)) return
+        hide()
       },
       { passive: true, capture: true },
     )
@@ -363,7 +385,8 @@ export function createSidebarPeek(input: {
     })
     makeEventListener(window, "blur", () => {
       pressed = false
-      hide()
+
+      if (!summoned) hide()
     })
 
     const aside = input.aside()
@@ -426,5 +449,11 @@ export function createSidebarPeek(input: {
     shown,
     /** Whether the sidebar last docked from a peek, which already shows it. */
     handedOff: () => handedOff,
+    /** Floats the closed sidebar until Escape, a press outside it or the next toggle, or closes it if it was called. */
+    toggle() {
+      if (summoned && motion.target === 100) return hide(true)
+      summoned = true
+      show()
+    },
   }
 }

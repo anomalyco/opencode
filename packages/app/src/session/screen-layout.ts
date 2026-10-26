@@ -1,9 +1,17 @@
-import { createMemo, type Accessor } from "solid-js"
+import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createSizing } from "./helpers"
 import type { SessionModel } from "./model"
-import { clampSessionPanelWidth, sessionPanelWidthCss, sessionPanelWidthMax } from "./session-panel-width"
+import { room, roomHysteresis, setRoom } from "@/shell/room"
+import {
+  clampSessionPanelWidth,
+  SESSION_PANEL_WIDTH_FIT,
+  sessionPanelWidthCss,
+  sessionPanelWidthMax,
+  SIDE_PANE_DOCK_ROW,
+  sideSheetWidth,
+} from "./session-panel-width"
 
 /** wide asks for the wider session minimum. */
 export function createSessionScreenLayout(session: SessionModel, input: { wide: Accessor<boolean> }) {
@@ -26,6 +34,22 @@ export function createSessionScreenLayout(session: SessionModel, input: { wide: 
     return width - 8
   })
 
+  // Asks the open sidebar to give way before the side panel has to float.
+  createEffect(() => setRoom("contentMinimum", tabsOpen() ? SIDE_PANE_DOCK_ROW : SESSION_PANEL_WIDTH_FIT))
+  onCleanup(() => setRoom("contentMinimum", SESSION_PANEL_WIDTH_FIT))
+
+  // Read from the shell's whole row rather than this one, which moves while the left sidebar does and shrinks when it
+  // docks, so the sidebar giving way to the side panel, or docking again as it closes, doesn't float the panel.
+  const narrow = createMemo<boolean>((previous) => {
+    const width = room.inner ?? rowSize.width
+
+    if (width === undefined) return false
+
+    return width < SIDE_PANE_DOCK_ROW + (previous ? roomHysteresis : 0)
+  }, false)
+
+  const sheet = createMemo(() => tabsOpen() && narrow())
+
   const splitSide = createMemo(() => tabsOpen() && input.wide())
 
   const resizedWidth = createMemo(() =>
@@ -38,7 +62,7 @@ export function createSessionScreenLayout(session: SessionModel, input: { wide: 
   )
 
   const panelWidth = createMemo(() => {
-    if (!tabsOpen()) return "100%"
+    if (!tabsOpen() || sheet()) return "100%"
 
     return sessionPanelWidthCss({
       width: view().session.width(),
@@ -59,7 +83,8 @@ export function createSessionScreenLayout(session: SessionModel, input: { wide: 
   const sideWidth = createMemo<number | undefined>((previous) => {
     const width = available()
 
-    if (tabsOpen() && width !== undefined) return Math.max(0, width - resizedWidth())
+    if (tabsOpen() && width !== undefined)
+      return sheet() ? sideSheetWidth(width + 8) : Math.max(0, width - resizedWidth())
 
     return previous
   })
@@ -77,7 +102,7 @@ export function createSessionScreenLayout(session: SessionModel, input: { wide: 
       ref: (element: HTMLDivElement) => {
         row = element
       },
-      resizable: tabsOpen,
+      resizable: () => tabsOpen() && !sheet(),
       resizedWidth,
       width: panelWidth,
     },
@@ -85,6 +110,8 @@ export function createSessionScreenLayout(session: SessionModel, input: { wide: 
       contentWidth: sideContentWidth,
       width: sideWidth,
       open: tabsOpen,
+      /** The open side panel floats over the chat, as the row is too narrow to dock it beside the chat. */
+      sheet,
       tabs: { open: tabsOpen },
     },
     size,

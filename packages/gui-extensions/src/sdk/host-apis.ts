@@ -703,7 +703,7 @@ export interface OpenOptions {
  * `settings`, `project`) wait and apply in call order once it mounts.
  */
 export interface Layout {
-  /** Viewport under 768px. Reactive. */
+  /** The phone layout: a touch screen without hover, under 768px. A narrow desktop window is not narrow. Reactive. */
   narrow(): boolean
   /** Stored layout (tabs, scroll) has loaded; false before the app interface mounts. Reactive. */
   ready(): boolean

@@ -1,5 +1,5 @@
 import { createEffect, onCleanup, Show } from "solid-js"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
@@ -9,6 +9,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useSettings } from "@/settings/model"
 import { sidebarUnread } from "@/shell/sidebar-peek"
+import { room } from "@/shell/room"
 
 // The toggle's dot for sidebar sessions with unread activity, shown while the sidebar is closed.
 function UnreadBadge(props: { show: boolean; ring: "base" | "deep" }) {
@@ -63,10 +64,11 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
   const language = useLanguage()
   const settings = useSettings()
   const keybind = () => command.keybindParts("sidebar.toggle")
+  const docked = () => settings.appearance.sidebarOpen() && !room.sidebarAutoHidden
   const side = props.handoff
   let full: SVGSVGElement | undefined
   let outline: HTMLSpanElement | undefined
-  const unread = () => !settings.appearance.sidebarOpen() && sidebarUnread()
+  const unread = () => !docked() && sidebarUnread()
 
   const paints = {
     out: (button: HTMLElement, closed: number) => {
@@ -94,7 +96,7 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
       class="shrink-0 [app-region:no-drag]"
       placement="bottom"
       // Held shut while the closed sidebar peeks on hover, where it would cover the peek.
-      forceOpen={!settings.appearance.sidebarOpen() ? false : undefined}
+      forceOpen={!docked() ? false : undefined}
       value={
         <>
           {language.t("command.sidebar.toggle")}
@@ -111,9 +113,9 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
         size="large"
         class="shrink-0"
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => settings.appearance.setSidebarOpen(!settings.appearance.sidebarOpen())}
+        onClick={() => command.trigger("sidebar.toggle")}
         aria-label={language.t(unread() ? "command.sidebar.toggle.unread" : "command.sidebar.toggle")}
-        aria-expanded={settings.appearance.sidebarOpen()}
+        aria-expanded={docked()}
         aria-controls="vertical-tabs-sidebar"
         icon={
           side === "in" ? (
@@ -126,11 +128,7 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
             </span>
           ) : (
             <span class="relative flex">
-              <Icon
-                name={
-                  side === "out" || (!side && settings.appearance.sidebarOpen()) ? "layout-left-full" : "layout-left"
-                }
-              />
+              <Icon name={side === "out" || (!side && docked()) ? "layout-left-full" : "layout-left"} />
               <UnreadBadge show={!side && unread()} ring="deep" />
             </span>
           )
@@ -145,13 +143,13 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
 function useCollapsedSlot() {
   const platform = usePlatform()
   const settings = useSettings()
-  const desktop = createMediaQuery("(min-width: 768px)")
+  const desktop = () => !isMobileLayout()
   const windows = () => platform.platform === "desktop" && platform.os === "windows"
   const mac = () => platform.platform === "desktop" && platform.os === "macos" && !platform.windowFullscreen?.()
 
   return {
     visible: () => desktop() && !windows() && settings.appearance.tabLayout() !== "horizontal",
-    open: settings.appearance.sidebarOpen,
+    open: () => settings.appearance.sidebarOpen() && !room.sidebarAutoHidden,
     // Lays the toggle out as if the traffic lights were the header's first control.
     width: () =>
       mac()

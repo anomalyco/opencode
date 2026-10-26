@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { SettingsPage } from "@opencode/gui-extensions/sdk"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useExtensionHost } from "./host"
@@ -8,7 +8,7 @@ import { useExtensionHost } from "./host"
 export function createSettingsPages() {
   const host = useExtensionHost()
   const platform = usePlatform()
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
 
   const items = createMemo(() =>
     host.items(SettingsPage).filter((item) => {

@@ -13,7 +13,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
@@ -337,7 +337,7 @@ export function CurrentUserMessageDisplay(props: {
   const now = useNow()
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
 
   const labels = createMemo<MetaItem[]>(() => {
     const agent = agentLabel(props.agent, data.agents)
@@ -1044,7 +1044,7 @@ export function AssistantTextContent(props: {
   })
 
   // Mobile omits the per-response agent and model; see CurrentUserMessageDisplay.
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
 
   const meta = createMemo<MetaItem[]>(() => [
     ...(mobile() ? [] : labels()),

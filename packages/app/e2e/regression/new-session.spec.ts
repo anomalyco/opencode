@@ -281,23 +281,27 @@ test("a pending worktree session shows immediately, keeps its draft, and hands o
   await expect(label).toHaveText("Generated session title")
 })
 
-test("a pending worktree session keeps Session as its mobile title until the generated title arrives", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  const mock = await openWorktreeDraft(page, { ...pendingDraft, createdSessionTitle: "" })
-  const label = page.locator('[data-slot="mobile-tab-title"]')
-  await expect(label).toHaveText("Session")
-  const pending = await submitPending(page, mock)
-  await expect(
-    page.locator('[data-slot="mobile-tabs-trigger"] [data-component="session-progress-indicator-v2"]'),
-  ).toBeVisible()
-  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
-  await expect(pending.shimmer).toHaveCount(0)
-  await expect(submit(page)).toBeEnabled()
-  await expect(label).toHaveText("Session")
-  await mock.push([renamed(pending.sessionID)])
-  await expect(label).toHaveText("Generated session title")
+test.describe("touch", () => {
+  test.use({ hasTouch: true, isMobile: true })
+
+  test("a pending worktree session keeps Session as its mobile title until the generated title arrives", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const mock = await openWorktreeDraft(page, { ...pendingDraft, createdSessionTitle: "" })
+    const label = page.locator('[data-slot="mobile-tab-title"]')
+    await expect(label).toHaveText("Session")
+    const pending = await submitPending(page, mock)
+    await expect(
+      page.locator('[data-slot="mobile-tabs-trigger"] [data-component="session-progress-indicator-v2"]'),
+    ).toBeVisible()
+    mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+    await expect(pending.shimmer).toHaveCount(0)
+    await expect(submit(page)).toBeEnabled()
+    await expect(label).toHaveText("Session")
+    await mock.push([renamed(pending.sessionID)])
+    await expect(label).toHaveText("Generated session title")
+  })
 })
 
 test("the title and message stay stable through worktree creation", async ({ page }) => {

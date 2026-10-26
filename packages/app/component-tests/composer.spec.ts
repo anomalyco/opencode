@@ -402,14 +402,8 @@ for (const direction of ["ltr", "rtl"]) {
           Math.abs((direction === "ltr" ? action.x - last.x - last.width : last.x - action.x - action.width) - 12),
         ).toBeLessThan(1)
         await page.keyboard.press("Enter")
-        // Below the mobile breakpoint the variant picker opens in a bottom drawer instead of a menu.
-        await expect(
-          width < 768
-            ? page
-                .getByRole("dialog", { name: "Choose model variant", exact: true })
-                .getByRole("button", { name: "high", exact: true })
-            : page.getByRole("menuitemradio", { name: "high", exact: true }),
-        ).toBeVisible()
+        // A narrow window with a mouse keeps the menu; only a touch screen gets the bottom drawer.
+        await expect(page.getByRole("menuitemradio", { name: "high", exact: true })).toBeVisible()
         await page.keyboard.press("Escape")
         await expect(variant).toBeFocused()
         await expect(submit).toBeInViewport()
@@ -708,7 +702,7 @@ story("keeps default thinking accessible by keyboard without composer hover", as
 })
 
 story.describe("mobile variant drawer", () => {
-  story.use({ viewport: { width: 360, height: 720 } })
+  story.use({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 720 } })
 
   // Guards patches/@corvu%2Fdrawer@0.2.4.patch. The drawer starts its opening transition two frames after it opens.
   // Dismissing it before then used to slide it open anyway, and dismissing it in that frame left it closing off screen

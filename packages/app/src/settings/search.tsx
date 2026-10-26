@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createUniqueId, For, on, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
+import { isMobileLayout } from "@opencode/ui/mobile-layout"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
@@ -333,7 +333,7 @@ export function createSettingsSearchCatalog() {
   const global = useGlobal()
   const servers = useSettingsServers()
   const surface = useSettingsSurface()
-  const mobile = createMediaQuery("(max-width: 767px)")
+  const mobile = isMobileLayout
 
   const inventory = createMemo(() =>
     servers().map((server) => {

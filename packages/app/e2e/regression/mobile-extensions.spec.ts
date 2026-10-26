@@ -3,7 +3,7 @@ import { sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode } from "../utils/workspace"
 
-test.use({ viewport: { width: 390, height: 844 } })
+test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
 async function openFiles(page: Page) {
   await page

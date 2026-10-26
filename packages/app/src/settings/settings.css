@@ -28,7 +28,7 @@
   min-width: 0;
 }
 
-@media (max-width: 767px) {
+@media (hover: none) and (pointer: coarse) and (max-width: 767px) {
   .settings-screen {
     --settings-mobile-inner-inset: 8px;
   }
@@ -1286,11 +1286,7 @@
 .settings-project-empty-card {
   width: 100%;
   border-radius: 8px;
-  background: color-mix(
-    in oklab,
-    var(--v2-background-bg-base) 50%,
-    var(--v2-background-bg-layer-01)
-  );
+  background: color-mix(in oklab, var(--v2-background-bg-base) 50%, var(--v2-background-bg-layer-01));
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
