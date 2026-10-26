@@ -165,7 +165,16 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
     if (url.pathname.endsWith("/inbox") || url.pathname.endsWith("/permission")) return json({ data: [] })
     return undefined
   }, createEventStream())
-  const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
+  // The fixture synthesizes the family from in-process reads, so only requests through the server reach this log.
+  const requests: string[] = []
+  const server = Bun.serve({
+    port: 0,
+    idleTimeout: 0,
+    fetch: (request) => {
+      requests.push(new URL(request.url).pathname)
+      return calls.fetch(request)
+    },
+  })
   const { run } = await import("../src/app")
   const task = Effect.runPromise(
     run({
@@ -189,6 +198,12 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
     const x = lines[y].indexOf("General finished")
     await setup.mockMouse.click(x + 1, y)
     await setup.waitForFrame((frame) => frame.includes("Investigate authentication"))
+    // One family read loads both members, their pending requests, and serves the child's route.
+    expect(
+      requests
+        .filter((pathname) => /^\/api\/session\/(active|[^/]+\/(family|permission|form))$/.test(pathname))
+        .toSorted(),
+    ).toEqual(["/api/session/active", `/api/session/${parent.id}/family`])
   } finally {
     setup.renderer.destroy()
     await task
