@@ -108,6 +108,20 @@ function executionSucceeded(id: string, sessionID = "session"): OpenCodeEvent {
   }
 }
 
+function executionInterrupted(
+  id: string,
+  sessionID = "session",
+  reason: "user" | "shutdown" | "superseded" | "inactivity" = "user",
+): OpenCodeEvent {
+  return {
+    id,
+    created: 0,
+    type: "session.execution.interrupted",
+    durable: durable(sessionID),
+    data: { sessionID, reason },
+  }
+}
+
 function executionFailed(id: string, sessionID = "session"): OpenCodeEvent {
   return {
     id,
@@ -308,5 +322,27 @@ describe("internal notifications TUI plugin", () => {
         sound: { name: "error", when: "always" },
       },
     ])
+  })
+
+  test("does not notify or play done sound when session execution is interrupted", async () => {
+    const harness = await setup()
+
+    harness.emit(executionStarted("event-1"))
+    harness.emit(executionInterrupted("event-2", "session", "user"))
+    expect(harness.notifications).toEqual([])
+
+    harness.emit(executionStarted("event-3"))
+    harness.emit(executionInterrupted("event-4", "session", "shutdown"))
+    expect(harness.notifications).toEqual([])
+  })
+
+  test("suppresses subsequent done notification after interruption", async () => {
+    const harness = await setup()
+
+    harness.emit(executionStarted("event-1"))
+    harness.emit(executionInterrupted("event-2"))
+    harness.emit(executionSucceeded("event-3"))
+
+    expect(harness.notifications).toEqual([])
   })
 })
