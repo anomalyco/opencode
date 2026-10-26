@@ -60,9 +60,33 @@ $ opencode pair
   http://127.0.0.1:49374/auth/connect/...
 ```
 
-## Docker
+## Container
 
-Docker images use versioned tags, for example `ghcr.io/anomalyco/opencode:2.0.0`.
+Official container images are published to GitHub Packages:
+
+[github.com/anomalyco/opencode/pkgs/container/opencode](https://github.com/anomalyco/opencode/pkgs/container/opencode)
+
+Images use versioned tags, for example `ghcr.io/anomalyco/opencode:2.0.0`.
+
+```bash
+$ docker run --rm -it \
+    -v opencode-config:/root \
+    -v "$PWD:/workspace" \
+    -w /workspace \
+    ghcr.io/anomalyco/opencode:2.0.0
+```
+
+Mount these directories so settings and projects survive container restarts:
+
+| Path         | Purpose                                                                                                                                        | Mount to                                                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `/root`      | Home directory of the container user. Holds `~/.config/opencode` (config, agents, commands, skills, plugins), provider credentials, and state. | A named volume or host directory, for personal configuration persistence |
+| `/workspace` | Conventional working directory for your project.                                                                                               | Your project directory on the host, for example `-v "$PWD:/workspace"`   |
+
+Persist `/root` to keep providers, plugins, and personal settings between runs.
+Mount `/workspace` to edit host files directly instead of copying them into the
+container. Keep the two separate so project files stay out of the configuration
+volume, and add more `-v` flags for extra project folders.
 
 ---
 
