@@ -15544,6 +15544,9 @@
           "modelID": {
             "type": "string"
           },
+          "type": {
+            "$ref": "#/components/schemas/Model.Type"
+          },
           "family": {
             "type": "string"
           },
