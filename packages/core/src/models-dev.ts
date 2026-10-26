@@ -169,9 +169,11 @@ function normalize(input: Record<string, unknown>): readonly Snapshot[] {
       const target = model && route(providerID, model)
       return model && target ? [{ model, route: target }] : []
     })
+    if (sources.length === 0) return []
     // v2 lists APIs per model, so the provider defaults are what most of its models use. A model that
     // builds its own URL would inherit a provider baseURL, so then every model carries its own instead.
-    const packageName = mostCommon(sources.map((source) => source.route.package)) ?? ""
+    const packageName = mostCommon(sources.map((source) => source.route.package))
+    if (!packageName) return []
     const urls = sources.map((source) => source.route.baseURL)
     const baseURL = urls.every((url) => url !== undefined) ? mostCommon(urls) : undefined
     const info = {

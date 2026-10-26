@@ -5055,6 +5055,22 @@
             "required": false,
             "style": "deepObject",
             "explode": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Model.Type"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Model type to list. Defaults to chat, the only type offered for sessions."
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -5123,7 +5139,7 @@
             }
           }
         },
-        "description": "Retrieve the current snapshot of available models ordered by release date. The snapshot may precede initial plugin settlement.",
+        "description": "Retrieve the current snapshot of available models of one type, chat by default, ordered by release date. The snapshot may precede initial plugin settlement.",
         "summary": "List models"
       }
     },
@@ -17804,6 +17820,9 @@
           "canonical": {
             "$ref": "#/components/schemas/Provider.ID"
           },
+          "type": {
+            "$ref": "#/components/schemas/Model.Type"
+          },
           "family": {
             "type": "string"
           },
@@ -17940,6 +17959,17 @@
           {
             "type": "object",
             "additionalProperties": {}
+          }
+        ]
+      },
+      "Model.Type": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["chat", "decision", "image"]
+          },
+          {
+            "type": "string"
           }
         ]
       },
