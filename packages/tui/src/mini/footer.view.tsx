@@ -784,6 +784,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             onContentChange={composer.onContentChange}
                             onSizeChange={composer.onSizeChange}
                             bind={composer.bind}
+                            menu={menu}
                           />
                         </Match>
                         <Match when={selectingSubagent()}>

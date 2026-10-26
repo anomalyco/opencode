@@ -28,6 +28,7 @@ async function firstLine(enabled: boolean) {
         onContentChange={() => {}}
         onSizeChange={() => {}}
         bind={() => {}}
+        menu={() => false}
       />
     ),
     { width: 40, height: 3 },
@@ -47,4 +48,37 @@ test("the prompt starts with a dollar sign in screen reader mode", async () => {
 
 test("the prompt has no dollar sign outside screen reader mode", async () => {
   expect(await firstLine(false)).not.toContain("$")
+})
+
+test("the open menu owns the terminal cursor in screen reader mode", async () => {
+  screenReader.enabled = true
+  const app = await testRender(
+    () => (
+      <RunPromptBody
+        theme={() => RUN_THEME_FALLBACK.footer}
+        background={() => "transparent"}
+        rail={() => "white"}
+        mono
+        cursorStyle={undefined}
+        placeholder={() => ""}
+        onSubmit={() => {}}
+        onKeyDown={() => {}}
+        onPaste={async () => {}}
+        images={() => []}
+        layout={() => ({ padding: 0, images: 0, textarea: 3 }) as never}
+        onContentChange={() => {}}
+        onSizeChange={() => {}}
+        bind={(area) => area?.focus()}
+        menu={() => true}
+      />
+    ),
+    { width: 40, height: 3 },
+  )
+  try {
+    app.renderer.setCursorPosition(30, 3, true)
+    await app.renderOnce()
+    expect(app.renderer.getCursorState().x).toBe(30)
+  } finally {
+    app.renderer.destroy()
+  }
 })

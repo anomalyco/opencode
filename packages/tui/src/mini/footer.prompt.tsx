@@ -223,6 +223,8 @@ export function RunPromptBody(props: {
   onContentChange: () => void
   onSizeChange: () => void
   bind: (area?: TextareaRenderable) => void
+  // Lets the open menu own the terminal cursor so screen readers announce its selection.
+  menu: Accessor<boolean>
 }) {
   const renderer = useRenderer()
   let area: TextareaRenderable | undefined
@@ -329,6 +331,7 @@ export function RunPromptBody(props: {
             focusedBackgroundColor={props.background()}
             cursorColor={props.theme().text}
             cursorStyle={props.cursorStyle}
+            showCursor={!(screenReader.enabled && props.menu())}
             onSubmit={props.onSubmit}
             onKeyDown={props.onKeyDown}
             onPaste={(event) => {
