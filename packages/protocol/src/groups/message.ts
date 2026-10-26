@@ -92,6 +92,9 @@ const MessagesCursor = Schema.Struct({
 export const SessionMediaMessagesResponse = Schema.Struct({
   data: Schema.Array(PublicMediaSessionMessage),
   cursor: MessagesCursor,
+  seq: Schema.optional(Schema.Int).annotate({
+    description: "Latest durable session event sequence reflected by this page.",
+  }),
 })
 
 /** Experimental: the `session.message` response for clients that opt into `experimental-media-uri`. */
@@ -105,6 +108,9 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       success: Schema.Struct({
         data: Schema.Array(PublicSessionMessage),
         cursor: MessagesCursor,
+        seq: Schema.optional(Schema.Int).annotate({
+          description: "Latest durable session event sequence reflected by this page.",
+        }),
       }).annotate({ identifier: "SessionMessagesResponse" }),
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(

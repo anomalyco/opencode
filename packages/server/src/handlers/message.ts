@@ -49,11 +49,18 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           type: ctx.query.type,
           cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
         }
-        const page = <Message extends { readonly id: SessionMessage.ID }>(messages: ReadonlyArray<Message>) => {
+        const page = <Message extends { readonly id: SessionMessage.ID }>({
+          seq,
+          messages,
+        }: {
+          readonly seq: number
+          readonly messages: ReadonlyArray<Message>
+        }) => {
           const first = messages[0]
           const last = messages.at(-1)
           return {
             data: messages,
+            seq,
             cursor: {
               previous: first ? cursor.encode(first, order, "previous") : undefined,
               next: last ? cursor.encode(last, order, "next") : undefined,
@@ -61,21 +68,21 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           }
         }
         if (wantsMediaRefs(ctx.request)) {
-          const messages = yield* session
-            .messagesWithRefs(input)
+          const result = yield* session
+            .messagePageWithRefs(input)
             .pipe(
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
             )
-          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(messages)).pipe(Effect.orDie)
+          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(result)).pipe(Effect.orDie)
         }
-        const messages = yield* session
-          .messages(input)
+        const result = yield* session
+          .messagePage(input)
           .pipe(
             Effect.catchTag("Session.NotFoundError", missingSession),
             Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
           )
-        return page(messages)
+        return page(result)
       }),
     )
   }),

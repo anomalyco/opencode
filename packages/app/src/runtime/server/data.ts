@@ -9,6 +9,10 @@ type SessionMutation = { readonly id: string; readonly type: "remove"; readonly 
 // The events on which the server advances a session's `time.updated` to the event's time.
 const SESSION_ACTIVITY = [
   "session.inbox.enqueued",
+  "session.execution.started",
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
   "session.step.started",
   "session.step.ended",
   "session.step.failed",

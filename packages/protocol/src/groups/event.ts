@@ -1,9 +1,11 @@
 import { Event } from "@opencode/schema/event"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { Location } from "@opencode/schema/location"
+import { Session } from "@opencode/schema/session"
 import type { Definition } from "@opencode/schema/event"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
+import { EventConnectionNotFoundError } from "../errors.js"
 
 const fields = {
   id: Event.ID,
@@ -20,6 +22,22 @@ const rpcEvent = Schema.Struct({
   data: Schema.Record(Schema.String, Schema.Unknown),
 }).annotate({ identifier: "V2Event.rpc" })
 
+export const EventDetailMode = Schema.Literals(["all", "subscribed"]).annotate({
+  identifier: "EventDetailMode",
+})
+export type EventDetailMode = typeof EventDetailMode.Type
+
+export const EventExperimentalQuery = Schema.Struct({
+  detail: Schema.optional(EventDetailMode).annotate({
+    description:
+      "When set to subscribed, high-volume session detail events are delivered only for sessions registered on this connection.",
+  }),
+}).annotate({ identifier: "EventExperimentalQuery" })
+
+export const EventSessionsPayload = Schema.Struct({
+  sessions: Schema.Array(Session.ID),
+}).annotate({ identifier: "EventSessionsPayload" })
+
 const schema = <const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) =>
   Schema.Union([
     ...definitions,
@@ -30,7 +48,9 @@ const schema = <const Definitions extends ReadonlyArray<Definition>>(definitions
           Schema.Struct({
             ...fields,
             type: Schema.Literal("server.connected"),
-            data: Schema.Struct({}),
+            data: Schema.Struct({
+              connection: Schema.optional(Schema.String),
+            }),
           }).annotate({ identifier: "V2Event.server.connected" }),
         ]),
   ]).annotate({ identifier: "V2Event" })
@@ -67,6 +87,34 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
             summary: "Subscribe to events",
             description:
               "Subscribe to native events and plugin RPC events across all server locations. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",
+          }),
+        ),
+      )
+      .add(
+        HttpApiEndpoint.get("event.experimental.subscribe", "/api/experimental/event", {
+          query: EventExperimentalQuery,
+          success: HttpApiSchema.StreamSse({ data: EventSchema }),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "event.experimental.subscribe",
+            summary: "Subscribe to events with per-connection session detail filtering",
+            description:
+              "Experimental event stream whose server.connected frame includes a connection ID for managing subscribed sessions.",
+          }),
+        ),
+      )
+      .add(
+        HttpApiEndpoint.put("event.experimental.sessions", "/api/experimental/event/:connection/sessions", {
+          params: { connection: Schema.String },
+          payload: EventSessionsPayload,
+          success: HttpApiSchema.NoContent,
+          error: [EventConnectionNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "event.experimental.sessions",
+            summary: "Replace subscribed sessions for an event stream connection",
+            description:
+              "Replace the set of session IDs whose detail events are delivered to the specified experimental event stream connection.",
           }),
         ),
       )

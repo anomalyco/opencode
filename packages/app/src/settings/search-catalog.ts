@@ -112,6 +112,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "model picker selector switcher redesign",
   },
   {
+    tab: "experimental",
+    label: "settings.experimental.row.eventSubscriptions.title",
+    target: "settings-event-subscriptions",
+    description: "settings.experimental.row.eventSubscriptions.description",
+    keywords: "event stream sse subscriptions bandwidth",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",

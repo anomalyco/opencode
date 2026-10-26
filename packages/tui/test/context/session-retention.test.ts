@@ -223,6 +223,17 @@ test("re-evicts an already excluded family when background turn events repopulat
         started: 1,
       },
     })
+    expect(scope.cached("background")).toBe(false)
+
+    scope.events.emit("session.execution.succeeded", {
+      id: "evt_exec_1",
+      created: 2,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "background", seq: 2, version: 1 },
+      data: {
+        sessionID: "background",
+      },
+    })
     expect(scope.cached("background")).toBe(true)
 
     scope.remember("background", undefined, 10)

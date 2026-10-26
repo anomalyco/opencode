@@ -13,6 +13,6 @@ export function make(options: ClientOptions) {
   return {
     ...raw,
     rpc: Object.assign(makeRpc(raw, events), raw.rpc),
-    event: events,
+    event: { ...raw.event, ...events },
   }
 }

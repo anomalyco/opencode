@@ -884,7 +884,7 @@ export type V2EventServerConnected = {
   metadata?: { [x: string]: any } | undefined
   location?: LocationPublicRef | undefined
   type: "server.connected"
-  data: {}
+  data: { connection?: string | undefined }
 }
 
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
@@ -2558,6 +2558,7 @@ export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMe
 export type SessionMessagesResponse = {
   data: Array<SessionMessageInfo>
   cursor: { previous?: string | null; next?: string | null }
+  seq?: number | null
 }
 
 export type SessionEventDurable =
@@ -2946,6 +2947,14 @@ export type RpcInternalError = {
 }
 export const isRpcInternalError = (value: unknown): value is RpcInternalError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "RpcInternalError"
+
+export type EventConnectionNotFoundError = {
+  readonly _tag: "EventConnectionNotFoundError"
+  readonly connection: string
+  readonly message: string
+}
+export const isEventConnectionNotFoundError = (value: unknown): value is EventConnectionNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "EventConnectionNotFoundError"
 
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
@@ -4097,6 +4106,14 @@ export type EventSubscribeInput = {
 }
 
 export type EventSubscribeOutput = V2Event
+
+export type EventExperimentalSubscribeInput = { readonly detail?: ("all" | "subscribed") | undefined }
+
+export type EventExperimentalSubscribeOutput = V2Event
+
+export type EventExperimentalSessionsInput = { readonly connection: string; readonly sessions: ReadonlyArray<string> }
+
+export type EventExperimentalSessionsOutput = void
 
 export type PtyListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

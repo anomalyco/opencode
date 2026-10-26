@@ -10479,6 +10479,210 @@
         "summary": "Subscribe to events"
       }
     },
+    "/api/experimental/event": {
+      "get": {
+        "tags": ["event"],
+        "operationId": "event.experimental.subscribe",
+        "parameters": [
+          {
+            "name": "detail",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EventDetailMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "When set to subscribed, high-volume session detail events are delivered only for sessions registered on this connection."
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/V2EventEncoded"
+                    }
+                  },
+                  "required": ["event", "data"],
+                  "additionalProperties": false
+                },
+                "x-effect-stream": {
+                  "encoding": "sse",
+                  "causeSchema": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Fail"]
+                            },
+                            "error": {
+                              "not": {}
+                            }
+                          },
+                          "required": ["_tag", "error"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Die"]
+                            },
+                            "defect": {}
+                          },
+                          "required": ["_tag", "defect"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Interrupt"]
+                            },
+                            "fiberId": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["_tag", "fiberId"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "errorSchema": {
+                    "not": {}
+                  },
+                  "failureEvent": "effect/http-api/stream/failure"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental event stream whose server.connected frame includes a connection ID for managing subscribed sessions.",
+        "summary": "Subscribe to events with per-connection session detail filtering"
+      }
+    },
+    "/api/experimental/event/{connection}/sessions": {
+      "put": {
+        "tags": ["event"],
+        "operationId": "event.experimental.sessions",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "EventConnectionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventConnectionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the set of session IDs whose detail events are delivered to the specified experimental event stream connection.",
+        "summary": "Replace subscribed sessions for an event stream connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventSessionsPayload"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/pty": {
       "get": {
         "tags": ["pty"],
@@ -16088,6 +16292,40 @@
       "Event.SeqEncoded": {
         "type": "string"
       },
+      "EventConnectionNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["EventConnectionNotFoundError"]
+          },
+          "connection": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "connection", "message"],
+        "additionalProperties": false
+      },
+      "EventDetailMode": {
+        "type": "string",
+        "enum": ["all", "subscribed"]
+      },
+      "EventSessionsPayload": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.ID"
+            }
+          }
+        },
+        "required": ["sessions"],
+        "additionalProperties": false
+      },
       "FileDiff.Info": {
         "type": "object",
         "properties": {
@@ -20976,6 +21214,17 @@
               }
             },
             "additionalProperties": false
+          },
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest durable session event sequence reflected by this page."
           }
         },
         "required": ["data", "cursor"],

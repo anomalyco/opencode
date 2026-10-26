@@ -144,6 +144,10 @@ export interface Interface {
   readonly messages: (
     input: SessionStore.MessagesInput,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
+  /** {@link Interface.messages} and the latest durable session sequence the page reflects, read atomically. */
+  readonly messagePage: (
+    input: SessionStore.MessagesInput,
+  ) => Effect.Effect<SessionStore.MessagePage<SessionMessage.Info>, NotFoundError | MessageDecodeError>
   readonly message: (input: {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
@@ -152,6 +156,10 @@ export interface Interface {
   readonly messagesWithRefs: (
     input: SessionStore.MessagesInput,
   ) => Effect.Effect<SessionMessage.MediaInfo[], NotFoundError | MessageDecodeError>
+  /** Experimental: {@link Interface.messagePage} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
+  readonly messagePageWithRefs: (
+    input: SessionStore.MessagesInput,
+  ) => Effect.Effect<SessionStore.MessagePage<SessionMessage.MediaInfo>, NotFoundError | MessageDecodeError>
   /** Experimental: {@link Interface.message} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
   readonly messageWithRefs: (input: {
     sessionID: SessionSchema.ID
@@ -434,11 +442,20 @@ const layer = Layer.effect(
         yield* result.get(input.sessionID)
         return yield* store.messages(input)
       }),
+      messagePage: Effect.fn("Session.messagePage")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* store.messagePage(input)
+      }),
       message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
       messagesWithRefs: Effect.fn("Session.messagesWithRefs")(function* (input) {
         const session = yield* result.get(input.sessionID)
         if (!(yield* keepsMediaRefs(session))) return yield* store.messages(input)
         return yield* store.messagesWithRefs(input)
+      }),
+      messagePageWithRefs: Effect.fn("Session.messagePageWithRefs")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        if (!(yield* keepsMediaRefs(session))) return yield* store.messagePage(input)
+        return yield* store.messagePageWithRefs(input)
       }),
       messageWithRefs: Effect.fn("Session.messageWithRefs")(function* (input) {
         const session = yield* result.get(input.sessionID).pipe(Effect.option)

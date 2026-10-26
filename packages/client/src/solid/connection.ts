@@ -1,6 +1,6 @@
-import { batch, onCleanup } from "solid-js"
+import { batch, createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { OpenCodeClient, OpenCodeEvent } from "../promise"
+import type { EventDetailMode, OpenCodeClient, OpenCodeEvent, SessionID } from "../promise"
 
 export type ClientConnectionStatus = "connected" | "connecting" | "reconnecting"
 export type ClientConnectionEvent = {
@@ -18,6 +18,7 @@ export type ClientConnectionOptions = {
   readonly onEvent: (event: OpenCodeEvent) => void
   readonly flushInterval?: number
   readonly pageLifecycle?: boolean
+  readonly detail?: EventDetailMode | (() => EventDetailMode)
   /**
    * Abort and reconnect a stream that receives no bytes for this long. The server writes a keepalive
    * comment every 15 seconds, so a quiet but healthy stream never trips this.
@@ -56,6 +57,49 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   let generation = 0
   let lastActivity = 0
   let forced = false
+  let connectionID: string | undefined
+  let desiredSessions = new Set<string>()
+  let acknowledgedSessions = new Set<string>()
+  let syncingSubscriptions: Promise<void> | undefined
+
+  const detailMode = (): EventDetailMode =>
+    typeof options.detail === "function" ? options.detail() : (options.detail ?? "all")
+
+  function sameSet(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+    if (left.size !== right.size) return false
+    for (const value of left) if (!right.has(value)) return false
+    return true
+  }
+
+  function syncSubscriptions(): Promise<void> {
+    if (detailMode() !== "subscribed" || !connectionID) return Promise.resolve()
+    if (syncingSubscriptions) return syncingSubscriptions
+    if (sameSet(desiredSessions, acknowledgedSessions)) return Promise.resolve()
+    const activeConnection = connectionID
+    const snapshot = new Set(desiredSessions)
+    const sessions = Array.from(snapshot) as SessionID[]
+    let ok = false
+    const task = api.event.experimental
+      .sessions({ connection: activeConnection, sessions })
+      .then(() => {
+        ok = true
+        if (connectionID === activeConnection) acknowledgedSessions = snapshot
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (syncingSubscriptions === task) syncingSubscriptions = undefined
+      })
+      .then(() => {
+        if (
+          connectionID === activeConnection &&
+          !sameSet(desiredSessions, acknowledgedSessions) &&
+          (ok || !sameSet(desiredSessions, snapshot))
+        )
+          return syncSubscriptions()
+      })
+    syncingSubscriptions = task
+    return task
+  }
 
   function record(status: ClientConnectionEvent["data"]["status"], attempt: number, error?: string) {
     history.push({ type: "client.connection", created: Date.now(), data: { status, attempt, error } })
@@ -94,7 +138,12 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     try {
       record(attempt === 0 ? "connecting" : "reconnecting", attempt)
       options.log?.info?.("event stream connecting", { attempt })
-      const iterator = api.event.subscribe({ signal: request.signal, onActivity: touch })[Symbol.asyncIterator]()
+      const mode = detailMode()
+      const source =
+        mode === "subscribed"
+          ? api.event.experimental.subscribe({ detail: "subscribed" }, { signal: request.signal, onActivity: touch })
+          : api.event.subscribe({ signal: request.signal, onActivity: touch })
+      const iterator = source[Symbol.asyncIterator]()
       const first = await iterator.next()
       if (signal.aborted) return { error: undefined, connectedAt }
       if (first.done)
@@ -111,6 +160,9 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       connectedAt = Date.now()
       touch()
       options.log?.info?.("event stream connected")
+      connectionID = first.value.data.connection
+      acknowledgedSessions = new Set()
+      if (connectionID !== undefined && desiredSessions.size > 0) void syncSubscriptions()
       publish(first.value)
       setConnection({ status: "connected", attempt: 0, error: undefined })
 
@@ -137,7 +189,11 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       return { error, connectedAt }
     } finally {
       request.abort()
-      if (current === request) current = undefined
+      if (current === request) {
+        current = undefined
+        connectionID = undefined
+        acknowledgedSessions = new Set()
+      }
       clearTimeout(timeout)
       clearTimeout(watchdog)
       signal.removeEventListener("abort", cancel)
@@ -238,6 +294,21 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       document.removeEventListener("visibilitychange", visibility)
     })
   }
+  if (typeof options.detail === "function") {
+    const readDetail = options.detail
+    createEffect(
+      on(
+        readDetail,
+        () => {
+          if (!started) return
+          forced = true
+          current?.abort(new Error("Event detail mode changed"))
+        },
+        { defer: true },
+      ),
+    )
+  }
+
   void start()
 
   onCleanup(() => {
@@ -251,6 +322,19 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     status: () => connection.status,
     attempt: () => connection.attempt,
     error: () => connection.error,
+    detail: detailMode,
+    setSessions(sessions: Iterable<string>) {
+      desiredSessions = new Set(sessions)
+      return syncSubscriptions()
+    },
+    subscribeSession(sessionID: string) {
+      if (detailMode() !== "subscribed") return Promise.resolve()
+      desiredSessions.add(sessionID)
+      return syncSubscriptions()
+    },
+    isSubscribed(sessionID: string) {
+      return detailMode() !== "subscribed" || desiredSessions.has(sessionID)
+    },
     internal: {
       history: () => history.slice(),
       resync,

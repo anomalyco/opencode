@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Scheduler } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -185,6 +185,25 @@ describe("SessionStore", () => {
           cursor: { id: SessionMessage.ID.make("msg_foreign"), direction: "next" },
         }),
       ).toEqual([])
+    }),
+  )
+
+  it.effect("reads a message page and its sequence atomically while events land", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_page")
+      const bus = yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const store = yield* SessionStore.Service
+      // Yielding after every op guarantees a publish gets a turn between a page's reads; resuming from a yield
+      // spends two ops, so 3 is the smallest budget that still makes progress.
+      const pages = yield* Effect.all(
+        Array.from({ length: 10 }, (_, index) => [
+          bus.publish(SessionEvent.Synthetic, { sessionID, text: String(index) }).pipe(Effect.as(undefined)),
+          store.messagePage({ sessionID, order: "asc" }),
+        ]).flat(),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 3))
+      // Created and Renamed hold seq 0 and 1; every later event adds one message.
+      for (const page of pages) if (page) expect(page.messages.length).toBe(page.seq - 1)
     }),
   )
 })

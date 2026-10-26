@@ -77,6 +77,10 @@ export type CreateDataInput = {
   }
   readonly connection?: {
     readonly status: () => "connected" | "connecting" | "reconnecting"
+    readonly detail?: () => "all" | "subscribed"
+    readonly setSessions?: (sessions: Iterable<string>) => Promise<void>
+    readonly subscribeSession?: (sessionID: string) => Promise<void>
+    readonly isSubscribed?: (sessionID: string) => boolean
   }
   /** Receives failed event-driven reads. Explicit reads still reject to their caller. */
   readonly onError?: (error: unknown) => void
@@ -309,10 +313,30 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  const messageBuffers = new Map<string, OpenCodeEvent[]>()
+  const staleMessages = new Set<string>()
+  let subscribedSessions = new Set<string>()
+  let replayingBuffer = false
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+
+  function isSubscribedSession(sessionID: string) {
+    if (config.connection?.isSubscribed) return config.connection.isSubscribed(sessionID)
+    if (config.connection?.detail?.() === "subscribed") return subscribedSessions.has(sessionID)
+    return true
+  }
+
+  function bufferMessageEvent(sessionID: string, event: OpenCodeEvent) {
+    if (replayingBuffer) return false
+    const buffer = messageBuffers.get(sessionID)
+    if (buffer) {
+      if ("durable" in event && event.durable) buffer.push(event)
+      return true
+    }
+    return staleMessages.has(sessionID)
+  }
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -449,6 +473,7 @@ export function createData(config: CreateDataInput) {
 
   function materializeInboxMessage(item: SessionInboxInfo) {
     if (item.type !== "user" && item.type !== "synthetic") return
+    if (!replayingBuffer && (messageBuffers.has(item.sessionID) || staleMessages.has(item.sessionID))) return
     message.update(item.sessionID, (draft, index) => {
       const row =
         item.type === "user"
@@ -613,6 +638,8 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
+    messageBuffers.delete(sessionID)
+    staleMessages.delete(sessionID)
     // Keep unacknowledged submissions until their echo or rollback settles them.
     const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
     const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
@@ -635,6 +662,9 @@ export function createData(config: CreateDataInput) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    messageBuffers.delete(sessionID)
+    staleMessages.delete(sessionID)
+    subscribedSessions.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -704,17 +734,21 @@ export function createData(config: CreateDataInput) {
       case "project.updated":
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
-      case "session.created":
-        sessionOutbox.delete(event.data.sessionID)
+      case "session.created": {
+        const local = sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
         // Band-aid: a newly created session starts empty, so live events can be its source of truth.
         // Fetching pending inputs and projected messages separately lets promotion move an input between snapshots,
         // causing both requests to miss it and overwrite event-built state. Skip those racy initial reads until
         // hydration can load pending and projected messages atomically.
-        sync.complete(`session.pending:${event.data.sessionID}`)
-        sync.complete(`session.message:${event.data.sessionID}`)
+        if (local || isSubscribedSession(event.data.sessionID)) {
+          if (!store.session.message[event.data.sessionID]) setStore("session", "message", event.data.sessionID, [])
+          sync.complete(`session.pending:${event.data.sessionID}`)
+          sync.complete(`session.message:${event.data.sessionID}`)
+        }
         return
+      }
       case "session.deleted":
         removeSession(event.data.sessionID)
         return
@@ -729,6 +763,7 @@ export function createData(config: CreateDataInput) {
         const previous = store.session.info[event.data.sessionID]?.agent
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
           type: "agent-switched",
@@ -742,6 +777,7 @@ export function createData(config: CreateDataInput) {
         const previous = event.data.previous ?? store.session.info[event.data.sessionID]?.model
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "model", event.data.model)
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         if (!store.session.message[event.data.sessionID]) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
@@ -796,9 +832,12 @@ export function createData(config: CreateDataInput) {
             projectID: current.projectID,
             subpath: current.subpath,
           }
-          setStore("session", "info", event.data.sessionID, "location", event.data.location)
-          setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
-          setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
+          if (!replayingBuffer) {
+            setStore("session", "info", event.data.sessionID, "location", event.data.location)
+            setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
+            setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
+          }
+          if (bufferMessageEvent(event.data.sessionID, event)) return
           message.insert(event.data.sessionID, {
             id: SessionMessage.ID.fromEvent(event.id),
             type: "location-switched",
@@ -835,26 +874,31 @@ export function createData(config: CreateDataInput) {
       }
       case "session.inbox.delivered": {
         const admitted = result.session.input.has(event.data.sessionID, event.data.inboxID)
-        removePending(event.data.sessionID, event.data.inboxID)
+        if (!replayingBuffer) removePending(event.data.sessionID, event.data.inboxID)
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.inboxID)
           if (position === undefined) return
           const existing = draft[position]
-          if (!existing || !admitted) return
+          if (!existing || (!admitted && !replayingBuffer)) return
           existing.time.created = event.created
           draft.splice(position, 1)
           draft.push(existing)
           message.reindex(draft, index, position)
         })
-        compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
+        if (!replayingBuffer) compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.delivery.changed":
         updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
         return
       case "session.inbox.cancelled": {
-        retractLocal(event.data.sessionID, event.data.inboxID)
-        compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
+        if (!replayingBuffer) {
+          retractLocal(event.data.sessionID, event.data.inboxID)
+          compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
+        }
+        if (bufferMessageEvent(event.data.sessionID, event)) return
+        if (replayingBuffer) retractLocal(event.data.sessionID, event.data.inboxID)
         return
       }
       case "session.inbox.enqueued": {
@@ -865,17 +909,22 @@ export function createData(config: CreateDataInput) {
           time: { created: event.created },
           ...event.data.item,
         }
-        pendingUpdates.get(item.sessionID)?.set(item.id, item)
-        admitLocal(item)
-        if (event.data.item.type === "compaction") {
-          const active = compacting.get(event.data.sessionID)
-          active?.observed.add(event.data.inboxID)
-          if (active && active.id !== event.data.inboxID && outbox.delete(active.id))
-            removePending(event.data.sessionID, active.id)
+        if (!replayingBuffer) {
+          pendingUpdates.get(item.sessionID)?.set(item.id, item)
+          admitLocal(item)
+          if (event.data.item.type === "compaction") {
+            const active = compacting.get(event.data.sessionID)
+            active?.observed.add(event.data.inboxID)
+            if (active && active.id !== event.data.inboxID && outbox.delete(active.id))
+              removePending(event.data.sessionID, active.id)
+          }
         }
+        if (bufferMessageEvent(event.data.sessionID, event)) return
+        if (replayingBuffer) materializeInboxMessage(item)
         return
       }
       case "session.instructions.updated":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         // Mirror the projector: the initial baseline and empty-rendering deltas carry no text
         // and produce no transcript message.
         const updateText = event.data.text
@@ -890,6 +939,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.synthetic":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
           type: "synthetic",
@@ -900,6 +950,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.shell.started":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
           type: "shell",
@@ -913,6 +964,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.shell.ended":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const match = message.shell(draft, event.data.shell.id)
@@ -924,6 +976,8 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.started":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
+        if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
           const existing = position === undefined ? undefined : draft[position]
@@ -959,11 +1013,13 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.streamed":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.completed = event.created
           assistant.finish = event.data.finish
@@ -978,10 +1034,12 @@ export function createData(config: CreateDataInput) {
       case "session.step.failed":
         // A budget refusal means the cached usage limits are out of date, which is what the refusal sends people to.
         if (
+          !replayingBuffer &&
           event.location &&
           (event.data.error.type === "provider.budget-limit" || event.data.error.type === "provider.model-budget-limit")
         )
           refreshUsageLimits(event.location)
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.completed = event.created
           assistant.finish = event.data.finish ?? "error"
@@ -996,21 +1054,25 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.text.started":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.content.push({ type: "text", text: "" })
         })
         return
       case "session.text.delta":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
           text.text += event.data.delta
         })
         return
       case "session.text.ended":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
           text.text = event.data.text
         })
         return
       case "session.tool.input.started":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.content.push({
             type: "tool",
@@ -1022,16 +1084,19 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.input.delta":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
           if (tool.state.status === "streaming") tool.state.input += event.data.delta
         })
         return
       case "session.tool.input.ended":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
           if (tool.state.status === "streaming") tool.state.input = event.data.text
         })
         return
       case "session.tool.called":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
           tool.time.ran = event.created
           tool.executed = event.data.executed
@@ -1040,11 +1105,13 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.progress":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
           if (tool.state.status === "running") tool.state.metadata = event.data.metadata
         })
         return
       case "session.tool.success":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
           if (tool.state.status !== "running") return
           tool.state = {
@@ -1059,6 +1126,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.failed":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
           if (tool.state.status !== "streaming" && tool.state.status !== "running") return
           tool.state = {
@@ -1075,6 +1143,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.reasoning.started":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.content.push({
             type: "reasoning",
@@ -1085,11 +1154,13 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.reasoning.delta":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
           reasoning.text += event.data.delta
         })
         return
       case "session.reasoning.ended":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
           reasoning.text = event.data.text
           reasoning.time = { created: reasoning.time?.created ?? event.created, completed: event.created }
@@ -1097,6 +1168,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.retry.scheduled":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
@@ -1105,7 +1177,9 @@ export function createData(config: CreateDataInput) {
         setSessionActive(event.data.sessionID, "running")
         return
       case "session.compaction.started":
-        if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
+        if (!replayingBuffer && event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
+        if (!replayingBuffer && event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.insert(event.data.sessionID, {
           id: event.data.inputID ?? SessionMessage.ID.fromEvent(event.id),
           type: "compaction",
@@ -1114,43 +1188,47 @@ export function createData(config: CreateDataInput) {
           summary: "",
           time: { created: event.created },
         })
-        if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "session.execution.succeeded":
       case "session.execution.failed":
       case "session.execution.interrupted":
-        setSessionActive(event.data.sessionID, "idle")
-        message.update(event.data.sessionID, (draft) => {
-          const currentAssistant = message.activeAssistant(draft)
-          if (currentAssistant) currentAssistant.retry = undefined
-        })
-        if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
-        // Mirror the projected idle marker so turn boundaries match before the next message read.
-        message.insert(event.data.sessionID, {
-          id: SessionMessage.ID.fromEvent(event.id),
-          type: "idle",
-          outcome:
-            event.type === "session.execution.succeeded"
-              ? "succeeded"
-              : event.type === "session.execution.failed"
-                ? "failed"
-                : "interrupted",
-          ...(event.type === "session.execution.failed" ? { error: event.data.error } : {}),
-          time: { created: event.created },
-        })
-        if (
-          store.session.message[event.data.sessionID]?.some(
-            (item) =>
-              item.type === "assistant" &&
-              item.content.some(
-                (part) =>
-                  part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
-              ),
-          )
-        ) {
-          sync.invalidate(`session.message:${event.data.sessionID}`)
-          refresh(() => result.session.message.sync(event.data.sessionID))
+        if (!replayingBuffer) setSessionActive(event.data.sessionID, "idle")
+        if (!bufferMessageEvent(event.data.sessionID, event)) {
+          message.update(event.data.sessionID, (draft) => {
+            const currentAssistant = message.activeAssistant(draft)
+            if (currentAssistant) currentAssistant.retry = undefined
+          })
+          if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+          // Mirror the projected idle marker so turn boundaries match before the next message read.
+          message.insert(event.data.sessionID, {
+            id: SessionMessage.ID.fromEvent(event.id),
+            type: "idle",
+            outcome:
+              event.type === "session.execution.succeeded"
+                ? "succeeded"
+                : event.type === "session.execution.failed"
+                  ? "failed"
+                  : "interrupted",
+            ...(event.type === "session.execution.failed" ? { error: event.data.error } : {}),
+            time: { created: event.created },
+          })
+          if (
+            !replayingBuffer &&
+            store.session.message[event.data.sessionID]?.some(
+              (item) =>
+                item.type === "assistant" &&
+                item.content.some(
+                  (part) =>
+                    part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+                ),
+            )
+          ) {
+            sync.invalidate(`session.message:${event.data.sessionID}`)
+            refresh(() => result.session.message.sync(event.data.sessionID))
+          }
         }
+        if (replayingBuffer) return
+        if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
@@ -1170,16 +1248,19 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
       case "session.revert.committed":
-        if (store.session.info[event.data.sessionID]) {
-          setStore("session", "info", event.data.sessionID, "revert", undefined)
+        if (!replayingBuffer) {
+          if (store.session.info[event.data.sessionID]) {
+            setStore("session", "info", event.data.sessionID, "revert", undefined)
+          }
+          // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
+          setStore(
+            "session",
+            "pending",
+            event.data.sessionID,
+            (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
+          )
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
-        setStore(
-          "session",
-          "pending",
-          event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
-        )
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findIndex((item) => item.id >= event.data.to)
           if (position === -1) return
@@ -1187,6 +1268,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.delta":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const current = message.compaction(draft)
@@ -1194,6 +1276,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.ended":
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
           const current = draft[position]
@@ -1224,7 +1307,9 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.failed":
-        if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
+        if (!replayingBuffer && event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
+        if (!replayingBuffer && event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
+        if (bufferMessageEvent(event.data.sessionID, event)) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
           const current = draft[position]
@@ -1245,7 +1330,6 @@ export function createData(config: CreateDataInput) {
           }
           message.append(draft, index, failed)
         })
-        if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "permission.asked":
         if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
@@ -1607,13 +1691,18 @@ export function createData(config: CreateDataInput) {
           })
           // A mounted optimistic session must not fetch its empty collections
           // before creation settles. The session.created echo re-syncs info.
+          setStore("session", "message", id, [])
           sync.complete(`session.family:${id}`)
           sync.complete(`session.pending:${id}`)
           sync.complete(`session.message:${id}`)
+          subscribedSessions.add(id)
         }
         // Wrapped so even a synchronous client failure reaches the rollback.
         const request = Promise.resolve()
-          .then(() => api().session.create({ ...payload, id, location }))
+          .then(async () => {
+            await config.connection?.subscribeSession?.(id)
+            return api().session.create({ ...payload, id, location })
+          })
           .then((info) => {
             sessionOutbox.delete(id)
             result.session.remember(info)
@@ -1710,6 +1799,7 @@ export function createData(config: CreateDataInput) {
         return sendAdmission(
           request.sessionID,
           async () => {
+            await config.connection?.subscribeSession?.(request.sessionID)
             await prepare?.()
             return api().session.prompt({ ...request, id })
           },
@@ -1746,6 +1836,20 @@ export function createData(config: CreateDataInput) {
       invalidate(sessionID: string) {
         sync.invalidate(`session:${sessionID}`)
       },
+      subscribe(sessionIDs: Iterable<string>) {
+        const next = new Set(sessionIDs)
+        for (const id of messageBuffers.keys()) next.add(id)
+        for (const id of sessionOutbox) next.add(id)
+        for (const id of new Set([...subscribedSessions, ...Object.keys(store.session.message)])) {
+          if (next.has(id)) continue
+          messageBuffers.delete(id)
+          staleMessages.add(id)
+          sync.invalidate(`session.pending:${id}`)
+          sync.invalidate(`session.message:${id}`)
+        }
+        subscribedSessions = next
+        return config.connection?.setSessions?.(next) ?? Promise.resolve()
+      },
       message: {
         list(sessionID: string) {
           return store.session.message[sessionID] ?? []
@@ -1757,29 +1861,57 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const response = await api().message.list({
-              sessionID,
-              limit: config.initialMessageLimit?.() ?? messagePageLimit,
-              order: "desc",
-            })
-            const fetched = response.data.toReversed().map(stored)
-            // Same protection as the pending sync: a re-fetch racing an
-            // admission must not wipe its local transcript row.
-            const ids = new Set(fetched.map((item) => item.id))
-            const admitted = new Set(
-              (store.session.pending[sessionID] ?? []).flatMap((item) =>
-                item.type === "user" || item.type === "synthetic" ? [item.id] : [],
-              ),
-            )
-            const local = (store.session.message[sessionID] ?? []).filter(
-              (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
-            )
-            const messages = local.length === 0 ? fetched : [...fetched, ...local]
-            batch(() => {
-              messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
-              setStore("session", "message", sessionID, reconcile(messages))
-              setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
-            })
+            const buffer = messageBuffers.get(sessionID) ?? []
+            messageBuffers.set(sessionID, buffer)
+            subscribedSessions.add(sessionID)
+            try {
+              await config.connection?.subscribeSession?.(sessionID)
+              const response = await api().message.list({
+                sessionID,
+                limit: config.initialMessageLimit?.() ?? messagePageLimit,
+                order: "desc",
+              })
+              const fetched = response.data.toReversed().map(stored)
+              // Same protection as the pending sync: a re-fetch racing an
+              // admission must not wipe its local transcript row.
+              const ids = new Set(fetched.map((item) => item.id))
+              const admitted = new Set(
+                (store.session.pending[sessionID] ?? []).flatMap((item) =>
+                  item.type === "user" || item.type === "synthetic" ? [item.id] : [],
+                ),
+              )
+              const local = staleMessages.has(sessionID)
+                ? (store.session.message[sessionID] ?? []).filter((item) => !ids.has(item.id) && outbox.has(item.id))
+                : (store.session.message[sessionID] ?? []).filter(
+                    (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
+                  )
+              const messages = local.length === 0 ? fetched : [...fetched, ...local]
+              batch(() => {
+                if (messageBuffers.get(sessionID) === buffer) messageBuffers.delete(sessionID)
+                staleMessages.delete(sessionID)
+                messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
+                setStore("session", "message", sessionID, reconcile(messages))
+                setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+                if (buffer.length > 0) {
+                  replayingBuffer = true
+                  try {
+                    for (const event of buffer) {
+                      if (
+                        "durable" in event &&
+                        event.durable &&
+                        (typeof response.seq !== "number" || event.durable.seq > response.seq)
+                      ) {
+                        handleEvent(event)
+                      }
+                    }
+                  } finally {
+                    replayingBuffer = false
+                  }
+                }
+              })
+            } finally {
+              if (messageBuffers.get(sessionID) === buffer) messageBuffers.delete(sessionID)
+            }
           })
         },
         more(sessionID: string) {

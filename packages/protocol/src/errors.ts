@@ -274,3 +274,12 @@ export class ShellNotFoundError extends Schema.TaggedError<ShellNotFoundError>()
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class EventConnectionNotFoundError extends Schema.TaggedError<EventConnectionNotFoundError>()(
+  "EventConnectionNotFoundError",
+  {
+    connection: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

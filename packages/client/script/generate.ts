@@ -117,6 +117,10 @@ await Effect.runPromise(
               name: "OpenCodeEvent",
               import: 'import type { OpenCodeEvent } from "@opencode/protocol/groups/event"',
             },
+            "event.experimental.subscribe": {
+              name: "OpenCodeEvent",
+              import: 'import type { OpenCodeEvent } from "@opencode/protocol/groups/event"',
+            },
           },
         }),
         fileURLToPath(new URL("../src/effect/api", import.meta.url)),

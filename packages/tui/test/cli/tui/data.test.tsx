@@ -509,6 +509,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
 
   try {
     await data.session.sync(sessionID)
+    await data.session.message.sync(sessionID)
     emitEvent(events, {
       id: "evt_revert_boundary_started",
       created: 1,
@@ -1331,6 +1332,7 @@ test("tracks session status from active sessions and execution events", async ()
   let settled = false
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
+    if (url.pathname.endsWith("/message")) return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/session-live")
       return json({
         data: {
@@ -1385,6 +1387,7 @@ test("tracks session status from active sessions and execution events", async ()
     await wait(() => data.session.status("session-active") === "running")
     expect(data.session.status("session-idle")).toBe("idle")
     await data.session.sync("session-live")
+    await data.session.message.sync("session-live")
 
     settled = true
     emitEvent(events, {
@@ -1453,6 +1456,7 @@ test("tracks session status from active sessions and execution events", async ()
     await wait(() => data.session.status("session-live") === "idle")
 
     await data.session.sync("session-failed")
+    await data.session.message.sync("session-failed")
     emitEvent(events, {
       id: "evt_failed_execution_started",
       created: 0,

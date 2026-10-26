@@ -20,7 +20,11 @@ export type {
   SessionApi,
   SkillApi,
 } from "./api.js"
-export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types.js"
+export type {
+  EventSubscribeOutput as OpenCodeEvent,
+  EventExperimentalSubscribeInput,
+} from "./generated/types.js"
+export type EventDetailMode = "all" | "subscribed"
 export type {
   MediaFileAttachment as PromptMediaFileAttachment,
   Attachment as PromptAttachment,

@@ -725,3 +725,77 @@ export const All = Schema.Union([Durable, ...EphemeralDefinitions], { mode: "one
 )
 export type Event = typeof All.Type
 export type Type = Event["type"]
+export type PublicEvent = Schema.Schema.Type<(typeof Definitions)[number]>
+export type PublicType = PublicEvent["type"]
+export type DeliveryClass = "summary" | "detail"
+
+// Keyed by public session event type so adding a session event forces an explicit summary vs detail choice.
+export const Delivery = {
+  "session.created": "summary",
+  "session.agent.selected": "summary",
+  "session.model.selected": "summary",
+  "session.moved": "summary",
+  "session.renamed": "summary",
+  "session.metadata.updated": "summary",
+  "session.permissions": "summary",
+  "session.viewed": "summary",
+  "session.archived": "summary",
+  "session.unarchived": "summary",
+  "session.deleted": "summary",
+  "session.forked": "summary",
+  "session.execution.started": "summary",
+  "session.execution.succeeded": "summary",
+  "session.execution.failed": "summary",
+  "session.execution.interrupted": "summary",
+  "session.revert.staged": "summary",
+  "session.revert.cleared": "summary",
+  "session.revert.committed": "summary",
+  "session.step.failed": "summary",
+  "session.retry.scheduled": "summary",
+  "session.usage.updated": "detail",
+  "session.inbox.delivered": "detail",
+  "session.inbox.enqueued": "detail",
+  "session.inbox.cancelled": "detail",
+  "session.inbox.delivery.changed": "detail",
+  "session.instructions.updated": "detail",
+  "session.synthetic": "detail",
+  "session.skill.activated": "detail",
+  "session.shell.started": "detail",
+  "session.shell.ended": "detail",
+  "session.step.started": "detail",
+  "session.step.streamed": "detail",
+  "session.step.ended": "detail",
+  "session.text.started": "detail",
+  "session.text.delta": "detail",
+  "session.text.ended": "detail",
+  "session.reasoning.started": "detail",
+  "session.reasoning.delta": "detail",
+  "session.reasoning.ended": "detail",
+  "session.tool.input.started": "detail",
+  "session.tool.input.delta": "detail",
+  "session.tool.input.ended": "detail",
+  "session.tool.called": "detail",
+  "session.tool.progress": "detail",
+  "session.tool.success": "detail",
+  "session.tool.failed": "detail",
+  "session.compaction.started": "detail",
+  "session.compaction.delta": "detail",
+  "session.compaction.ended": "detail",
+  "session.compaction.failed": "detail",
+} as const satisfies Record<PublicType, DeliveryClass>
+
+export type DetailType = {
+  [K in PublicType]: (typeof Delivery)[K] extends "detail" ? K : never
+}[PublicType]
+
+export const isDetailType = (type: string): type is DetailType =>
+  Object.hasOwn(Delivery, type) && Delivery[type as PublicType] === "detail"
+
+export const detailSessionID = (event: {
+  readonly type: string
+  readonly data?: unknown
+}): SessionID | undefined => {
+  if (!isDetailType(event.type)) return undefined
+  const data = event.data as { readonly sessionID?: SessionID } | undefined
+  return data?.sessionID
+}

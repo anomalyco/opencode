@@ -108,21 +108,24 @@ const decodeStoredRow = (
 ): Effect.Effect<SessionMessage.Info | SessionStored.User, MessageDecodeError> =>
   row.type === "user" ? decodeStoredUser(rowInput(row)).pipe(Effect.mapError(decodeError(row))) : decodeMessageRow(row)
 
+/** Decodes rows {@link SessionBlob.hydrate} already restored. */
+export const decodeHydratedRows = (rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>) =>
+  Effect.forEach(rows, decodeMessageRow, { concurrency: 1 })
+
 /** Decodes rows after restoring media stored in `blob`. Reads that return media must use this. */
 export const decodeMessageRows = Effect.fnUntraced(function* (
   db: DatabaseService,
   rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
 ) {
-  return yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), decodeMessageRow, { concurrency: 1 })
+  return yield* decodeHydratedRows(yield* SessionBlob.hydrate(db, rows))
 })
 
-/** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */
-export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
-) {
-  const kept = yield* SessionBlob.keepRefs(db, rows)
-  return yield* Effect.forEach(
+/** Decodes rows {@link SessionBlob.keepRefs} already rewrote, so files stored in `blob` stay `media:` refs. */
+export const decodeKeptRows = (kept: {
+  readonly rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>
+  readonly meta: ReadonlyMap<string, SessionBlob.Meta>
+}) =>
+  Effect.forEach(
     kept.rows,
     (row) =>
       decodeMedia(rowInput(row)).pipe(
@@ -135,6 +138,13 @@ export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
       ),
     { concurrency: 1 },
   )
+
+/** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */
+export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
+) {
+  return yield* decodeKeptRows(yield* SessionBlob.keepRefs(db, rows))
 })
 
 const messageEntries = Effect.fnUntraced(function* (

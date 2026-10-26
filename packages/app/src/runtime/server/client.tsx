@@ -1,7 +1,7 @@
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { EventDetailMode, OpenCodeEvent } from "@opencode/client/promise"
 import { createClientConnection, createPtyClient, type ClientConnectionStatus } from "@opencode/client/solid"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { type Accessor, createEffect, on, onCleanup } from "solid-js"
+import { createEffect, on, onCleanup } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/runtime/server/api"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "./registry"
@@ -66,15 +66,15 @@ type ServerSDKBase = {
   http: ServerConnection.HttpBase
   api: ServerApi
   pty: ReturnType<typeof createPtyClient>
-  connection: {
-    status: Accessor<ServerConnectionStatus>
-    attempt: Accessor<number>
-    error: Accessor<string | undefined>
-  }
+  connection: ReturnType<typeof createClientConnection>
   event: OpenCodeEventSource
 }
 
-function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
+function createServerSdkContextBase(
+  server: ServerConnection.Any,
+  scope: ServerScope,
+  options?: { detail?: () => EventDetailMode },
+): ServerSDKBase {
   const platform = usePlatform()
   const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
 
@@ -95,6 +95,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     reconnect: reconnect ? async (signal) => transport.update(await reconnect(signal)) : undefined,
     flushInterval: 16,
     pageLifecycle: true,
+    detail: options?.detail,
     onEvent(event) {
       events.publish(event)
     },
@@ -173,8 +174,12 @@ export type ServerSDK = ServerSDKBase & {
   ensureDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
 }
 
-export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope): ServerSDK {
-  const sdk = createServerSdkContextBase(server, scope)
+export function createServerSdkContext(
+  server: ServerConnection.Any,
+  scope: ServerScope,
+  options?: { detail?: () => EventDetailMode },
+): ServerSDK {
+  const sdk = createServerSdkContextBase(server, scope, options)
 
   return Object.assign(sdk, {
     ensureDirSdkContext: createRefCountMap((dir) => createDirSdkContext(dir, sdk)),

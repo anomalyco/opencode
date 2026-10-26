@@ -191,7 +191,10 @@ function createServerController(
   const tabs = useTabs()
   const currentRoute = useCurrentRoute()
   const connKey = ServerConnection.key(conn)
-  const sdk = createServerSdkContext(conn, scope)
+
+  const sdk = createServerSdkContext(conn, scope, {
+    detail: () => (settings.general.eventSubscriptions() ? "subscribed" : "all"),
+  })
 
   const source = createData({
     api: () => sdk.api,
@@ -216,6 +219,24 @@ function createServerController(
   const data = createDesktopData({
     data: source,
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
+  })
+
+  const openSessions = createMemo(() => {
+    const route = currentRoute()
+    const current = route.type === "session" && route.server === connKey ? [route.sessionId] : []
+
+    const open = tabs.store.flatMap((tab) =>
+      tab.type === "session" && tab.server === connKey
+        ? [tab.sessionId, ...(tab.routeSessionId ? [tab.routeSessionId] : [])]
+        : [],
+    )
+
+    return Array.from(new Set([...current, ...open]))
+  })
+
+  createEffect(() => {
+    if (!settings.general.eventSubscriptions() || !tabs.ready()) return
+    void data.session.subscribe(openSessions())
   })
 
   // Transcripts otherwise stay loaded for every session this window ever opened. Open tabs and the three most

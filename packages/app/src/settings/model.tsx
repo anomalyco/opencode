@@ -131,6 +131,8 @@ const generalSchema = Persistence.struct({
   newIcons: Schema.Boolean,
   // The "New model picker" design experiment, off until it ships.
   newModelPicker: Schema.Boolean,
+  // Per-connection session detail subscriptions on `/api/experimental/event?detail=subscribed`.
+  eventSubscriptions: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review extension, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -300,6 +302,7 @@ export const defaultSettings: Settings = {
     timelineWidth: "comfortable",
     newIcons: false,
     newModelPicker: false,
+    eventSubscriptions: false,
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
@@ -411,6 +414,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newModelPicker: withFallback(() => store.general?.newModelPicker, defaultSettings.general.newModelPicker),
         setNewModelPicker(value: boolean) {
           setStore("general", "newModelPicker", value)
+        },
+        eventSubscriptions: withFallback(
+          () => store.general?.eventSubscriptions,
+          defaultSettings.general.eventSubscriptions,
+        ),
+        setEventSubscriptions(value: boolean) {
+          setStore("general", "eventSubscriptions", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,

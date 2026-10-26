@@ -1392,6 +1392,7 @@ export type MessageListInput = {
 export type MessageListOutput = {
   readonly data: ReadonlyArray<SessionMessage.Info>
   readonly cursor: { readonly previous?: string | undefined; readonly next?: string | undefined }
+  readonly seq?: number | undefined
 }
 export type MessageListOperation<E = never> = (input: MessageListInput) => Effect.Effect<MessageListOutput, E>
 
@@ -1998,8 +1999,27 @@ export type EventSubscribeInput = {
 export type EventSubscribeOutput = OpenCodeEvent
 export type EventSubscribeOperation<E = never> = (input?: EventSubscribeInput) => Stream.Stream<EventSubscribeOutput, E>
 
+export type EventExperimentalSubscribeInput = { readonly detail?: ("all" | "subscribed") | undefined }
+export type EventExperimentalSubscribeOutput = OpenCodeEvent
+export type EventExperimentalSubscribeOperation<E = never> = (
+  input?: EventExperimentalSubscribeInput,
+) => Stream.Stream<EventExperimentalSubscribeOutput, E>
+
+export type EventExperimentalSessionsInput = {
+  readonly connection: string
+  readonly sessions: ReadonlyArray<Session.ID>
+}
+export type EventExperimentalSessionsOutput = void
+export type EventExperimentalSessionsOperation<E = never> = (
+  input: EventExperimentalSessionsInput,
+) => Effect.Effect<EventExperimentalSessionsOutput, E>
+
 export interface EventApi<E = never> {
   readonly subscribe: EventSubscribeOperation<E>
+  readonly experimental: {
+    readonly subscribe: EventExperimentalSubscribeOperation<E>
+    readonly sessions: EventExperimentalSessionsOperation<E>
+  }
 }
 
 export type PtyListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
