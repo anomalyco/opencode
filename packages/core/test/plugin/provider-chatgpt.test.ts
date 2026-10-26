@@ -749,6 +749,8 @@ describe("ChatGPTPlugin", () => {
           "gpt-6-sol-fast",
           "gpt-6.1-sol",
           "gpt-6.1-sol-fast",
+          "gpt-6.1-terra",
+          "gpt-6.1-terra-fast",
         ])
           catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
       })
@@ -827,6 +829,8 @@ describe("ChatGPTPlugin", () => {
           "gpt-6-sol-fast",
           "gpt-6.1-sol",
           "gpt-6.1-sol-fast",
+          "gpt-6.1-terra",
+          "gpt-6.1-terra-fast",
         ].map((id) => Model.ID.make(id)),
       )
     }),
