@@ -7,6 +7,8 @@ import { Provider } from "../../provider.js"
 
 const providerID = Provider.ID.make("vercel")
 const methodID = Integration.MethodID.make("gateway-setup")
+// Temporary default from vercel/vercel packages/cli/src/util/oauth.ts.
+const vercelCLIClientID = "cl_HYyOPBNtFMfHhaUn9L4QPfTZz6TP47bp"
 const Discovery = Schema.Struct({ device_authorization_endpoint: Schema.String, token_endpoint: Schema.String })
 const Device = Schema.Struct({
   device_code: Schema.NonEmptyString,
@@ -24,7 +26,7 @@ const Teams = Schema.Struct({
 })
 const CreatedKey = Schema.Struct({ apiKeyString: Schema.NonEmptyString, apiKey: Schema.Struct({ id: Schema.String }) })
 
-/** The client ID belongs to OpenCode's registered public Vercel OAuth application. */
+/** A dedicated OAuth application can override the temporary Vercel CLI client ID. */
 export function make(options: { clientID?: string; issuer?: string; api?: string } = {}) {
   return define({
     id: "opencode.provider.vercel.gateway",
@@ -35,11 +37,7 @@ export function make(options: { clientID?: string; issuer?: string; api?: string
           method: { id: methodID, type: "oauth", label: "Set up Vercel AI Gateway" },
           authorize: (_answer, prompt) =>
             Effect.gen(function* () {
-              const clientID = options.clientID ?? process.env.OPENCODE_VERCEL_CLIENT_ID
-              if (!clientID)
-                return yield* Effect.fail(
-                  new Error("Vercel sign-in is not available in this build. Use an existing API key to connect."),
-                )
+              const clientID = options.clientID ?? process.env.OPENCODE_VERCEL_CLIENT_ID ?? vercelCLIClientID
               const issuer = options.issuer ?? "https://vercel.com"
               const discovery = yield* request(`${issuer}/.well-known/openid-configuration`, {}, Discovery)
               const device = yield* request(

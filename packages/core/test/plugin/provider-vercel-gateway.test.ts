@@ -7,12 +7,13 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { make } from "@opencode/core/plugin/provider/vercel-gateway"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+import { withEnv } from "../fixture/env"
 
 const it = testEffect(PluginTestLayer)
 const integrationID = Integration.ID.make("vercel")
 const methodID = Integration.MethodID.make("gateway-setup")
 
-const fixture = Effect.fn(function* (denied = false) {
+const fixture = Effect.fn(function* (denied = false, clientID = "opencode-test-client") {
   const requests: Array<{ path: string; method: string; body?: unknown }> = []
   const server = yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -60,7 +61,7 @@ const fixture = Effect.fn(function* (denied = false) {
   )
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  yield* make({ clientID: "opencode-test-client", issuer: server.url.origin, api: server.url.origin }).effect(host)
+  yield* make({ ...(clientID ? { clientID } : {}), issuer: server.url.origin, api: server.url.origin }).effect(host)
   const integrations = yield* Integration.Service
   const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
   const input = { integrationID, attemptID: attempt.attemptID }
@@ -75,6 +76,27 @@ const fixture = Effect.fn(function* (denied = false) {
 })
 
 describe("Vercel AI Gateway setup", () => {
+  it.live("uses the temporary Vercel CLI client ID when no override is configured", () =>
+    withEnv({ OPENCODE_VERCEL_CLIENT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const test = yield* fixture(false, "")
+        const device = test.requests.find((request) => request.path === "/device")
+        expect(new URLSearchParams(String(device?.body)).get("client_id")).toBe("cl_HYyOPBNtFMfHhaUn9L4QPfTZz6TP47bp")
+        yield* test.integrations.oauth.cancel(test.input)
+      }),
+    ),
+  )
+
+  it.live("allows a dedicated OAuth client ID to override the temporary default", () =>
+    withEnv({ OPENCODE_VERCEL_CLIENT_ID: "dedicated-opencode-client" }, () =>
+      Effect.gen(function* () {
+        const test = yield* fixture(false, "")
+        const device = test.requests.find((request) => request.path === "/device")
+        expect(new URLSearchParams(String(device?.body)).get("client_id")).toBe("dedicated-opencode-client")
+        yield* test.integrations.oauth.cancel(test.input)
+      }),
+    ),
+  )
   it.live("signs in, interviews, creates a team key and stores only the Gateway credential", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
