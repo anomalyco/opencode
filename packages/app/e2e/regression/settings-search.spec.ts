@@ -37,7 +37,7 @@ async function open(page: Page, input: { count?: number; seed?: SeedInput } = {}
     settings,
     search: settings.getByRole("combobox", { name: "Search", exact: true }),
     results: settings.getByRole("listbox", { name: "Settings results", exact: true }),
-    viewport: settings.locator(".settings-search-scroll"),
+    viewport: settings.locator('.settings-search [data-slot="search-list-scroll"]'),
   }
 
   // Readiness includes the server-backed project inventory, not just the settings shell.
@@ -67,20 +67,21 @@ test("pointer selection, keyboard navigation, the empty state, and the local fin
     "Terminal FontAppearance",
     "UI FontAppearance",
   ])
+  // Keys stay with the field, as in every shared search list.
   await code.click()
-  await expect(code).toBeFocused()
+  await expect(view.search).toBeFocused()
+  await expect(code).toHaveAttribute("aria-selected", "true")
   await expect(view.settings.getByRole("textbox", { name: "Code Font", exact: true })).toBeInViewport()
-  await code.press("ArrowDown")
-  await expect(terminal).toBeFocused()
+  await view.search.press("ArrowDown")
   await expect(terminal).toHaveAttribute("aria-selected", "true")
-  await terminal.press("Enter")
-  await expect(terminal).toBeFocused()
+  await view.search.press("Enter")
+  await expect(view.search).toBeFocused()
   await expect(view.settings.getByRole("textbox", { name: "Terminal Font", exact: true })).toBeInViewport()
   await expect(view.settings.locator('[data-search-target="row"]')).toContainText("Terminal Font")
-  await terminal.press("End")
-  await expect(font).toBeFocused()
-  await font.press("Home")
-  await expect(code).toBeFocused()
+  await view.search.press("End")
+  await expect(font).toHaveAttribute("aria-selected", "true")
+  await view.search.press("Home")
+  await expect(code).toHaveAttribute("aria-selected", "true")
   await findShortcut(page)
   await expect(view.search).toBeFocused()
   expect(await view.search.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([
@@ -112,6 +113,23 @@ test("pointer selection, keyboard navigation, the empty state, and the local fin
   await expect(page.getByRole("textbox", { name: /Search sessions/ })).toBeFocused()
 })
 
+test("the narrow layout floats the results in the shared search list popover", async ({ page }) => {
+  const view = await open(page, { count: 30 })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await view.search.fill("e")
+  const popover = view.settings.locator('.settings-search [data-component="search-list"][data-popover]')
+  const body = popover.locator('[data-slot="search-list-body"]')
+  await expect(body).toBeVisible()
+  await expect(body).toHaveCSS("position", "absolute")
+  await expect(body.locator('[data-slot="search-list-header"]').first()).toHaveText("Pages")
+  await expect(view.results.getByRole("option").first()).toHaveAttribute("data-slot", "search-list-row")
+  await expect(body.locator('[data-slot="search-list-footer"]')).toHaveText(en["settings.search.refine"])
+  await view.search.fill("zzzzzzzzzz")
+  await expect(body.locator('[data-slot="search-list-empty"]').getByRole("status")).toHaveText(
+    'No results for "zzzzzzzzzz"',
+  )
+})
+
 test("a long empty-state query keeps its closing quote beside the ellipsis while typing and resizing", async ({
   page,
 }) => {
@@ -121,8 +139,11 @@ test("a long empty-state query keeps its closing quote beside the ellipsis while
   const status = view.settings.getByRole("status")
   const quoted = status.locator("bdi")
 
+  // Rects, not clientWidth: the centred quote is exactly as wide as its text, and clientWidth rounds.
   const fits = () =>
-    quoted.evaluate((element) => element.getBoundingClientRect().width <= element.parentElement!.clientWidth)
+    quoted.evaluate(
+      (element) => element.getBoundingClientRect().width <= element.parentElement!.getBoundingClientRect().width + 0.5,
+    )
 
   await expect(status).toHaveAccessibleName(`No results for "${query}"`)
   await expect(quoted).toHaveText(/^".+…"$/)
@@ -145,10 +166,11 @@ test("the search input tracks overflow through typing, caret moves, resizing, an
     await expect(view.search).toHaveAttribute("data-overflow-end", end)
   }
 
+  // Bare Home and End move through the results, so the caret moves with Shift.
   await view.search.fill("zzzz ".repeat(30))
-  await view.search.press("End")
+  await view.search.press("Shift+End")
   await overflow("true", "false")
-  await view.search.press("Home")
+  await view.search.press("Shift+Home")
   await overflow("false", "true")
   await view.search.evaluate((input: HTMLInputElement) => {
     input.scrollLeft = (input.scrollWidth - input.clientWidth) / 2
