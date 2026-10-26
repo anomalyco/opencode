@@ -13,6 +13,18 @@ const binaryKinds = new Set<ArtifactKind>([
   "presentation",
 ])
 
+/** Kinds a media element reads straight from the server, so it shows the first frame before the rest arrives. */
+export const streamedKinds = new Set<ArtifactKind>(["image", "audio", "video"])
+
+/** Content for a streamed file from a HEAD of its URL. A changed file gets a new URL, so its element reloads. */
+export function streamedFileContent(path: string, url: string, response: Response): FileContent {
+  const size = Number(response.headers.get("content-length") ?? 0)
+  const versioned = new URL(url)
+  versioned.searchParams.set("v", `${size}-${Date.parse(response.headers.get("last-modified") ?? "") || 0}`)
+
+  return { type: "binary", content: "", size, mimeType: artifactMime(path), url: versioned.href }
+}
+
 /** Text files never contain NUL; a NUL in the first 8 KiB marks an unknown binary. */
 function isBinaryBytes(bytes: Uint8Array) {
   return bytes.subarray(0, 8192).includes(0)

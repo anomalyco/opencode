@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, Message } from "../../src/index.js"
+import { LLM, Message } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { it } from "../lib/effect.js"

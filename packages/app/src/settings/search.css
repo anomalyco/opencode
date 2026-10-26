@@ -110,8 +110,15 @@
 }
 
 .settings-search-scroll {
-  /* The 4px thumb is centered in a 12px hit target, leaving an 8px gap beside the rows. */
-  padding-inline-end: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  /* The reserved scrollbar and this padding keep 16px between the edge and the rows, scrolling or not. */
+  padding-inline-end: calc(16px - var(--scrollbar-size, 0px));
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scroll-padding-block: 16px 32px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 32px), transparent);
 }
 
 @container settings-screen (min-width: 800px) {
@@ -119,13 +126,6 @@
     width: calc(100% + 16px);
     margin-inline-end: -16px;
   }
-}
-
-.settings-search-scroll > .scroll-view__viewport {
-  overscroll-behavior: contain;
-  scroll-padding-block: 16px 32px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 32px), transparent);
-  mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 32px), transparent);
 }
 
 .settings-search-scroll[data-empty="true"] {
@@ -295,7 +295,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-search-target]::before {
     animation-timing-function: steps(1, end);
   }

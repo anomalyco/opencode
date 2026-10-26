@@ -11,7 +11,9 @@
   padding-inline: 8px;
   border-radius: 6px;
   background-color: var(--v2-background-bg-layer-01);
-  box-shadow: inset 0 0 0 0.5px transparent;
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  transition: outline-color 85ms ease-out;
   color: var(--v2-text-text-base);
   font-size: 13px;
   font-weight: 440;
@@ -19,17 +21,19 @@
   letter-spacing: -0.04px;
   cursor: text;
 
+  /* The site button keeps 4px on every side, and the address still starts 32px in. */
   &[data-site] {
-    padding-inline-start: 6px;
+    gap: 8px;
+    padding-inline-start: 4px;
   }
 
   &:hover:not([data-editing]) {
-    background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
+    background-color: var(--v2-background-bg-layer-02);
   }
 
   &[data-editing] {
     padding-inline-start: 8px;
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-focus);
+    outline-color: var(--v2-border-border-focus);
   }
 
   /* A focused page address sits where it sat at rest, 32px in; typed text and the placeholder sit at 30px. */
@@ -132,16 +136,31 @@
     }
   }
 
-  /* Page actions show on hover and while the field has focus. */
+  /* Page actions show on hover and while the field has focus, 4px from the edge like the site button. */
   [data-slot="browser-address-actions"] {
     display: none;
     flex: none;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
   }
 
   &:is(:hover, :focus-within) [data-slot="browser-address-actions"] {
     display: flex;
+  }
+
+  &:is(:hover, :focus-within):has([data-slot="browser-address-actions"]) {
+    padding-inline-end: 4px;
+  }
+
+  /* The hit area reaches the field's top and bottom edges and meets its neighbour halfway across the gap. */
+  [data-slot="browser-address-actions"] [data-component="icon-button-v2"] {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -4px -2px;
+    }
   }
 }
 
@@ -221,35 +240,56 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 320px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--v2-background-bg-base);
+  gap: 2px;
+  width: 261px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
   box-shadow: var(--v2-elevation-floating);
   outline: none;
   color: var(--v2-text-text-base);
   font-size: 13px;
   font-weight: 440;
-  line-height: var(--line-height-compact);
+  line-height: var(--line-height-base);
   letter-spacing: -0.04px;
+  user-select: none;
   transform-origin: var(--kb-popover-content-transform-origin);
 
   [data-slot="browser-site-host"] {
+    flex: 1;
     min-width: 0;
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: inherit;
-    font-weight: 530;
+    font: inherit;
   }
 
   [data-slot="browser-site-row"] {
     display: flex;
     gap: 8px;
     align-items: flex-start;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  /* Centers the icon on the first line of the row's text. */
+  [data-slot="browser-site-icon"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    height: 20px;
     color: var(--v2-icon-icon-muted);
+  }
+
+  /* Spans the card edge to edge over its padding; a 1px line scaled to a hairline. */
+  [data-slot="browser-site-separator"] {
+    flex: none;
+    height: 1px;
+    margin: 2px -4px;
+    background: var(--v2-border-border-base);
+    transform: scaleY(0.5);
   }
 
   /* An action beside a row's text, centered on it. */
@@ -259,6 +299,9 @@
   }
 
   [data-slot="browser-site-detail"] {
+    font-size: 11px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
     color: var(--v2-text-text-muted);
   }
 }

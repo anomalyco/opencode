@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ไฟล์ทั้งหมด",
-  "tree.empty": "ไม่มีไฟล์",
-  "tree.changes.one": "มีการเปลี่ยนแปลงไฟล์ {{count}} ไฟล์",
-  "tree.changes.other": "มีการเปลี่ยนแปลงไฟล์ {{count}} ไฟล์",
   "tab.notFound": "ไม่พบไฟล์: {{name}}",
   "mobile.title": "ไฟล์",
   "mobile.openTabs": "เปิดไฟล์",

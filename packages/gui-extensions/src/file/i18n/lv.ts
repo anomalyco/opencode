@@ -1,9 +1,5 @@
 export default {
   "tree.all": "Visi faili",
-  "tree.empty": "Nav failu",
-  "tree.changes.zero": "Mainīti {{count}} failu",
-  "tree.changes.one": "{{count}} fails mainīts",
-  "tree.changes.other": "Mainīti {{count}} faili",
   "tab.notFound": "Fails nav atrasts: {{name}}",
   "mobile.title": "Faili",
   "mobile.openTabs": "Atveriet failus",

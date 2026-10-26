@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { Transcription, TranscriptionEvent } from "../../src/index.js"
+import { Transcription, TranscriptionEvent } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording, dialog } from "./transcription-recording.js"

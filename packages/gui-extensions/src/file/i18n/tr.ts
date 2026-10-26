@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Tüm dosyalar",
-  "tree.empty": "Dosya yok",
-  "tree.changes.one": "{{count}} dosya değiştirildi",
-  "tree.changes.other": "{{count}} dosya değiştirildi",
   "tab.notFound": "Kaldır Dosya bulunamadı: {{name}}",
   "mobile.title": "Dosyalar",
   "mobile.openTabs": "Dosyaları aç",

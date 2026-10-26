@@ -49,7 +49,7 @@ function setup(rules: Permission.Ruleset = [], sessionID = Session.ID.make("ses_
         directory: "/project",
         title: "test",
         version: "test",
-        agent: "test",
+        agent: Agent.ID.make("test"),
       })
       .onConflictDoNothing()
       .run()

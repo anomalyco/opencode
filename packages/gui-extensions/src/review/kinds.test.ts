@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { reviewDiffDirectory, reviewDiffNeedsLoad, sortReviewPaths } from "./kinds"
+import { expandReviewFolders, reviewDiffDirectory, reviewDiffNeedsLoad, sortReviewPaths } from "./kinds"
 
 describe("reviewDiffNeedsLoad", () => {
   test("loads changed files whose aggregate patch has no hunks", () => {
@@ -59,5 +59,35 @@ describe("sortReviewPaths", () => {
       "src\\lib\\a.ts",
       "README.md",
     ])
+  })
+})
+
+describe("expandReviewFolders", () => {
+  test("lists an opened untracked folder's entries after its row, without changing the top-level rows", () => {
+    const row = (file: string) => ({ file, patch: "", additions: 0, deletions: 0, status: "added" as const })
+    const rows = [row("keep.txt"), row("research/")]
+    const inside = [...Array.from({ length: 50 }, (_, index) => row(`research/${index}.md`)), row("research/deep/")]
+
+    expect(expandReviewFolders(rows, new Map()).map((diff) => diff.file)).toEqual(["keep.txt", "research/"])
+
+    const expanded = expandReviewFolders(
+      rows,
+      new Map([
+        ["research/", inside],
+        ["research/deep/", [row("research/deep/inner.md")]],
+      ]),
+    ).map((diff) => diff.file)
+
+    expect(expanded).toHaveLength(54)
+    expect(expanded.slice(0, 3)).toEqual(["keep.txt", "research/", "research/0.md"])
+    expect(expanded.slice(-2)).toEqual(["research/deep/", "research/deep/inner.md"])
+
+    // A listing that stopped early ends with a `more` entry for the folder itself, which stays out of the rows.
+    const stopped = expandReviewFolders(
+      rows,
+      new Map([["research/", [row("research/a.md"), { ...row("research/"), more: true as const }]]]),
+    )
+
+    expect(stopped.map((diff) => diff.file)).toEqual(["keep.txt", "research/", "research/a.md"])
   })
 })

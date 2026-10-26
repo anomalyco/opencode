@@ -29,8 +29,6 @@ type WslServersControllerOptions = {
   writeServers: (servers: WslServerConfig[]) => void
 }
 
-export type WslServersController = ReturnType<typeof createWslServersController>
-
 export function wslServerIdForDistro(distro: string) {
   return `wsl:${distro}`
 }

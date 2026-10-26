@@ -157,6 +157,7 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
 
     "terminal_suspend": "ctrl+z",
     "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
     "plugin_manager": "none",
     "plugin_install": "none",
 

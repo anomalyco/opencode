@@ -190,7 +190,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(بدون جواب)",
   "ui.question.review.notAnswered": "(پاسخ داده نشد)",
   "ui.question.multiHint": "همه پاسخ هایی که اعمال می شوند را انتخاب کنید",
-  "ui.question.singleHint": "یک پاسخ را انتخاب کنید",
   "ui.question.custom.placeholder": "پاسخ خود را تایپ کنید…",
   "ui.messagePart.context.match.one": "({{count}} تطابق)",
   "ui.messagePart.context.match.other": "({{count}} تطابق)",

@@ -1,10 +1,10 @@
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { Spinner } from "@opencode/ui/spinner"
+import { Loader } from "@opencode/ui/loader"
 import { Switch } from "@opencode/ui/switch"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import { renderSVG } from "uqr"
+import { renderSVG } from "@opencode/util/qr"
 import { useExtension, type Live, type IpcClient } from "../sdk"
 import type { Pairing } from "./contract"
 import type definition from "./index"
@@ -163,7 +163,7 @@ export default function PairingPage(props: {
               </Button>
             </Row>
             <Show when={main()}>
-              <div data-action="settings-remote-access">
+              <div data-action="settings-remote-access" class="border-b-[0.5px] border-v2-border-border-base">
                 <Row title={ctx.t("remote.title")} description={ctx.t("remote.description")}>
                   <Switch
                     hideLabel
@@ -351,7 +351,7 @@ function DialogPairing(props: {
             class={`${frame} flex flex-col items-center justify-center gap-2 bg-v2-background-bg-layer-01 p-6 text-center`}
             role="status"
           >
-            <Spinner class="size-5 text-v2-icon-icon-muted" />
+            <Loader class="size-5 text-v2-icon-icon-muted" />
             <Show when={!tunnel.isSuccess}>
               <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
                 {ctx.t("setup.title")}

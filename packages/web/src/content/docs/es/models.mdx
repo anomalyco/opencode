@@ -58,7 +58,7 @@ configuracion de OpenCode.
 }
 ```
 
-Aquí el ID completo es `provider_id/model_id`. Por ejemplo, si usa [OpenCode Zen](https://opencode.ai/v2/docs/console/), usaría `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+Aquí el ID completo es `provider_id/model_id`. Por ejemplo, si usa [OpenCode Zen](https://opencode.ai/v2/docs/console/), usaría `opencode/gpt-6.1-sol` para GPT-6.1 Sol.
 
 Si ha configurado un [proveedor personalizado](/docs/providers#custom), `provider_id` es la clave de la parte `provider` de su configuración y `model_id` es la clave de `provider.models`.
 
@@ -74,7 +74,7 @@ Puede configurar globalmente las opciones de un modelo a través de la configura
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ Puede configurar globalmente las opciones de un modelo a través de la configura
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ Puede configurar globalmente las opciones de un modelo a través de la configura
 }
 ```
 
-Aquí estamos configurando ajustes globales para dos modelos integrados: `gpt-5` cuando se accede a través del proveedor `openai` y `claude-sonnet-4-20250514` cuando se accede a través del proveedor `anthropic`.
+Aquí estamos configurando ajustes globales para dos modelos integrados: `gpt-6.1-sol` cuando se accede a través del proveedor `openai` y `claude-sonnet-5-5` cuando se accede a través del proveedor `anthropic`.
 Los nombres de modelo y proveedor integrados se pueden encontrar en [Models.dev](https://models.dev).
 
 También puede configurar estas opciones para cualquier agente que esté utilizando. La configuración del agente anula cualquier opción global aquí. [Más información](/docs/agents/#additional).
@@ -113,7 +113,7 @@ También puede definir variantes personalizadas que amplíen las integradas. Las
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ Puede anular las variantes existentes o agregar las suyas propias:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -212,7 +212,7 @@ Cuando se inicia OpenCode, busca modelos en el siguiente orden de prioridad:
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

@@ -1,8 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../src/index.js"
-import { BlackForestLabs, Fal, Google, OpenAI, Replicate, Stability, XAI, ZAI } from "../src/providers.js"
+import { Image, ImageClient, Media } from "../src/effect.js"
+import {
+  BlackForestLabs,
+  Fal,
+  Google,
+  OpenAI,
+  Replicate,
+  Stability,
+  VercelAIGateway,
+  XAI,
+  ZAI,
+} from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json } from "./lib/http.js"
 
@@ -52,9 +62,10 @@ describe("Image", () => {
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
         n: 2,
-        size: "2048x2048",
-        format: "jpeg",
+        aspect: "1:1",
+        resolution: "2K",
         providerOptions: {
+          outputFormat: "jpeg",
           quality: "future-quality",
           output_format: "avif",
           outputCompression: 30,
@@ -127,7 +138,7 @@ describe("Image", () => {
     ),
   )
 
-  it.effect("sends only model and prompt by default and decodes OpenAI bytes as png", () =>
+  it.effect("sends only model and prompt by default and sniffs bytes when output_format is missing", () =>
     Effect.gen(function* () {
       const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
       expect(openai.image("gpt-image-2").route.id).toBe("openai-images")
@@ -140,7 +151,7 @@ describe("Image", () => {
                   const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
                   expect(web.url).toBe("https://openai.test/v1/images/generations")
                   expect(JSON.parse(input.text)).toEqual({ model: "gpt-image-2", prompt: "A lighthouse" })
-                  return input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                  return input.respond(JSON.stringify({ data: [{ b64_json: "/9j/4AAQ" }] }), {
                     headers: { "content-type": "application/json" },
                   })
                 }),
@@ -149,9 +160,127 @@ describe("Image", () => {
           ),
         ),
       )
-      expect(response.image.source).toEqual({ type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/png" })
-      expect(response.image.info).toEqual({ format: "png" })
+      expect(response.image.source).toEqual({
+        type: "bytes",
+        data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+        mediaType: "image/jpeg",
+      })
+      expect(response.providerMetadata).toEqual({ openai: {} })
     }),
+  )
+
+  it.effect("classifies an OpenAI stream moderation error event as a content policy rejection", () =>
+    Effect.gen(function* () {
+      const error = yield* Image.stream({
+        model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("gpt-image-1-mini"),
+        prompt: "A lighthouse",
+      }).pipe(Stream.runDrain, Effect.flip)
+      expect(error.reason._tag).toBe("ContentPolicy")
+      expect(error.message).toContain("rejected by the safety system")
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.respond(
+              `event: error\ndata: ${JSON.stringify({
+                type: "error",
+                error: {
+                  type: "image_generation_user_error",
+                  code: "moderation_blocked",
+                  message:
+                    "Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include the request ID req_123.",
+                  param: null,
+                },
+                sequence_number: 0,
+              })}\n\n`,
+              { headers: { "content-type": "text/event-stream" } },
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("ignores unknown OpenAI image stream events", () =>
+    Effect.gen(function* () {
+      const events = yield* Image.stream({
+        model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("gpt-image-1-mini"),
+        prompt: "A lighthouse",
+      }).pipe(Stream.runCollect)
+      expect(Array.from(events).map((event) => event.type)).toEqual(["image", "finish"])
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.respond(
+              [
+                { type: "image_generation.in_progress", sequence_number: 0 },
+                {
+                  type: "image_generation.completed",
+                  b64_json: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64"),
+                  output_format: "png",
+                },
+              ]
+                .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+                .join(""),
+              { headers: { "content-type": "text/event-stream" } },
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("lowers aspect to the nearest OpenAI size and reports the substitution", () =>
+    Effect.gen(function* () {
+      const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+      const response = yield* Image.generate({
+        model: openai.image("gpt-image-1.5"),
+        prompt: "A lighthouse",
+        aspect: "16:9",
+      })
+      expect(response.notices).toEqual([
+        { type: "other", message: "OpenAI Images doesn't offer 16:9; used 1536x1024 (3:2)" },
+      ])
+      const conflict = yield* Image.generate({
+        model: openai.image("gpt-image-2"),
+        prompt: "A lighthouse",
+        aspect: "16:9",
+        providerOptions: { size: "1024x1024" },
+      }).pipe(Effect.flip)
+      expect(conflict.reason._tag).toBe("InvalidRequest")
+    }).pipe(
+      Effect.provide(
+        layer((input) => {
+          expect(JSON.parse(input.text)).toEqual({ model: "gpt-image-1.5", prompt: "A lighthouse", size: "1536x1024" })
+          return Effect.succeed(json(input, { data: [{ b64_json: "AQID" }] }))
+        }),
+      ),
+    ),
+  )
+
+  it.effect("computes a free size for gateway-hosted models", () =>
+    Effect.gen(function* () {
+      const response = yield* Image.generate({
+        model: VercelAIGateway.configure({ apiKey: "test", baseURL: "https://gateway.test/v1" }).image(
+          "bfl/flux-2-klein-4b",
+        ),
+        prompt: "A lighthouse",
+        aspect: "16:9",
+      })
+      expect(response.notices).toBeUndefined()
+    }).pipe(
+      Effect.provide(
+        layer((input) => {
+          expect(JSON.parse(input.text)).toEqual({
+            model: "bfl/flux-2-klein-4b",
+            prompt: "A lighthouse",
+            size: "1360x768",
+          })
+          return Effect.succeed(json(input, { data: [{ b64_json: "AQID" }] }))
+        }),
+      ),
+    ),
   )
 
   it.effect("preserves native snake_case and unknown request options", () =>
@@ -161,8 +290,8 @@ describe("Image", () => {
         baseURL: "https://api.openai.test/v1",
       }).image("future-image-model"),
       prompt: "A lighthouse in fog",
-      format: "jpeg",
       providerOptions: {
+        outputFormat: "jpeg",
         output_format: "avif",
         outputCompression: 30,
         output_compression: 40,
@@ -186,7 +315,7 @@ describe("Image", () => {
                 provider_future_option: { enabled: true },
               })
               return Effect.succeed(
-                input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }], output_format: "avif" }), {
                   headers: { "content-type": "application/json" },
                 }),
               )
@@ -202,8 +331,8 @@ describe("Image", () => {
       model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
       prompt: "Combine these images",
       images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png"), Media.fromDataUrl("data:image/jpeg;base64,BAUG")],
-      mask: Media.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
       providerOptions: {
+        mask: Media.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
         quality: "high",
         future_option: true,
       },
@@ -242,7 +371,7 @@ describe("Image", () => {
       model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
       prompt: "Combine these images",
       images: [Media.url("https://example.test/source.png"), Media.ref("openai", "file_123")],
-      mask: Media.ref("openai", "file_mask"),
+      providerOptions: { mask: Media.ref("openai", "file_mask") },
       http: { body: { future_option: true } },
     }).pipe(
       Effect.provide(
@@ -428,10 +557,10 @@ describe("Image", () => {
           http: { body: { labels: { deployment: "test" } }, query: { api: "v1" } },
         }).image("any-model-id"),
         prompt: "A robot tending a rooftop garden",
-        aspectRatio: "16:9",
-        seed: 42,
+        aspect: "16:9",
+        resolution: "2K",
         providerOptions: {
-          imageSize: "2K",
+          seed: 42,
           thinkingLevel: "HIGH",
           includeThoughts: true,
           futureOption: true,
@@ -736,15 +865,15 @@ describe("Image", () => {
           Image.start({
             model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
             prompt,
-            aspectRatio: "16:9",
+            resolution: "4K",
           }),
           Image.start({
-            model: Fal.configure({ apiKey: "test" }).image("fal-ai/nano-banana-2"),
+            model: Fal.configure({ apiKey: "test" }).image("fal-ai/flux-pro/kontext"),
             prompt,
-            size: "512x512",
+            resolution: "2K",
           }),
           Stream.runCollect(Image.stream({ model: openai.image("gpt-image-2"), prompt, n: 2 })),
-          Image.start({ model: replicate, prompt, seed: 7 }),
+          Image.start({ model: replicate, prompt, aspect: "1:1" }),
           Image.start({
             model: replicate,
             prompt,
@@ -757,10 +886,10 @@ describe("Image", () => {
         [
           ["UnsupportedOperation", "image.start"],
           ["UnsupportedOperation", "media.n"],
-          ["UnsupportedOperation", "media.aspectRatio"],
-          ["UnsupportedOperation", "media.size"],
+          ["UnsupportedOperation", "media.resolution"],
+          ["UnsupportedOperation", "media.resolution"],
           ["UnsupportedOperation", "media.n"],
-          ["UnsupportedOperation", "media.seed"],
+          ["UnsupportedOperation", "media.aspect"],
           ["InvalidRequest", false],
           ["InvalidRequest", false],
         ],
@@ -788,17 +917,17 @@ describe("Image", () => {
       const rejected = yield* Image.start({
         model: fal.image("fal-ai/flux-pro/kontext"),
         prompt: "A lighthouse",
-        size: "512x512",
+        resolution: "2K",
       }).pipe(Effect.flip)
       yield* Image.start({
         model: fal.image("fal-ai/flux-pro/kontext"),
         prompt: "A lighthouse",
         images: images.slice(0, 1),
-        aspectRatio: "16:9",
+        aspect: "16:9",
       })
       yield* Image.start({ model: fal.image("fal-ai/flux-pro/kontext/max/multi"), prompt: "A lighthouse", images })
 
-      expect(rejected.reason).toMatchObject({ _tag: "UnsupportedOperation", operation: "media.size" })
+      expect(rejected.reason).toMatchObject({ _tag: "UnsupportedOperation", operation: "media.resolution" })
       expect(bodies).toEqual([
         { prompt: "A lighthouse", aspect_ratio: "16:9", image_url: "https://example.test/a.png" },
         { prompt: "A lighthouse", image_urls: ["https://example.test/a.png", "https://example.test/b.png"] },

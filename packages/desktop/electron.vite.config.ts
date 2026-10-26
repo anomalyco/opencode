@@ -1,5 +1,6 @@
 import { defineConfig } from "electron-vite"
 import type { Plugin } from "vite"
+import { BetaNotes } from "./scripts/beta-notes"
 import { pickerPlugin } from "./scripts/picker"
 import { nodePtyPackage } from "./scripts/utils"
 
@@ -50,9 +51,18 @@ const initialChunk: Plugin = {
   },
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(async ({ command }) => {
   const channel = resolveChannel()
   const nodePtyPkg = nodePtyPackage()
+
+  // Beta builds carry their commit and recent history for the updater's "What's new in beta"; the dev server carries
+  // them without asking GitHub, so the page can be tried; other channels none.
+  const betaNotes =
+    channel === "beta"
+      ? await BetaNotes.enrich(BetaNotes.embed(), { token: process.env.GITHUB_TOKEN })
+      : command === "serve"
+        ? BetaNotes.embed()
+        : undefined
 
   return {
     main: {
@@ -123,6 +133,8 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       define: {
         "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
         "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+        "import.meta.env.OPENCODE_COMMIT": betaNotes ? JSON.stringify(betaNotes.sha) : "undefined",
+        "import.meta.env.OPENCODE_BETA_NOTES": betaNotes ? JSON.stringify(JSON.stringify(betaNotes)) : "undefined",
         "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
           command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
         ),

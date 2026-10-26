@@ -1,7 +1,7 @@
 import { batch, createMemo, createRoot, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createKeyed, type Mutable, type Storage, type ServerRef, type MountedSession, type Sessions } from "../sdk"
-import { MAX_TERMINAL_SESSIONS, numberFromTitle, TerminalState, type LocalPTY } from "./state"
+import { MAX_TERMINAL_SESSIONS, numberFromTitle, TerminalState, terminalTab, type LocalPTY } from "./state"
 import { defaultTitle } from "./title"
 
 const STORE = "terminals"
@@ -177,7 +177,8 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
 
       if (!(event.target instanceof Element)) return
 
-      if (event.target.closest("#terminal-panel")) return
+      // The side region focuses its selected tab trigger or root while switching tabs; only focus leaving it cancels.
+      if (event.target.closest("#terminal-panel, #review-panel")) return
 
       cancelFocus()
     }
@@ -285,6 +286,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     stored.update((draft) => {
       Object.assign(draft.all[index], {
         id: data.id,
+        tab: terminalTab(pty),
         title: data.title ?? pty.title,
         titleNumber: pty.titleNumber,
         buffer: undefined,
@@ -309,35 +311,25 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     clear() {
       stored.set({ active: undefined, all: [] })
     },
+    /** Creates a terminal and makes it the active one; resolves its id, or undefined when the server refuses. */
     new() {
       const nextNumber = pickNextTerminalNumber()
       const focusRequest = requestFocus(undefined, true)
 
-      const doCreate = async () => {
-        return input.server.client.pty
-          .create({ location, title: defaultTitle(nextNumber) })
-          .then((result) => result.data)
-      }
-
-      doCreate()
-        .then((data) => {
-          const id = data?.id
+      return input.server.client.pty
+        .create({ location, title: defaultTitle(nextNumber) })
+        .then((result) => {
+          const id = result.data?.id
 
           if (!id) {
             cancelFocus(focusRequest)
 
-            return
-          }
-
-          const newTerminal = {
-            id,
-            title: data?.title ?? defaultTitle(nextNumber),
-            titleNumber: nextNumber,
+            return undefined
           }
 
           batch(() => {
             stored.update((draft) => {
-              draft.all.push(newTerminal)
+              draft.all.push({ id, title: result.data?.title ?? defaultTitle(nextNumber), titleNumber: nextNumber })
               draft.active = id
             })
 
@@ -345,10 +337,14 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
               setUi("focus", { request: focusRequest, id, pending: false })
             }
           })
+
+          return id
         })
         .catch((error) => {
           cancelFocus(focusRequest)
           console.error("Failed to create terminal", error)
+
+          return undefined
         })
     },
     update,
@@ -367,6 +363,8 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
       })
     },
     clone,
+    /** The terminal whose side panel tab has this id. */
+    byTab: (tab: string) => all().find((pty) => terminalTab(pty) === tab),
     open(id: string) {
       stored.update((draft) => {
         draft.active = id

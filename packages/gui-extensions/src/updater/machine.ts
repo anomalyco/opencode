@@ -1,7 +1,7 @@
 import { Deferred, Effect, Exit, Fiber } from "effect"
 import type { UpdaterState } from "./contract"
 
-export type UpdateTarget =
+type UpdateTarget =
   | { readonly mode: "restart"; readonly version: string }
   | { readonly mode: "external"; readonly version: string; readonly url: string }
 

@@ -2,62 +2,197 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Only the open preview takes clicks, so nothing left on screen while it closes blocks the page. */
+  pointer-events: none;
+  --image-preview-shadow:
+    0 15px 45px 0 rgba(19, 16, 16, 0.35), 0 3.35px 10.051px 0 rgba(19, 16, 16, 0.25),
+    0 0.998px 2.993px 0 rgba(19, 16, 16, 0.2);
 
-  [data-slot="image-preview-container"] {
-    position: relative;
+  /* The preview dims the page itself, in step with the image's flight, instead of the dialog stack's overlay. */
+  [data-slot="image-preview-scrim"] {
+    position: fixed;
+    inset: 0;
+    background-color: var(--v2-overlay-simple-overlay-scrim);
+    pointer-events: none;
+  }
+
+  /* While the image flies, a shadow flies under it, deepest mid-flight as it lifts between the page and the preview,
+     where the image lies flat on the backdrop. */
+  [data-slot="image-preview-surface"] {
+    display: none;
+    position: fixed;
+    z-index: 49;
+    pointer-events: none;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: var(--image-preview-shadow);
+      opacity: calc(4 * var(--image-preview-lift, 0) * (1 - var(--image-preview-lift, 0)));
+    }
+  }
+
+  /* The origin's outline, carried over the flying image until it lifts off the page. */
+  [data-slot="image-preview-edge"] {
+    display: none;
+    position: fixed;
+    z-index: 51;
+    pointer-events: none;
+  }
+
+  [data-slot="image-preview-flight"] {
+    display: none;
+    position: fixed;
+    z-index: 51;
+    max-width: none;
+    max-height: none;
+    transform-origin: 0 0;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* A borrowed video flies itself and stays where it lands, over the preview, so its own controls keep working. Its
+     page styles and the popover it briefly becomes to refuse a double click's fullscreen must not move it. */
+  > video {
+    position: fixed;
+    z-index: 51;
+    right: auto;
+    bottom: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    border-radius: var(--radius-md);
+    transform-origin: 0 0;
+    pointer-events: auto;
+  }
+
+  &[data-stage="flying"] > video {
+    pointer-events: none;
+  }
+
+  canvas[data-slot="image-preview-image"] {
+    visibility: hidden;
+  }
+
+  &[data-stage="pending"] :is([data-slot="image-preview-scrim"], [data-slot="image-preview-content"]) {
+    opacity: 0;
+  }
+
+  &[data-stage="flying"] {
+    :is([data-slot="image-preview-surface"], [data-slot="image-preview-flight"], [data-slot="image-preview-edge"]) {
+      display: block;
+    }
+
+    [data-slot="image-preview-image"] {
+      visibility: hidden;
+    }
+  }
+
+  /* The image is the preview: no panel around it, fitted to the window with room for the controls under it. */
+  [data-slot="image-preview-content"] {
+    position: absolute;
+    inset: 0;
     z-index: 50;
-    width: min(calc(100vw - 32px), 90vw);
-    max-width: 1200px;
-    height: min(calc(100vh - 32px), 90vh);
+    pointer-events: auto;
+
+    &:focus-visible {
+      outline: none;
+    }
+
+    /* Kobalte unmounts closed content once its CSS animation ends, so this holds it for the closing flight. Held, it
+       must not take the page's clicks; Kobalte's inline style is otherwise auto. */
+    &[data-closed] {
+      animation: image-preview-exit var(--image-preview-exit);
+      pointer-events: none !important;
+    }
+  }
+
+  [data-slot="image-preview-body"] {
+    position: absolute;
+    inset: 44px clamp(8px, 3vw, 36px);
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
+    padding: 12px;
+    overflow: hidden;
+    user-select: none;
+    /* A zoomed image fades out in the padding instead of being cut at the edge; a fitted one never reaches it. */
+    mask-image:
+      linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
+      linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+    mask-composite: intersect;
 
-    [data-slot="image-preview-content"] {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: 100%;
-      max-height: 100%;
-      border-radius: var(--radius-lg);
-      background: var(--surface-raised-stronger-non-alpha);
-      box-shadow:
-        0 15px 45px 0 rgba(19, 16, 16, 0.35),
-        0 3.35px 10.051px 0 rgba(19, 16, 16, 0.25),
-        0 0.998px 2.993px 0 rgba(19, 16, 16, 0.2);
-      overflow: hidden;
-
-      &:focus-visible {
-        outline: none;
-      }
-
-      [data-slot="image-preview-header"] {
-        display: flex;
-        padding: 8px 8px 0;
-        justify-content: flex-end;
-        align-items: center;
-        align-self: stretch;
-      }
-
-      [data-slot="image-preview-body"] {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        overflow: auto;
-      }
-
-      [data-slot="image-preview-image"] {
-        max-width: 100%;
-        max-height: calc(90vh - 100px);
-        object-fit: contain;
-        border-radius: var(--radius-md);
-      }
+    &[data-zoomed] {
+      cursor: grab;
+      touch-action: pinch-zoom;
     }
+
+    &[data-dragging] {
+      cursor: grabbing;
+    }
+  }
+
+  [data-slot="image-preview-image"] {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    transform-origin: center;
+    -webkit-user-drag: none;
+  }
+
+  [data-slot="image-preview-controls"] {
+    position: absolute;
+    bottom: 12px;
+    inset-inline: 0;
+    width: fit-content;
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--v2-background-bg-layer-01);
+    box-shadow: var(--v2-elevation-floating);
+  }
+
+  [data-slot="image-preview-zoom-level"] {
+    min-width: 52px;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot="image-preview-divider"] {
+    width: 1px;
+    height: 16px;
+    margin-inline: 2px;
+    background: var(--v2-border-border-base);
+  }
+}
+
+/* The dialog stack's overlay rule is unlayered, so it outranks this layered one unless marked important; without it the
+   overlay's full dim appears in one frame under the preview's own scrim. */
+[data-component="dialog-overlay"]:has(+ [data-dialog-layer] > [data-component="image-preview"]) {
+  background-color: transparent !important;
+}
+
+/* A modal Kobalte dialog turns the body's pointer events off and only restores them when its content unmounts, which
+   the closing flight above holds back; the page takes clicks again as soon as the close starts. */
+body:has([data-component="image-preview"] [data-slot="image-preview-content"][data-closed]) {
+  pointer-events: auto !important;
+}
+
+[data-image-preview-origin] {
+  visibility: hidden;
+}
+
+@keyframes image-preview-exit {
+  to {
+    visibility: visible;
   }
 }

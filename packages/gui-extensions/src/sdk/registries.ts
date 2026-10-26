@@ -17,6 +17,8 @@ export interface Command {
   readonly title: string
   /** The palette's second line. */
   readonly description?: string
+  /** Extra words the palette matches, separated by spaces, e.g. "dev bar" for the debug bar. */
+  readonly keywords?: string
   /** The palette category the command is listed under; translated text. */
   readonly group?: string
   /**
@@ -31,6 +33,12 @@ export interface Command {
   readonly section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
   /** The default keybind, e.g. `mod+shift+t`. The user can change it in Settings > Shortcuts. */
   readonly bind?: string
+  /**
+   * Published command id whose shortcut this command shares, e.g. `tab.close` for a command that closes a tab inside
+   * its `scope`. The command takes that command's custom shortcut, or `bind` while it has none, and Settings >
+   * Shortcuts lists only that command. Pair it with `scope`, so the shared shortcut reaches this command only there.
+   */
+  readonly follows?: string
   /** Also offers the command as a composer slash command. */
   readonly slash?: {
     /** The name after the slash, e.g. `open` for `/open`. */
@@ -81,6 +89,19 @@ export interface SessionPanelMenuItem extends MenuItemBase {
   readonly icon?: IconName
   /** Published command id whose shortcut the item shows. */
   readonly keybind?: string
+  /** A short muted detail after the title where the item lists as a launcher row, e.g. a count. Omit it for none. */
+  readonly description?: string
+  /**
+   * The tab the item opens is already open. Launcher lists such as the new tab page leave the item out; the + menu
+   * still lists it. Omit it while the tab is closed, or for an item that always opens a new tab.
+   */
+  readonly opened?: boolean
+  /**
+   * Makes + run this item directly instead of showing the host's launcher choices. The first primary item in `order`
+   * wins. Opening the side region with no tabs still shows the host's New tab view, which lists non-primary items
+   * that are not already open. Omit it for an ordinary launcher item.
+   */
+  readonly primary?: true
   /** Runs the item. */
   run(): void
 }
@@ -119,7 +140,8 @@ export interface ServerRowMenuItem extends MenuItemBase {
 
 /**
  * An item of a host menu, by `menu`. Each menu takes only its own fields, so a field the menu ignores fails to compile.
- * - `session.panel`: the + menu before the side panel tabs; shows `icon` and `keybind`.
+ * - `session.panel`: the + menu before the side panel tabs; shows `icon`, `keybind` and `description`, `primary`
+ *   makes the item the new tab action, and launcher lists skip `opened` items. `Layout.side.menu` lists the items for a launcher of your own.
  * - `server.add`: the Add server menu.
  * - `server.row`: the menu of each server row in Settings; `when` and `enabled` filter it per row, and `run` receives
  *   the row's server key.
@@ -210,6 +232,11 @@ export interface MobileView {
   readonly kind: "tab" | "menu" | "drawer"
   /** The view's icon in the More drawer. */
   readonly icon?: IconName
+  /**
+   * Once shown, the view stays mounted while another view is shown, e.g. a terminal that keeps its shell's screen.
+   * Defaults to false: the view mounts each time it is shown.
+   */
+  readonly cached?: boolean
 }
 
 /**
@@ -226,17 +253,27 @@ export interface PanelProps {
   readonly screen: SessionScreen
 }
 
-/** A panel: the tabs an extension shows in a session's side region, or its dock. */
+/** How a closed side tab lists under "Recently closed", from `Panel.closed`. */
+export type ClosedPanelTab = {
+  /** The row's title; the tab's title by default. */
+  readonly title?: string
+  /** The row's icon; the panel's mobile icon by default. A tab with a `file` shows its file icon. */
+  readonly icon?: IconName
+  /** A muted detail after the title, e.g. a page's host. A tab with a `file` shows its folder. */
+  readonly detail?: string
+  /** What `restore` needs to bring the tab back, e.g. a URL. */
+  readonly data?: string
+}
+
+/** A panel: the tabs an extension shows in a session's side region. */
 export interface Panel {
   /** The panel's id, unique within the extension. Its mobile view's key is `${extension}:${id}`. */
   readonly id: string
   /**
    * Where the panel renders.
    * - `side`: tabs in the side region's strip.
-   * - `dock`: the dock, below or beside the timeline. The host renders the first tab `list` returns (with `open`
-   *   empty) of the first dock panel.
    */
-  readonly region: "side" | "dock"
+  readonly region: "side"
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
   /** Tabs are not restored: stored keys this panel stops listing leave the strip. See also `PanelTab.transient`. */
@@ -296,6 +333,29 @@ export interface Panel {
    */
   close?(input: PanelProps): void
   /**
+   * Read as the user closes a tab, for the new tab view's "Recently closed" list and ⌘⇧T. Return how the row reads and
+   * the data `restore` needs, or `false` when the tab cannot come back. Without it, a tab that is not `transient`
+   * lists under its title and reopens under the same key. The host stores the entry, so keep `data` small.
+   *
+   * @param input - The closing tab, routed session and owning screen. Capture what reopening needs now.
+   */
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  /**
+   * Brings back a tab `closed` listed. Without it, the host opens the same key again.
+   *
+   * @param input - The routed session, owning screen, the closed tab's id and the `data` `closed` returned.
+   */
+  restore?(input: {
+    /** The routed session the tab closed in. */
+    readonly session: MountedSession
+    /** The session screen that owns the panel. */
+    readonly screen: SessionScreen
+    /** The closed tab's id. */
+    readonly id: string
+    /** What `closed` returned as `data`. */
+    readonly data?: string
+  }): void
+  /**
    * Runs when the tab becomes selected. `restored` is true for the selection the side region mounts with, e.g. the
    * tab selected before a reload, and false for every later selection change.
    *
@@ -307,6 +367,14 @@ export interface Panel {
       readonly restored: boolean
     },
   ): void
+  /**
+   * Runs when the user opens the side region on this tab with its toggle, once the tab is on screen. Move keyboard
+   * focus to the tab's own target, such as a text field. When focus is still outside the region afterwards, the host
+   * focuses the region itself.
+   *
+   * @param input - The selected tab, routed session and owning screen. Do not destructure.
+   */
+  enter?(input: PanelProps): void
 }
 
 /** A search entry of a `SettingsPage`, indexed without mounting the page. */
@@ -518,16 +586,10 @@ export interface LinkHandler {
   exists?(link: Link): boolean | Promise<boolean>
 }
 
-/** A titlebar pill, or the dev channel badge as a toggle. */
+/** A pill in the titlebar or tabs footer; the label shows on hover. */
 export interface TitlebarItem {
   /** The item's id; the host keeps the pill's element while the id stays. */
   readonly id: string
-  /**
-   * Where the item shows. Defaults to `titlebar`.
-   * - `titlebar`: a pill in the titlebar or tabs footer; the label shows on hover.
-   * - `channel`: makes the dev channel badge a toggle that runs the item.
-   */
-  readonly placement?: "titlebar" | "channel"
   /** The visible label. */
   readonly label: string
   /** Accessible name when it differs from the visible label. */
@@ -538,7 +600,7 @@ export interface TitlebarItem {
   readonly busy?: boolean
   /** Shows the pill pressed (`aria-pressed`). */
   readonly pressed?: boolean
-  /** Runs when the user clicks the pill, or the channel badge it toggles. Omit it for an item that only shows. */
+  /** Runs when the user clicks the pill. Omit it for an item that only shows. */
   run?(): void
 }
 
@@ -555,15 +617,24 @@ export interface SlotMap {
     /** The timeline is the one on screen. */
     readonly active: boolean
   }
+  /** Items in the project/location menu, after its location details. Omitted on loading headers without a screen. */
+  readonly "session.location.menu": {
+    /** The menu's owning session screen; always present. */
+    readonly screen: SessionScreen
+    /** The session whose location is shown; reads follow moves without remounting. */
+    readonly session: MountedSession
+    /** Whether the project menu is open. Subscribe to location data only while true. */
+    readonly shown: boolean
+  }
+  /** Replaces the project menu's current location row. Without a contribution the host shows a static row. */
+  readonly "session.location.workspace": SlotMap["session.location.menu"] & {
+    /** The current worktree name, or the localized label for the local repository. */
+    readonly label: string
+    /** The location icon: monitor for the local repository, worktree for a worktree. */
+    readonly icon: IconName
+  }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {
-    /** The owning session screen; always present. */
-    readonly screen: SessionScreen
-    /** The routed session; a new object when another session is routed. */
-    readonly session: MountedSession
-  }
-  /** The side region's inner sidebar, shown while it is open. */
-  readonly "session.panel.sidebar": {
     /** The owning session screen; always present. */
     readonly screen: SessionScreen
     /** The routed session; a new object when another session is routed. */
@@ -618,7 +689,7 @@ export const Command = Registry.define<Command>("command")
 export const MenuItem = Registry.define<MenuItem>("menu-item")
 
 /**
- * The registry of panels: tabs in the session's side region, or the dock.
+ * The registry of panels: tabs in the session's side region.
  *
  * @example
  * ```ts
@@ -663,7 +734,7 @@ export const Server = Registry.define<Server>("server")
 export const LinkHandler = Registry.define<LinkHandler>("link-handler")
 
 /**
- * The registry of titlebar pills, and of the toggle the dev channel badge runs.
+ * The registry of titlebar pills, and of the toggle the channel badge runs.
  *
  * @example
  * ```ts

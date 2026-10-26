@@ -10,7 +10,7 @@ import {
   ToolDefinition,
   TransportError,
   type LLMRequest,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import type { StreamOptions } from "@opencode/ai/route"

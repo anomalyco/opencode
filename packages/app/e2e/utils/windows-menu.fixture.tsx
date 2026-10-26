@@ -6,11 +6,14 @@ import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
-export function mount(input: { server: string }) {
+// `path` opens a route other than Home.
+export function mount(input: { server: string; path?: string }) {
   const root = document.getElementById("root")
 
   if (!root) throw new Error("Missing fixture root")
   const history = createMemoryHistory()
+
+  if (input.path) history.set({ value: input.path, replace: true })
   render(() => {
     const [store, setStore] = createStore<{ actions: string[] }>({ actions: [] })
 

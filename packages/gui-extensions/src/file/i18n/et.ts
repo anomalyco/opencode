@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Kõik failid",
-  "tree.empty": "Faile pole",
-  "tree.changes.one": "{{count}} faili muudetud",
-  "tree.changes.other": "{{count}} faili muudetud",
   "tab.notFound": "Faili ei leitud: {{name}}",
   "mobile.title": "Failid",
   "mobile.openTabs": "Ava failid",

@@ -381,9 +381,10 @@ test("jump to latest lands on stable final rows after offscreen growth", async (
   })
 
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-  await scroller.evaluate(
-    (element) => (element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight - 600)),
-  )
+  await scroller.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+    element.scrollTop = 0
+  })
   await timeline.send(partUpdated(shell(shellID, "running", lines(50))), 300)
 
   const regions = defineVisualRegions({

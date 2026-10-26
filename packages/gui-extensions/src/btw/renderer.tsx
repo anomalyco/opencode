@@ -75,7 +75,7 @@ const setup: Setup<typeof Btw> = (ctx) => {
           },
           label: (state) => (
             <div class="flex min-w-0 items-center gap-1.5">
-              <Icon name="bubble-5" size="small" />
+              <Icon name="comment" class="shrink-0" />
               <span class="truncate">{btw.question(state.session, id) ?? ctx.t("tab.title")}</span>
             </div>
           ),

@@ -205,7 +205,6 @@ export const dict = {
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
   "ui.question.multiHint": "Выберите все подходящие",
-  "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите свой ответ…",
 
   "ui.fileSearch.placeholder": "Найти",

@@ -1,8 +1,91 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, T0, expectPath, provider, sessionHref } from "../utils/app"
-import { openDraft, openSession } from "../utils/workspace"
+import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, provider, sessionHref } from "../utils/app"
+import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
+import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-server"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
+test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
+  const target = "ses_0123456789abcdefghijklmnop"
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
+  const view = await openSession(page, {
+    name: "SessionMentions",
+    findFiles: () => [],
+    sessions: [
+      { id: "ses_mentions_source", title: "Review the plan" },
+      { id: target, title: "Auth middleware" },
+    ],
+    seed: { tabs: ["ses_mentions_source"] },
+    onPrompt: (input) => void prompts.push(input.body),
+  })
+
+  await view.editor.fill("Compare with @Auth")
+  await page
+    .locator('[data-component="composer-suggestions"]')
+    .getByRole("button", { name: /Auth middleware/ })
+    .click()
+  await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]?.text).toBe(`Compare with @session:${target} `)
+  const message = page.locator('[data-timeline-row="UserMessage"]')
+  const chip = message.getByRole("button", { name: "Auth middleware", exact: true })
+  await expect(chip).toBeVisible()
+  await chip.click()
+  await expect(page).toHaveURL(new RegExp(`${target}$`))
+  await expect(page.locator("[data-titlebar-tab-link]").filter({ hasText: "Review the plan" })).toHaveCount(1)
+  await expect(page.locator('[data-titlebar-tab-slot][data-active="true"]')).toContainText("Auth middleware")
+})
+
+test("a bare @ lists sessions, and a multi-word title matches while file search is slow", async ({ page }) => {
+  const target = "ses_0123456789opencodeconsolex"
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
+  const view = await openSession(page, {
+    name: "SessionMentionSearch",
+    findFiles: () => [],
+    sessions: [
+      { id: "ses_mention_search_source", title: "Review the plan" },
+      { id: "ses_0123456789homesessionabcde", title: "HOME" },
+      { id: target, title: "OPENCODE CONSOLE" },
+    ],
+    seed: { tabs: ["ses_mention_search_source"] },
+    onPrompt: (input) => void prompts.push(input.body),
+  })
+
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  const files = await holdRoute(page, (url) => url.pathname === "/api/fs/find")
+
+  await view.editor.pressSequentially("Compare with @")
+  await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /OPENCODE CONSOLE/ })).toBeVisible()
+
+  await view.editor.pressSequentially("open")
+  await files.arrived
+  await view.editor.pressSequentially(" con")
+  await expect(suggestions.getByRole("button", { name: /HOME/ })).toHaveCount(0)
+  await expect(suggestions.locator("[data-suggestion-id][data-active]")).toContainText("OPENCODE CONSOLE")
+  await view.editor.press("Enter")
+  await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@OPENCODE CONSOLE")
+  files.release()
+
+  // Prose after a completed mention neither reopens the popover nor lets it take Enter.
+  await view.editor.pressSequentially("on code")
+  await expect(suggestions).toBeHidden()
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]?.text).toBe(`Compare with @session:${target} on code`)
+
+  // A space after a full title ends a typed mention, so the rest stays prose.
+  await view.editor.pressSequentially("@home")
+  await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
+  await view.editor.pressSequentially(" now")
+  await expect(suggestions).toBeHidden()
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(2)
+  expect(prompts[1]?.text).toBe("@home now")
+})
 
 test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
   page,
@@ -54,14 +137,11 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
         id: "opencode-go",
         name: "OpenCode Go",
         methods: [{ type: "key" }],
-        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Anomaly", method: "oauth" }] : [],
+        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }] : [],
       },
     ],
-    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
-    onIntegrationOAuthStatus: () => {
-      state.authorized = true
-
-      return "complete"
+    onConnectKey: (input) => {
+      if (input.integrationID === "opencode-go") state.authorized = true
     },
     pageMessages: () => ({
       items: [
@@ -100,10 +180,11 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
   await expect(view.editor).toHaveText("Refactor the parser")
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> Go sign-in -> Continue switches the model in the current session without opening a new draft tab.
+  // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
-  const connect = page.getByRole("dialog")
-  await connect.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+  const connect = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
+  await connect.getByPlaceholder("API key").fill("sk-go-test")
+  await connect.getByRole("button", { name: "Continue", exact: true }).click()
   const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
   await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
   await connected.getByRole("button", { name: "Continue", exact: true }).click()
@@ -149,7 +230,9 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
     mimeType: "image/png",
     buffer: Buffer.from("png-bytes"),
   })
-  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("diagram.png")
+  await expect(
+    page.locator('[data-component="composer-attachments"]').getByRole("img", { name: "diagram.png", exact: true }),
+  ).toBeVisible()
 
   await view.push([
     {
@@ -172,7 +255,9 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
 
   await expect(page.getByRole("status").filter({ hasText: "You've used today's free messages." })).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("diagram.png")
+  await expect(
+    page.locator('[data-component="composer-attachments"]').getByRole("img", { name: "diagram.png", exact: true }),
+  ).toBeVisible()
   await expect(view.editor).toHaveText("")
 })
 
@@ -197,7 +282,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   })
 
   const control = page.locator('[data-action="composer-model"]')
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText("OpenCode / Alpha")
   await view.editor.fill("Keep my selected model")
 
   catalog.current = provider(beta)
@@ -210,7 +295,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Select model")
+  await expect(control).toHaveText("OpenCode / alpha (unavailable)")
   await view.editor.press("Enter")
   await expect(page.getByText("Select an agent and model", { exact: true })).toBeVisible()
   await expect(view.editor).toHaveText("Keep my selected model")
@@ -227,11 +312,12 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText("OpenCode / Alpha")
   await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
-  expect(switches).toEqual([{ model: { id: "alpha", providerID: "opencode", variant: "high" } }])
+  // The session already runs Alpha high, so the send has no switch to make.
+  expect(switches).toEqual([])
 
   catalog.current = provider(beta)
   await view.push([
@@ -243,20 +329,205 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Select model")
+  await expect(control).toHaveText("OpenCode / alpha (unavailable)")
   await control.click()
   await page
     .getByRole("dialog", { name: "Select model" })
     .getByRole("button", { name: "Beta Free", exact: true })
     .click()
-  await expect(control).toHaveText("Beta")
+  await expect(control).toHaveText("OpenCode / Beta")
   await view.editor.fill("Use the replacement I chose")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(2)
-  expect(switches).toEqual([
-    { model: { id: "alpha", providerID: "opencode", variant: "high" } },
-    { model: { id: "beta", providerID: "opencode" } },
-  ])
+  expect(switches).toEqual([{ model: { id: "beta", providerID: "opencode" } }])
+})
+
+test("an existing session's model never shows a fallback while its agent loads", async ({ page }) => {
+  const sessionID = "ses_agent_pending"
+  await mockWorkspace(page, {
+    name: "AgentPending",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
+    provider: provider({ id: "alpha", name: "Alpha" }, { id: "beta", name: "Beta" }),
+    seed: { storage: { "opencode.global.dat:model": { recent: [{ providerID: "opencode", modelID: "beta" }] } } },
+  })
+  const agents = Promise.withResolvers<void>()
+  await page.route(/\/api\/agent(\?|$)/, async (route) => {
+    await agents.promise
+    await route.fallback()
+  })
+
+  // Every chip text painted from the first frame, so a fallback shown for even one frame fails the test.
+  await page.addInitScript(() => {
+    const seen = new Set<string>()
+    window.__chipTexts = seen
+
+    const tick = () => {
+      const text = document.querySelector('[data-action="composer-model"]')?.textContent
+
+      if (text) seen.add(text)
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+  })
+
+  const catalog = ["/api/model", "/api/provider", "/api/config"].map((path) =>
+    page.waitForResponse((response) => new URL(response.url()).pathname === path),
+  )
+
+  const agentRequested = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/agent")
+  await page.goto(sessionHref(sessionID))
+  await Promise.all(catalog)
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+
+  const control = page.locator('[data-action="composer-model"]')
+  // The recent model must not stand in for the session's model while its agent is unresolved. The chip may stay
+  // hidden or name the session's own model, which the loaded selection then keeps.
+  await agentRequested
+  const agentLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/agent")
+  agents.resolve()
+  await agentLoaded
+  await expect(control).toHaveText("OpenCode / Alpha")
+  expect(await page.evaluate(() => [...(window.__chipTexts ?? [])])).toEqual(["OpenCode / Alpha"])
+})
+
+test("a send pressed while the Location's plugins activate waits, Esc cancels it, and it sends once catalogs load", async ({
+  page,
+}) => {
+  const sessionID = "ses_plugins_booting"
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+  await mockWorkspace(page, {
+    name: "PluginsBooting",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
+    provider: provider({ id: "alpha", name: "Alpha" }),
+    onPrompt: (input) => void prompts.push(input.body),
+  })
+  // The server answers the catalogs once plugins activate, and the model list gives up first with a 503.
+  await mockPluginsActivating(page)
+  const held = await holdRoute(page, /\/api\/(agent|provider|model)(\?|$)/)
+  const toast = page.getByText("Select an agent and model")
+  const submit = page.locator('[data-action="composer-submit"]')
+
+  try {
+    await page.goto(sessionHref(sessionID))
+    const editor = page.locator('[data-component="composer-editor"]')
+    await expect(editor).toBeEditable()
+    await held.arrived
+    await editor.fill("ship it")
+    await editor.press("Enter")
+    await expect(submit).toHaveAttribute("aria-busy", "true")
+    // Esc cancels the held send and keeps the prompt for the next press.
+    await editor.press("Escape")
+    await expect(submit).not.toHaveAttribute("aria-busy", "true")
+    await expect(editor).toHaveText("ship it")
+    await editor.press("Enter")
+    await expect(submit).toHaveAttribute("aria-busy", "true")
+    await expect(toast).toHaveCount(0)
+    expect(prompts).toEqual([])
+
+    held.release()
+    await expect.poll(() => prompts.length).toBe(1)
+    expect(prompts[0]).toMatchObject({ text: "ship it" })
+    await expect(editor).toHaveText("")
+    await expect(submit).not.toHaveAttribute("aria-busy", "true")
+    await expect(toast).toHaveCount(0)
+  } finally {
+    held.release()
+  }
+})
+
+test("an opened session in another Location names its model from a loaded catalog before its agents load", async ({
+  page,
+}) => {
+  const other = "C:/OpenCode/WarmOther"
+  await mockWorkspace(page, {
+    name: "WarmOpen",
+    sessions: [
+      { id: "ses_warm_here", title: "Here", agent: "build", model: { id: "alpha", providerID: "opencode" } },
+      {
+        id: "ses_warm_there",
+        title: "There",
+        directory: other,
+        location: { directory: other },
+        agent: "build",
+        model: { id: "beta", providerID: "opencode", variant: "high" },
+      },
+    ],
+    provider: provider({ id: "alpha", name: "Alpha" }, { id: "beta", name: "Beta (latest)", variants: { high: {} } }),
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await page.goto(sessionHref("ses_warm_here"))
+  await expect(control).toHaveText("OpenCode / Alpha")
+
+  const held = await holdRoute(
+    page,
+    (url) =>
+      ["/api/agent", "/api/config"].includes(url.pathname) && url.searchParams.get("location[directory]") === other,
+  )
+
+  try {
+    await page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref("ses_warm_there", SERVER)}"]`).click()
+    await held.arrived
+    await expect(control).toHaveText("OpenCode / Beta")
+    await expect(page.getByRole("button", { name: "Choose model variant" })).toHaveText("high")
+    const painted = await control.elementHandle()
+
+    const loaded = ["/api/agent", "/api/config"].map((path) =>
+      page.waitForResponse((response) => {
+        const url = new URL(response.url())
+
+        return url.pathname === path && url.searchParams.get("location[directory]") === other
+      }),
+    )
+
+    // A click before the catalog loads opens the dialog once it does.
+    await control.click()
+    held.release()
+    await Promise.all(loaded)
+    await expect(page.getByRole("dialog")).toBeVisible()
+    // The loaded selection keeps the same chip instead of replacing it.
+    await expect(control).toHaveText("OpenCode / Beta")
+    expect(await painted?.evaluate((element) => element.isConnected)).toBe(true)
+  } finally {
+    held.release()
+  }
+})
+
+declare global {
+  interface Window {
+    __chipTexts?: Set<string>
+  }
+}
+
+test("names a Console-managed provider without its workspace unless a direct connection shares it", async ({
+  page,
+}) => {
+  const sessions = [
+    { id: "ses_managed_root", model: { id: "alpha", providerID: "opencode" } },
+    { id: "ses_managed_openai", model: { id: "gpt", providerID: "console-openai" } },
+  ]
+
+  const managed = { integrationID: "opencode" }
+  await openSession(page, {
+    name: "ManagedProvider",
+    sessions: sessions.map((session) => ({ ...session, agent: "build" })),
+    provider: {
+      all: [
+        { ...managed, id: "opencode", name: "Anomaly / OpenCode", models: { alpha: { id: "alpha", name: "Alpha" } } },
+        { ...managed, id: "console-openai", name: "Anomaly / OpenAI", models: { gpt: { id: "gpt", name: "GPT" } } },
+        { id: "openai", name: "OpenAI", models: { gpt: { id: "gpt", name: "GPT" } } },
+      ],
+      connected: ["opencode", "console-openai", "openai"],
+      default: {},
+    },
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await expect(control).toHaveText("OpenCode / Alpha")
+  await page.goto(sessionHref(sessions[1]!.id))
+  await expect(control).toHaveText("Anomaly / OpenAI / GPT")
 })
 
 async function draft(page: Page) {
@@ -299,25 +570,39 @@ test("keeps a 25000-line crash report editable in a new session", async ({ page 
   expect(await events.evaluate((events) => events.count)).toBe(1)
   await expect(input).toBeFocused()
   await expectCaretVisible(input)
-  const scroll = page.locator('[data-component="composer-scroll"]')
-  await expect(scroll.locator(".scroll-view__viewport")).toHaveCSS("scrollbar-width", "none")
-  await expect(scroll.locator(".scroll-view__thumb")).toBeVisible()
   await page.keyboard.type("!")
   await expect.poll(async () => (await input.innerText()) === text + "!").toBe(true)
   await expectCaretVisible(input)
-  const thumb = await scroll.locator(".scroll-view__thumb").boundingBox()
-  const bounds = await scroll.boundingBox()
-
-  if (!thumb || !bounds) throw new Error("Missing composer scrollbar bounds")
-  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(thumb.x + thumb.width / 2, bounds.y + 8 + thumb.height / 2)
-  await page.mouse.up()
-  await expect(scroll.locator(".scroll-view__viewport")).toHaveJSProperty("scrollTop", 0)
-  await expect(input).toBeFocused()
   await page.keyboard.press("ControlOrMeta+Home")
   await page.keyboard.press("ControlOrMeta+End")
   await expectCaretVisible(input)
+})
+
+test("keeps a line added at the end of a scrolling prompt clear of the bottom fade", async ({ page }) => {
+  const { editor } = await openSession(page, { name: "ComposerFade" })
+  await editor.click()
+
+  for (const line of Array.from({ length: 12 }, (_, index) => `Line ${index + 1}`)) {
+    await page.keyboard.type(line)
+    await page.keyboard.press("Shift+Enter")
+  }
+  await page.keyboard.type("Last line")
+  await expect.poll(() => editor.innerText()).toMatch(/Line 12\nLast line$/)
+
+  // The mask fades the viewport's bottom --composer-fade-bottom pixels; the last line must end above them.
+  await expect
+    .poll(() =>
+      editor.evaluate((element) => {
+        const viewport = element.closest('[data-component="composer-scroll"]')!
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        const line = Array.from(range.getClientRects()).reduce((last, rect) => (rect.bottom > last.bottom ? rect : last))
+        const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
+
+        return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))
+      }),
+    )
+    .toBe(0)
 })
 
 test("a key-up never moves the caret back after later navigation", async ({ page }) => {
@@ -469,7 +754,7 @@ test("keeps a narrow session composer contained when invoking a built-in", async
   await page.locator('[data-suggestion-id="model.choose"]').click()
 
   const dialog = page.getByRole("dialog", { name: "Select model", exact: true })
-  const search = dialog.getByRole("searchbox", { name: "Search models", exact: true })
+  const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
   await expect(search).toBeFocused()
   await expect(editor).toHaveText("keep me")
   await page.keyboard.press("Escape")
@@ -485,16 +770,21 @@ test("keeps a narrow session composer contained when invoking a built-in", async
 test("keeps focus in a dialog that replaces the model dialog and returns it to the composer caret", async ({
   page,
 }) => {
-  const { editor } = await openSession(page, { name: "ComposerDialogFocus", provider: NO_PROVIDER })
+  const { editor } = await openSession(page, {
+    name: "ComposerDialogFocus",
+    provider: provider({ id: "paid", name: "Paid", cost: { input: 1, output: 1 } }),
+  })
+
   await editor.fill("keep me")
   await editor.press("End")
   await editor.press("ArrowLeft")
   await editor.press("ArrowLeft")
   await editor.press("ArrowLeft")
-  await editor.press("ControlOrMeta+'")
+  // Clicking the trigger leaves focus at the caret, so the replacing dialog returns it there.
+  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
 
   const models = page.getByRole("dialog", { name: "Select model", exact: true })
-  await expect(models.getByRole("searchbox", { name: "Search models", exact: true })).toBeFocused()
+  await expect(models.getByRole("combobox", { name: "Search models", exact: true })).toBeFocused()
   await models.getByRole("button", { name: "Manage models", exact: true }).click()
   await expect(models).toBeHidden()
 
@@ -615,10 +905,16 @@ test("marks a Console provider with its workspace only when it is also connected
     },
   })
 
-  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
-  const menu = page.getByRole("menu")
-  await expect(menu.getByRole("menuitemradio", { name: "Direct Gemini", exact: true })).toBeVisible()
-  const headings = menu.locator('[data-slot="menu-v2-group-label"]')
+  const trigger = page.locator('[data-component="composer"] [data-action="composer-model"]')
+  await trigger.hover()
+  const details = page.getByRole("tooltip")
+  await expect(details.getByText("Console Model", { exact: true })).toBeVisible()
+  await expect(details.getByText("OpenCode", { exact: true })).toBeVisible()
+  await expect(details.getByText(/Anomaly \//)).toHaveCount(0)
+  await trigger.click()
+  const menu = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(menu.getByRole("option", { name: "Direct Gemini", exact: true })).toBeVisible()
+  const headings = menu.locator('[data-slot="search-list-header"]')
   await expect(headings).toHaveCount(4)
   await expect(headings.filter({ hasText: /^GoogleAnomaly$/ })).toHaveCount(1)
   await expect(headings.filter({ hasText: /^Google$/ })).toHaveCount(1)
@@ -680,4 +976,32 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   await expect(control).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(control).toHaveCSS("opacity", "0")
+})
+
+test("pastes into the composer from the session view but not into other inputs", async ({ page }) => {
+  const prompts: unknown[] = []
+  const { editor } = await openSession(page, { name: "PasteFocus", onPrompt: (input) => void prompts.push(input.body) })
+  await editor.fill("hello")
+  await editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  const message = page.locator('[data-timeline-row="UserMessage"]')
+  await message.click()
+  await expect(editor).not.toBeFocused()
+
+  await page.evaluate(() => navigator.clipboard.writeText("pasted from the timeline"))
+  await page.keyboard.press("ControlOrMeta+V")
+  await expect(editor).toBeFocused()
+  await expect.poll(() => editor.innerText()).toBe("pasted from the timeline")
+
+  await editor.blur()
+  await page.evaluate(() => {
+    const field = document.createElement("input")
+    field.id = "elsewhere"
+    document.body.append(field)
+    field.focus()
+  })
+  await page.keyboard.press("ControlOrMeta+V")
+  await expect(page.locator("#elsewhere")).toHaveValue("pasted from the timeline")
+  await expect(page.locator("#elsewhere")).toBeFocused()
+  await expect.poll(() => editor.innerText()).toBe("pasted from the timeline")
 })

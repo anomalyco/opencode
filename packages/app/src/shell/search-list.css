@@ -1,0 +1,245 @@
+/* Outranks the deeply nested base dialog header rule. */
+[data-component="dialog-v2"]
+  [data-slot="dialog-container"]
+  .search-list-dialog[data-slot="dialog-content"]
+  [data-slot="dialog-header"] {
+  padding-bottom: 12px;
+}
+
+.search-list-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.search-list-search {
+  flex-shrink: 0;
+  /* The 1px top keeps the field's outside focus outline from clipping against the body. */
+  padding: 1px 12px 8px;
+}
+
+.search-list-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.search-list-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 8px 8px;
+}
+
+.search-list-row {
+  display: flex;
+  width: 100%;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: start;
+  cursor: default;
+  scroll-margin-block: 8px;
+}
+
+.search-list-row[data-active] {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.search-list-row:focus-visible {
+  background: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
+}
+
+.search-list-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+.search-list-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-text-text-base);
+  font-weight: 530;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-list-title[data-weight="regular"] {
+  flex: 1;
+  font-weight: 440;
+}
+
+/* A zero basis lays the title out at full width first; the detail only fills what is left. */
+.search-list-detail {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  color: var(--v2-text-text-muted);
+  font-weight: 440;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-list-trailing {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+.search-list-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+[data-component="dialog-v2"]:has(.mcp-dialog) [data-slot="dialog-container"] {
+  width: min(calc(100vw - 24px), 480px);
+}
+
+.mcp-dialog [data-slot="search-list-row"] {
+  gap: 16px;
+}
+
+.mcp-dialog-lead {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+}
+
+.mcp-dialog-name {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+.mcp-dialog [data-status="disabled"] .mcp-dialog-name {
+  color: var(--v2-text-text-muted);
+}
+
+/* The session MCP list's status dot: filled while on, a ring when disabled. */
+.mcp-status-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+  color: var(--v2-icon-icon-faint);
+}
+
+.mcp-status-dot[data-status="connected"] {
+  color: var(--icon-success-base);
+}
+
+.mcp-status-dot[data-status="failed"] {
+  color: var(--icon-critical-base);
+}
+
+.mcp-status-dot[data-status="needs_auth"] {
+  color: var(--icon-warning-base);
+}
+
+.mcp-status-dot[data-status="disabled"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.mcp-status-dot[data-status="pending"] {
+  animation: mcp-dialog-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mcp-dialog-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.mcp-trailing {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* A quiet ghost action in the switch's place, small enough to weigh about as much as a switch. */
+.mcp-status-action[data-component="button-v2"][data-size="small"] {
+  height: 20px;
+  padding-inline: 5px;
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 16px;
+  letter-spacing: 0.05px;
+}
+
+/* At the row's end, the label lines up with the switches above and below it. */
+.mcp-status-action[data-component="button-v2"]:last-child {
+  margin-inline-end: -5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcp-status-dot[data-status="pending"] {
+    animation: none;
+  }
+}
+
+.mcp-error-heading {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 4px 8px;
+}
+
+[data-component="dialog-v2"]
+  [data-slot="dialog-container"]
+  .mcp-dialog[data-slot="dialog-content"]
+  .mcp-error-heading
+  > [data-slot="dialog-title-group"] {
+  display: contents;
+}
+
+.mcp-error-heading [data-slot="dialog-title"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.mcp-error-heading [data-slot="dialog-description"] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+@media (max-width: 639px), (hover: none) {
+  .mcp-dialog [data-slot="search-list-row"] {
+    height: auto;
+    min-height: 44px;
+    padding-block: 8px;
+  }
+}

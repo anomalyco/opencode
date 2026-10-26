@@ -690,6 +690,38 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("lets a configured provider baseURL override catalog model baseURLs", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("gateway")
+      yield* providers.transform((editor) => {
+        for (const id of ["chat", "pinned"])
+          editor.models.update(providerID, Model.ID.make(id), (model) => {
+            model.settings = { baseURL: "https://catalog.example/v1" }
+          })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              gateway: {
+                settings: { baseURL: "http://127.0.0.1:17322" },
+                models: { pinned: { settings: { baseURL: "http://127.0.0.1:9000" } } },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const baseURL = (id: string) =>
+        models.get(providerID, Model.ID.make(id)).pipe(Effect.map((model) => required(model).settings?.baseURL))
+      expect(yield* baseURL("chat")).toBe("http://127.0.0.1:17322")
+      expect(yield* baseURL("pinned")).toBe("http://127.0.0.1:9000")
+    }),
+  )
+
   it.effect("generates variants after rewriting a configured model package", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service

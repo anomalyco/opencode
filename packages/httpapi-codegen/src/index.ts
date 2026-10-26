@@ -810,6 +810,17 @@ function renderPromiseTypes(
     types.set(projected.ast, type)
     return type
   }
+  const fieldTypeOf = (schema: Schema.Top, name: string, decoded: boolean) => {
+    const ast = (decoded ? Schema.toType(schema) : Schema.toEncoded(schema)).ast
+    const property = SchemaAST.isObjects(ast)
+      ? ast.propertySignatures.find((property) => property.name === name)
+      : undefined
+    if (property === undefined) return `(${typeOf(schema, decoded)})[${JSON.stringify(name)}]`
+    const type = Schema.make<Schema.Top>(property.type)
+    // Indexing an optional property includes undefined, so keep it when the field schema omits it.
+    if (!SchemaAST.isOptional(property.type) || includesUndefined(property.type)) return typeOf(type)
+    return typeOf(Schema.UndefinedOr(type))
+  }
   const outputMarkers = new Map<SchemaAST.AST, string>()
   const outputSchemas: Array<Schema.Top> = []
   const outputTypeOf = (schema: Schema.Top) => {
@@ -853,7 +864,7 @@ function renderPromiseTypes(
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema) : `(${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`}`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema) : fieldTypeOf(schema, field.name, field.source === "query")}`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
@@ -1142,6 +1153,11 @@ function structuralType(schema: Schema.Top) {
     expand(document.codes[0].Type)
       .replaceAll("Schema.Json", "JsonValue"),
   )
+}
+
+function includesUndefined(ast: SchemaAST.AST): boolean {
+  if (SchemaAST.isUndefined(ast)) return true
+  return SchemaAST.isUnion(ast) && ast.types.some(includesUndefined)
 }
 
 function promiseTypeAst(schema: Schema.Top) {

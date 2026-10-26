@@ -8,8 +8,6 @@ import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
-import { LayerNode } from "./effect/layer-node.js"
-import { makeRuntime } from "./effect/runtime.js"
 import { NpmConfig } from "./npm-config.js"
 
 export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()("NpmInstallFailedError", {
@@ -470,28 +468,6 @@ export const node = makeGlobalNode({
   layer: layer,
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
-
-const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
-
-export async function add(...args: Parameters<Interface["add"]>) {
-  return runPromise((svc) => svc.add(...args))
-}
-
-export async function resolve(...args: Parameters<Interface["resolve"]>) {
-  return runPromise((svc) => svc.resolve(...args))
-}
-
-export async function check(...args: Parameters<Interface["check"]>) {
-  return runPromise((svc) => svc.check(...args))
-}
-
-export async function update(...args: Parameters<Interface["update"]>) {
-  return runPromise((svc) => svc.update(...args))
-}
-
-export async function which(...args: Parameters<Interface["which"]>) {
-  return runPromise((svc) => svc.which(...args))
-}
 
 function gitRevision(resolved: string | undefined) {
   return resolved?.match(/#([a-f0-9]{40}|[a-f0-9]{64})(?=::|$)/i)?.[1]

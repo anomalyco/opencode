@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Allar fílur",
-  "tree.empty": "Ongar fílur",
-  "tree.changes.one": "{{count}} fílan er broytt",
-  "tree.changes.other": "{{count}} fílur broyttar",
   "tab.notFound": "Fíla ikki funnin: {{name}}",
   "mobile.title": "Fílur",
   "mobile.openTabs": "Opna fílur",

@@ -12,12 +12,13 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { ImagePreview } from "@opencode/ui/image-preview"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
-import { ScrollView } from "@opencode/ui/scroll-view"
+import { Loader } from "@opencode/ui/loader"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
@@ -123,7 +124,7 @@ export default function ArtifactView(props: {
   // A file that fails also drops the facts its viewer reported, such as a page count.
   const fail = (reason?: string) => change({ undecodable: true, info: {}, reason })
 
-  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => fail() }
+  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => fail(ctx.t("view.loadFailed")) }
 
   const size = () => formatBytes(locale.locale(), contentBytes(props.content))
 
@@ -135,7 +136,7 @@ export default function ArtifactView(props: {
   })
 
   const rendered = () => (
-    <ScrollView class="min-h-0 flex-1">
+    <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
       <Show
         when={kind() === "markdown"}
         fallback={<ArtifactMermaid text={props.content.content} cacheKey={props.cacheKey} />}
@@ -147,7 +148,7 @@ export default function ArtifactView(props: {
           cacheKey={props.cacheKey}
         />
       </Show>
-    </ScrollView>
+    </div>
   )
 
   return (
@@ -295,8 +296,11 @@ function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
   )
 }
 
-function createBlobUrl(content: () => FileContent) {
+function createMediaUrl(content: () => FileContent) {
   return createMemo(() => {
+    const streamed = content().url
+
+    if (streamed) return streamed
     const value = blobUrlFromContent(content())
     onCleanup(() => URL.revokeObjectURL(value))
 
@@ -304,9 +308,24 @@ function createBlobUrl(content: () => FileContent) {
   })
 }
 
+/** Holds the pane until the media's first frame, so a file still streaming never shows as blank. */
+function MediaLoading() {
+  const ctx = useExtension()
+
+  return (
+    <div
+      role="status"
+      aria-label={ctx.t("common.loading")}
+      class="pointer-events-none absolute inset-0 flex items-center justify-center text-text-weak"
+    >
+      <Loader class="size-4" />
+    </div>
+  )
+}
+
 /** Images and SVG previews: each decoded image owns its viewport. */
 function ArtifactImage(props: MediaProps) {
-  const url = createBlobUrl(() => props.content)
+  const url = createMediaUrl(() => props.content)
 
   return (
     <Show when={url()} keyed>
@@ -485,6 +504,9 @@ function ImageStage(props: MediaProps & { src: string }) {
           zoomAt(1 / fit(), event.clientX, event.clientY)
         }}
       />
+      <Show when={!view.imageWidth}>
+        <MediaLoading />
+      </Show>
       <div class="absolute end-3 top-3">
         <Button size="small" variant="neutral" disabled={view.zoom === 1} onClick={reset}>
           {ctx.t("view.fit")}
@@ -496,13 +518,13 @@ function ImageStage(props: MediaProps & { src: string }) {
 
 function ArtifactVideo(props: MediaProps) {
   const ctx = useExtension()
-  const url = createBlobUrl(() => props.content)
-  // Fullscreen belongs to one video: a new file starts fitted in the pane.
-  const [expandedUrl, setExpandedUrl] = createSignal<string>()
+  const dialog = useDialog()
+  const url = createMediaUrl(() => props.content)
+  const [loadedUrl, setLoadedUrl] = createSignal<string>()
   const [paused, setPaused] = createSignal(true)
   const [active, setActive] = createSignal(false)
+  const [open, setOpen] = createSignal(false)
   const [box, setBox] = createStore({ left: 0, top: 0, ready: false })
-  const expanded = () => expandedUrl() === url()
 
   let stage: HTMLDivElement | undefined
   let video: HTMLVideoElement | undefined
@@ -521,8 +543,17 @@ function ArtifactVideo(props: MediaProps) {
 
   onCleanup(clearIdle)
 
-  const close = () => setExpandedUrl(undefined)
-  const toggle = () => setExpandedUrl(expanded() ? undefined : url())
+  // The preview fills the window and borrows this <video> element, so playback carries on as it flies out and back.
+  const expand = () => {
+    const el = video
+
+    if (!el?.videoWidth || open() || !stage?.contains(el)) return
+    setOpen(true)
+    dialog.show(
+      () => <ImagePreview src={el.currentSrc} alt={getFilename(props.path)} video={el} />,
+      () => setOpen(false),
+    )
+  }
 
   const measure = () => {
     if (!video || video.offsetWidth === 0 || video.offsetHeight === 0) return
@@ -541,46 +572,13 @@ function ArtifactVideo(props: MediaProps) {
     () => measure(),
   )
 
-  // Top-layer promotion escapes the side panel's stacking context and <main>'s content containment
-  // while keeping the same <video> element mounted so playback never resets.
-  createKeyed(expanded, (open) => {
-    const el = stage
-
-    if (!el || !open) return
-
-    el.setAttribute("popover", "manual")
-    el.showPopover?.()
-    measure()
-
-    makeEventListener(
-      window,
-      "keydown",
-      (event: KeyboardEvent) => {
-        if (event.key !== "Escape") return
-
-        event.preventDefault()
-        event.stopPropagation()
-        close()
-      },
-      { capture: true },
-    )
-
-    onCleanup(() => {
-      if (el.isConnected) el.hidePopover?.()
-      el.removeAttribute("popover")
-      measure()
-    })
-  })
-
-  const label = () => ctx.t(expanded() ? "view.exitFullscreen" : "view.fullscreen")
-  const controlsVisible = () => paused() || active()
+  const controlsVisible = () => !open() && (paused() || active())
 
   return (
     <div
       ref={stage}
       data-slot="artifact-stage"
       data-zoom="fit"
-      data-expanded={expanded() ? "" : undefined}
       class="relative min-h-0 flex-1 overflow-hidden"
       onPointerMove={wake}
       onPointerLeave={() => {
@@ -588,15 +586,7 @@ function ArtifactVideo(props: MediaProps) {
         setActive(false)
       }}
     >
-      <div
-        classList={{
-          "absolute inset-0 flex items-center justify-center p-6": !expanded(),
-          "absolute inset-0 flex items-center justify-center px-8 pt-12 pb-8": expanded(),
-        }}
-        onClick={(event) => {
-          if (expanded() && event.target === event.currentTarget) close()
-        }}
-      >
+      <div class="absolute inset-0 flex items-center justify-center p-6">
         <video
           ref={video}
           data-slot="artifact-media"
@@ -608,7 +598,7 @@ function ArtifactVideo(props: MediaProps) {
           src={url()}
           onClick={(event) => {
             // Chromium's controls answer the second click of a double click with a native fullscreen request, which
-            // covers the theatre the double click opens. Opting out with controlslist="nofullscreen" would also end
+            // covers the preview the double click opens. Opting out with controlslist="nofullscreen" would also end
             // their click-to-play. The fullscreen element ready check refuses an open popover, so the video is one
             // while its controls handle this click, and is released before the next frame renders.
             const el = event.currentTarget
@@ -619,7 +609,7 @@ function ArtifactVideo(props: MediaProps) {
             el.showPopover?.()
             requestAnimationFrame(() => el.removeAttribute("popover"))
           }}
-          onDblClick={toggle}
+          onDblClick={expand}
           onPlay={() => setPaused(false)}
           onPause={() => setPaused(true)}
           onEnded={() => setPaused(true)}
@@ -629,45 +619,33 @@ function ArtifactVideo(props: MediaProps) {
             props.onInfo({ width: el.videoWidth, height: el.videoHeight, duration: el.duration })
             measure()
           }}
+          onLoadedData={() => setLoadedUrl(url())}
         />
+        <Show when={loadedUrl() !== url()}>
+          <MediaLoading />
+        </Show>
         <button
           type="button"
           data-slot="artifact-video-fullscreen"
-          aria-label={label()}
-          aria-pressed={expanded()}
-          title={label()}
-          onClick={toggle}
+          aria-label={ctx.t("view.fullscreen")}
+          title={ctx.t("view.fullscreen")}
+          onClick={expand}
           style={box.ready ? { left: `${box.left}px`, top: `${box.top}px` } : { right: "72px", bottom: "48px" }}
           classList={{
-            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none":
-              true,
+            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none": true,
             "opacity-100": controlsVisible(),
             "pointer-events-none opacity-0": !controlsVisible(),
           }}
         >
           <span class="flex size-9 items-center justify-center rounded-full transition-colors">
-            <Show
-              when={expanded()}
-              fallback={
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path
-                    d="M3 6V3H6M10 3H13V6M13 10V13H10M6 13H3V10"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              }
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M3 5.5H5.5V3M13 5.5H10.5V3M10.5 13V10.5H13M5.5 13V10.5H3"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="square"
-                />
-              </svg>
-            </Show>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M3 6V3H6M10 3H13V6M13 10V13H10M6 13H3V10"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="square"
+              />
+            </svg>
           </span>
         </button>
       </div>
@@ -676,7 +654,7 @@ function ArtifactVideo(props: MediaProps) {
 }
 
 function ArtifactAudio(props: MediaProps) {
-  const url = createBlobUrl(() => props.content)
+  const url = createMediaUrl(() => props.content)
 
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
@@ -701,7 +679,7 @@ function ArtifactAudio(props: MediaProps) {
 }
 
 function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" | "html" }) {
-  const url = createBlobUrl(() => props.content)
+  const url = createMediaUrl(() => props.content)
   // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
   const src = () => (props.kind === "pdf" ? `${url()}#navpanes=0&view=FitH` : url())
 
@@ -789,7 +767,7 @@ const specimenSizes = [12, 16, 24, 40, 64]
 
 function ArtifactFont(props: { path: string; content: FileContent }) {
   const ctx = useExtension()
-  const url = createBlobUrl(() => props.content)
+  const url = createMediaUrl(() => props.content)
   const family = createMemo(() => `artifact-${Math.random().toString(36).slice(2)}`)
 
   // The document's font set holds the face while it shows.

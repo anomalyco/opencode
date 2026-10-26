@@ -7,7 +7,8 @@
     <div id="root"></div>
     <script type="module">
       import { mount } from "./windows-menu.fixture.tsx"
-      mount({ server: new URLSearchParams(location.search).get("server") })
+      const params = new URLSearchParams(location.search)
+      mount({ server: params.get("server"), path: params.get("path") ?? undefined })
     </script>
   </body>
 </html>

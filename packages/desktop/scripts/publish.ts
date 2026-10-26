@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { Script } from "@opencode/script"
+import { Schema } from "effect"
 import { UpdateArtifact } from "../../../script/update-artifact"
 
 const dryRun = process.argv.includes("--dry-run")
@@ -10,19 +11,14 @@ if (!Script.release) {
   process.exit(0)
 }
 
-const directory = process.env.OPENCODE_DESKTOP_DIST
+const UploadedFiles = Schema.fromJsonString(
+  Schema.Record(Schema.String, Schema.Struct({ url: Schema.String, sha256: Schema.String, size: Schema.Number })),
+)
 
-if (!directory) throw new Error("OPENCODE_DESKTOP_DIST is required")
+// Beta build jobs upload their own platform's files (scripts/upload.ts) and pass only the returned file lists here.
+const uploadedDirectory = process.env.OPENCODE_DESKTOP_UPLOADED
 
-const files = (
-  await Array.fromAsync(
-    new Bun.Glob("*.{exe,blockmap,dmg,zip,AppImage,deb,rpm,app.tar.gz}").scan({ cwd: directory, absolute: true }),
-  )
-).sort()
-
-if (!files.length) throw new Error("No desktop release files found")
-
-const uploaded = await UpdateArtifact.upload({ version: Script.version, files, dryRun })
+const uploaded = uploadedDirectory ? await uploadedByBuildJobs(uploadedDirectory) : await uploadFiles()
 
 const artifact = {
   channel: Script.channel,
@@ -35,6 +31,34 @@ const artifact = {
 if (dryRun) console.log(`dry-run artifact: ${JSON.stringify(artifact)}`)
 
 if (!dryRun) await UpdateArtifact.publish(artifact)
+
+async function uploadFiles() {
+  const directory = process.env.OPENCODE_DESKTOP_DIST
+
+  if (!directory) throw new Error("OPENCODE_DESKTOP_DIST is required")
+
+  const files = (
+    await Array.fromAsync(
+      new Bun.Glob("*.{exe,blockmap,dmg,zip,AppImage,deb,rpm,app.tar.gz}").scan({ cwd: directory, absolute: true }),
+    )
+  ).sort()
+
+  if (!files.length) throw new Error("No desktop release files found")
+
+  return UpdateArtifact.upload({ version: Script.version, files, dryRun })
+}
+
+async function uploadedByBuildJobs(directory: string) {
+  const lists = await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: directory, absolute: true }))
+
+  if (!lists.length) throw new Error(`No uploaded desktop file lists found in ${directory}`)
+
+  const entries = await Promise.all(
+    lists.map(async (file) => Object.entries(Schema.decodeUnknownSync(UploadedFiles)(await Bun.file(file).text()))),
+  )
+
+  return Object.fromEntries(entries.flat())
+}
 
 type DesktopFile = {
   url: string

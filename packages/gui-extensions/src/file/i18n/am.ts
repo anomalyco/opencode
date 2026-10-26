@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ሁሉም ፋይሎች",
-  "tree.empty": "ምንም ፋይሎች",
-  "tree.changes.one": "{{count}} ፋይል ተቀይሯል",
-  "tree.changes.other": "{{count}} ፋይሎች ተቀይረዋል",
   "tab.notFound": "ፋይል አልተገኘም {{name}}",
   "mobile.title": "ፋይሎች",
   "mobile.openTabs": "ክፍት ፋይሎች",

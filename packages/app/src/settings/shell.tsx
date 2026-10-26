@@ -3,6 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import {
   createEffect,
   createMemo,
+  For,
   lazy,
   on,
   onCleanup,
@@ -16,13 +17,10 @@ import {
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
-import { useServerCollectionController } from "@/servers/registry/controller"
-import { AddServerMenu } from "@/servers/registry/add-menu"
 import { DialogServer } from "@/servers/connect/dialog"
 import { LocationProvider } from "@/workspaces/location"
 import { SettingsGeneral } from "./general/general"
@@ -32,8 +30,10 @@ import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
-import { SettingsServerGeneral } from "./servers/servers"
-import { useSettingsServers, useSettingsServersLoaded, type SettingsServer } from "./servers/inventory"
+import { SettingsServerGeneral, SettingsServerList } from "./servers/servers"
+import { SettingsServerSwitcher } from "./servers/switcher"
+import { SettingsServerUnavailable } from "./servers/unavailable"
+import { settingsServerReachable, useSettingsServers, useSettingsServersLoaded } from "./servers/inventory"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
@@ -45,7 +45,7 @@ import { SettingsProjectGeneral } from "./workspaces/project"
 import { ProjectSettingsExtensions } from "./workspaces/project-extensions"
 import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
-import { pageIcons } from "./pages"
+import { pageIcons, pageLabels } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
 import { ExtensionSettingsPages } from "@/runtime/extension/settings-page-view"
 import "@/settings/settings.css"
@@ -64,12 +64,21 @@ const rootClientTabs = [
 ] as const
 
 const serverTabs = [
-  { value: "projects", icon: pageIcons.projects, label: "settings.tab.projects" },
-  { value: "workspaces", icon: pageIcons.workspaces, label: "settings.tab.workspaces" },
   { value: "providers", icon: pageIcons.providers, label: "settings.providers.title" },
   { value: "models", icon: pageIcons.models, label: "settings.models.title" },
   { value: "extensions", icon: pageIcons.extensions, label: "settings.tab.extensions" },
+  { value: "projects", icon: pageIcons.projects, label: "settings.tab.projects" },
+  { value: "workspaces", icon: pageIcons.workspaces, label: "settings.tab.workspaces" },
 ] as const
+
+// The heading of each per-server page, which its unreachable state keeps.
+const serverPages = {
+  providers: { title: "settings.providers.title", description: "settings.providers.description" },
+  models: { title: "settings.models.title", description: "settings.models.description" },
+  extensions: { title: "settings.tab.extensions", description: "settings.extensions.description" },
+  projects: { title: "settings.projects.title", description: "settings.projects.description" },
+  workspaces: { title: "settings.tab.workspaces", description: "settings.workspaces.description" },
+} as const
 
 const experimentalTab = [
   { value: "experimental", icon: pageIcons.experimental, label: "settings.tab.experimental" },
@@ -80,11 +89,6 @@ const guiExtensionsTab = [
 ] as const
 
 const aboutTab = [{ value: "about", icon: pageIcons.about, label: "settings.tab.about" }] as const
-
-const nestedServerTabs = [
-  { value: "general", icon: pageIcons.servers, label: "settings.general.section.general" },
-  ...serverTabs,
-] as const
 
 const nestedProjectTabs = [
   { value: "general", icon: pageIcons.projects, label: "settings.general.section.general" },
@@ -138,20 +142,16 @@ export function SettingsScreen() {
 
   const connection = (key: string) => servers().find((item) => item.key === key)
 
-  const project = (server: ServerConnection.Any, directory: string) => {
-    const context = global.ensureServerCtx(server)
-
-    const value =
-      context.projects.list().find((item) => item.worktree === directory) ??
-      context.sync.data.project.find((item) => item.worktree === directory)
-
-    return value ? { expanded: false, ...value } : undefined
-  }
+  const project = (server: ServerConnection.Any, directory: string) =>
+    global
+      .ensureServerCtx(server)
+      .projects.list()
+      .find((item) => item.worktree === directory)
 
   const targetServer = createMemo(() => {
     const view = surface.view()
 
-    if (view.type === "root") return undefined
+    if (view.type !== "project") return undefined
 
     return connection(view.server)
   })
@@ -176,11 +176,7 @@ export function SettingsScreen() {
       })),
     })
 
-    if (next?.type === "back") surface.back()
-
-    if (next?.type === "server") surface.replaceServer(next.server)
-
-    if (next?.type === "root") surface.open(next.tab)
+    if (next) surface.replace(next)
   })
 
   return (
@@ -203,13 +199,26 @@ export function SettingsScreen() {
 
         surface.back()
       }}
+      onWheel={(event) => {
+        if (!root || event.ctrlKey || !event.deltaY || !(event.target instanceof Element)) return
+
+        // The page scrolls inside its panel, so a wheel over the gutters or sidebar would otherwise do nothing.
+        if (event.target.closest(".settings-content") || scrollsNatively(event.target, root, event.deltaY)) return
+        const panel = root.querySelector<HTMLElement>(".settings-content > .settings-panel")
+
+        if (!panel) return
+        const unit =
+          event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? panel.clientHeight
+            : event.deltaMode === WheelEvent.DOM_DELTA_LINE
+              ? 16
+              : 1
+        panel.scrollBy({ top: event.deltaY * unit })
+      }}
     >
       <Switch>
         <Match when={surface.view().type === "root"}>
           <RootSettings />
-        </Match>
-        <Match when={surface.view().type === "server"}>
-          <Show when={targetServer()}>{(server) => <ServerSettings entry={server()} />}</Show>
         </Match>
         <Match when={surface.view().type === "project"}>
           <Show when={targetServer()?.connection} keyed>
@@ -223,15 +232,22 @@ export function SettingsScreen() {
   )
 }
 
+function scrollsNatively(target: Element, root: Element, deltaY: number) {
+  for (let node: Element | null = target; node && node !== root; node = node.parentElement) {
+    if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue
+
+    if (deltaY < 0 ? node.scrollTop > 0 : node.scrollHeight - node.clientHeight - node.scrollTop > 1) return true
+  }
+
+  return false
+}
+
 function RootSettings() {
   const language = useLanguage()
   const dialog = useDialog()
   const surface = useSettingsSurface()
-  const layout = useLayout()
-  const tabs = useTabs()
-  const servers = useServerCollectionController()
+  const global = useGlobal()
   const inventory = useSettingsServers()
-  const loaded = useSettingsServersLoaded()
   const platform = usePlatform()
 
   const [state, setState] = createStore<{ worktreeFilterReset: number; modelProvider: string | undefined }>({
@@ -239,33 +255,17 @@ function RootSettings() {
     modelProvider: undefined,
   })
 
-  const list = servers.collection.items
-  const singleEntry = createMemo(() => (inventory().length === 1 ? inventory()[0] : undefined))
-  const single = createMemo(() => singleEntry()?.connection)
-  const prefetchWorkspaces = useWorkspacesPrefetch(single)
   const multiple = createMemo(() => inventory().length > 1)
 
-  const ordered = createMemo(() => {
-    const order = new Map(list().map((server, index) => [ServerConnection.key(server), index]))
+  // The selected server while its pages can load; an unreachable one shows its pages' unavailable state instead.
+  const reachable = createMemo(() => {
+    const entry = surface.server()
 
-    return inventory().toSorted((a, b) => (order.get(a.key) ?? list().length) - (order.get(b.key) ?? list().length))
+    return entry && settingsServerReachable(entry, global.servers.health[entry.key]) ? entry.connection : undefined
   })
 
-  const sourceServer = createMemo(() => {
-    const route = surface.route()
-
-    if (route.type === "session") return connectionFor(list(), route.server)
-
-    if (route.type === "draft") {
-      const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
-
-      return connectionFor(list(), draft?.server)
-    }
-
-    return connectionFor(list(), layout.home.selection().server)
-  })
-
-  const sourceDirectory = useSettingsDirectory(sourceServer)
+  const prefetchWorkspaces = useWorkspacesPrefetch(reachable)
+  const activeDirectory = useSettingsDirectory(reachable)
   // Development builds list the built-in GUI extensions of this window.
   const guiExtensions = !!GuiExtensionsSettings && platform.platform === "desktop"
   createEffect(() => {
@@ -278,12 +278,18 @@ function RootSettings() {
     if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
   })
 
-  const addServer = () =>
-    void dialog.push(() => (
-      <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
-    ))
+  const selectServer = (server: ServerConnection.Any) => surface.selectServer(ServerConnection.key(server))
+
+  const addServer = () => void dialog.push(() => <DialogServer mode="add" onSave={selectServer} />)
 
   const groups = createMemo<SettingsNavGroup[]>(() => [
+    {
+      items: serverTabs.map((item) => ({
+        ...item,
+        label: language.t(item.label),
+        onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
+      })),
+    },
     {
       items: [
         ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
@@ -294,31 +300,15 @@ function RootSettings() {
         })),
       ],
     },
-    ...(multiple()
-      ? [
-          {
-            label: language.t("settings.tab.servers"),
-            action: <AddServerMenu compact onAddServer={addServer} />,
-            items: ordered().map((server) => ({
-              value: `server:${server.key}`,
-              icon: "server" as const,
-              label: server.name,
-            })),
-          },
-        ]
-      : [
-          {
-            items: [
-              ...serverTabs.map((item) => ({
-                ...item,
-                label: language.t(item.label),
-                disabled: !single(),
-                onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
-              })),
-              { value: "servers", icon: "server" as const, label: language.t("settings.section.server") },
-            ],
-          },
-        ]),
+    {
+      items: [
+        {
+          value: "servers",
+          icon: pageIcons.servers,
+          label: language.t(multiple() ? "settings.tab.servers" : pageLabels.servers),
+        },
+      ],
+    },
     ...(experimentalSettingsAvailable
       ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
       : []),
@@ -326,22 +316,7 @@ function RootSettings() {
     { items: aboutTab.map((item) => ({ ...item, label: language.t(item.label) })) },
   ])
 
-  createEffect(() => {
-    const view = surface.view()
-
-    if (view.type !== "root" || !loaded() || !multiple()) return
-
-    if (["projects", "workspaces", "providers", "models", "extensions", "servers"].includes(view.tab))
-      surface.open("general")
-  })
-
   const change = (value: string) => {
-    if (value.startsWith("server:")) {
-      surface.openServer(value.slice("server:".length))
-
-      return
-    }
-
     if (value === "workspaces") setState("worktreeFilterReset", (current) => current + 1)
     surface.select(value)
   }
@@ -353,7 +328,6 @@ function RootSettings() {
       backLabel={language.t("settings.backToApp")}
       onBack={() => surface.close()}
       onChange={change}
-      mobileAction={multiple() ? <AddServerMenu compact onAddServer={addServer} /> : undefined}
     >
       <Tabs.Content value="general" class="settings-panel">
         <SettingsGeneral />
@@ -381,13 +355,63 @@ function RootSettings() {
       <Tabs.Content value="about" class="settings-panel settings-about">
         <SettingsAbout active={surface.view().tab === "about"} />
       </Tabs.Content>
-      <Show when={single()} keyed>
+      <Show
+        when={reachable()}
+        keyed
+        fallback={
+          <Show when={surface.server()}>
+            {(entry) => (
+              <For each={serverTabs}>
+                {(item) => (
+                  <Tabs.Content value={item.value} class="settings-panel">
+                    <SettingsServerUnavailable
+                      entry={entry()}
+                      title={language.t(serverPages[item.value].title)}
+                      description={language.t(serverPages[item.value].description)}
+                      headerAction={<SettingsServerSwitcher />}
+                      onManage={() => surface.openServers(entry().key)}
+                      onServerChange={selectServer}
+                    />
+                  </Tabs.Content>
+                )}
+              </For>
+            )}
+          </Show>
+        }
+      >
         {(server) => (
           <SettingsServerDataScope server={server}>
+            <Tabs.Content value="providers" class="settings-panel">
+              <SettingsProviders
+                directory={undefined}
+                headerAction={<SettingsServerSwitcher />}
+                onSelectProvider={(providerID) => {
+                  setState("modelProvider", providerID)
+                  surface.select("models")
+                }}
+              />
+            </Tabs.Content>
+            <Tabs.Content value="models" class="settings-panel">
+              <SettingsModels
+                active={surface.view().tab === "models"}
+                provider={state.modelProvider}
+                headerAction={<SettingsServerSwitcher />}
+                onReveal={() => setState("modelProvider", undefined)}
+              />
+            </Tabs.Content>
+            <Tabs.Content value="extensions" class="settings-panel">
+              <SettingsExtensions
+                directory={activeDirectory()}
+                subtab={surface.view().subtab}
+                headerAction={<SettingsServerSwitcher />}
+                onSubtab={(value) => surface.subtab(value)}
+              />
+            </Tabs.Content>
             <Tabs.Content value="projects" class="settings-panel">
               <SettingsProjects
                 server={server}
                 active={surface.view().tab === "projects"}
+                headerAction={<SettingsServerSwitcher />}
                 onOpenProject={(project) =>
                   surface.openProject({
                     server: ServerConnection.key(server),
@@ -398,132 +422,29 @@ function RootSettings() {
             </Tabs.Content>
             <Tabs.Content value="workspaces" class="settings-panel">
               <SettingsWorkspaces
-                activeDirectory={sourceServer() === server ? sourceDirectory() : undefined}
-                resetProjectFilter={() => state.worktreeFilterReset}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders
-                directory={undefined}
-                onSelectProvider={(providerID) => {
-                  setState("modelProvider", providerID)
-                  surface.select("models")
-                }}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="models" class="settings-panel">
-              <SettingsModels
-                active={surface.view().tab === "models"}
-                provider={state.modelProvider}
-                onReveal={() => setState("modelProvider", undefined)}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="extensions" class="settings-panel">
-              <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
-            </Tabs.Content>
-          </SettingsServerDataScope>
-        )}
-      </Show>
-      <Show when={singleEntry()}>
-        {(entry) => (
-          <Tabs.Content value="servers" class="settings-panel">
-            <SettingsServerGeneral entry={entry()} onAddServer={addServer} />
-          </Tabs.Content>
-        )}
-      </Show>
-    </SettingsNavigation>
-  )
-}
-
-function ServerSettings(props: { entry: SettingsServer }) {
-  const language = useLanguage()
-  const surface = useSettingsSurface()
-  const activeDirectory = useSettingsDirectory(() => props.entry.connection)
-  const prefetchWorkspaces = useWorkspacesPrefetch(() => props.entry.connection)
-
-  const [state, setState] = createStore<{ worktreeFilterReset: number; modelProvider: string | undefined }>({
-    worktreeFilterReset: 0,
-    modelProvider: undefined,
-  })
-
-  const groups = createMemo<SettingsNavGroup[]>(() => [
-    {
-      items: nestedServerTabs.map((item) => ({
-        ...item,
-        label: item.value === "general" ? props.entry.name : language.t(item.label),
-        disabled: item.value !== "general" && !props.entry.connection,
-        onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
-      })),
-    },
-  ])
-
-  createEffect(() => {
-    if (!props.entry.connection && surface.view().tab !== "general") surface.select("general")
-  })
-
-  const change = (value: string) => {
-    if (value === "workspaces") setState("worktreeFilterReset", (current) => current + 1)
-    surface.select(value)
-  }
-
-  return (
-    <SettingsNavigation
-      value={surface.view().tab}
-      groups={groups()}
-      backLabel={language.t("settings.backToSettings")}
-      onBack={() => surface.back()}
-      onChange={change}
-    >
-      <Tabs.Content value="general" class="settings-panel">
-        <SettingsServerGeneral
-          entry={props.entry}
-          nested
-          onServerChange={(server) => surface.replaceServer(ServerConnection.key(server))}
-        />
-      </Tabs.Content>
-      <Show when={props.entry.connection} keyed>
-        {(server) => (
-          <SettingsServerDataScope server={server}>
-            <Tabs.Content value="projects" class="settings-panel">
-              <SettingsProjects
-                server={server}
-                active={surface.view().tab === "projects"}
-                onOpenProject={(project) =>
-                  surface.openProject({
-                    server: props.entry.key,
-                    project: project.worktree,
-                  })
-                }
-              />
-            </Tabs.Content>
-            <Tabs.Content value="workspaces" class="settings-panel">
-              <SettingsWorkspaces
                 activeDirectory={activeDirectory()}
                 resetProjectFilter={() => state.worktreeFilterReset}
+                headerAction={<SettingsServerSwitcher />}
               />
-            </Tabs.Content>
-            <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders
-                directory={undefined}
-                onSelectProvider={(providerID) => {
-                  setState("modelProvider", providerID)
-                  surface.select("models")
-                }}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="models" class="settings-panel">
-              <SettingsModels
-                active={surface.view().tab === "models"}
-                provider={state.modelProvider}
-                onReveal={() => setState("modelProvider", undefined)}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="extensions" class="settings-panel">
-              <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
             </Tabs.Content>
           </SettingsServerDataScope>
         )}
       </Show>
+      <Tabs.Content value="servers" class="settings-panel">
+        <Show
+          when={multiple() ? undefined : inventory()[0]}
+          fallback={
+            <SettingsServerList
+              servers={inventory()}
+              selected={surface.server()?.key}
+              onAddServer={addServer}
+              onServerChange={selectServer}
+            />
+          }
+        >
+          {(entry) => <SettingsServerGeneral entry={entry()} onAddServer={addServer} />}
+        </Show>
+      </Tabs.Content>
     </SettingsNavigation>
   )
 }
@@ -562,8 +483,7 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
             <SettingsProjectGeneral
               server={props.server}
               project={props.project}
-              onOpenServer={() => surface.replaceServer(ServerConnection.key(props.server))}
-              onClose={() => surface.back()}
+              onOpenServer={() => surface.openServers(ServerConnection.key(props.server))}
             />
           </Tabs.Content>
           <Tabs.Content value="workspaces" class="settings-panel">
@@ -576,10 +496,6 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
       </LocationProvider>
     </SettingsServerDataScope>
   )
-}
-
-function connectionFor(list: readonly ServerConnection.Any[], key: string | undefined) {
-  return list.find((item) => ServerConnection.key(item) === key)
 }
 
 function useSettingsDirectory(server: Accessor<ServerConnection.Any | undefined>) {

@@ -22,18 +22,6 @@ export type ProviderAuthOption<Mode extends ApiKeyMode> =
   | AuthOverride
   | (Mode extends "optional" ? OptionalApiKeyAuth : RequiredApiKeyAuth)
 
-export type LanguageModelOptions<Base, Mode extends ApiKeyMode> = Omit<Base, "apiKey" | "auth"> &
-  ProviderAuthOption<Mode>
-
-export type LanguageModelArgs<Base, Mode extends ApiKeyMode> = Mode extends "optional"
-  ? readonly [options?: LanguageModelOptions<Base, Mode>]
-  : readonly [options: LanguageModelOptions<Base, Mode>]
-
-export type LanguageModelFactory<Base, Mode extends ApiKeyMode, LanguageModel> = (
-  id: string,
-  ...args: LanguageModelArgs<Base, Mode>
-) => LanguageModel
-
 /**
  * Require at least one of the keys in `T`. Use for option shapes where any
  * subset of fields is acceptable but at least one must be present (e.g. Azure

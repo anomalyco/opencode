@@ -27,6 +27,35 @@ Run `/connect`, choose a provider, and enter its credentials. Then run `/models`
 
 See the [Go guide](/console/go) for usage limits, endpoints, and privacy details.
 
+## ChatGPT
+
+Use a ChatGPT Plus or Pro plan instead of an OpenAI API key. Connect **OpenAI**, then choose **Sign in with ChatGPT**
+or one of the legacy **Codex** sign-in methods. Usage counts against your plan, so these models show no cost.
+
+```text
+/connect
+/models
+```
+
+### Context limits
+
+By default, OpenCode caps the context window for these sign-ins below each model's real limit. The caps match the
+defaults in Codex, so your plan usage is consumed at a similar rate as it would be in other OpenAI products.
+
+| Model                 | Input limit |
+| --------------------- | ----------- |
+| GPT-6.1 Sol and newer | 500,000     |
+| Older models          | 272,000     |
+
+To opt out, disable the cap plugin in your config. The `-` prefix turns off a built-in plugin; all other plugins stay
+enabled.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["-opencode.provider.openai-context-caps"],
+}
+```
+
 ## Custom
 
 Add a provider when its API is not already in the catalog. This OpenAI-compatible example defines the credential,
@@ -117,7 +146,7 @@ Both fields can also be set on a model or variant when only part of a provider's
   "providers": {
     "openai": {
       "models": {
-        "gpt-5.2": {
+        "gpt-6.1-sol": {
           "headers": { "X-Model-Tier": "coding" },
           "variants": [
             {
@@ -134,7 +163,7 @@ Both fields can also be set on a model or variant when only part of a provider's
 
 ## Timeouts
 
-HTTP requests wait up to five minutes for response headers and up to five minutes between streamed response chunks.
+HTTP requests wait up to five minutes for response headers and up to fifteen minutes between streamed response chunks.
 Set the provider's `settings.headerTimeout` or `settings.chunkTimeout` to a number of milliseconds to change a limit,
 or to `false` to disable it. `settings.timeout` additionally bounds the whole request from send until the response
 completes; it has no default. These configuration settings apply provider-wide, not per model or variant. On a
@@ -250,8 +279,8 @@ ID sent to the provider.
     "openai": {
       "models": {
         "coding": {
-          "modelID": "gpt-5.2",
-          "name": "GPT-5.2 Coding",
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Coding",
         },
       },
     },
@@ -340,12 +369,12 @@ switching accounts. To pick up a deployment added later, restart OpenCode or con
 - Deployments inherit limits, costs, and capabilities from their catalog models.
 
 Deployment names are their model IDs, in lowercase because Azure ignores case in names, for example
-`azure/gpt-production`. A deployment named after its model, such as `gpt-5-mini`, keeps the catalog ID. These IDs stay
+`azure/gpt-production`. A deployment named after its model, such as `gpt-6-luna`, keeps the catalog ID. These IDs stay
 stable when other deployments are added or removed.
 
 OpenCode matches a deployment to the catalog by the model it deploys, or by its name when Azure spells the model
-differently, as with `gpt-4` for GPT-4 Turbo. A deployment named after another model, such as `gpt-5` deploying
-`gpt-5-mini`, shows that model's name, limits, and costs.
+differently, as with `gpt-4` for GPT-4 Turbo. A deployment named after another model, such as `gpt-6.1-sol` deploying
+`gpt-6-luna`, shows that model's name, limits, and costs.
 
 With the Azure CLI, OpenCode lists deployments through the Azure management API, which needs read access to the
 resource. If that fails, and always with an API key, it uses the resource's legacy deployment inventory. Discovery reads
@@ -361,7 +390,7 @@ kept.
   "providers": {
     "azure": {
       "models": {
-        "gpt-5-mini": {
+        "gpt-6-luna": {
           "modelID": "gpt-production",
         },
       },
@@ -556,7 +585,7 @@ OpenRouter account, then refer to models with the full OpenRouter model ID after
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/anthropic/claude-sonnet-4",
+  "model": "openrouter/anthropic/claude-sonnet-5.5",
 }
 ```
 

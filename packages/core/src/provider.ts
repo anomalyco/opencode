@@ -4,8 +4,8 @@ import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai"
-import { isRecord } from "@opencode/ai/utils/record"
+import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/util/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
 import { importModule, resolveModule } from "@opencode/util/runtime-import"
@@ -183,16 +183,17 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-/** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "encoding", "fetch", "headerTimeout", "timeout", "transport"] as const
-const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "timeout", "transport"] as const
+const settingsKeys = Struct.keys(Provider.Settings.schema.fields)
+const providerOnlyKeys = settingsKeys.filter((key) => !(key in Model.Settings.schema.fields))
 
-export function nativeSettings(settings: Settings): Settings {
-  return Struct.omit(settings, CORE_KEYS)
+/** The provider options: every settings key OpenCode doesn't read itself. */
+export function nativeSettings(settings: Settings) {
+  return Struct.omit(settings, settingsKeys)
 }
 
+/** Settings a model inherits from its provider. */
 export function modelSettings(settings: Settings | undefined) {
-  return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
+  return settings && Struct.omit(settings, providerOnlyKeys)
 }
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
@@ -234,16 +235,21 @@ export function mergeOverlay(
 ): Record<string, Json> | undefined {
   if (base === undefined) return overlay && decodeJsonRecord({ ...overlay })
   if (overlay === undefined) return decodeJsonRecord({ ...base })
-  return decodeJsonRecord(
-    Object.fromEntries(
-      new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
-        const left = base[key]
-        const right = overlay[key]
-        if (right === undefined) return [key, left]
-        if (isRecord(left) && isRecord(right)) return [key, mergeOverlay(left, right) ?? {}]
-        return [key, right]
-      }),
-    ),
+  return decodeJsonRecord(mergeRecord(base, overlay))
+}
+
+function mergeRecord(
+  base: Readonly<Record<string, unknown>>,
+  overlay: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
+      const left = base[key]
+      const right = overlay[key]
+      if (right === undefined) return [key, left]
+      if (isRecord(left) && isRecord(right)) return [key, mergeRecord(left, right)]
+      return [key, right]
+    }),
   )
 }
 
@@ -268,6 +274,9 @@ export type Request = Provider.Request
 
 export const Compaction = Provider.Compaction
 export type Compaction = Provider.Compaction
+
+export const Cache = Provider.Cache
+export type Cache = Provider.Cache
 
 export const Transport = Provider.Transport
 export type Transport = Provider.Transport

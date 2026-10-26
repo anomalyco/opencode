@@ -1,7 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
-import { Spinner } from "@opencode/ui/spinner"
+import { Loader } from "@opencode/ui/loader"
 import { Show } from "solid-js"
 import { createKeyed, useExtension } from "../sdk"
 import { isSshConnecting, sshName } from "./name"
@@ -65,7 +65,7 @@ export function SshCover(props: { id: string; visit: object; ssh: SshController;
               onClick={() => props.ssh.connect(item().config)}
             >
               <Show when={connecting()}>
-                <Spinner class="size-3.5" />
+                <Loader class="size-3.5" />
               </Show>
               {connecting()
                 ? extension.t("session.connecting")

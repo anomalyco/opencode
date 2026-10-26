@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
@@ -77,6 +78,89 @@ describe("SessionModelRequest HTTP hooks", () => {
           { hook: "response", kind, agent: Agent.ID.make("build") },
         ]),
       )
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
+  it.effect("sends a kept request's original body and a replaced request's new body", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      let replace = false
+      yield* hooks.register("session", "http.request", (event) =>
+        Effect.sync(() => {
+          if (replace) {
+            event.request = new Request(event.request.url, { method: "POST", body: '{"replaced":true}' })
+            return
+          }
+          event.request.headers.set("x-plugin", "kept")
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const prepared = yield* requests.primary({
+        session,
+        agent: Agent.ID.make("build"),
+        model,
+        system: [],
+        messages: [],
+      })
+      const http = prepared.options.http
+      if (!http) throw new Error("Expected HTTP middleware")
+      const original = HttpClientRequest.post("https://example.test/v1/chat/completions").pipe(
+        HttpClientRequest.bodyText('{"messages":[]}', "application/json"),
+      )
+      const send = () => {
+        const sent: HttpClientRequest.HttpClientRequest[] = []
+        return http(original, (request) =>
+          Effect.sync(() => {
+            sent.push(request)
+            return HttpClientResponse.fromWeb(request, new Response("{}", { status: 200 }))
+          }),
+        ).pipe(Effect.map(() => sent[0]!))
+      }
+
+      const kept = yield* send()
+      expect(kept.body).toBe(original.body)
+      expect(kept.headers["x-plugin"]).toBe("kept")
+
+      replace = true
+      const replaced = yield* send()
+      expect(replaced.body._tag).toBe("Uint8Array")
+      if (replaced.body._tag !== "Uint8Array") return
+      expect(new TextDecoder().decode(replaced.body.body)).toBe('{"replaced":true}')
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
+  it.effect("keeps hook edits to a tool schema out of later requests", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          const input = event.tools.lookup!.input as { required: string[] }
+          input.required.push("extra")
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const inputSchema = { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
+      const tools = {
+        definitions: [new ToolDefinition({ name: "lookup", description: "Lookup", inputSchema })],
+        execute: () => Effect.die("unused tool execution"),
+      }
+
+      const required = yield* Effect.forEach([1, 2], () =>
+        requests
+          .primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools })
+          .pipe(
+            Effect.map((prepared) => {
+              const tool = prepared.request.tools[0]
+              return tool?.type === "tool" ? tool.inputSchema.required : undefined
+            }),
+          ),
+      )
+
+      expect(required).toEqual([
+        ["id", "extra"],
+        ["id", "extra"],
+      ])
+      expect(inputSchema.required).toEqual(["id"])
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 

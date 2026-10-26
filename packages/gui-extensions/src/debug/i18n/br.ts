@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Alternar barra de depuração",
-  "status.toggle": "Alternar ferramentas de depuração",
   ariaLabel: "Diagnóstico de desempenho de desenvolvimento",
   providerAriaLabel: "Diagnóstico de desempenho do provedor",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Tempo entre o envio da solicitação ao provedor e a primeira saída do modelo.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Tempo entre o envio da solicitação ao provedor e o primeiro texto da resposta.",
+  "duration.label": "TIME",
+  "duration.tip": "Tempo entre o prompt que iniciou o último turno e a conclusão da resposta.",
   "tps.label": "TPS",
-  "tps.tip": "Tokens de saída por segundo após a primeira saída do modelo.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Tempo entre o envio da solicitação ao provedor e o fim do fluxo de resposta.",
+  "tps.tip":
+    "Tokens de saída e de raciocínio por segundo nas requisições ao modelo do último turno, sem contar o tempo das ferramentas.",
   "nav.label": "NAV",
   "nav.tip":
     "Última transição de rota concluída tocando em uma página de sessão, medida desde o início do roteador até a primeira pintura após o estabelecimento.",
