@@ -41,11 +41,12 @@ describe("timeline model", () => {
     expect(loads).toBe(3)
   })
 
-  test.each(["switch", "failure", "reconnect"])("resumes the original leading turn after %s", async (interruption) => {
+  const resumed = ["msg_previous_turn", "msg_parent", "msg_latest"]
+
+  test("resumes the original leading turn after switching away", async () => {
     const messages: SessionMessageInfo[] = [assistant("msg_latest")]
     let current = true
     let loads = 0
-
     const input = {
       current: () => current,
       messages: () => messages,
@@ -53,30 +54,76 @@ describe("timeline model", () => {
       loading: () => false,
       loadMore: async () => {
         loads += 1
-
-        if (loads === 1 && interruption === "failure") throw new Error("history failed")
-
         messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
       },
       pause: async () => {
-        if (interruption === "switch") current = false
+        current = false
       },
       maxPages: 3,
     }
 
-    if (interruption === "failure") await expect(enrichLeadingTurn(input)).rejects.toThrow("history failed")
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(0)
 
-    if (interruption !== "failure") await enrichLeadingTurn(input)
-
-    if (interruption === "reconnect") messages.splice(0, messages.length, assistant("msg_latest"))
     current = true
     await enrichLeadingTurn({ ...input, pause: async () => undefined })
-
-    expect(messages.map((message) => message.id)).toEqual(["msg_previous_turn", "msg_parent", "msg_latest"])
-    expect(loads).toBe(interruption === "switch" ? 1 : 2)
+    expect(messages.map((message) => message.id)).toEqual(resumed)
+    expect(loads).toBe(1)
 
     await enrichLeadingTurn({ ...input, pause: async () => undefined })
-    expect(loads).toBe(interruption === "switch" ? 1 : 2)
+    expect(loads).toBe(1)
+  })
+
+  test("resumes the original leading turn after a failed page", async () => {
+    const messages: SessionMessageInfo[] = [assistant("msg_latest")]
+    let loads = 0
+    const input = {
+      current: () => true,
+      messages: () => messages,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+        if (loads === 1) throw new Error("history failed")
+        messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
+      },
+      pause: async () => undefined,
+      maxPages: 3,
+    }
+
+    await expect(enrichLeadingTurn(input)).rejects.toThrow("history failed")
+    await enrichLeadingTurn(input)
+    expect(messages.map((message) => message.id)).toEqual(resumed)
+    expect(loads).toBe(2)
+
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(2)
+  })
+
+  test("resumes the original leading turn after the transcript reconnects", async () => {
+    const messages: SessionMessageInfo[] = [assistant("msg_latest")]
+    let loads = 0
+    const input = {
+      current: () => true,
+      messages: () => messages,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+        messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
+      },
+      pause: async () => undefined,
+      maxPages: 3,
+    }
+
+    await enrichLeadingTurn(input)
+    messages.splice(0, messages.length, assistant("msg_latest"))
+    await enrichLeadingTurn(input)
+    expect(messages.map((message) => message.id)).toEqual(resumed)
+    expect(loads).toBe(2)
+
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(2)
   })
 
   test.each([
