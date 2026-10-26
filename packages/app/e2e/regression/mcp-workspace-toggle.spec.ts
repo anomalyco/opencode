@@ -81,7 +81,7 @@ async function open(
   return { requests, panel, show, push: mock.push, toggle: panel.getByRole("switch") }
 }
 
-for (const surface of ["popover", "dialog"] as const) {
+for (const surface of ["popover", "dialog", "settings"] as const) {
   test(`idle MCP stays enabled and disconnects from the ${surface}`, async ({ page }) => {
     const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
 
