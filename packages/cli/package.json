@@ -84,5 +84,10 @@
     "solid-refresh": "0.6.3",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/cli"
   }
 }
