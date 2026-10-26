@@ -7,7 +7,7 @@ import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
-import { captureStderr } from "#stderr-capture"
+import { captureStderr, type StderrCapture } from "#stderr-capture"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -247,7 +247,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     updatedVersion: undefined as string | undefined,
     reason: undefined as unknown,
   }
-  let stderrCapturePath: string | undefined
+  let stderrCapture: StderrCapture | undefined
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       // The renderer owns the terminal surface for this scope; any native or
@@ -258,7 +258,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         Effect.sync(() => captureStderr(global.log)),
         (captured) => Effect.sync(() => captured?.restore()),
       )
-      stderrCapturePath = captured?.path
+      stderrCapture = captured
       if (!captured) {
         if (process.stderr.isTTY)
           log("debug", "failed to capture stderr for the TUI; native output may repaint the screen", {})
@@ -498,12 +498,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     }),
   )
   yield* Effect.sync(() => {
-    if (stderrCapturePath) {
-      // The capture file only has bytes when the run actually produced native
-      // output; tell the user where a crash or noisy child's output went.
+    if (stderrCapture) {
+      // The capture file may predate this run (append mode, shared file);
+      // report only what the run actually wrote.
       try {
-        if (statSync(stderrCapturePath).size > 0)
-          process.stderr.write(`stderr output for this run was captured to ${stderrCapturePath}\n`)
+        if (statSync(stderrCapture.path).size > stderrCapture.startSize)
+          process.stderr.write(`stderr output for this run was captured to ${stderrCapture.path}\n`)
       } catch {}
     }
     if (result.reason !== undefined)
