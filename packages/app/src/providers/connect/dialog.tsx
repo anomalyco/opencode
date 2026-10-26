@@ -25,6 +25,7 @@ import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { ExternalLink } from "@/runtime/platform/external-link"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -1731,10 +1732,16 @@ function ProviderConnection(props: {
           <Match when={controller.auth.state() === "receipt"}>
             <div class="px-3 flex flex-col gap-4">
               <p>{language.t("provider.connect.toast.connected.title", { provider: provider().name })}</p>
-              <a href={controller.receipt()?.url} target="_blank" rel="noopener noreferrer">
+              <ExternalLink
+                href={controller.receipt()?.url ?? ""}
+                class="inline-flex items-center gap-1.5 self-start text-[13px] leading-5 underline-offset-4"
+              >
                 {controller.receipt()?.title}
-              </a>
-              <Button onClick={() => void controller.auth.refresh()}>{language.t("common.continue")}</Button>
+                <Icon name="arrow-up-right" size="small" />
+              </ExternalLink>
+              <Button variant="contrast" onClick={() => void controller.auth.refresh()}>
+                {language.t("common.continue")}
+              </Button>
             </div>
           </Match>
           <Match when={controller.auth.state() === "form"}>
