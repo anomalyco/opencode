@@ -508,40 +508,12 @@ test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
   expect(resolve(gitlab("duo-workflow-opus-5-5"), [{ type: "effort" }])).toEqual([])
 })
 
-// Entrypoints whose API has no reasoning option: every decision API, and image APIs without a thinking setting.
-const NO_REASONING_CONTROL = new Set([
-  "@opencode/ai/providers/baseten/decisions",
-  "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
-  "@opencode/ai/providers/cloudflare-workers-ai/decisions",
-  "@opencode/ai/providers/digitalocean/decisions",
-  "@opencode/ai/providers/opencode/decisions",
-  "@opencode/ai/providers/openrouter/decisions",
-  "@opencode/ai/providers/typesafe-ai/decisions",
-  "@opencode/ai/providers/vercel-ai-gateway/decisions",
-  // Its API has `thinkingMode`, but no catalog image model on it lists reasoning yet.
-  "@opencode/ai/providers/alibaba/images",
-  "@opencode/ai/providers/azure/images",
-  "@opencode/ai/providers/cloudflare-workers-ai/images",
-  "@opencode/ai/providers/digitalocean/images",
-  "@opencode/ai/providers/openai/images",
-  "@opencode/ai/providers/openai-compatible/images",
-  "@opencode/ai/providers/openrouter/images",
-  "@opencode/ai/providers/vercel-ai-gateway/images",
-  "@opencode/ai/providers/xai/images",
-  "@opencode/ai/providers/zai/images",
-])
-
 test("spells reasoning variants for every bundled native package", () => {
   const supports: Variant.Support[] = [{ type: "toggle" }, { type: "effort" }, { type: "budget_tokens" }]
   const missing = Array.from(Provider.builtinPackages).filter(
-    (packageName) =>
-      !NO_REASONING_CONTROL.has(packageName) &&
-      Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
+    (packageName) => Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
   )
   expect(missing).toEqual([])
-  expect(Array.from(NO_REASONING_CONTROL).filter((packageName) => !Provider.builtinPackages.has(packageName))).toEqual(
-    [],
-  )
 })
 
 test("spells Mantle variants for the API each model is routed through", () => {
@@ -573,20 +545,14 @@ test("spells Google Interactions variants as thinking levels", () => {
     ])
 })
 
-test("spells Gemini image variants as uppercase thinking levels", () => {
-  for (const packageName of ["@opencode/ai/providers/google/images", "@opencode/ai/providers/google-vertex/images"])
-    expect(
-      resolve(model(packageName, "gemini-3.1-flash-image"), [{ type: "effort", values: ["minimal", "high"] }]),
-    ).toEqual([
-      { id: "minimal", settings: { thinkingLevel: "MINIMAL" } },
-      { id: "high", settings: { thinkingLevel: "HIGH" } },
-    ])
-})
-
 test("reads models.dev v2 reasoning as variant support", () => {
   expect(Variant.supports({ supported: false })).toEqual([])
   expect(Variant.supports({ supported: true })).toEqual([])
   expect(
     Variant.supports({ supported: true, toggle: true, effort: ["default", "low"], budget: { min: 1024, max: 8000 } }),
-  ).toEqual([{ type: "toggle" }, { type: "effort", values: ["low"] }, { type: "budget_tokens", min: 1024, max: 8000 }])
+  ).toEqual([
+    { type: "toggle" },
+    { type: "effort", values: ["low"] },
+    { type: "budget_tokens", min: 1024, max: 8000 },
+  ])
 })

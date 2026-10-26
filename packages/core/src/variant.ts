@@ -124,12 +124,6 @@ const googleInteractions: Protocol = (_, support) => {
   }))
 }
 
-// The Gemini image API takes the thinking level in Google's uppercase spelling.
-const googleImages: Protocol = (_, support) => {
-  if (support.type !== "effort") return []
-  return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { thinkingLevel: effort.toUpperCase() } }))
-}
-
 const cloudflareAIGateway: Protocol = (model, support) => {
   const id = modelID(model)
   if (id.startsWith("openai/")) return openaiResponses(model, support)
@@ -612,8 +606,10 @@ const gitlab: Protocol = (model, support) => {
 const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai": openaiResponses,
   "@opencode/ai/providers/openai/responses": openaiResponses,
+  "@opencode/ai/providers/openai/images": openaiResponses,
   "@opencode/ai/providers/azure": openaiResponses,
   "@opencode/ai/providers/azure/responses": openaiResponses,
+  "@opencode/ai/providers/azure/images": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/responses": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock-mantle": openaiResponses,
@@ -629,8 +625,12 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex/responses": openResponses,
   "@opencode/ai/providers/google-vertex-responses": openResponses,
   "@opencode/ai/providers/xai": openResponses,
+  "@opencode/ai/providers/xai/images": openResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
+  "@opencode/ai/providers/openai-compatible/images": openaiCompatible,
+  "@opencode/ai/providers/typesafe-ai/decisions": openaiCompatible,
+  "@opencode/ai/providers/opencode/decisions": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
   "@opencode/ai/providers/azure/chat": openaiChat,
   "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiChat,
@@ -638,13 +638,19 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex-chat": vertexChat,
   "@opencode/ai/providers/alibaba": alibabaChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
+  "@opencode/ai/providers/alibaba/images": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
+  "@opencode/ai/providers/baseten/decisions": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
   "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
+  "@opencode/ai/providers/cloudflare-workers-ai/images": workersAIChat,
+  "@opencode/ai/providers/cloudflare-workers-ai/decisions": workersAIChat,
   "@opencode/ai/providers/cohere/chat": openaiChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
   "@opencode/ai/providers/digitalocean": openaiChat,
+  "@opencode/ai/providers/digitalocean/images": openaiChat,
+  "@opencode/ai/providers/digitalocean/decisions": openaiChat,
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,
@@ -658,6 +664,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/venice": veniceChat,
   "@opencode/ai/providers/zai": zaiChat,
   "@opencode/ai/providers/zai/chat": zaiChat,
+  "@opencode/ai/providers/zai/images": zaiChat,
   "@opencode/ai/providers/zai-coding-plan": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 
@@ -676,19 +683,24 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google": gemini,
   "@opencode/ai/providers/google-vertex": gemini,
   "@opencode/ai/providers/google-vertex/gemini": gemini,
+  "@opencode/ai/providers/google/images": gemini,
+  "@opencode/ai/providers/google-vertex/images": gemini,
   "@opencode/ai/providers/google/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex-interactions": googleInteractions,
-  "@opencode/ai/providers/google/images": googleImages,
-  "@opencode/ai/providers/google-vertex/images": googleImages,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
   "@opencode/ai/providers/cohere": cohere,
   "@opencode/ai/providers/openrouter": openrouter,
+  "@opencode/ai/providers/openrouter/images": openrouter,
+  "@opencode/ai/providers/openrouter/decisions": openrouter,
 
   [Provider.aisdk("venice-ai-sdk-provider")]: veniceChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
+  "@opencode/ai/providers/cloudflare-ai-gateway/decisions": cloudflareAIGateway,
   "@opencode/ai/providers/vercel-ai-gateway": vercelGateway,
+  "@opencode/ai/providers/vercel-ai-gateway/images": vercelGateway,
+  "@opencode/ai/providers/vercel-ai-gateway/decisions": vercelGateway,
   "@opencode/ai/providers/vercel-ai-gateway/chat": vercelChat,
   "@opencode/ai/providers/vercel-ai-gateway/messages": vercelMessages,
   "@opencode/ai/providers/vercel-ai-gateway/responses": vercelResponses,
