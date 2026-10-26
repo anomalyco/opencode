@@ -67,6 +67,52 @@ const delta = (bus: Bus.Interface) =>
   })
 
 describe("Bus Session routing", () => {
+  it.effect("preserves queued typed and mixed ordering while deduplicating old/new move recipients", () =>
+    Effect.gen(function* () {
+      yield* seed()
+      const bus = yield* Bus.Service
+      const gate = yield* Deferred.make<void>()
+      const watchers = yield* Effect.forEach([a, b], (ref) =>
+        Effect.forEach([0, 1, 2], (mode) => {
+          const stream =
+            mode === 0
+              ? bus.subscribe()
+              : mode === 1
+                ? bus.subscribe(SessionEvent.Moved)
+                : bus.subscribe([SessionEvent.Moved, SessionEvent.Text.Delta, Done])
+          const bounded =
+            mode === 1
+              ? stream.pipe(Stream.take(3))
+              : stream.pipe(Stream.takeUntil((event) => event.type === Done.type))
+          return bounded.pipe(
+            Stream.mapEffect((event) => Deferred.await(gate).pipe(Effect.as(event))),
+            Stream.runCollect,
+            Effect.provideService(Location.Service, location(ref)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+        }),
+      )
+      const before = yield* delta(bus)
+      const first = yield* bus.publish(
+        SessionEvent.Moved,
+        { sessionID: id, location: b, projectID: Project.ID.global },
+        { location: a },
+      )
+      const after = yield* delta(bus)
+      const same = yield* bus.publish(SessionEvent.Moved, { sessionID: id, location: b, projectID: Project.ID.global })
+      const back = yield* bus.publish(SessionEvent.Moved, { sessionID: id, location: a, projectID: Project.ID.global })
+      const final = yield* bus.publish(SessionEvent.Moved, { sessionID: id, location: a, projectID: Project.ID.global })
+      const done = yield* bus.publish(Done, {})
+      yield* Deferred.succeed(gate, undefined)
+      expect(yield* Fiber.join(watchers[0][0])).toEqual([before, first, back, final, done])
+      expect(yield* Fiber.join(watchers[0][1])).toEqual([first, back, final])
+      expect(yield* Fiber.join(watchers[0][2])).toEqual([before, first, back, final, done])
+      expect(yield* Fiber.join(watchers[1][0])).toEqual([first, after, same, back, done])
+      expect(yield* Fiber.join(watchers[1][1])).toEqual([first, same, back])
+      expect(yield* Fiber.join(watchers[1][2])).toEqual([first, after, same, back, done])
+    }),
+  )
+
   it.effect("delivers workspace-only moves to both owners without duplicating same-location moves", () =>
     Effect.gen(function* () {
       yield* seed()
