@@ -7,6 +7,7 @@ import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
+import { captureStderr } from "#stderr-capture"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -248,6 +249,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
+      // The renderer owns the terminal surface for this scope; any native or
+      // child output on stderr would paint straight over it. Point stderr at
+      // the run's log and restore it when this scope ends, so messages the
+      // run prints afterwards still reach the terminal.
+      const captured = yield* Effect.acquireRelease(
+        Effect.sync(() => captureStderr(global.log)),
+        (captured) => Effect.sync(() => captured?.restore()),
+      )
+      if (!captured) log("debug", "failed to capture stderr for the TUI; native output may repaint the screen", {})
       const options = {
         externalOutputMode: "passthrough",
         targetFps: 60,
