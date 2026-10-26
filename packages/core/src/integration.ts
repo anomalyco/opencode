@@ -648,7 +648,8 @@ const layer = Layer.effect(
           const deferred = yield* Deferred.make<Form.Answer>()
           const published = yield* SynchronizedRef.modify(attempts, (current) => {
             const attempt = current.get(id)
-            if (!attempt || attempt.status !== "pending" || attempt.prompt) return [false, current]
+            if (!attempt || attempt.status !== "pending" || attempt.authorization.mode !== "auto" || attempt.prompt)
+              return [false, current]
             return [
               true,
               new Map(current).set(id, {
@@ -659,7 +660,9 @@ const layer = Layer.effect(
           })
           if (!published)
             return yield* Effect.fail(
-              new Error("Setup prompts must be asked sequentially from the authorization callback"),
+              new Error(
+                "Setup prompts require automatic authorization and must be asked sequentially from its callback",
+              ),
             )
           return yield* Deferred.await(deferred)
         })

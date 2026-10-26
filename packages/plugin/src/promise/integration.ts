@@ -64,7 +64,7 @@ export type IntegrationOAuthAuthorization = {
     }
 )
 
-/** Ask sequential setup steps from the authorization callback, after browser sign-in. */
+/** Ask sequential setup steps from an automatic authorization callback, after browser sign-in. Code-mode callbacks cannot prompt. */
 export type IntegrationOAuthPrompt = (input: {
   readonly title: string
   readonly fields: Form.Fields

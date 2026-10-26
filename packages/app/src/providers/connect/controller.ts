@@ -7,6 +7,7 @@ import type {
   IntegrationOauthConnectOutput,
   IntegrationPrompt,
 } from "@opencode/client/promise"
+import { isIntegrationAttemptNotFoundError } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
@@ -288,7 +289,7 @@ export function createProviderConnectionController(options: {
     options.onComplete()
   }
 
-  const poll = async (authorization: Authorization, generation: number) => {
+  const poll = async (authorization: Authorization, generation: number, recover = false): Promise<void> => {
     const result = await serverSDK.api.integration.oauth
       .status({
         integrationID: options.provider(),
@@ -301,6 +302,8 @@ export function createProviderConnectionController(options: {
     if (polling.disposed || generation !== polling.generation) return
 
     if (!result.ok) {
+      if (recover && isIntegrationAttemptNotFoundError(result.error) && store.methodIndex !== undefined)
+        return select(store.methodIndex, store.formAnswer)
       setStore("statusFailed", true)
       dispatch({
         type: "auth.error",
@@ -330,6 +333,8 @@ export function createProviderConnectionController(options: {
 
     if (result.status.status === "failed") {
       polling.attempt = undefined
+      setStore("prompt", undefined)
+      if (recover && store.methodIndex !== undefined) return select(store.methodIndex, store.formAnswer)
       const message = result.status.message
       dispatch({
         type: "auth.error",
@@ -346,6 +351,8 @@ export function createProviderConnectionController(options: {
 
     if (result.status.status === "expired") {
       polling.attempt = undefined
+      setStore("prompt", undefined)
+      if (recover && store.methodIndex !== undefined) return select(store.methodIndex, store.formAnswer)
       dispatch({
         type: "auth.error",
         error: language.t(isConsole() ? "provider.connect.console.expired" : "provider.connect.oauth.expired"),
@@ -354,6 +361,7 @@ export function createProviderConnectionController(options: {
       return
     }
 
+    setStore({ prompt: undefined, state: "waiting", error: undefined })
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
   }
 
@@ -547,16 +555,11 @@ export function createProviderConnectionController(options: {
     if (store.connected) return finish()
     const authorization = store.authorization
 
-    if (store.prompt && authorization) {
-      setStore({ state: "form", error: undefined })
-      return
-    }
-
-    if (store.statusFailed && authorization) {
+    if ((store.prompt || store.statusFailed) && authorization) {
       polling.attempt = { type: "oauth", attemptID: authorization.attemptID }
-      setStore({ state: "waiting", error: undefined, statusFailed: false })
+      setStore({ prompt: undefined, state: "waiting", error: undefined, statusFailed: false })
 
-      return poll(authorization, polling.generation)
+      return poll(authorization, polling.generation, true)
     }
 
     const index = store.methodIndex
@@ -593,12 +596,13 @@ export function createProviderConnectionController(options: {
         attemptID: authorization.attemptID,
         location: location(),
         promptID: prompt.id,
-        answer,
+        answer: { ...providerFormDefaults(prompt.fields), ...answer },
       })
       .then(() => ({ ok: true as const }))
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
+      setStore({ prompt: undefined, statusFailed: true })
       dispatch({ type: "auth.error", error: formatServerError(result.error, language.t) })
       return
     }

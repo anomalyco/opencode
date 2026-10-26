@@ -144,6 +144,44 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("rejects setup prompts in code-mode callbacks without blocking completion", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("vercel")
+      const methodID = Integration.MethodID.make("setup")
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "Setup" },
+          authorize: (_answer, prompt) =>
+            Effect.succeed({
+              mode: "code" as const,
+              url: "https://example.com/login",
+              instructions: "Paste the code",
+              callback: () =>
+                prompt({ title: "Confirm", fields: [{ type: "boolean", key: "create", required: true }] }).pipe(
+                  Effect.as(Credential.Key.make({ type: "key", key: "unused" })),
+                ),
+            }),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+      const input = { integrationID, attemptID: attempt.attemptID }
+      const completion = yield* integrations.oauth
+        .complete({ ...input, code: "fixture-code" })
+        .pipe(Effect.timeout("1 second"), Effect.exit, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("1 second")
+      const result = yield* Fiber.join(completion)
+      expect(Exit.isFailure(result)).toBe(true)
+      expect(yield* integrations.oauth.status(input)).toMatchObject({
+        status: "failed",
+        message: expect.stringContaining("Setup prompts require automatic authorization"),
+      })
+      expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
+
   it.effect("cancels a setup interview before it creates a credential", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

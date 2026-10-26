@@ -675,6 +675,57 @@ function OAuthStarting(props: {
   return <OAuthView title={props.method.label} message="Starting authorization…" />
 }
 
+function OAuthSubmitting(props: {
+  integration: IntegrationInfo
+  title: string
+  attempt: IntegrationAttempt
+  location: LocationRef
+  onConnected?: OnIntegrationConnected
+  promptID: string
+  answer: FormAnswer
+}) {
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+  let disposed = false
+  let settled = false
+  const cancel = () =>
+    client.api.integration.oauth.cancel({
+      integrationID: props.integration.id,
+      attemptID: props.attempt.attemptID,
+      location: locationQuery(props.location),
+    })
+
+  onMount(() => {
+    void client.api.integration.oauth
+      .complete({
+        integrationID: props.integration.id,
+        attemptID: props.attempt.attemptID,
+        location: locationQuery(props.location),
+        promptID: props.promptID,
+        answer: props.answer,
+      })
+      .then(() => {
+        if (disposed) return
+        settled = true
+        dialog.replace(() => <OAuthAuto {...props} />)
+      })
+      .catch((cause) => {
+        if (disposed) return
+        settled = true
+        void cancel()
+        toast.show({ variant: "error", message: errorMessage(cause) })
+        dialog.clear()
+      })
+  })
+  onCleanup(() => {
+    disposed = true
+    if (!settled) void cancel()
+  })
+
+  return <OAuthView title={props.title} message="Waiting for authorization…" />
+}
+
 function OAuthAuto(props: {
   integration: IntegrationInfo
   title: string
@@ -690,6 +741,7 @@ function OAuthAuto(props: {
   const newDesigns = useNewDesigns()
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
+  let disposed = false
 
   const open = () => {
     openUrl(props.attempt.url).catch(() =>
@@ -724,6 +776,7 @@ function OAuthAuto(props: {
         location: locationQuery(props.location),
       })
       .then((result) => {
+        if (disposed) return
         const status = result.data
         if (status.status === "pending") {
           if (status.prompt) {
@@ -740,14 +793,7 @@ function OAuthAuto(props: {
                   })
                   return
                 }
-                await client.api.integration.oauth.complete({
-                  integrationID: props.integration.id,
-                  attemptID: props.attempt.attemptID,
-                  location: locationQuery(props.location),
-                  promptID: prompt.id,
-                  answer,
-                })
-                dialog.replace(() => <OAuthAuto {...props} />)
+                dialog.replace(() => <OAuthSubmitting {...props} promptID={prompt.id} answer={answer} />)
               })
               .catch((cause) => {
                 toast.show({ variant: "error", message: errorMessage(cause) })
@@ -756,7 +802,6 @@ function OAuthAuto(props: {
                   attemptID: props.attempt.attemptID,
                   location: locationQuery(props.location),
                 })
-                dialog.clear()
               })
             return
           }
@@ -800,6 +845,7 @@ function OAuthAuto(props: {
         dialog.clear()
       })
       .catch((cause) => {
+        if (disposed) return
         settled = true
         toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
@@ -808,6 +854,7 @@ function OAuthAuto(props: {
 
   onMount(poll)
   onCleanup(() => {
+    disposed = true
     if (timer) clearTimeout(timer)
     if (settled) return
     void client.api.integration.oauth.cancel({

@@ -28,7 +28,7 @@ Only successful, confirmed authorization replaces the saved credential. The conn
 
 ## Shared integration behavior
 
-OAuth authorizers may use their second `prompt` argument to ask validated forms after sign-in. Each form has an ID, appears in the pending attempt's status, and is answered through `integration.oauth.complete` with `promptID` and `answer`. Replayed or stale form IDs are rejected. Existing code and automatic OAuth methods remain supported.
+Automatic OAuth authorizers may use their second `prompt` argument to ask validated forms after sign-in. Each form has an ID, appears in the pending attempt's status, and is answered through `integration.oauth.complete` with `promptID` and `answer`. Replayed or stale form IDs are rejected. Code-mode callbacks cannot prompt because their completion request waits for the callback to finish; attempting to prompt fails immediately. Existing code and automatic OAuth methods remain supported.
 
 Authorization callbacks may return an OAuth credential or a derived API-key credential. An optional `onComplete` produces a public next-step link only after credential persistence succeeds. TUI, CLI, and app clients support these prompts and next-step links. Cancelling or expiring an interview interrupts the pending callback; no key is created before the user confirms the review.
 
