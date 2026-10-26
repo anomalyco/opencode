@@ -60,6 +60,8 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         "session.permission.list",
         Effect.fn(function* (ctx) {
           const session = yield* sessionInfo(sessions, ctx.params.sessionID)
+          // Pending permissions live in memory, so listing must not start a Location that is not running.
+          if (instances.live && !(yield* instances.live(session))) return { data: [] }
           const requests = yield* Permission.Service.use((permission) =>
             permission.forSession(ctx.params.sessionID),
           ).pipe(instances.provide(session), locationErrors)

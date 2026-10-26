@@ -10,6 +10,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
+import type { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
@@ -33,6 +34,7 @@ import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { readyWhenCached } from "./fixture/location"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -2061,14 +2063,14 @@ function buildExecution(
     const locations = Layer.effect(
       LocationServiceMap.Service,
       LayerMap.make(
-        () =>
+        (_ref: Location.Ref) =>
           // The local execution test only needs the Session runner (and the Shell, if given) from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           (shell ? Layer.merge(runner, Layer.succeed(Shell.Service, shell)) : runner) as unknown as Layer.Layer<
             LocationServices,
             FileSystem.DirectoryNotFoundError
           >,
-      ),
+      ).pipe(readyWhenCached),
     )
     return yield* Layer.buildWithScope(
       SessionRestart.layer(options).pipe(

@@ -23,6 +23,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { readyWhenCached } from "./fixture/location"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
@@ -52,7 +53,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
-    () =>
+    (_ref: Location.Ref) =>
       // The test only needs the compaction location service used by Session.compact.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       SessionCompaction.layer.pipe(
@@ -60,7 +61,7 @@ const locations = Layer.effect(
         Layer.provide(config),
         Layer.provide(models),
       ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-  ),
+  ).pipe(readyWhenCached),
 )
 const it = testEffect(
   AppNodeBuilder.build(

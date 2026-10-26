@@ -7,7 +7,7 @@ import type { InstancePlugins } from "@opencode/core/plugin/instance"
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { Context, Duration, Effect, Layer, LayerMap, RcMap, Scope } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap, MutableHashSet, Scope } from "effect"
 
 export interface Configuration {
   readonly plugins: InstancePlugins.List
@@ -56,6 +56,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
         ...LocationServiceMap.canonical(session.location),
       })
       const provide = (session: Session.Info) => Effect.provide(instances.get(key(session)))
+      const ready = MutableHashSet.empty<ReturnType<typeof key>>()
       const instances: LayerMap.LayerMap<
         ReturnType<typeof key>,
         Instance.Services,
@@ -89,6 +90,10 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
                       yield* Effect.die(
                         new Error(`Instance plugin setup failed: ${failed.map((plugin) => plugin.id).join(", ")}`),
                       )
+                    yield* Effect.acquireRelease(
+                      Effect.sync(() => MutableHashSet.add(ready, input)),
+                      () => Effect.sync(() => MutableHashSet.remove(ready, input)),
+                    )
                   }).pipe(Effect.provide(context)),
                 ),
               )
@@ -101,7 +106,10 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           ),
         { idleTimeToLive: Duration.infinity },
       )
-      return Instance.Service.of({ provide, live: (session) => RcMap.has(instances.rcMap, key(session)) })
+      return Instance.Service.of({
+        provide,
+        live: (session) => Effect.sync(() => MutableHashSet.has(ready, key(session))),
+      })
     }),
   )
 }

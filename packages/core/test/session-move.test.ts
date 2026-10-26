@@ -30,6 +30,7 @@ import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { readyWhenCached } from "./fixture/location"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -60,7 +61,7 @@ const itWithActiveExecution = testEffect(
                 }),
                 Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
               ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-          ),
+          ).pipe(readyWhenCached),
         ),
       ),
     ],
@@ -69,12 +70,12 @@ const itWithActiveExecution = testEffect(
 const unavailableLocations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
-    () =>
+    (_ref: Location.Ref) =>
       Layer.effectDiscard(Effect.die(new Error("broken location"))) as unknown as Layer.Layer<
         LocationServices,
         FileSystem.DirectoryNotFoundError
       >,
-  ),
+  ).pipe(readyWhenCached),
 )
 const itWithUnavailableDestination = testEffect(
   AppNodeBuilder.build(

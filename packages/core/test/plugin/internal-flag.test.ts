@@ -17,6 +17,7 @@ import { Npm } from "@opencode/util/npm"
 import { Bus } from "../../src/bus"
 import { Database } from "../../src/database/database"
 import { tempGlobalLayer } from "../fixture/global"
+import { readyWhenCached } from "../fixture/location"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -31,7 +32,7 @@ const instances = Layer.effect(
     const map = yield* LayerMap.make(
       (ref: Location.Ref) => Instance.layer(ref, { discovery: false, replacements: bindings }),
       { idleTimeToLive: Duration.infinity },
-    )
+    ).pipe(readyWhenCached)
     const bindings: LayerNode.Replacements = [
       App.node.replace(App.configured({ channel: "dev" })),
       Global.node.replace(tempGlobalLayer),

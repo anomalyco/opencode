@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
+import type { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Model } from "@opencode/core/model"
@@ -27,6 +28,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Layer, LayerMap, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
+import { readyWhenCached } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -675,11 +677,11 @@ function buildExecution(scope: Scope.Scope, drain: Drain) {
     const locations = Layer.effect(
       LocationServiceMap.Service,
       LayerMap.make(
-        () =>
+        (_ref: Location.Ref) =>
           // The settlement test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           runner as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-      ),
+      ).pipe(readyWhenCached),
     )
     return yield* Layer.buildWithScope(
       SessionExecution.layer.pipe(

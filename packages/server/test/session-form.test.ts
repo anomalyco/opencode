@@ -5,7 +5,7 @@ import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
-it.live("lists no forms for a Session whose Location is not live, and pending forms once it is", () =>
+it.live("lists no forms or permissions for a Session whose Location is not live, and pending ones once it is", () =>
   Effect.gen(function* () {
     const handler = yield* ServerFetch.make({
       app: { version: "test" },
@@ -25,15 +25,18 @@ it.live("lists no forms for a Session whose Location is not live, and pending fo
         return { status: response.status, body: await response.json() }
       })
     const create = (directory: string) =>
-      request("/api/session", { location: { directory } }).pipe(
-        Effect.map((response) => (response.body as { data: { id: string } }).data.id),
-      )
+      // The rule keeps a permission request pending instead of allowing it.
+      request("/api/session", {
+        location: { directory },
+        permissions: [{ action: "shell", resource: "*", effect: "ask" }],
+      }).pipe(Effect.map((response) => (response.body as { data: { id: string } }).data.id))
 
     // A subagent whose worktree was deleted must not boot or 404.
     const deleted = yield* tmpdirScoped()
     const orphan = yield* create(deleted.path)
     yield* Effect.promise(() => fs.rm(deleted.path, { recursive: true, force: true }))
     expect(yield* request(`/api/session/${orphan}/form`)).toEqual({ status: 200, body: { data: [] } })
+    expect(yield* request(`/api/session/${orphan}/permission`)).toEqual({ status: 200, body: { data: [] } })
 
     const directory = yield* tmpdirScoped()
     const live = yield* create(directory.path)
@@ -45,6 +48,11 @@ it.live("lists no forms for a Session whose Location is not live, and pending fo
     expect(yield* request(`/api/session/${live}/form`)).toEqual({
       status: 200,
       body: { data: [(created.body as { data: unknown }).data] },
+    })
+    const permission = yield* request(`/api/session/${live}/permission`, { action: "shell", resources: ["pwd"] })
+    expect(permission.status).toBe(200)
+    expect((yield* request(`/api/session/${live}/permission`)).body).toMatchObject({
+      data: [{ id: (permission.body as { data: { id: string } }).data.id }],
     })
   }).pipe(Effect.scoped),
 )

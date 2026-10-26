@@ -44,7 +44,7 @@ import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
-import { location } from "./fixture/location"
+import { location, readyWhenCached } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 
@@ -284,7 +284,7 @@ const locations = makeGlobalNode({
             } as unknown as Plugin.Interface),
           ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>
         },
-      )
+      ).pipe(readyWhenCached)
     }),
   ),
   deps: [App.node, Bus.node, SessionStore.node, PermissionSaved.node],
