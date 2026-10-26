@@ -8,7 +8,7 @@ import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getWindowByID, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { getLastFocusedWindow, getWindowByID, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
@@ -29,7 +29,7 @@ const runtime = Layer.effect(
   Effect.gen(function* () {
     const shutdown = yield* Shutdown.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
-    const windows = yield* makeMainWindows()
+    const windows = yield* mainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
     const pendingDeepLinks: string[] = []
