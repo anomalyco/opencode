@@ -1,4 +1,5 @@
-import { ErrorBoundary, createEffect, createMemo, onCleanup, Show, type ParentProps } from "solid-js"
+import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { Title } from "@solidjs/meta"
 import { useParams } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -213,15 +214,7 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 // Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
 function SessionDocumentTitle(props: { sessionID: () => string }) {
   const data = useData()
+  const title = () => data.session.get(props.sessionID())?.title
 
-  createEffect(() => {
-    const title = data.session.get(props.sessionID())?.title
-
-    document.title = isFallbackTitle(title) ? "OpenCode" : `${title} · OpenCode`
-  })
-  onCleanup(() => {
-    document.title = "OpenCode"
-  })
-
-  return null
+  return <Show when={!isFallbackTitle(title()) && title()}>{(value) => <Title>{`${value()} · OpenCode`}</Title>}</Show>
 }
