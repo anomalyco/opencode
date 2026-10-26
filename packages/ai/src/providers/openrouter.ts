@@ -3,7 +3,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type OpenString } from "../schema/index.js"
+import { ProviderID, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
@@ -206,9 +206,14 @@ export const configure = (input: LanguageModelOptions = {}) => {
     http: input.http,
   })
   const media = MediaRoute.deployment({ ...input, baseURL: input.baseURL ?? baseURL }, auth)
-  const image = (modelID: string | ModelID) => OpenAIImages.model({ ...media, id: modelID, provider: id })
-  const decision = (modelID: string | ModelID) =>
-    decisionRoute.model<OpenRouterDecisionOptions>({ id: modelID, compatibility: { mediaInput: "state" } })
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model<OpenRouterDecisionOptions>({
+      id: modelID,
+      compatibility: { mediaInput: "state" },
+      providerOptions,
+    })
   return {
     id,
     model: (modelID: string | ModelID) =>
@@ -225,16 +230,22 @@ export const image = provider.image
 export const model: ProviderPackage.Definition<Settings, OpenRouterProviderOptionsInput>["model"] = (
   modelID,
   settings,
-) => fromSettings(settings).model(modelID)
-export const imageModel = (modelID: string, settings: Settings) => fromSettings(settings).image(modelID)
-export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
+) => configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
-function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
-  return configure({
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  })
+  }
 }

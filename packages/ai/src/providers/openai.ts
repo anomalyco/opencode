@@ -9,6 +9,7 @@ import {
   mergeHttpOptions,
   type ModelID,
   type OpenString,
+  type ProviderOptions,
 } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
@@ -115,7 +116,8 @@ export const configure = (input: Config = {}) => {
       input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
     ),
   }
-  const image = (modelID: string | ModelID) => OpenAIImages.model({ ...media, id: modelID })
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, providerOptions })
   const speech = (modelID: string | ModelID) => OpenAISpeech.model({ ...media, id: modelID })
   const transcription = (modelID: string | ModelID) => OpenAITranscription.model({ ...media, id: modelID })
   const decisionRoute = OpenAIDecisions.route.with({
@@ -124,7 +126,8 @@ export const configure = (input: Config = {}) => {
     headers: media.headers,
     http: media.http,
   })
-  const decision = (modelID: string | ModelID) => decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
 
   return {
     id,
@@ -178,8 +181,14 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptio
   modelID,
   settings,
 ) => configure(config(settings)).chat(modelID)
-export const imageModel = (modelID: string, settings: Settings) => configure(config(settings)).image(modelID)
-export const decisionModel = (modelID: string, settings: Settings) => configure(config(settings)).decision(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image

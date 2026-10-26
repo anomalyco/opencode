@@ -38,6 +38,7 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> extends Med
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
+      providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as ImageRoute,
     })
   }

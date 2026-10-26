@@ -124,6 +124,12 @@ const googleInteractions: Protocol = (_, support) => {
   }))
 }
 
+// The Gemini image API takes the thinking level in Google's uppercase spelling.
+const googleImages: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { thinkingLevel: effort.toUpperCase() } }))
+}
+
 const cloudflareAIGateway: Protocol = (model, support) => {
   const id = modelID(model)
   if (id.startsWith("openai/")) return openaiResponses(model, support)
@@ -673,6 +679,8 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex-interactions": googleInteractions,
+  "@opencode/ai/providers/google/images": googleImages,
+  "@opencode/ai/providers/google-vertex/images": googleImages,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
   "@opencode/ai/providers/cohere": cohere,

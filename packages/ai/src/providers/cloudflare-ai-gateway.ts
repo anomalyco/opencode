@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { AtLeastOne, ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
@@ -132,7 +132,7 @@ export const configure = (input: LanguageModelOptions) => {
   const messages = messagesRoute.with(passthrough("anthropic/v1"))
   const chat = route.with(rest)
   // The Run API base is derived per call so a chat-only configuration without an account still constructs.
-  const decision = (value: string | ModelID) =>
+  const decision = (value: string | ModelID, providerOptions?: ProviderOptions) =>
     CloudflareRunDecisions.route
       .with({
         provider: id,
@@ -141,7 +141,7 @@ export const configure = (input: LanguageModelOptions) => {
         headers: rest.headers,
         http: input.http,
       })
-      .model({ id: value })
+      .model({ id: value, providerOptions })
   return {
     id,
     model: (value: string | ModelID) => {
@@ -163,10 +163,13 @@ export const configure = (input: LanguageModelOptions) => {
 export const provider = { id, configure }
 
 export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).model(modelID)
-export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
+  configure(config(settings)).model(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
-function fromSettings({
+function config({
   accountId,
   apiKey,
   baseURL: configuredBaseURL,
@@ -182,7 +185,7 @@ function fromSettings({
   ...providerOptions
 }: Settings) {
   const connection = configuredBaseURL === undefined ? { accountId: accountId ?? "" } : { baseURL: configuredBaseURL }
-  return configure({
+  return {
     ...connection,
     apiKey,
     cacheKey,
@@ -195,7 +198,7 @@ function fromSettings({
     metadata,
     providerOptions,
     skipCache,
-  })
+  }
 }
 
 export * as CloudflareAIGateway from "./cloudflare-ai-gateway.js"

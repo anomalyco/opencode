@@ -8,7 +8,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("digitalocean")
@@ -59,9 +59,11 @@ export const configure = (input: LanguageModelOptions = {}) => {
     headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
     http: input.http,
   })
-  const decision = (modelID: string | ModelID) => decisionRoute.model({ id: modelID })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model({ id: modelID, providerOptions })
   const media = MediaRoute.deployment({ ...input, baseURL: endpoint ?? baseURL }, auth)
-  const image = (modelID: string | ModelID) => OpenAIImages.model({ ...media, id: modelID, provider: id })
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
   return {
     id,
     model: (modelID: string | ModelID) =>
@@ -82,18 +84,24 @@ export const decision = provider.decision
 export const image = provider.image
 
 export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).model(modelID)
-export const imageModel = (modelID: string, settings: Settings) => fromSettings(settings).image(modelID)
-export const decisionModel = (modelID: string, settings: Settings) => fromSettings(settings).decision(modelID)
+  configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
-function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
-  return configure({
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: { body },
     providerOptions,
-  })
+  }
 }
 
 export * as DigitalOcean from "./digitalocean.js"

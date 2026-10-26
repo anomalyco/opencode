@@ -4,7 +4,14 @@ import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/c
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
-import { HttpOptions, ProviderConfigurationError, ProviderID, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import {
+  HttpOptions,
+  ProviderConfigurationError,
+  ProviderID,
+  mergeHttpOptions,
+  type ModelID,
+  type ProviderOptions,
+} from "../schema/index.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
@@ -133,13 +140,14 @@ export const configure = (input: Config) => {
       .with(withOpenAIOptions(modelID, modelDefaults))
       .model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
 
-  const image = (modelID: string | ModelID) => {
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
     const target = endpoint(input, modelID)
     const media = MediaRoute.deployment({ ...input, baseURL: target.baseURL }, auth(input))
     return OpenAIImages.model({
       ...media,
       id: modelID,
       provider: id,
+      providerOptions,
       http: mergeHttpOptions(
         media.http,
         target.query === undefined ? undefined : new HttpOptions({ query: target.query }),
@@ -196,5 +204,8 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptio
   modelID,
   settings,
 ) => configure(config(settings)).chat(modelID)
-export const imageModel = (modelID: string, settings: Settings) => configure(config(settings)).image(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
 export const model = responsesModel

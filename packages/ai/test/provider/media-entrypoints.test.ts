@@ -189,18 +189,28 @@ const images: ReadonlyArray<Case<ImageModel>> = [
 
 const decisions: ReadonlyArray<Case<DecisionModel>> = [
   {
-    name: "openai-compatible",
+    name: "typesafe-ai",
     load: async () => {
-      const { model } = await import("@opencode/ai/providers/openai-compatible/decisions")
+      const { model } = await import("@opencode/ai/providers/typesafe-ai/decisions")
       return model("typesafe/jev", {
         ...shared,
-        apiKey: "opencode-key",
-        baseURL: "https://opencode.ai/inference/systemone/v1",
-        provider: "opencode",
+        apiKey: "amd-key",
+        baseURL: "https://developer.amd.test/radeon/api/v1",
       })
     },
+    url: "https://developer.amd.test/radeon/api/v1/systemone",
+    auth: ["authorization", "Bearer amd-key"],
+    headers: { "typesafe-danger-zone-images": "true" },
+    provider: "typesafe-ai",
+  },
+  {
+    name: "opencode",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/opencode/decisions")
+      return model("jev", { ...shared, apiKey: "zen-key", baseURL: "https://opencode.ai/inference/systemone/v1" })
+    },
     url: "https://opencode.ai/inference/systemone/v1/systemone",
-    auth: ["authorization", "Bearer opencode-key"],
+    auth: ["authorization", "Bearer zen-key"],
     headers: { "typesafe-danger-zone-images": "true" },
     provider: "opencode",
   },
@@ -292,4 +302,33 @@ describe("decision entrypoints", () => {
         expectRequest(yield* sentDecision(model), model, entry)
       }),
     )
+})
+
+describe("entrypoint settings", () => {
+  it.effect("sends leftover settings as default provider options, under the request's own", () =>
+    Effect.gen(function* () {
+      const { model } = yield* Effect.promise(() => import("@opencode/ai/providers/google/images"))
+      const calls = yield* sentImage(model("gemini-3.1-flash-image", { apiKey: "google-key", thinkingLevel: "HIGH" }))
+      expect(JSON.parse(calls[0].body).generationConfig.thinkingConfig).toEqual({ thinkingLevel: "HIGH" })
+
+      const overridden: Array<Call> = []
+      yield* Image.generate({
+        model: model("gemini-3.1-flash-image", { apiKey: "google-key", thinkingLevel: "HIGH", seed: 7 }),
+        prompt: "A red circle",
+        providerOptions: { thinkingLevel: "MINIMAL" },
+      }).pipe(Effect.exit, Effect.provide(ImageClient.layer.pipe(Layer.provide(record(overridden)))))
+      expect(JSON.parse(overridden[0].body).generationConfig).toMatchObject({
+        seed: 7,
+        thinkingConfig: { thinkingLevel: "MINIMAL" },
+      })
+    }),
+  )
+
+  it.effect("sends leftover decision settings as provider options", () =>
+    Effect.gen(function* () {
+      const { model } = yield* Effect.promise(() => import("@opencode/ai/providers/openrouter/decisions"))
+      const calls = yield* sentDecision(model("cloudflare/clef-omni", { apiKey: "openrouter-key", user: "user-1" }))
+      expect(JSON.parse(calls[0].body).user).toBe("user-1")
+    }),
+  )
 })

@@ -7,7 +7,13 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import {
+  ProviderConfigurationError,
+  ProviderID,
+  type LLMRequest,
+  type ModelID,
+  type ProviderOptions,
+} from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
@@ -114,11 +120,12 @@ export const configure = (input: Config = {}) => {
     id,
     model: (modelID: string | ModelID) =>
       configuredRoute(input, modelID).model<GeminiProviderOptionsInput>({ id: modelID }),
-    image: (modelID: string | ModelID) => {
+    image: (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
       const target = connection(input, modelID)
       return GoogleImages.model({
         ...MediaRoute.deployment({ ...input, baseURL: target.endpoint.baseURL }, target.auth),
         id: modelID,
+        providerOptions,
       })
     },
     configure,
@@ -130,25 +137,19 @@ export const provider = {
   configure,
 }
 export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).model(modelID)
-export const imageModel = (modelID: string, settings: Settings) => fromSettings(settings).image(modelID)
+  configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
 
-function fromSettings({
-  accessToken,
-  apiKey,
-  baseURL,
-  body,
-  headers,
-  location,
-  project,
-  ...providerOptions
-}: Settings) {
+function config({ accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings) {
   if (apiKey !== undefined && accessToken !== undefined)
     throw new ProviderConfigurationError({
       provider: id,
       message: "Google Vertex apiKey cannot be combined with accessToken or auth",
     })
-  return configure({
+  return {
     ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
     baseURL,
     headers,
@@ -156,5 +157,5 @@ function fromSettings({
     location,
     project,
     providerOptions,
-  })
+  }
 }

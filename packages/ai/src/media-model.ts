@@ -2,14 +2,7 @@ import { Effect } from "effect"
 import { Endpoint } from "./route/endpoint.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import {
-  AIError,
-  HttpOptions,
-  InvalidRequestError,
-  ModelID,
-  ProviderID,
-  type ProviderOptions,
-} from "./schema/index.js"
+import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID, type ProviderOptions } from "./schema/index.js"
 
 /**
  * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
@@ -24,12 +17,15 @@ export class MediaModel<Route, Options> {
   readonly provider: ProviderID
   readonly route: Route
   readonly http?: HttpOptions
+  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
+  readonly providerOptions?: ProviderOptions
 
   constructor(input: MediaModel.Input<Route>) {
     this.id = ModelID.make(input.id)
     this.provider = ProviderID.make(input.provider)
     this.route = input.route
     this.http = input.http
+    this.providerOptions = input.providerOptions
   }
 }
 
@@ -41,6 +37,7 @@ export namespace MediaModel {
     readonly provider: string | ProviderID
     readonly route: Route
     readonly http?: HttpOptions
+    readonly providerOptions?: ProviderOptions
   }
 
   /** A protocol plus its canonical start path; `ModelInput.baseURL` overrides `baseURL` per deployment. */
