@@ -65,7 +65,7 @@ const layer = Layer.effect(
         const limit = Number.isNaN(options.limit) ? 100 : Math.min(Math.max(Math.floor(options.limit ?? 100), 1), 1000)
         const end = prefixEnd(options.prefix)
         const rows = yield* db
-          .select({ key: KVTable.key, value: KVTable.value })
+          .select({ key: KVTable.key, value: raw })
           .from(KVTable)
           .where(
             and(
@@ -78,9 +78,15 @@ const layer = Layer.effect(
           .limit(limit + 1)
           .all()
           .pipe(Effect.orDie)
-        const entries = rows.slice(0, limit)
+        const page = rows.slice(0, limit).map((row) => ({ key: row.key, value: decode(row.value) }))
+        const entries = page.flatMap((row) =>
+          Option.isSome(row.value) ? [{ key: row.key, value: row.value.value }] : [],
+        )
+        const skipped = page.filter((row) => Option.isNone(row.value)).map((row) => row.key)
+        if (skipped.length > 0) yield* Effect.logWarning("Skipping malformed KV values", { keys: skipped })
         if (rows.length <= limit) return { entries }
-        return { entries, next: entries[entries.length - 1].key }
+        // Page from the raw rows so a skipped value never stalls or repeats the cursor.
+        return { entries, next: page[page.length - 1].key }
       }),
     })
   }),
