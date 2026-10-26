@@ -214,6 +214,7 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 // Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
 function SessionDocumentTitle(props: { sessionID: () => string }) {
   const data = useData()
+
   const title = createMemo(() => {
     const value = data.session.get(props.sessionID())?.title
 
