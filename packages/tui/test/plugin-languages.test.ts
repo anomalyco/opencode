@@ -7,8 +7,10 @@ import { createPluginContext, type Dispose, type Registry, type usePluginHost } 
 const elm = {
   id: "elm",
   extensions: [".elm"],
+  aliases: ["elm-lang"],
   wasm: "https://example.com/tree-sitter-elm.wasm",
   highlights: ["https://example.com/highlights.scm"],
+  injectionMapping: { infoStringMap: { elm: "elm" } },
 }
 
 function setup() {

@@ -284,14 +284,16 @@ Register a tree-sitter language to highlight its files and Markdown fences; the 
 const unregister = context.languages.register({
   id: "acme",
   extensions: [".acme"],
+  aliases: ["acme-lang"],
   wasm: new URL("./tree-sitter-acme.wasm", import.meta.url).href,
   highlights: [new URL("./queries/highlights.scm", import.meta.url).href],
 })
 return unregister
 ```
 
-Sources are http(s) URLs, file URLs, or absolute paths. Use nvim-treesitter capture names in highlight queries.
-Languages in [`cli.json`](/cli/config#languages) override plugin languages with the same ID.
+Sources are http(s) URLs, file URLs, or absolute paths. Aliases are alternate Markdown code-fence names. Use
+nvim-treesitter capture names in highlight queries. Languages in [`cli.json`](/cli/config#languages) override plugin
+languages with the same ID.
 
 ## Commands and keymaps
 

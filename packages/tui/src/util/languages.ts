@@ -35,11 +35,13 @@ export function set(source: Source, definitions: readonly LanguageDefinition[]) 
       definition.id,
       {
         filetype: definition.id,
+        ...(definition.aliases?.length ? { aliases: [...definition.aliases] } : {}),
         wasm: definition.wasm,
         queries: {
           highlights: [...definition.highlights],
           injections: definition.injections && [...definition.injections],
         },
+        ...(definition.injectionMapping ? { injectionMapping: definition.injectionMapping } : {}),
       },
     ]),
   )
