@@ -1,6 +1,6 @@
 export * as LocationLifecycle from "./location-lifecycle.js"
 
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, Scope } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LocationEvent } from "@opencode/schema/location-event"
 import { Bus } from "./bus.js"
@@ -16,7 +16,15 @@ const isSessionEvent = Schema.is(SessionEvent.Durable)
 
 export class Service extends Context.Service<
   Service,
-  { readonly isClosed: () => boolean; readonly shutdown: Effect.Effect<void> }
+  {
+    readonly isClosed: () => boolean
+    readonly shutdown: Effect.Effect<void>
+    /** Completes once shutdown has run. Long-lived holders release the Location on it so its scope can close. */
+    readonly awaitShutdown: Effect.Effect<void>
+    /** Keeps the idle sweep from evicting the Location for the calling scope, for open client connections. */
+    readonly retain: Effect.Effect<void, never, Scope.Scope>
+    readonly isRetained: () => boolean
+  }
 >()("@opencode/LocationLifecycle") {}
 
 const layer = Layer.effect(
@@ -39,6 +47,7 @@ const layer = Layer.effect(
     })
     yield* Effect.addFinalizer(() => unsubscribe)
     let closed = false
+    let retained = 0
     const done = yield* Deferred.make<void>()
     const shutdown = Effect.suspend(() => {
       if (closed) return Deferred.await(done)
@@ -59,6 +68,17 @@ const layer = Layer.effect(
     return Service.of({
       isClosed: () => closed,
       shutdown,
+      awaitShutdown: Deferred.await(done),
+      retain: Effect.acquireRelease(
+        Effect.sync(() => {
+          retained++
+        }),
+        () =>
+          Effect.sync(() => {
+            retained--
+          }),
+      ),
+      isRetained: () => retained > 0,
     })
   }),
 )
