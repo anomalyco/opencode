@@ -1,11 +1,13 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import { Event } from "@opencode/schema/event"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
 import { Database } from "../database/database.js"
+import { EventSequenceTable } from "../event/sql.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
@@ -54,6 +56,7 @@ export type MessagesInput = {
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
+  readonly sequences: (sessionIDs: ReadonlyArray<Session.ID>) => Effect.Effect<ReadonlyMap<Session.ID, Event.Seq>>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
@@ -184,6 +187,17 @@ const layer = Layer.effect(
           Effect.orDie,
         )
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+      }),
+      sequences: Effect.fn("SessionStore.sequences")(function* (sessionIDs) {
+        if (sessionIDs.length === 0) return new Map()
+        const rows = yield* db
+          .select({ sessionID: SessionTable.id, seq: EventSequenceTable.seq })
+          .from(SessionTable)
+          .leftJoin(EventSequenceTable, eq(EventSequenceTable.aggregate_id, SessionTable.id))
+          .where(inArray(SessionTable.id, Array.from(sessionIDs)))
+          .all()
+          .pipe(Effect.orDie)
+        return new Map(rows.map((row) => [row.sessionID, row.seq ?? Event.Seq.make(0)]))
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
         return yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))

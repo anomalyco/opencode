@@ -27,6 +27,8 @@ import type {
   SessionExportInput,
   SessionExportOutput,
   SessionActiveOutput,
+  SessionHeadsInput,
+  SessionHeadsOutput,
   SessionGetInput,
   SessionGetOutput,
   SessionRemoveInput,
@@ -650,6 +652,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      heads: (input?: SessionHeadsInput, requestOptions?: RequestOptions) =>
+        request<SessionHeadsOutput>(
+          {
+            method: "GET",
+            path: `/api/experimental/session/heads`,
+            query: { sessions: input?.["sessions"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
       get: (input: SessionGetInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionGetOutput }>(
           {

@@ -73,7 +73,7 @@ it.live("filters message types before paginating in either direction through the
         const previous = await fixture.api.message.list({ ...input, cursor: second.cursor.previous })
         expect(previous.data).toEqual(first.data)
         const end = await fixture.api.message.list({ ...input, cursor: second.cursor.next })
-        expect(end).toEqual({ data: [], cursor: { previous: null, next: null } })
+        expect(end).toEqual({ data: [], cursor: { previous: null, next: null }, seq: 9 })
       }
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "compaction" })).data).toEqual([
         messages[4],

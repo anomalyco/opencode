@@ -42,6 +42,11 @@ const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
 
+const SessionHead = Schema.Struct({
+  seq: Event.Seq,
+  running: Schema.Boolean,
+}).annotate({ identifier: "SessionHead" })
+
 const PublicSessionInfo = Schema.Struct({
   ...Struct.omit(Session.Info.fields, ["location"]),
   location: Location.PublicRef,
@@ -225,6 +230,21 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           summary: "List active sessions",
           description:
             "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.heads", "/api/experimental/session/heads", {
+        query: Schema.Struct({
+          sessions: Schema.String.pipe(Schema.optional),
+        }),
+        success: Schema.Record(Session.ID, SessionHead),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.heads",
+          summary: "Get session heads",
+          description:
+            "Retrieve the current durable event sequence and running state for the requested sessions. Unknown session IDs are omitted.",
         }),
       ),
     )

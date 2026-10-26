@@ -112,6 +112,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "model picker selector switcher redesign",
   },
   {
+    tab: "experimental",
+    label: "settings.experimental.row.sessionHeads.title",
+    target: "settings-session-heads",
+    description: "settings.experimental.row.sessionHeads.description",
+    keywords: "reconnect session heads sequence sync",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",

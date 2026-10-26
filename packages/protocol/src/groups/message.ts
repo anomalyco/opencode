@@ -1,3 +1,4 @@
+import { Event } from "@opencode/schema/event"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Location } from "@opencode/schema/location"
@@ -92,6 +93,7 @@ const MessagesCursor = Schema.Struct({
 export const SessionMediaMessagesResponse = Schema.Struct({
   data: Schema.Array(PublicMediaSessionMessage),
   cursor: MessagesCursor,
+  seq: Event.Seq.pipe(Schema.optional),
 })
 
 /** Experimental: the `session.message` response for clients that opt into `experimental-media-uri`. */
@@ -105,6 +107,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       success: Schema.Struct({
         data: Schema.Array(PublicSessionMessage),
         cursor: MessagesCursor,
+        seq: Event.Seq.pipe(Schema.optional),
       }).annotate({ identifier: "SessionMessagesResponse" }),
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(

@@ -50,6 +50,17 @@ export const SettingsExperimental: Component = () => {
                 />
               </div>
             </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.sessionHeads.title")}
+              description={language.t("settings.experimental.row.sessionHeads.description")}
+            >
+              <div data-action="settings-session-heads">
+                <Switch
+                  checked={settings.general.sessionHeads()}
+                  onChange={(checked) => settings.general.setSessionHeads(checked)}
+                />
+              </div>
+            </SettingsRow>
           </SettingsList>
         </div>
       </div>

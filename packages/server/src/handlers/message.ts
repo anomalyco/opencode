@@ -1,3 +1,4 @@
+import type { Event } from "@opencode/schema/event"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
 import { Effect, Option, Schema } from "effect"
@@ -49,7 +50,10 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
           type: ctx.query.type,
           cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
         }
-        const page = <Message extends { readonly id: SessionMessage.ID }>(messages: ReadonlyArray<Message>) => {
+        const page = <Message extends { readonly id: SessionMessage.ID }>(
+          messages: ReadonlyArray<Message>,
+          seq: Event.Seq | undefined,
+        ) => {
           const first = messages[0]
           const last = messages.at(-1)
           return {
@@ -58,8 +62,11 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
               previous: first ? cursor.encode(first, order, "previous") : undefined,
               next: last ? cursor.encode(last, order, "next") : undefined,
             },
+            seq,
           }
         }
+        const heads = yield* session.heads([ctx.params.sessionID])
+        const seq = heads.get(ctx.params.sessionID)?.seq
         if (wantsMediaRefs(ctx.request)) {
           const messages = yield* session
             .messagesWithRefs(input)
@@ -67,7 +74,9 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
             )
-          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(messages)).pipe(Effect.orDie)
+          return yield* HttpServerResponse.schemaJson(SessionMediaMessagesResponse)(page(messages, seq)).pipe(
+            Effect.orDie,
+          )
         }
         const messages = yield* session
           .messages(input)
@@ -75,7 +84,7 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
             Effect.catchTag("Session.NotFoundError", missingSession),
             Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
           )
-        return page(messages)
+        return page(messages, seq)
       }),
     )
   }),

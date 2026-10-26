@@ -1526,6 +1526,70 @@
         "summary": "List active sessions"
       }
     },
+    "/api/experimental/session/heads": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "experimental.session.heads",
+        "parameters": [
+          {
+            "name": "sessions",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "patternProperties": {
+                    "^ses": {
+                      "$ref": "#/components/schemas/SessionHead"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve the current durable event sequence and running state for the requested sessions. Unknown session IDs are omitted.",
+        "summary": "Get session heads"
+      }
+    },
     "/api/session/{sessionID}": {
       "get": {
         "tags": ["session"],
@@ -16072,6 +16136,10 @@
           }
         ]
       },
+      "Event.Seq": {
+        "type": "integer",
+        "minimum": 0
+      },
       "Event.SeqEncoded": {
         "type": "string"
       },
@@ -20914,6 +20982,19 @@
         "required": ["data"],
         "additionalProperties": false
       },
+      "SessionHead": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "$ref": "#/components/schemas/Event.Seq"
+          },
+          "running": {
+            "type": "boolean"
+          }
+        },
+        "required": ["seq", "running"],
+        "additionalProperties": false
+      },
       "SessionInterruptResponse": {
         "type": "object",
         "properties": {
@@ -20963,6 +21044,16 @@
               }
             },
             "additionalProperties": false
+          },
+          "seq": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["data", "cursor"],

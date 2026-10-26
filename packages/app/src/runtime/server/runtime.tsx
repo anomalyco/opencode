@@ -204,6 +204,7 @@ function createServerController(
     directory: "",
     // The timeline shows tool output as text only, so screenshots in tool results never need their bytes here.
     omitToolFileData: true,
+    sessionHeads: settings.general.sessionHeads,
     onError(error) {
       showToast({
         variant: "error",

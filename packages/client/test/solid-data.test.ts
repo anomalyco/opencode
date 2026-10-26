@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
-import { createRoot } from "solid-js"
+import { createEffect, createRoot, createSignal } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
@@ -1451,6 +1451,338 @@ test("projects background user shell metadata from durable shell data", () => {
     expect(setup.data.session.message.list("ses_refresh")).toMatchObject([
       { type: "shell", shellID: "sh_user", status: "running", metadata: { background: true } },
     ])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("ignores duplicate durable seqs and refetches the newest page once on a sequence gap", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let pageSeq = 1
+  let pageMessages = [{ id: "msg_1", type: "user", text: "Initial", time: { created: 1 } }]
+  let messageReads = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === "/api/session/ses_gap/message") {
+        messageReads++
+        return Response.json({
+          data: pageMessages.toReversed(),
+          cursor: {},
+          seq: pageSeq,
+        })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      sessionHeads: () => true,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_gap")
+    expect(messageReads).toBe(1)
+
+    // Duplicate seq (<= last) is ignored.
+    setup.emit({
+      id: "evt_dup",
+      created: 2,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq: 1, version: 1 },
+      data: { sessionID: "ses_gap", agent: "plan" },
+    })
+    expect(setup.data.session.message.list("ses_gap").map((item) => item.id)).toEqual(["msg_1"])
+    expect(messageReads).toBe(1)
+
+    // Contiguous seq (last + 1) applies inline without refetching.
+    setup.emit({
+      id: "evt_next",
+      created: 3,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq: 2, version: 1 },
+      data: { sessionID: "ses_gap", agent: "build" },
+    })
+    expect(setup.data.session.message.list("ses_gap").map((item) => item.id)).toEqual(["msg_1", "msg_next"])
+    expect(messageReads).toBe(1)
+
+    // Gap (seq > last + 1) triggers one newest-page refetch and updates the tracked seq from the page response.
+    pageSeq = 5
+    pageMessages = [
+      { id: "msg_1", type: "user", text: "Initial", time: { created: 1 } },
+      { id: "msg_next", type: "agent-switched", agent: "build", time: { created: 3 } },
+      { id: "msg_missed", type: "user", text: "Missed", time: { created: 4 } },
+      { id: "msg_gap", type: "user", text: "After gap", time: { created: 5 } },
+    ]
+    setup.emit({
+      id: "evt_gap",
+      created: 5,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq: 4, version: 1 },
+      data: { sessionID: "ses_gap", agent: "plan" },
+    })
+    await wait(() => setup.data.session.message.list("ses_gap").some((item) => item.id === "msg_missed"))
+    expect(messageReads).toBe(2)
+
+    // Page response updated tracked seq to 5, so seq 5 is now ignored as a duplicate.
+    setup.emit({
+      id: "evt_dup_after_page",
+      created: 6,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq: 5, version: 1 },
+      data: { sessionID: "ses_gap", agent: "plan" },
+    })
+    expect(setup.data.session.message.list("ses_gap").map((item) => item.id)).toEqual([
+      "msg_1",
+      "msg_next",
+      "msg_missed",
+      "msg_gap",
+    ])
+    expect(messageReads).toBe(2)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("keeps seqs applied during a gap refetch so the next in-order event does not refetch again", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let messageReads = 0
+  const held = Promise.withResolvers<void>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === "/api/session/ses_gap/message") {
+        messageReads++
+        if (messageReads === 1)
+          return Response.json({
+            data: [{ id: "msg_1", type: "user", text: "Initial", time: { created: 1 } }],
+            cursor: {},
+            seq: 1,
+          })
+        await held.promise
+        return Response.json({
+          data: [{ id: "msg_page", type: "user", text: "Page at 3", time: { created: 3 } }],
+          cursor: {},
+          seq: 3,
+        })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      sessionHeads: () => true,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
+  const select = (seq: number) =>
+    setup.emit({
+      id: `evt_${seq}`,
+      created: seq,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq, version: 1 },
+      data: { sessionID: "ses_gap", agent: "plan" },
+    })
+
+  try {
+    await setup.data.session.message.sync("ses_gap")
+    select(3)
+    await wait(() => messageReads === 2)
+    select(4)
+    select(5)
+    held.resolve()
+    await wait(() => setup.data.session.message.list("ses_gap").some((item) => item.id === "msg_page"))
+
+    select(6)
+    await Bun.sleep(20)
+    expect(messageReads).toBe(2)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("leaves live durable events untracked when sessionHeads is off", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let messageReads = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === "/api/session/ses_gap/message") {
+        messageReads++
+        return Response.json({
+          data: [{ id: "msg_1", type: "user", text: "Initial", time: { created: 1 } }],
+          cursor: {},
+          seq: 2,
+        })
+      }
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_gap")
+    setup.emit({
+      id: "evt_old",
+      created: 2,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq: 1, version: 1 },
+      data: { sessionID: "ses_gap", agent: "plan" },
+    })
+    setup.emit({
+      id: "evt_far",
+      created: 3,
+      type: "session.agent.selected",
+      durable: { aggregateID: "ses_gap", seq: 9, version: 1 },
+      data: { sessionID: "ses_gap", agent: "build" },
+    })
+    await Bun.sleep(20)
+    expect(setup.data.session.message.list("ses_gap").map((item) => item.id)).toEqual(["msg_1", "msg_old", "msg_far"])
+    expect(messageReads).toBe(1)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reconnect with sessionHeads enabled calls heads once and refetches only moved or running sessions", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const headsQueries: string[] = []
+  const messageReads: string[] = []
+  const [status, setStatus] = createSignal<"connected" | "reconnecting">("connected")
+  const state = {
+    seqs: { ses_idle: 2, ses_moved: 2, ses_running: 4 } as Record<string, number>,
+    running: { ses_idle: false, ses_moved: false, ses_running: false } as Record<string, boolean>,
+  }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname === "/api/experimental/session/heads") {
+        const sessions = url.searchParams.get("sessions") ?? ""
+        headsQueries.push(sessions)
+        return Response.json(
+          Object.fromEntries(
+            sessions
+              .split(",")
+              .filter(Boolean)
+              .map((id) => [id, { seq: state.seqs[id] ?? 0, running: state.running[id] ?? false }]),
+          ),
+        )
+      }
+      const match = /^\/api\/session\/([^/]+)\/message$/.exec(url.pathname)
+      if (match?.[1]) {
+        const sessionID = match[1]
+        messageReads.push(sessionID)
+        const seq = state.seqs[sessionID] ?? 0
+        return Response.json({
+          data: [{ id: `msg_${sessionID}_${seq}`, type: "user", text: `${sessionID}:${seq}`, time: { created: seq } }],
+          cursor: {},
+          seq,
+        })
+      }
+      if (url.pathname === "/api/session/active")
+        return Response.json(Object.fromEntries(Object.entries(state.running).filter(([, running]) => running)))
+      if (url.pathname === "/api/project") return Response.json([])
+      if (url.pathname === "/api/location") return Response.json({ directory: "/project" })
+      return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
+    },
+  })
+  const setup = createRoot((dispose) => {
+    const data = createData({
+      api: () => api,
+      directory: "/project",
+      sessionHeads: () => true,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status },
+    })
+    for (const id of ["ses_idle", "ses_moved", "ses_running"]) {
+      createEffect(() => {
+        if (status() !== "connected") return
+        void data.session.message.sync(id)
+      })
+    }
+    return {
+      data,
+      emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+      dispose,
+    }
+  })
+
+  try {
+    await Promise.all([
+      setup.data.session.message.sync("ses_idle"),
+      setup.data.session.message.sync("ses_moved"),
+      setup.data.session.message.sync("ses_running"),
+    ])
+    messageReads.length = 0
+
+    setStatus("reconnecting")
+    state.seqs.ses_moved = 5
+    state.running.ses_running = true
+    setStatus("connected")
+    setup.emit({ type: "server.connected", data: {} })
+
+    await wait(
+      () =>
+        setup.data.session.message.list("ses_moved")[0]?.id === "msg_ses_moved_5" &&
+        messageReads.includes("ses_running"),
+    )
+    expect(headsQueries).toEqual(["ses_idle,ses_moved,ses_running"])
+    expect(messageReads.toSorted()).toEqual(["ses_moved", "ses_running"])
+    expect(setup.data.session.status("ses_running")).toBe("running")
+    expect(setup.data.session.status("ses_idle")).toBe("idle")
   } finally {
     setup.dispose()
   }

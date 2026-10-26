@@ -85,6 +85,8 @@ export type CreateDataInput = {
    * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive.
    */
   readonly omitToolFileData?: boolean
+  /** Refetches only changed or running loaded sessions through `session.heads` on reconnect. */
+  readonly sessionHeads?: () => boolean
 }
 
 const messagePageLimit = 20
@@ -252,6 +254,13 @@ function createSync() {
         if (active !== true && active.started) active.invalidated = true
       })
     },
+    invalidateWhere(predicate: (key: string) => boolean) {
+      state.forEach((active, current) => {
+        if (!predicate(current)) return
+        if (active === true) state.delete(current)
+        if (active !== true && active.started) active.invalidated = true
+      })
+    },
   }
 }
 
@@ -309,10 +318,28 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  const sessionSeq = new Map<string, number>()
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  let headsGeneration = 0
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+
+  function refetchSession(sessionID: string) {
+    sync.invalidate(`session.message:${sessionID}`)
+    refresh(() => result.session.message.sync(sessionID))
+  }
+
+  function sessionSyncOwner(key: string) {
+    if (key.startsWith("session:")) return key.slice("session:".length)
+    if (key.startsWith("session.family:")) return key.slice("session.family:".length)
+    if (key.startsWith("session.pending:")) return key.slice("session.pending:".length)
+    if (key.startsWith("session.message:")) return key.slice("session.message:".length)
+    if (key.startsWith("session.permission:")) return key.slice("session.permission:".length)
+    if (key.startsWith("session.form:") && !key.startsWith("session.form:global:"))
+      return key.slice("session.form:".length, -1)
+    return undefined
+  }
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -610,6 +637,7 @@ export function createData(config: CreateDataInput) {
 
   function evictSession(sessionID: string) {
     if (sessionOutbox.has(sessionID)) return
+    sessionSeq.delete(sessionID)
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
@@ -633,6 +661,7 @@ export function createData(config: CreateDataInput) {
 
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
+    sessionSeq.delete(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -662,10 +691,57 @@ export function createData(config: CreateDataInput) {
   }
 
   function handleEvent(event: OpenCodeEvent) {
+    let gap = false
+    if (config.sessionHeads?.() && "durable" in event && event.durable && event.type.startsWith("session.")) {
+      const sessionID = event.durable.aggregateID
+      const seq = event.durable.seq
+      if (event.type === "session.created") {
+        sessionSeq.set(sessionID, seq)
+      } else if (event.type !== "session.deleted") {
+        const last = sessionSeq.get(sessionID)
+        if (last !== undefined) {
+          if (seq <= last) return
+          sessionSeq.set(sessionID, seq)
+          if (seq > last + 1) {
+            gap = true
+            refetchSession(sessionID)
+          }
+        }
+      }
+    }
+
     switch (event.type) {
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
+        if (config.sessionHeads?.()) {
+          const loaded = [...new Set([...sessionSeq.keys(), ...Object.keys(store.session.message)])]
+          if (loaded.length > 0) {
+            const baseline = new Map(sessionSeq)
+            const generation = ++headsGeneration
+            refresh(() =>
+              api()
+                .session.heads({ sessions: loaded.join(",") })
+                .then((heads) => {
+                  if (headsGeneration !== generation) return
+                  for (const sessionID of loaded) {
+                    const head = heads[SessionID.make(sessionID)]
+                    if (!head) continue
+                    const last = sessionSeq.get(sessionID)
+                    const moved =
+                      last === undefined ||
+                      head.seq > last ||
+                      (head.seq < last && last === baseline.get(sessionID))
+                    sessionSeq.set(sessionID, Math.max(last ?? -1, head.seq))
+                    if (!updates.has(sessionID)) {
+                      setStore("session", "active", sessionID, head.running ? "running" : "idle")
+                    }
+                    if (moved || head.running) refetchSession(sessionID)
+                  }
+                }),
+            )
+          }
+        }
         refresh(() =>
           api()
             .session.active()
@@ -750,17 +826,18 @@ export function createData(config: CreateDataInput) {
           previous,
           time: { created: event.created },
         })
-        refresh(() =>
-          api()
-            .session.message.get({ sessionID: event.data.sessionID, messageID: SessionMessage.ID.fromEvent(event.id) })
-            .then((item) => {
-              message.update(event.data.sessionID, (draft, index) => {
-                const position = index.get(item.id)
-                if (position === undefined) return message.append(draft, index, item)
-                draft[position] = item
-              })
-            }),
-        )
+        if (!gap)
+          refresh(() =>
+            api()
+              .session.message.get({ sessionID: event.data.sessionID, messageID: SessionMessage.ID.fromEvent(event.id) })
+              .then((item) => {
+                message.update(event.data.sessionID, (draft, index) => {
+                  const position = index.get(item.id)
+                  if (position === undefined) return message.append(draft, index, item)
+                  draft[position] = item
+                })
+              }),
+          )
         return
       }
       case "session.renamed": {
@@ -1139,6 +1216,7 @@ export function createData(config: CreateDataInput) {
           time: { created: event.created },
         })
         if (
+          !gap &&
           store.session.message[event.data.sessionID]?.some(
             (item) =>
               item.type === "assistant" &&
@@ -1148,8 +1226,7 @@ export function createData(config: CreateDataInput) {
               ),
           )
         ) {
-          sync.invalidate(`session.message:${event.data.sessionID}`)
-          refresh(() => result.session.message.sync(event.data.sessionID))
+          refetchSession(event.data.sessionID)
         }
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
@@ -1762,6 +1839,8 @@ export function createData(config: CreateDataInput) {
               limit: config.initialMessageLimit?.() ?? messagePageLimit,
               order: "desc",
             })
+            if (response.seq != null)
+              sessionSeq.set(sessionID, Math.max(sessionSeq.get(sessionID) ?? -1, response.seq))
             const fetched = response.data.toReversed().map(stored)
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -2070,6 +2149,13 @@ export function createData(config: CreateDataInput) {
 
   createEffect(() => {
     if (config.connection?.status() === "connected") return
+    if (config.sessionHeads?.()) {
+      sync.invalidateWhere((key) => {
+        const owner = sessionSyncOwner(key)
+        return owner === undefined || (!sessionSeq.has(owner) && !store.session.message[owner])
+      })
+      return
+    }
     sync.invalidate()
   })
 

@@ -64,3 +64,26 @@ it.live("archives and unarchives a session through PATCH", () =>
     expect(yield* listed(false)).toContain(created.data.id)
   }).pipe(Effect.scoped),
 )
+
+it.live("returns durable sequence heads for known sessions and omits unknown IDs", () =>
+  Effect.gen(function* () {
+    const request = yield* makeRequest()
+    const first = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", "POST", {})).data.id
+    const second = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", "POST", {})).data.id
+
+    expect(
+      yield* request(`/api/experimental/session/heads?sessions=${first},${second},ses_missing,unknown`, "GET"),
+    ).toEqual({
+      [first]: { seq: 0, running: false },
+      [second]: { seq: 0, running: false },
+    })
+
+    yield* request(`/api/session/${first}`, "PATCH", { title: "Renamed" })
+    yield* request(`/api/session/${first}`, "PATCH", { archived: true })
+
+    expect(yield* request(`/api/experimental/session/heads?sessions=${first},${second},ses_missing`, "GET")).toEqual({
+      [first]: { seq: 2, running: false },
+      [second]: { seq: 0, running: false },
+    })
+  }).pipe(Effect.scoped),
+)

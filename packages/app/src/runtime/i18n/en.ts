@@ -765,6 +765,8 @@ export const dict = {
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.newModelPicker.title": "New model picker",
   "settings.experimental.row.newModelPicker.description": "Preview the redesigned model picker",
+  "settings.experimental.row.sessionHeads.title": "Fast session reconnect",
+  "settings.experimental.row.sessionHeads.description": "Refetch only changed or running sessions on reconnect",
   "settings.guiExtensions.title": "Extensions",
   "settings.guiExtensions.description": "Built-in GUI extensions in this window. Development builds only.",
   "settings.guiExtensions.reload": "Reload",

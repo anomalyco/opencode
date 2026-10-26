@@ -5,7 +5,7 @@ import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SessionMediaMessageResponse } from "@opencode/protocol/groups/message"
@@ -161,6 +161,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           return {
             data: Object.fromEntries(Array.from(active, (sessionID) => [sessionID, { type: "running" as const }])),
           }
+        }),
+      )
+      .handle(
+        "session.heads",
+        Effect.fn(function* (ctx) {
+          const ids = (ctx.query.sessions ?? "")
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Schema.is(Session.ID))
+          return Object.fromEntries(yield* session.heads(ids))
         }),
       )
       .handle(
