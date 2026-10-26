@@ -332,6 +332,8 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Main session",
+  "session.child.agent": "{{agent}} subagent",
+  "session.child.subagent": "Subagent",
   "session.child.status.running": "Running",
   "session.child.status.succeeded": "Done",
   "session.child.status.failed": "Failed",

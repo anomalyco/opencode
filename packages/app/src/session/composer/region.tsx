@@ -480,6 +480,7 @@ export function ActiveSessionComposerRegion(props: {
           {(info) => (
             <SubagentBar
               agent={info().agent}
+              title={info().title}
               model={subagentModel()}
               status={subagentStatus()}
               started={info().time.created}
