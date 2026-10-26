@@ -166,6 +166,8 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   const voice = timeline.getByRole("img", { name: "Voice", exact: true })
   await expect(voice).toBeVisible()
   await expect(indicator).toBeVisible()
+  // The faded bubble already marks a steer as waiting, so Pending is plain text with no icon.
+  await expect(indicator).toHaveText("Pending")
   await expect(indicator.locator("svg")).toHaveCount(0)
 
   await expect(voice.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-outline-wave-audio")
