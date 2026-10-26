@@ -38,6 +38,47 @@ describe("provider error classification", () => {
     expect(isContextOverflow("413 status code (no body)")).toBe(true)
   })
 
+  test("classifies image-count rejections as context overflow", () => {
+    const cases = [
+      {
+        message:
+          "Error from provider (Console Go): Upstream request failed: [invalid_request_error] request contains 51 images, exceeding the maximum of 50 allowed per request",
+        body: {
+          error: {
+            type: "invalid_request_error",
+            message:
+              "Error from provider (Console Go): Upstream request failed: [invalid_request_error] request contains 51 images, exceeding the maximum of 50 allowed per request",
+          },
+        },
+      },
+      {
+        message: "Exceeded maximum number of images (50).",
+        body: { error: { code: "BadRequest", message: "Exceeded maximum number of images (50)." } },
+      },
+      {
+        message: "messages: too many images and documents: 101 > 100",
+        body: {
+          type: "error",
+          error: { type: "invalid_request_error", message: "messages: too many images and documents: 101 > 100" },
+        },
+      },
+      {
+        message: "The model returned the following errors: too many images and documents: 150 + 0 > 100",
+        body: { message: "The model returned the following errors: too many images and documents: 150 + 0 > 100" },
+      },
+    ]
+    expect(
+      cases.map((item) => {
+        const reason = classifyProviderFailure({
+          message: item.message,
+          status: 400,
+          rawBody: JSON.stringify(item.body),
+        })
+        return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
+      }),
+    ).toEqual(["context-overflow", "context-overflow", "context-overflow", "context-overflow"])
+  })
+
   test("classifies generic request size failures separately from context overflow", () => {
     const failures = [
       classifyProviderFailure({ message: "request too large", status: 413 }),

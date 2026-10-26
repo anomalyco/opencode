@@ -55,6 +55,13 @@ const patterns = [
   /too many tokens/i,
   /token limit exceeded/i,
   /request_too_large/i,
+  // Image-count caps: compaction drops the replayed images, so these recover the same way.
+  // OpenCode Console/Zen gateway
+  /request contains \d+ images, exceeding the maximum/i,
+  // Azure OpenAI
+  /exceeded maximum number of images/i,
+  // Anthropic and Bedrock
+  /too many images and documents/i,
 ]
 
 const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
