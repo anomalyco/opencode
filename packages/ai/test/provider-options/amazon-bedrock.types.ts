@@ -10,8 +10,8 @@ LLM.request({
     effort: "future-effort",
     serviceTier: "future-tier",
     thinking: { type: "adaptive", display: "future-display" },
-    guardrail: { identifier: "abc123", version: "DRAFT", trace: "future-trace", streamProcessingMode: "async" },
-    outputFormat: { type: "json_schema", schema: { type: "object" } },
+    guardrail: { identifier: "abc123", version: "DRAFT", trace: "future-trace", streamProcessingMode: "future-mode" },
+    outputFormat: { type: "future-format", schema: { type: "object" } },
     requestMetadata: { suite: "opencode-ai" },
   },
 })

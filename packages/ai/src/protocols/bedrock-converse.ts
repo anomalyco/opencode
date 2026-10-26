@@ -126,6 +126,12 @@ const BedrockToolChoice = Schema.Union([
   Schema.Struct({ tool: Schema.Struct({ name: Schema.String }) }),
 ])
 
+// Value sets from the Converse API reference. Unknown values pass through for forward compatibility.
+const ServiceTierType = ProviderShared.knownString<"priority" | "default" | "flex" | "reserved">()
+const GuardrailTrace = ProviderShared.knownString<"enabled" | "disabled" | "enabled_full">()
+const GuardrailStreamProcessingMode = ProviderShared.knownString<"sync" | "async">()
+const TextFormatType = ProviderShared.knownString<"json_schema">()
+
 const BedrockBodyFields = {
   modelId: Schema.String,
   messages: Schema.Array(BedrockMessage),
@@ -145,19 +151,19 @@ const BedrockBodyFields = {
     }),
   ),
   additionalModelRequestFields: Schema.optional(JsonObject),
-  serviceTier: Schema.optional(Schema.Struct({ type: Schema.String })),
+  serviceTier: Schema.optional(Schema.Struct({ type: ServiceTierType })),
   guardrailConfig: Schema.optional(
     Schema.Struct({
       guardrailIdentifier: Schema.String,
       guardrailVersion: Schema.String,
-      trace: Schema.optional(Schema.String),
-      streamProcessingMode: Schema.optional(Schema.String),
+      trace: Schema.optional(GuardrailTrace),
+      streamProcessingMode: Schema.optional(GuardrailStreamProcessingMode),
     }),
   ),
   outputConfig: Schema.optional(
     Schema.Struct({
       textFormat: Schema.Struct({
-        type: Schema.Literal("json_schema"),
+        type: TextFormatType,
         structure: Schema.Struct({
           jsonSchema: Schema.Struct({
             schema: Schema.String,
@@ -520,11 +526,11 @@ const Options = Schema.Struct({
   ),
   /** Reasoning effort, sent in the field each model family reads. */
   effort: Schema.optional(ProviderShared.knownString<"low" | "medium" | "high" | "xhigh" | "max">()),
-  serviceTier: Schema.optional(ProviderShared.knownString<"priority" | "default" | "flex" | "reserved">()),
+  serviceTier: Schema.optional(ServiceTierType),
   /** Constrains the response text to a JSON schema. */
   outputFormat: Schema.optional(
     Schema.Struct({
-      type: Schema.Literal("json_schema"),
+      type: TextFormatType,
       schema: JsonObject,
       name: Schema.optional(Schema.String),
       description: Schema.optional(Schema.String),
@@ -534,8 +540,8 @@ const Options = Schema.Struct({
     Schema.Struct({
       identifier: Schema.String,
       version: Schema.String,
-      trace: Schema.optional(ProviderShared.knownString<"enabled" | "disabled" | "enabled_full">()),
-      streamProcessingMode: Schema.optional(ProviderShared.knownString<"sync" | "async">()),
+      trace: Schema.optional(GuardrailTrace),
+      streamProcessingMode: Schema.optional(GuardrailStreamProcessingMode),
     }),
   ),
   /** Key-value pairs for filtering invocation logs. */
@@ -657,7 +663,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
         ? undefined
         : {
             textFormat: {
-              type: "json_schema" as const,
+              type: options.outputFormat.type,
               structure: {
                 jsonSchema: {
                   schema: ProviderShared.encodeJson(options.outputFormat.schema),
