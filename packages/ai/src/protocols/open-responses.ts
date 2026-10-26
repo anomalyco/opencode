@@ -534,7 +534,7 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
   return {
     type: "input_image" as const,
     image_url: location,
-    detail,
+    detail: detail ?? "auto",
   }
 })
 

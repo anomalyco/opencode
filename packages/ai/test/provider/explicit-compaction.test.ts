@@ -196,7 +196,7 @@ const retainedItems = [
     id: "msg_media",
     role: "user",
     content: [
-      { type: "input_image", image_url: "https://example.com/image.png" },
+      { type: "input_image", image_url: "https://example.com/image.png", detail: "auto" },
       { type: "input_file", filename: "report.pdf", file_data: "data:application/pdf;base64,cGRm", detail: "high" },
       { type: "input_file", filename: "other.pdf", file_url: "https://example.com/report.pdf", detail: "low" },
     ],
@@ -375,7 +375,9 @@ for (const model of [
               output: [{ type: "message", role: "user", content: images }, checkpoint],
             }),
           )
-        expect(JSON.parse(text).input[0].content).toEqual(images)
+        expect(JSON.parse(text).input[0].content).toEqual(
+          images.map((image) => ({ ...image, detail: "detail" in image ? image.detail : "auto" })),
+        )
         return respond(sseEvents({ type: "response.completed", response: { id: "resp_1" } }))
       }),
     ),
