@@ -131,7 +131,7 @@
     "@solid-primitives/resize-observer": "catalog:",
     "fuzzysort": "catalog:",
     "katex": "0.16.47",
-    "knobs": "npm:@kitlangton/knobs@0.4.0-next.22",
+    "knobs": "npm:@kitlangton/knobs@0.4.0-next.23",
     "marked": "catalog:",
     "solid-list": "catalog:",
     "solid-sonner": "catalog:"

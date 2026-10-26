@@ -187,6 +187,7 @@ export default function DebugBar(props: {
   memory?: { on: boolean; env: boolean; toggle: () => void }
   motion?: { open: boolean; toggle: () => void }
   onClose?: () => void
+  demo?: { open: boolean; toggle: () => void }
 }) {
   const ctx = useExtension()
   const router = ctx.router
@@ -755,6 +756,16 @@ export default function DebugBar(props: {
                 </a>
               </Tooltip>
             )}
+            <Show when={props.demo}>
+              <ToggleCell
+                active={!!props.demo?.open}
+                inline={props.inline}
+                label={ctx.t("demo.label")}
+                tip={ctx.t("demo.tip")}
+                value={ctx.t(props.demo?.open ? "focus.on" : "focus.off")}
+                onClick={() => props.demo?.toggle()}
+              />
+            </Show>
             <ToggleCell
               active={globals().speed !== 1}
               inline={props.inline}

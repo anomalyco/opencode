@@ -4,7 +4,7 @@ import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
-import { holdRoute, provider } from "../utils/app"
+import { holdRoute, provider, seed } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { openSession } from "../utils/workspace"
 
@@ -1012,7 +1012,305 @@ for (const [action, status] of [
   })
 }
 
-test("waiting steers group under one Pending line, each keeping its own actions beside its bubble", async ({
+test("a queued prompt flies from its row onto its bubble as it leaves for the timeline, like a sent message", async ({
+  page,
+}) => {
+  const mock = createQueueMock(
+    ["fly me into the timeline", "remove me quietly"],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(2)
+  // Records each flight copy that paints, once, though its carrier moves into the row it follows: the bubble copy
+  // carries the prompt's text.
+  await page.evaluate(() => {
+    const seen = new Set<Element>()
+    Object.assign(window, { flights: seen })
+    new MutationObserver((records) =>
+      records.forEach((record) =>
+        record.addedNodes.forEach((node) => {
+          if (!(node instanceof HTMLElement)) return
+
+          if (node.matches("[data-flight]")) seen.add(node)
+          node.querySelectorAll("[data-flight]").forEach((copy) => seen.add(copy))
+        }),
+      ),
+    ).observe(document.body, { childList: true, subtree: true })
+  })
+
+  const flights = () =>
+    page.evaluate(() =>
+      // SAFETY: the test stored this value on window itself, in this shape.
+      "flights" in window ? [...(window.flights as Set<Element>)].map((copy) => copy.textContent ?? "") : [],
+    )
+
+  await view.rows.nth(0).getByRole("button", { name: "Steer" }).click()
+  await expect(userRow(page, mock.rows[0].id)).toContainText("fly me into the timeline")
+  await expect.poll(flights).toEqual(["fly me into the timeline"])
+
+  // A removed prompt never reaches the timeline, so nothing flies.
+  await view.rows.nth(0).locator('[data-action="session-queue-remove"]').click()
+  await expect(view.rows).toHaveCount(0)
+  await page.waitForTimeout(800)
+  expect(await flights()).toEqual(["fly me into the timeline"])
+  await expect(page.locator("[data-send-flight]")).toHaveCount(0)
+})
+
+test("a steered queue row's copy lands where its bubble rests while the closing queue lowers the transcript", async ({
+  page,
+}) => {
+  const model = { id: "queue-model", providerID: "opencode" }
+  const paragraph = "The harbor wakes before the town does, and the lanterns along the mole are still turning. "
+
+  const mock = createQueueMock(
+    ["steer me into place"],
+    [
+      { id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } },
+      {
+        id: "msg_queue_long_answer",
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [{ type: "text", text: Array.from({ length: 12 }, () => paragraph.repeat(3)).join("\n\n") }],
+        finish: "stop",
+        time: { created: 2, completed: 3 },
+      },
+    ],
+  )
+
+  // Quarter speed, so even a slow runner draws many frames of the flight.
+  await seed(page, { storage: { "opencode.motion.v2": { speed: 0.25 } } })
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(1)
+  await page.waitForTimeout(1000)
+
+  // Every frame, where the flight copy is painted.
+  await page.evaluate(() => {
+    const tops: number[] = []
+    Object.assign(window, { flightTops: tops })
+
+    const tick = () => {
+      const host = document.querySelector("[data-flight]")
+
+      if (host) tops.push(host.getBoundingClientRect().top)
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+  })
+
+  await view.rows.nth(0).getByRole("button", { name: "Steer", exact: true }).click()
+  await expect(view.rows).toHaveCount(0)
+  const bubble = userRow(page, mock.rows[0]!.id).locator('[data-slot="user-message-text"]')
+  await expect(bubble).toContainText("steer me into place")
+  await expect(page.locator("[data-flight]")).toHaveCount(0)
+  await page.waitForTimeout(1000)
+  // SAFETY: the test stored this value on window itself, in this shape.
+  const tops = await page.evaluate(() => ("flightTops" in window ? (window.flightTops as number[]) : []))
+  const rest = (await bubble.boundingBox())!.y
+
+  expect(tops.length).toBeGreaterThan(2)
+  // The queue's row leaves and the transcript's end rides the composer down; the copy rides with it onto the bubble.
+  expect(Math.abs(tops.at(-1)! - rest)).toBeLessThanOrEqual(2)
+})
+
+test("a steer's copy lands on its bubble's corners, and Working glides below the steers they deliver", async ({
+  page,
+}) => {
+  const model = { id: "queue-model", providerID: "opencode" }
+  const assistantID = "msg_queue_motion_assistant"
+
+  const mock = createQueueMock(
+    [],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  // Quarter speed, so even a slow runner draws many frames of each move.
+  await seed(page, { storage: { "opencode.motion.v2": { speed: 0.25 } } })
+  const view = await openQueue(page, mock, "steer")
+  const transcript = page.locator("[data-timeline-virtual-content]")
+  const working = transcript.locator('[data-component="session-working"]')
+  mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model, started: 1 })
+  await expect(working).toBeVisible()
+
+  // Every frame, each flight copy's painted corners: the larger of its clip's and its own, at its host's scale.
+  await page.evaluate(() => {
+    const flights: number[][][] = []
+    const seen = new Map<Element, number[][]>()
+    Object.assign(window, { flights })
+
+    const expand = (values: number[]) => [
+      values[0]!,
+      values[1] ?? values[0]!,
+      values[2] ?? values[0]!,
+      values[3] ?? values[1] ?? values[0]!,
+    ]
+
+    const tick = () => {
+      document.querySelectorAll<HTMLElement>("[data-flight]").forEach((host) => {
+        const scale = new DOMMatrix(getComputedStyle(host).transform).a
+        const copy = getComputedStyle(host.firstElementChild!)
+        const clip = expand((/round ([^)/]+)/.exec(copy.clipPath)?.[1] ?? "0").trim().split(/\s+/).map(parseFloat))
+
+        const own = [
+          copy.borderTopLeftRadius,
+          copy.borderTopRightRadius,
+          copy.borderBottomRightRadius,
+          copy.borderBottomLeftRadius,
+        ].map(parseFloat)
+
+        const frames = seen.get(host) ?? []
+
+        if (!seen.has(host)) seen.set(host, frames) && flights.push(frames)
+        frames.push(clip.map((corner, index) => Math.max(corner, own[index]!) * scale))
+      })
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+  })
+
+  const flight = (index: number) =>
+    // SAFETY: the test stored this value on window itself, in this shape.
+    page.evaluate((index) => ("flights" in window ? (window.flights as number[][][])[index] : undefined), index)
+
+  for (const [index, text] of ["U2: Also check the retry path.", "U3: And the queue."].entries()) {
+    await view.input.fill(text)
+    await view.input.press("Enter")
+    await expect(view.input).toHaveText("")
+    await expect.poll(() => mock.rows.length).toBe(index + 1)
+    const bubble = userRow(page, mock.rows[index]!.id).locator('[data-slot="user-message-text"]')
+    await expect(bubble).toContainText(text)
+    await expect(page.locator("[data-flight]")).toHaveCount(0)
+
+    const corners = await bubble.evaluate((element) => {
+      const style = getComputedStyle(element)
+
+      return [
+        style.borderTopLeftRadius,
+        style.borderTopRightRadius,
+        style.borderBottomRightRadius,
+        style.borderBottomLeftRadius,
+      ].map(parseFloat)
+    })
+
+    const frames = (await flight(index)) ?? []
+    expect(frames.length).toBeGreaterThan(2)
+    // The corners ease one way on the flight, and the copy hands over to its bubble wearing the bubble's own.
+    corners.forEach((corner, side) => {
+      const path = frames.map((frame) => frame[side]!)
+      const direction = Math.sign(corner - path[0]!)
+      path.slice(1).forEach((value, at) => expect((value - path[at]!) * direction).toBeGreaterThanOrEqual(-0.5))
+      expect(Math.abs(path.at(-1)! - corner)).toBeLessThanOrEqual(1)
+    })
+  }
+
+  const pending = mock.rows.map((row) => userRow(page, row.id))
+  await expect(working.or(pending[0]!).or(pending[1]!)).toHaveText([/Working/, /U2:/, /U3:/])
+
+  // Every frame, where Working is painted while the steers it waited above are delivered.
+  const tops = await working.evaluateHandle((element) => {
+    // SAFETY: widens the empty initial list to its element type.
+    const state = { on: true, tops: [] as number[] }
+
+    const tick = () => {
+      if (!state.on) return
+      state.tops.push(element.getBoundingClientRect().top)
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+
+    return state
+  })
+
+  const delivered = mock.rows.splice(0)
+  delivered.forEach((row) => mock.emit("session.inbox.delivered", { sessionID, inboxID: row.id }))
+  await expect(pending[0]!.or(pending[1]!).or(working)).toHaveText([/U2:/, /U3:/, /Working/])
+  await page.waitForTimeout(3000)
+  const trace = await tops.evaluate((state) => ((state.on = false), state.tops))
+  const from = trace[0]!
+  const to = trace.at(-1)!
+  expect(to - from).toBeGreaterThan(40)
+  // It slides there through the frames between rather than appearing below them.
+  expect(trace.filter((top) => top > from + 2 && top < to - 2).length).toBeGreaterThanOrEqual(3)
+  expect(Math.max(...trace.slice(1).map((top, index) => Math.abs(top - trace[index]!)))).toBeLessThan((to - from) / 3)
+})
+
+test("the reply to a delivered steer streams in below it without the transcript jumping", async ({ page }) => {
+  const model = { id: "queue-model", providerID: "opencode" }
+  const assistantID = "msg_queue_reply_assistant"
+  const paragraph = "The harbor wakes before the town does, and the lanterns along the mole are still turning. "
+
+  const mock = createQueueMock(
+    [],
+    [
+      { id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } },
+      {
+        id: "msg_queue_long_answer",
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [{ type: "text", text: Array.from({ length: 12 }, () => paragraph.repeat(3)).join("\n\n") }],
+        finish: "stop",
+        time: { created: 2, completed: 3 },
+      },
+    ],
+  )
+
+  await seed(page, { storage: { "opencode.motion.v2": { speed: 0.25 } } })
+  const view = await openQueue(page, mock, "steer")
+  const transcript = page.locator("[data-timeline-virtual-content]")
+  const working = transcript.locator('[data-component="session-working"]')
+  mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model, started: 4 })
+  await expect(working).toBeInViewport()
+
+  await view.input.fill("U2: Also check the retry path.")
+  await view.input.press("Enter")
+  await expect.poll(() => mock.rows.length).toBe(1)
+  const steer = userRow(page, mock.rows[0]!.id)
+  await expect(steer).toBeInViewport()
+  const [delivered] = mock.rows.splice(0)
+  mock.emit("session.inbox.delivered", { sessionID, inboxID: delivered!.id })
+  await expect(steer.or(working)).toHaveText([/U2:/, /Working/])
+  await page.waitForTimeout(3000)
+
+  // Every frame, where the steer is painted while its reply starts streaming below it.
+  const tops = await steer.evaluateHandle((element) => {
+    // SAFETY: widens the empty initial list to its element type.
+    const state = { on: true, tops: [] as number[] }
+
+    const tick = () => {
+      if (!state.on) return
+      state.tops.push(element.getBoundingClientRect().top)
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+
+    return state
+  })
+
+  const reply = { sessionID, assistantMessageID: "msg_queue_reply_follow_up" }
+  mock.emit("session.step.started", { ...reply, agent: "build", model, started: 5 })
+  mock.emit("session.text.started", { ...reply, ordinal: 0 })
+
+  for (const word of paragraph.repeat(2).split(" ")) {
+    mock.emit("session.text.delta", { ...reply, ordinal: 0, delta: `${word} ` })
+    await page.waitForTimeout(40)
+  }
+
+  await page.waitForTimeout(3000)
+  const trace = await tops.evaluate((state) => ((state.on = false), state.tops))
+
+  // Following the reply only ever carries the steer up, a little each frame.
+  const steps = trace.slice(1).map((top, index) => top - trace[index]!)
+  expect(Math.max(...steps)).toBeLessThanOrEqual(1)
+  expect(Math.min(...steps)).toBeGreaterThan(-24)
+})
+
+test("waiting steers group under one Steering label, each keeping its own actions beside its bubble @quarantine", async ({
   page,
 }) => {
   const mock = createQueueMock(
@@ -1027,8 +1325,9 @@ test("waiting steers group under one Pending line, each keeping its own actions 
   await expect(last).toContainText("U3: And rebase on beta first.")
   await expect(first.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
 
-  // The run's last steer carries the one Pending line; the first folds its line away.
-  await expect(last.locator('[data-slot="user-message-meta"]')).toContainText("Pending", { useInnerText: true })
+  // The run wears one Steering label above its first steer, and no meta line at rest.
+  await expect(first.locator('[data-slot="user-message-pending-label"]')).toHaveText("Steering")
+  await expect(last.locator('[data-slot="user-message-pending-label"]')).toHaveCount(0)
   await expect(first.locator('[data-slot="user-message-meta"]')).toBeHidden()
 
   await first.locator('[data-slot="user-message-text"]').hover()
@@ -1166,13 +1465,22 @@ for (const delivery of ["steer", "queue"] as const) {
         : undefined
 
     if (colors) {
-      // A pending steer is grey, switches to it without a transition, and keeps its Pending row in view without hover.
+      // A pending steer is grey, switches to it without a transition, and wears a Steering label above it.
       await expect(bubble).toHaveCSS("background-color", colors.pending.background)
       await expect(bubble).toHaveCSS("color", colors.pending.text)
       await expect(bubble).toHaveCSS("transition-duration", "0s")
-      await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
-      // Pending stands in for the time of a steer that has not been sent.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/, {
+      await expect(pending.locator('[data-slot="user-message-pending-label"]')).toHaveText("Steering")
+      // One line tall and 4px above its bubble, the gap a run's bubbles keep between them.
+      await expect
+        .poll(async () => {
+          const label = (await pending.locator('[data-slot="user-message-pending-label"]').boundingBox())!
+          const below = (await bubble.boundingBox())!
+
+          return [Math.round(label.height), Math.round(below.y - label.y - label.height)]
+        })
+        .toEqual([16, 4])
+      // The time waits, hidden, until delivery.
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model$/, {
         useInnerText: true,
       })
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))

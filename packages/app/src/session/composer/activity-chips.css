@@ -38,6 +38,7 @@
  * line up in a column; descriptions take the remaining width and truncate only when the panel reaches its maximum.
  */
 [data-component="menu-v2-content"][data-slot="session-activity-panel"] {
+  animation-duration: 90ms;
   width: max-content;
   min-width: max(var(--kb-popper-anchor-width, 0px), 240px);
   max-width: min(360px, calc(100vw - 56px));

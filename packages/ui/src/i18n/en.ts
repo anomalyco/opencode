@@ -281,6 +281,7 @@ const source = {
   "ui.message.revertMessage": "Rewind to here",
   "ui.message.moveToQueue": "Move to queue",
   "ui.message.pending": "Pending",
+  "ui.message.steering": "Steering",
   "ui.message.voice": "Voice",
   "ui.message.deletePending": "Delete",
   "ui.message.copyResponse": "Copy response",

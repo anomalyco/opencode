@@ -269,6 +269,52 @@ describe("createTimelineProjection", () => {
     expect(result.rowByKey.get("user-message:user-1")).toBe(result.rows[2])
   })
 
+  test("gives every steer of a delivered batch the context of the reply that answers it", () => {
+    const local = { id: "local", providerID: "local-provider" }
+    const answer = { id: "answer", providerID: "answer-provider" }
+
+    const steer = (id: string, created: number) => ({
+      id,
+      type: "user" as const,
+      text: id,
+      time: { created },
+      metadata: { model: { providerID: local.providerID, id: local.id } },
+    })
+
+    const messages = [
+      steer("user-1", 1),
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: answer,
+        content: [{ type: "text", text: "first" }],
+        time: { created: 2, completed: 3 },
+      },
+      steer("steer-1", 4),
+      steer("steer-2", 5),
+      steer("steer-3", 6),
+      {
+        id: "assistant-2",
+        type: "assistant",
+        agent: "build",
+        model: answer,
+        content: [{ type: "text", text: "second" }],
+        time: { created: 7 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "busy" },
+      reasoningMode: "full",
+    })
+
+    expect(["user-1", "steer-1", "steer-2", "steer-3"].map((id) => result.userContextByID.get(id))).toEqual(
+      Array.from({ length: 4 }, () => ({ agent: "build", model: answer })),
+    )
+  })
+
   test("reuses a stable projected row array", () => {
     const messages = [
       { id: "user-1", type: "user", text: "first", time: { created: 1 } },
@@ -359,8 +405,8 @@ describe("reasoningHeading", () => {
     expect(reasoningHeading("## First step\n\nDetails.\n\n## Second step\n\nMore details.")).toBe("Second step")
     expect(reasoningHeading("<h2>First step</h2>\n<p>Body</p>\n<h3>Second step</h3>")).toBe("Second step")
     expect(reasoningHeading("First step\n===\n\nSecond step\n---")).toBe("Second step")
-    expect(
-      reasoningHeading("**Designing Interactive Experience**\n\n**Note** that this line ends with **bold**"),
-    ).toBe("Designing Interactive Experience")
+    expect(reasoningHeading("**Designing Interactive Experience**\n\n**Note** that this line ends with **bold**")).toBe(
+      "Designing Interactive Experience",
+    )
   })
 })

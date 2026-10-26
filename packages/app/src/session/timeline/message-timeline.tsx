@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Acces
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { abort } from "@opencode/util/abort"
-import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
@@ -10,13 +9,15 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
+import { prefersReducedMotion } from "@opencode/ui/motion"
+import { motionTuning } from "@opencode/ui/motion-tuning"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -80,7 +81,7 @@ type MessageTimelineProps = {
   scroll: { overflow: boolean; jump: boolean }
   onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
-  onScheduleScrollState: (el: HTMLDivElement) => void
+  onScheduleScrollState: (el: HTMLDivElement, geometry?: { extent: number; viewport: number; offset: number }) => void
   onPin: () => void
   onUnpin: () => void
   onUserScroll: (target?: EventTarget | null) => void
@@ -91,6 +92,7 @@ type MessageTimelineProps = {
   reserveReviewToggle: boolean
   setContentRef: (el: HTMLDivElement) => void
   bottomInset?: number
+  bottomInsetStep?: () => number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
@@ -119,8 +121,18 @@ export function MessageTimeline(props: MessageTimelineProps) {
     }
   }
 
+  // Motion state belongs to one session; another one starts from a fresh view.
   return (
-    <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+    <Show when={controller.data.sessionID()} keyed>
+      {(_id) => (
+        <MessageTimelineView
+          {...props}
+          data={controller.data}
+          action={controller.action}
+          pending={controller.pending}
+        />
+      )}
+    </Show>
   )
 }
 
@@ -176,18 +188,105 @@ function MessageTimelineView(
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
 
+  const backgroundHintPartID = createMemo(() => {
+    const blocking = new Set(props.background.blocking().map((task) => task.partID))
+
+    if (blocking.size === 0) return
+
+    return projection
+      .rows()
+      .flatMap((row) =>
+        Predicate.isTagged(row, "AssistantPart") ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
+      )
+      .findLast((ref) => blocking.has(ref.partID))?.partID
+  })
+
+  const working = createMemo(() => {
+    const id = sessionID()
+
+    if (!id || sessionStatus().type !== "busy") return false
+
+    if (data.session.permission.list(id)?.length || data.session.form.list(id)?.length) return false
+    const active = projection.activeMessageID()
+
+    if (!active) return false
+    const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
+
+    if (assistant?.retry) return false
+
+    // Pending steers still project under the previous response until delivery.
+    // Its error must not hide feedback for a newly submitted prompt.
+    if (
+      assistant?.error &&
+      !data.session.pending.list(id).some((item) => item.type === "user" && item.delivery === "steer")
+    )
+      return false
+
+    return !projection.rows().some((row) => {
+      if (row.userMessageID !== active || !Predicate.isTagged(row, "Notice")) return false
+      const message = messageByID().get(row.messageID)
+
+      return message?.type === "compaction" && message.status === "running"
+    })
+  })
+
+  // Live Thinking, or a live group of only thoughts, stands in for Working; its row keeps its place meanwhile.
+  const thinking = createMemo(() => {
+    const active = projection.activeMessageID()
+
+    if (!active) return false
+
+    return projection.rows().some((row) => {
+      if (row.userMessageID !== active) return false
+
+      if (Predicate.isTagged(row, "Thinking")) return true
+
+      return (
+        Predicate.isTagged(row, "AssistantPart") &&
+        row.group.type === "context" &&
+        projection.lastAssistantGroupKey().get(active) === row.group.key &&
+        row.group.refs.every(
+          (ref) => Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)?.type === "reasoning",
+        )
+      )
+    })
+  })
+
+  const showWorking = createMemo(() => working() && !thinking())
+  const showActivity = createMemo(() => working() || !!backgroundHintPartID())
+
+  const timelineRows = createMemo(() => {
+    const base = projection.rows()
+    const active = projection.activeMessageID()
+
+    if (!showActivity() || !active) return base.filter((row) => !Predicate.isTagged(row, "Activity"))
+
+    if (base.some((row) => Predicate.isTagged(row, "Activity"))) return base
+
+    return [...base, new TimelineRow.Activity({ userMessageID: active })]
+  })
+
+  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [TimelineRow.key(row), row])))
+
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     presentationKey: () => JSON.stringify(props.data.timelineDetail()),
-    projection,
+    projection: {
+      ...projection,
+      rows: timelineRows,
+      rowByKey: timelineRowByKey,
+    },
     showHeader,
+    layout: (row, environment) =>
+      Predicate.isTagged(row, "Activity") ? { source: "fixed", height: 36 } : rowRenderer.layout(row, environment),
     pinned,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
     setContentRef: props.setContentRef,
     bottomInset: () => props.bottomInset ?? 0,
+    bottomInsetStep: props.bottomInsetStep,
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
     onPin: props.onPin,
@@ -355,134 +454,41 @@ function MessageTimelineView(
     revealPart: virtualized.revealPart,
   })
 
-  const backgroundHintPartID = createMemo(() => {
-    const blocking = new Set(props.background.blocking().map((task) => task.partID))
+  // Live status sits in its own timeline row at the end of the active turn, growing and leaving on the shared row
+  // spring and handing over to the reply's copy button when the turn completes.
+  function ActivityLane() {
+    const hint = createStatusFade(() => !!backgroundHintPartID(), 1000)
 
-    if (blocking.size === 0) return
-
-    return projection
-      .rows()
-      .flatMap((row) =>
-        Predicate.isTagged(row, "AssistantPart") ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
-      )
-      .findLast((ref) => blocking.has(ref.partID))?.partID
-  })
-
-  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
-
-  const backgroundHintPresence = createAnimatedPresence(
-    backgroundHintPartID,
-    () => backgroundHintRef() ?? null,
-    sessionID,
-    1000,
-  )
-
-  const showWorking = createMemo(() => {
-    const id = sessionID()
-
-    if (!id || sessionStatus().type !== "busy") return false
-
-    if (data.session.permission.list(id)?.length || data.session.form.list(id)?.length) return false
-    const active = projection.activeMessageID()
-
-    if (!active) return false
-    const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
-
-    if (assistant?.retry) return false
-
-    // Pending steers still project under the previous response until delivery.
-    // Its error must not hide feedback for a newly submitted prompt.
-    if (
-      assistant?.error &&
-      !data.session.pending.list(id).some((item) => item.type === "user" && item.delivery === "steer")
-    )
-      return false
-    const content = assistant?.content.at(-1)
-
-    if (
-      assistant?.time.completed === undefined &&
-      assistant?.time.streamed === undefined &&
-      content?.type === "text" &&
-      content.text.trim()
-    )
-      return false
-    const background = new Set(props.background.tasks().map((task) => task.id))
-
-    return !projection.rows().some((row) => {
-      if (row.userMessageID !== active) return false
-
-      if (Predicate.isTagged(row, "Thinking")) return true
-
-      if (Predicate.isTagged(row, "Notice")) {
-        const message = messageByID().get(row.messageID)
-
-        return message?.type === "compaction" && message.status === "running"
-      }
-
-      if (!Predicate.isTagged(row, "AssistantPart")) return false
-
-      // A live group of only thoughts reads as Thinking and stands in for Working.
-      if (row.group.type === "context" && projection.lastAssistantGroupKey().get(active) === row.group.key)
-        return row.group.refs.every(
-          (ref) => Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)?.type === "reasoning",
-        )
-
-      // Used and read groups keep the fallback, so each new read does not swap Working out for its short call.
-      if (row.group.type === "context" || row.group.type === "read") return false
-
-      return (row.group.type === "part" ? [row.group.ref] : row.group.refs).some((ref) => {
-        const content = Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)
-
-        if (content?.type !== "tool") return false
-
-        if (content.state.status === "streaming" || content.state.status === "running") return true
-        const taskID = content.state.metadata?.[content.name === "subagent" ? "sessionID" : "shellID"]
-
-        return background.has(content.id) || (Predicate.isString(taskID) && background.has(taskID))
-      })
-    })
-  })
-
-  // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
-  const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
-
-  // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
-  // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
-  // floats in never closes and a pinned timeline does not shift when input waits.
-  const activity = (live: () => boolean) => (
-    <div
-      classList={{
-        "min-w-0 w-full max-w-full": true,
-        "md:max-w-session md:mx-auto": props.centered,
-      }}
-    >
-      <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
-        <Show when={live() && showWorking()}>
-          <div data-component="session-working" role="status">
+    return (
+      <div
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-session md:mx-auto": props.centered,
+        }}
+      >
+        <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
+          <div
+            data-slot="session-working-indicator"
+            data-component={showWorking() || !showActivity() ? "session-working" : undefined}
+            role={showWorking() ? "status" : undefined}
+            aria-hidden={!showWorking() || undefined}
+            class="origin-left transition-[opacity,visibility] duration-150 ease-out will-change-[transform,opacity,filter] motion-reduce:transition-none"
+            classList={{ "invisible opacity-0 pointer-events-none": !showWorking() && showActivity() }}
+          >
             <TextShimmer text={language.t("session.timeline.working")} active />
           </div>
-        </Show>
-        <Show when={live() && backgroundHintPresence.present()}>
-          <div
-            ref={setBackgroundHintRef}
-            data-component="session-background-hint-row"
-            class="duration-150 motion-reduce:animate-none"
-            classList={{
-              "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-              "animate-out fade-out fill-mode-forwards":
-                backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-            }}
-          >
-            <BackgroundMoveHint onMove={props.background.move} />
-          </div>
-        </Show>
+          <Show when={hint.present()}>
+            <div ref={hint.ref} data-component="session-background-hint-row">
+              <BackgroundMoveHint onMove={props.background.move} />
+            </div>
+          </Show>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <VirtualizedTimeline
-      bottomSpacer={activity(() => !activityRow())}
       deferred={(row) => {
         if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
@@ -494,14 +500,7 @@ function MessageTimelineView(
           when={Predicate.isTagged(row(), "Activity")}
           fallback={<rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
         >
-          {(_) => {
-            // This row sits above input still waiting for delivery. Until live status first shows, it takes no room,
-            // so the waiting input keeps the place delivery leaves it. Once shown, the lane stays for the life of the
-            // row: Working hides and returns several times in one step, and each change would move that input 36px.
-            const shown = createMemo((was) => was || showWorking() || backgroundHintPresence.present(), false)
-
-            return <Show when={shown()}>{activity(() => true)}</Show>
-          }}
+          <ActivityLane />
         </Show>
       )}
       header={
@@ -683,4 +682,84 @@ function MessageTimelineView(
       }
     />
   )
+}
+
+// Status fades in and out from whatever opacity it has reached, so a flicker or a quick return never cuts it short.
+// Present when it mounts, it starts at rest; `hold` keeps it at least that long once shown.
+function createStatusFade(show: Accessor<boolean>, hold = 0) {
+  const [present, setPresent] = createSignal(show())
+  let element: HTMLElement | undefined
+  let fade: Animation | undefined
+  let shownAt = performance.now()
+  let entering = false
+
+  const run = (visible: boolean) => {
+    if (!element) return !visible && setPresent(false)
+
+    // An interrupted fade turns around from the opacity it has reached.
+    const from = entering
+      ? 0
+      : fade?.playState === "running"
+        ? Number(getComputedStyle(element).opacity)
+        : visible
+          ? 0
+          : 1
+
+    entering = false
+    fade?.cancel()
+
+    // It slides out from the status beside it as it fades, and back toward it as it leaves; reduced motion only fades.
+    const still = prefersReducedMotion()
+
+    const pose = (opacity: number) => ({
+      opacity: String(opacity),
+      translate: still ? "0 0" : `${(opacity - 1) * 6}px 0`,
+    })
+
+    const current = element.animate([pose(from), pose(visible ? 1 : 0)], {
+      duration: (visible ? 240 : 140) * motionTuning.timeScale(),
+      easing: visible ? "cubic-bezier(.22,1,.36,1)" : "cubic-bezier(.4,0,1,1)",
+      fill: "both",
+    })
+
+    fade = current
+    current.finished.then(
+      () => fade === current && !visible && setPresent(false),
+      () => undefined,
+    )
+  }
+
+  createEffect(
+    on(
+      show,
+      (visible) => {
+        if (visible) shownAt = performance.now()
+
+        if (visible && !present()) {
+          entering = true
+
+          return setPresent(true)
+        }
+
+        const remaining = visible ? 0 : hold - (performance.now() - shownAt)
+
+        if (remaining <= 0) return run(visible)
+        const timer = setTimeout(() => run(false), remaining)
+        onCleanup(() => clearTimeout(timer))
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(() => fade?.cancel())
+
+  return {
+    present,
+    ref(value: HTMLElement) {
+      element = value
+
+      // Solid builds the row outside the document, on a timeline that never runs, so the fade starts once it is
+      // inserted, still before it paints.
+      if (entering) queueMicrotask(() => entering && run(true))
+    },
+  }
 }

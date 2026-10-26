@@ -22,7 +22,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
-import { getSessionMessageHandoff } from "@/session/handoff"
+import { getSessionMessageHandoffs } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
@@ -80,10 +80,9 @@ export function createTimelineController(input: { session: TimelineSessionSource
 
   // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
   const projectedMessages = createMemo(() =>
-    applyTimelineMessageHandoff(
+    getSessionMessageHandoffs(input.session.identity.sessionKey()).reduce(
+      (messages, handoff) => applyTimelineMessageHandoff(messages, handoff, input.session.data.info()),
       visibleMessages(),
-      getSessionMessageHandoff(input.session.identity.sessionKey()),
-      input.session.data.info(),
     ),
   )
 
@@ -104,6 +103,12 @@ export function createTimelineController(input: { session: TimelineSessionSource
           item.type === "synthetic"
             ? [item.id]
             : [],
+        )
+        // A steer the composer just sent waits where admission will put it, so admission moves nothing.
+        .concat(
+          data.session.pending.admission(id) === "starting"
+            ? []
+            : getSessionMessageHandoffs(input.session.identity.sessionKey()).map((handoff) => handoff.message.id),
         ),
     )
   })

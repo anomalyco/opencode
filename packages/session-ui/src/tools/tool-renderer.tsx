@@ -18,7 +18,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Predicate, Schema } from "effect"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
@@ -43,6 +43,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "@kitlangton/solid-motion"
+import { widthMorph } from "@opencode/ui/motion/solid"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type {
   FileDiffInfo,
@@ -1796,8 +1797,18 @@ ToolRegistry.register({
       open()
     }
 
+    const [card, setCard] = createSignal<HTMLDivElement>()
+    // Backgrounding adds a suffix while the task stays on screen; its surface keeps one continuous width.
+    widthMorph({
+      ref: card,
+      content: () => card()?.querySelector<HTMLElement>('[data-component="task-tool-surface"]') ?? undefined,
+      watch: () => [title(), subtitle(), running(), clickable()],
+      spring: () => ({ duration: 0.25, bounce: 0 }),
+      inset: 0,
+    })
+
     const trigger = () => (
-      <div data-component="task-tool-card">
+      <div ref={setCard} data-component="task-tool-card" class="max-w-full">
         <div data-component="task-tool-surface">
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
@@ -2011,6 +2022,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
   const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
+
   // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
     String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
@@ -2225,7 +2237,7 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
               {([key, value]) => (
                 <div data-slot="execute-tool-call-input-entry">
                   <dt>{key}:</dt>
-                  <dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd>
+                  <dd>{Predicate.isString(value) ? value : JSON.stringify(value, null, 2)}</dd>
                 </div>
               )}
             </For>

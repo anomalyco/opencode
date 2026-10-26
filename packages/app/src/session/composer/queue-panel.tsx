@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, Show, untrack } from "solid-js"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -13,7 +13,8 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { SessionQueueView } from "./queue"
-import { cascade, Grow, queueStagger } from "./spring-height"
+import { cascade, Grow, queueRowClose, queueStagger } from "./spring-height"
+import { prepareSendFlight } from "@/session/timeline/send-flight"
 import "./queue-panel.css"
 
 type QueueRow = ReturnType<SessionQueueView["rows"]>[number]
@@ -38,16 +39,20 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
       (next) => {
         const prevLive = lastLive
         lastLive = next
+
         if (next.length === 0) return
 
         // An in-place edit or reorder keeps the row count: a row whose ID it replaced swaps in place rather than closing,
         // while a row that was already closing keeps closing until its exit completes.
         const swap = next.length === prevLive.length && prevLive.length > 0
+
         if (!swap && prevLive.length > 0 && !props.hidden)
           next.forEach((row) => !prevLive.some((item) => item.id === row.id) && appearing.add(row.id))
+
         const kept = untrack(shown).filter(
           (row) => !swap || next.some((item) => item.id === row.id) || !prevLive.some((item) => item.id === row.id),
         )
+
         setShown(keepLeaving(kept, next))
       },
       { defer: true },
@@ -63,10 +68,14 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
         stopCascade?.()
         stopCascade = undefined
         const step = queueStagger()
+
         if (!now || was !== false || step <= 0 || prefersReducedMotion()) return
         queueMicrotask(() => {
           if (!open()) return
-          stopCascade = cascade([...listRef.querySelectorAll<HTMLElement>('[data-component="session-queue-row"]')], step)
+          stopCascade = cascade(
+            [...listRef.querySelectorAll<HTMLElement>('[data-component="session-queue-row"]')],
+            step,
+          )
         })
       },
       { defer: true },
@@ -131,6 +140,7 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
                   when={!open() || live().includes(id)}
                   appear={appearing.delete(id)}
                   fade
+                  close={queueRowClose}
                   onClosed={() => setShown((rows) => rows.filter((row) => row.id !== id))}
                 >
                   <SessionQueueRow queue={props.queue} id={id} index={live().indexOf(id)} />
@@ -149,9 +159,10 @@ function keepLeaving<T extends { id: string }>(previous: T[], next: T[]) {
     (rows, row, index) => {
       if (rows.some((item) => item.id === row.id)) return rows
       const before = previous.slice(0, index).findLast((item) => rows.some((entry) => entry.id === item.id))
-      const at = before ? rows.findIndex((item) => item.id === before.id) + 1 : 0
 
-      return [...rows.slice(0, at), row, ...rows.slice(at)]
+      rows.splice(before ? rows.findIndex((item) => item.id === before.id) + 1 : 0, 0, row)
+
+      return rows
     },
     [...next],
   )
@@ -166,6 +177,20 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
   // shows its actions without hover and its label reads Send: that is how a
   // parked queue resumes.
   const active = () => !props.queue.working() && props.index === 0
+
+  let root: HTMLDivElement | undefined
+  let text: HTMLButtonElement | undefined
+  // Like a sent message, a prompt that leaves the queue for the timeline flies from its row onto its bubble. Removed
+  // or undone prompts never land, so their copy expires unseen.
+  createRenderEffect(
+    on(
+      leaving,
+      (now) => {
+        if (now) prepareSendFlight(props.id, text, root)
+      },
+      { defer: true },
+    ),
+  )
 
   const sortable = useSortable({
     get id() {
@@ -183,7 +208,10 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
     <Show when={row()} keyed>
       {(entry) => (
         <div
-          ref={sortable.ref}
+          ref={(el) => {
+            root = el
+            sortable.ref(el)
+          }}
           data-component={leaving() ? undefined : "session-queue-row"}
           data-leaving={leaving() || undefined}
           aria-busy={leaving() ? undefined : entry.pending}
@@ -207,6 +235,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
             <div class="flex min-w-0 items-center gap-4">
               <button
                 type="button"
+                ref={text}
                 data-action="session-queue-edit"
                 dir="auto"
                 aria-disabled={entry.pending}

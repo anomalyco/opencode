@@ -674,12 +674,15 @@ function freeLimit(
 // OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.
 function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
   const type = message.error?.type
+
   if (type !== "provider.budget-limit" && type !== "provider.model-budget-limit") return {}
   const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(message.error?.response?.body ?? "")?.[1] ?? "")
-  return {
-    kind: type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const),
-    ...(Number.isNaN(at) ? {} : { resetAt: at }),
-  }
+
+  const kind = type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const)
+
+  if (Number.isNaN(at)) return { kind }
+
+  return { kind, resetAt: at }
 }
 
 function isInterrupted(error: SessionMessageAssistant["error"]) {
@@ -795,7 +798,9 @@ function indexUserContext(messages: SessionMessageInfo[]) {
   const result = new Map<string, { agent: string; model: ModelRef }>()
   let agent = ""
   let model: ModelRef = { id: "", providerID: "" }
-  let userID: string | undefined
+  // The user messages the next assistant message answers: one, or a batch of steers delivered together.
+  let answering: string[] = []
+  let answered = false
 
   messages.forEach((message) => {
     if (message.type === "agent-switched") agent = message.agent
@@ -803,7 +808,9 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     if (message.type === "model-switched") model = message.model
 
     if (message.type === "user") {
-      userID = message.id
+      if (answered) answering = []
+      answered = false
+      answering.push(message.id)
       const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
       const localModelID = localModel?.id ?? localModel?.modelID
 
@@ -819,13 +826,13 @@ function indexUserContext(messages: SessionMessageInfo[]) {
       })
     }
 
-    if (message.type === "shell") userID = undefined
+    if (message.type === "shell") answering = []
 
     if (message.type !== "assistant") return
     agent = message.agent
     model = message.model
-
-    if (userID) result.set(userID, { agent, model })
+    answered = true
+    answering.forEach((id) => result.set(id, { agent, model }))
   })
 
   return result

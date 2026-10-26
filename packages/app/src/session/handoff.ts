@@ -10,14 +10,16 @@ export type SessionMessageHandoff = {
 
 const MAX = 40
 
-const [handoffs, setHandoffs] = createStore<Record<string, SessionMessageHandoff | undefined>>({})
+// Each prompt keeps its handoff until its own admission echo, so a second steer sent before the first is admitted
+// leaves the first where it stands.
+const [handoffs, setHandoffs] = createStore<Record<string, SessionMessageHandoff[] | undefined>>({})
 
 const handoffOrder = new Map<string, true>()
 
 export const setSessionMessageHandoff = (key: string, handoff: SessionMessageHandoff) => {
   handoffOrder.delete(key)
   handoffOrder.set(key, true)
-  setHandoffs(key, handoff)
+  setHandoffs(key, (list = []) => [...list.filter((item) => item.message.id !== handoff.message.id), handoff])
 
   while (handoffOrder.size > MAX) {
     const first = handoffOrder.keys().next().value
@@ -28,32 +30,43 @@ export const setSessionMessageHandoff = (key: string, handoff: SessionMessageHan
   }
 }
 
-export const getSessionMessageHandoff = (key: string) => handoffs[key]
+export const getSessionMessageHandoffs = (key: string) => handoffs[key] ?? []
 
 export const clearSessionMessageHandoff = (key: string, messageID: string) => {
-  if (handoffs[key]?.message.id !== messageID) return
+  const list = handoffs[key]?.filter((item) => item.message.id !== messageID)
+
+  if (list?.length === handoffs[key]?.length) return
+
+  if (list?.length) return setHandoffs(key, list)
   handoffOrder.delete(key)
   setHandoffs(key, undefined)
 }
 
-// Holds a session's handoff until the server's admission echo, which follows the echoes of the switches it projects.
+// Holds each of a session's handoffs until the server's admission echo, which follows the echoes of the switches it
+// projects.
 export function createSessionMessageHandoff(key: string, sessionID: string, event: ServerSDK["event"]) {
-  let unsubscribe: VoidFunction | undefined
+  const echoes = new Map<string, VoidFunction>()
+
+  const release = (messageID: string) => {
+    echoes.get(messageID)?.()
+    echoes.delete(messageID)
+  }
 
   return {
     set(handoff: SessionMessageHandoff) {
-      unsubscribe?.()
+      release(handoff.message.id)
       setSessionMessageHandoff(key, handoff)
-      unsubscribe = event.on("session.inbox.enqueued", (item) => {
-        if (item.data.sessionID !== sessionID || item.data.inboxID !== handoff.message.id) return
-        unsubscribe?.()
-        unsubscribe = undefined
-        clearSessionMessageHandoff(key, handoff.message.id)
-      })
+      echoes.set(
+        handoff.message.id,
+        event.on("session.inbox.enqueued", (item) => {
+          if (item.data.sessionID !== sessionID || item.data.inboxID !== handoff.message.id) return
+          release(handoff.message.id)
+          clearSessionMessageHandoff(key, handoff.message.id)
+        }),
+      )
     },
     clear(messageID: string) {
-      unsubscribe?.()
-      unsubscribe = undefined
+      release(messageID)
       clearSessionMessageHandoff(key, messageID)
     },
   }

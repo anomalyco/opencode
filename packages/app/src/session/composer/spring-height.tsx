@@ -76,6 +76,18 @@ export const queueStagger = motionTuning.number("docks.stagger", {
   time: "duration",
 })
 
+// A queued row closes on its own spring, apart from the timeline's slower row growth.
+export const queueRowClose = motionTuning.spring("docks.queue-row-close", {
+  label: "Queue row close",
+  group,
+  subsection,
+  presets: {
+    snappy: { duration: 0.32, bounce: 0 },
+    smooth: { duration: 0.42, bounce: 0 },
+    calm: { duration: 0.55, bounce: 0 },
+  },
+})
+
 const fade: DurationOptions = { duration: 0.15, bounce: 0 }
 
 const snap = (px: number, dpr = window.devicePixelRatio || 1) => Math.round(px * dpr) / dpr

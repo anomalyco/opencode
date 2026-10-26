@@ -6,6 +6,8 @@ import { preloadMarkdown } from "../src/components/markdown-cache"
 import { MarkdownProvider, type MarkdownLocalFileExists } from "../src/context/markdown"
 import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
+import { createTimelineMarkdownLayout } from "../src/timeline/markdown-layout"
+import { createTimelineTextLayout } from "../src/timeline/text-layout"
 
 export {
   getCachedMarkdown,
@@ -28,6 +30,7 @@ export async function mountMarkdown(options: {
   streaming?: boolean
   cached?: boolean
   images?: boolean
+  prepared?: boolean
   synchronousFiles?: boolean
   localFileExists?: MarkdownLocalFileExists
 }) {
@@ -44,6 +47,8 @@ export async function mountMarkdown(options: {
     const [text, setText] = createSignal(options.text)
     const [streaming, setStreaming] = createSignal(options.streaming ?? false)
     const [visible, setVisible] = createSignal(true)
+    const [prepared, setPrepared] = createSignal(options.prepared ?? false)
+    const layout = createTimelineMarkdownLayout(createTimelineTextLayout())
 
     return (
       <DialogProvider>
@@ -55,6 +60,7 @@ export async function mountMarkdown(options: {
           onChange={(event) => setStreaming(event.currentTarget.checked)}
         />
         <button onClick={() => setVisible((value) => !value)}>Toggle Markdown</button>
+        <button onClick={() => setPrepared((value) => !value)}>Toggle preparation</button>
         <MarkdownProvider
           readImage={(path, signal) =>
             options.images ? readLocalImage(api, "C:/project", path, signal) : Promise.resolve(undefined)
@@ -69,6 +75,7 @@ export async function mountMarkdown(options: {
               text={text()}
               streaming={streaming()}
               cacheKey={options.cached ? "markdown-test" : undefined}
+              prepared={prepared() ? layout.prepare("markdown-test", text(), streaming()) : undefined}
               deferUntilReady
             />
           </Show>

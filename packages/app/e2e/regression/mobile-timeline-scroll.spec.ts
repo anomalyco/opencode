@@ -1,4 +1,4 @@
-import { devices, expect, test, type Page } from "@playwright/test"
+import { devices, expect, test, type Locator, type Page } from "@playwright/test"
 import {
   assistantMessage,
   partDelta,
@@ -122,6 +122,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 }],
         timestamp: restingTimestamp(),
       })
+      const held = await sampleTops(reading.anchor)
       image.resolve()
 
       for (const [index, row] of rows.entries()) {
@@ -130,6 +131,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
           .poll(() => row.evaluate((element) => element.getBoundingClientRect().height))
           .toBe(heights[index] + 600)
       }
+
+      await settleMotion(reading.scroller)
+      expect(movedFrames(await held(), before)).toEqual([])
 
       await testInfo.attach("images-held.png", { body: await page.screenshot(), contentType: "image/png" })
       expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
@@ -732,12 +736,21 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               timestamp: restingTimestamp(),
             })
 
-            for (let step = 1; step <= 23; step++)
+            // Drag on until the row with the delayed image mounts just above the screen, so its load resizes a row
+            // above the resting anchor.
+            const imagePart = page.getByText("Part 46.", { exact: true })
+
+            for (let step = 1; step <= 23 || !(await imagePart.count()); step++) {
+              expect(step).toBeLessThanOrEqual(40)
+
               await devtools.send("Input.dispatchTouchEvent", {
                 type: "touchMove",
                 touchPoints: [{ x: point.x, y: point.y + step * 30 }],
                 timestamp: restingTimestamp(),
               })
+              await page.evaluate(() => new Promise(requestAnimationFrame))
+            }
+
             await expect(touched).not.toBeInViewport()
             await devtools.send("Input.dispatchTouchEvent", {
               type: release,
@@ -760,16 +773,43 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await expect(page.locator(`${thumbSelector}[data-visible="true"]`)).toHaveCount(1)
             await fixture.send(partDelta("prt_target_heading", "\n\nMore content."))
             await expect(heading).toContainText("More content.")
-            await expect(heading.locator("p")).toHaveCount(2)
-            await expect.poll(() => target.evaluate((element) => element?.isConnected)).toBe(false)
+            await expect(heading.locator("p")).toHaveText(["Heading text", "More content."])
+            // An unchanged paragraph may keep its node. Whether kept or replaced, what was touched shows current text.
+            const part = await heading.elementHandle()
+            expect(
+              await target.evaluate(
+                (element, part) =>
+                  !element?.isConnected ||
+                  (!!part?.contains(element) && element.closest("p")?.textContent === "Heading text"),
+                part,
+              ),
+            ).toBe(true)
+            await part?.dispose()
             await devtools.send("Input.dispatchTouchEvent", { type: release, touchPoints: [] })
             await target.dispose()
             await expect(hidden).toHaveCount(1)
           }
 
-          const anchor = page.getByText(detach === "scroll" ? "Part 48." : "Reading 20.", { exact: true })
+          // The first part below the delayed image that rests wholly in view anchors the measurement.
+          const resting = await scroller.evaluate((element) => {
+            const view = element.getBoundingClientRect()
+
+            return [...element.querySelectorAll("p")]
+              .map((paragraph) => ({ text: paragraph.textContent ?? "", box: paragraph.getBoundingClientRect() }))
+              .find(
+                (part) =>
+                  Number(/^Part (\d+)\.$/.exec(part.text)?.[1]) > 46 &&
+                  part.box.top >= view.top &&
+                  part.box.bottom <= view.bottom,
+              )?.text
+          })
+
+          const anchor = page.getByText(detach === "scroll" ? resting! : "Reading 20.", { exact: true })
           await expect(anchor).toBeInViewport()
+          // The streamed paragraph is drawn growing in; measure where the anchor rests.
+          await settleMotion(scroller)
           const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
+          const loading = await sampleTops(anchor)
           image.resolve()
           const loaded = page.getByAltText("Delayed image", { exact: true })
           await expect(loaded).toHaveJSProperty("naturalHeight", 300)
@@ -780,6 +820,8 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
                 .evaluate((element) => element.getBoundingClientRect().height),
             )
             .toBeGreaterThan(300)
+          await settleMotion(scroller)
+          expect(movedFrames(await loading(), before)).toEqual([])
           await page.screenshot()
           expect(await anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
           await scroller.press("Home")
@@ -840,16 +882,24 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       })
 
       expect(chosen.above).toHaveLength(2)
+      const anchor = scroller.locator(`[data-timeline-key="${chosen.key}"]`)
+      // The row's box is drawn moving while its rewrapped part is revealed; what it shows must hold still.
+      const content = anchor.locator(":scope > div")
+      const held = await sampleTops(content)
       await page.setViewportSize({ width: 390, height: 844 })
 
       for (const row of chosen.above)
         await expect
           .poll(async () => (await scroller.locator(`[data-timeline-key="${row.key}"]`).boundingBox())?.height)
           .toBeGreaterThan(row.height)
-      const anchor = scroller.locator(`[data-timeline-key="${chosen.key}"]`)
+      await settleMotion(scroller)
+      expect(movedFrames(await held(), chosen.top)).toEqual([])
       await testInfo.attach("reflow-held.png", { body: await page.screenshot(), contentType: "image/png" })
       expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+      const cancelled = await sampleTops(content)
       await devtools.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
+      await settleMotion(scroller)
+      expect(movedFrames(await cancelled(), chosen.top)).toEqual([])
       await testInfo.attach("reflow-cancelled.png", { body: await page.screenshot(), contentType: "image/png" })
       expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
     })
@@ -894,13 +944,77 @@ async function readFrom(page: Page, text: string) {
   const anchor = scroller.getByText(text, { exact: true })
   await expect(anchor).toBeAttached()
   await expect(scroller.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+  // Rendered markdown can grow rows in view, which the timeline draws as a spring. Aim at where the anchor rests.
+  await settleMotion(scroller)
   await anchor.evaluate((element) => {
     const root = element.closest("[data-scrollable]")!
     root.scrollTop += element.getBoundingClientRect().top - root.getBoundingClientRect().top - 8
   })
   await expect(anchor).toBeInViewport()
+  await settleMotion(scroller)
 
   return { timeline, scroller, anchor, start }
+}
+
+// Resolves once no finite transform animation runs in the timeline. Motion starts in the commit after a change is
+// observed, so each pass waits two frames before it looks.
+async function settleMotion(scroller: Locator) {
+  await scroller.evaluate(async (root) => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+    for (;;) {
+      await frame()
+      await frame()
+
+      const moving = root
+        .getAnimations({ subtree: true })
+        .filter(
+          (animation) =>
+            animation.playState === "running" &&
+            animation.effect instanceof KeyframeEffect &&
+            animation.effect.getComputedTiming().endTime !== Infinity &&
+            animation.effect.getKeyframes().some((keyframe) => keyframe.transform !== undefined),
+        )
+
+      if (!moving.length) return
+      await Promise.all(moving.map((animation) => animation.finished.catch(() => undefined)))
+    }
+  })
+}
+
+// Records the element's painted top every frame until the returned function stops it.
+async function sampleTops(locator: Locator) {
+  const state = await locator.evaluateHandle((element) => {
+    // SAFETY: widens the empty initial list to its element type.
+    const state = { on: true, tops: [] as number[] }
+
+    const tick = () => {
+      if (!state.on) return
+      state.tops.push(element.getBoundingClientRect().top)
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+
+    return state
+  })
+
+  return async () => {
+    const tops = await state.evaluate((state) => {
+      state.on = false
+
+      return state.tops
+    })
+
+    await state.dispose()
+
+    return tops
+  }
+}
+
+// Frames where content that should hold still was painted more than 2px from where it rests.
+function movedFrames(tops: number[], rest: number) {
+  return tops.flatMap((top, frame) => (Math.abs(top - rest) > 2 ? [{ frame, top }] : []))
 }
 
 // Chromium flings a touchEnd that lands within 80 ms of a touchMove made within 40 ms of the previous one

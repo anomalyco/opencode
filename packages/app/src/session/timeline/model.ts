@@ -1,7 +1,7 @@
 import { createMemo, createResource, type Accessor } from "solid-js"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { useData } from "@/runtime/server/current"
-import { getSessionMessageHandoff } from "@/session/handoff"
+import { getSessionMessageHandoffs } from "@/session/handoff"
 import type { SessionModel } from "../model"
 
 const leadingTurnPageDelay = 200
@@ -44,7 +44,7 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
     // load with the inbox, not the transcript, so alone they are no tail; a first prompt shows through its handoff.
     return (
       data.session.message.list(id).some((message) => !data.session.input.has(id, message.id)) ||
-      !!getSessionMessageHandoff(input.session.identity.sessionKey())
+      getSessionMessageHandoffs(input.session.identity.sessionKey()).length > 0
     )
   })
 

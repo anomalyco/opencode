@@ -28,6 +28,7 @@ import {
   userMessage,
   userText,
 } from "../utils/timeline"
+import { seed } from "../utils/app"
 
 const detailed = timelinePresets[2].value
 
@@ -655,12 +656,12 @@ test("shows a background subagent's outcome as its own row where it finished", a
   await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
 })
 
-test("holds undelivered input still while live status above it comes and goes", async ({ page }) => {
+test("keeps undelivered input right under live status while it comes and goes", async ({ page }) => {
   const timeline = await setupTimeline(page, {
     sessionStatus: { [sessionID]: { type: "busy" } },
     messages: [
       userMessage(),
-      // Streaming text stands in for Working, so live status has nothing to show.
+      // Working keeps its own row while the reply streams.
       assistantMessage([textPart("prt_streaming_answer", "It ships as soon as it's ready.")], { completed: false }),
     ],
   })
@@ -685,38 +686,49 @@ test("holds undelivered input still while live status above it comes and goes", 
       },
     })
 
-  const first = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: "Audit constraints" })
+  const notice = (description: string) =>
+    page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: description })
 
-  const gap = async () => {
-    const [above, below] = await Promise.all([answer.boundingBox(), first.boundingBox()])
+  const first = notice("Audit constraints")
 
-    return above && below ? Math.round(below.y - above.y - above.height) : undefined
+  // The space between two rows' boxes, so a hidden or collapsing lane shows up as a gap or an overlap.
+  const gap = (above: Locator, below: Locator) => async () => {
+    const [top, bottom] = await Promise.all([above.boundingBox(), below.boundingBox()])
+
+    return top && bottom ? Math.round(bottom.y - top.y - top.height) : undefined
   }
 
+  const row = (content: Locator) => page.locator("[data-timeline-key]", { has: content })
+
   await expect(answer).toBeVisible()
+  await expect(working).toBeVisible()
   await timeline.send(outcome("msg_pending_outcome", "Audit constraints"))
   await expect(first).toHaveText(/^General finished · Audit constraints$/)
-  await expect(working).toHaveCount(0)
-  // Live status moves above the waiting notice, but takes no room while it has nothing to show.
-  await expect.poll(lane).toBe(0)
-  const pending = await gap()
+  // Live status moves above the waiting notice at its full height, with nothing between them.
+  await expect(working).toBeVisible()
+  await expect.poll(lane).toBe(36)
+  await expect.poll(gap(activity, row(first))).toBe(0)
 
+  // Delivered input joins the turn, and live status follows it at the same height.
   await timeline.send(inboxDelivered({ sessionID, inboxID: "msg_pending_outcome" }))
-  await expect(activity).toHaveCount(0)
-  await expect.poll(gap).toBe(pending)
+  await expect.poll(gap(row(first), activity)).toBe(0)
+  await expect.poll(lane).toBe(36)
 
+  const second = notice("Review copy")
   await timeline.send(outcome("msg_pending_review", "Review copy"))
-  await expect(page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: "Review copy" })).toBeVisible()
-  await expect.poll(lane).toBe(0)
+  await expect(second).toBeVisible()
+  await expect.poll(gap(activity, row(second))).toBe(0)
+  await expect.poll(lane).toBe(36)
 
-  // A finished read keeps Working on; the next streaming text hides it again. Once shown, the lane stays.
+  // A finished read and the next streaming text both keep Working on, and the lane never changes height.
   await timeline.send(partUpdated(toolPart("prt_live_read", "read", "completed", { filePath: "README.md" })))
   await expect(working).toBeVisible()
   await expect.poll(lane).toBe(36)
   await timeline.send(partUpdated(textPart("prt_live_text", "Checking the copy next.")))
   await expect(page.getByText("Checking the copy next.", { exact: true })).toBeVisible()
-  await expect(working).toHaveCount(0)
+  await expect(working).toBeVisible()
   await expect.poll(lane).toBe(36)
+  await expect.poll(gap(activity, row(second))).toBe(0)
 })
 
 test("jumps from a finished shell's notice to its call", async ({ page }) => {
@@ -862,7 +874,7 @@ test.describe("Working", () => {
       await timeline.send(partUpdated(toolPart(id, name, "streaming", input)))
       const tool = page.locator(`[data-timeline-part-id="${id}"]`)
       await expect(tool).toBeVisible()
-      await expect(working).toHaveCount(0)
+      await expect(working).toBeVisible()
 
       const metadata =
         name === "patch"
@@ -873,7 +885,7 @@ test.describe("Working", () => {
       await expect(tool).toContainText(
         { shell: "printf ready", patch: "working.ts", subagent: "Inspect working indicator" }[name],
       )
-      await expect(working).toHaveCount(0)
+      await expect(working).toBeVisible()
 
       await timeline.send(partUpdated(toolPart(id, name, "completed", input, { metadata })))
       await expect(tool).toBeVisible()
@@ -960,7 +972,7 @@ test.describe("Working", () => {
 
       if (!grouped) {
         await expect(page.locator('[data-timeline-part-id="prt_background_active"]')).toBeVisible()
-        await expect(working).toHaveCount(0)
+        await expect(working).toBeVisible()
 
         return
       }
@@ -1022,8 +1034,133 @@ test.describe("Working", () => {
     await expect(page.locator(`[data-timeline-part-id="${assistantID}:text:0"]`)).toContainText(
       "The response is streaming.",
     )
-    await expect(working).toHaveCount(0)
+    await expect(working).toBeVisible()
   })
+})
+
+test("fades in a whole long reply that arrives in one update instead of growing it", async ({ page }) => {
+  const timeline = await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([], { completed: false })],
+  })
+
+  await expect(page.locator('[data-component="session-working"]')).toBeVisible()
+  await page.waitForTimeout(500)
+  await page.evaluate(() => {
+    const played: { moves: boolean; duration: number }[] = []
+    Object.assign(window, { played })
+    const animate = Element.prototype.animate
+    Element.prototype.animate = function (frames, options) {
+      const list = Array.isArray(frames) ? frames : []
+      const timeline = this.closest("[data-timeline-key]") || this.querySelector(":scope > [data-timeline-key]")
+
+      if (timeline)
+        played.push({
+          moves: list.some((frame) => "transform" in frame || "clipPath" in frame),
+          duration: Number(options instanceof Object ? (options.duration ?? 0) : (options ?? 0)),
+        })
+
+      return animate.call(this, frames, options)
+    }
+  })
+
+  await timeline.send({
+    id: "evt_instant_text_started",
+    type: "session.text.started",
+    created: 1700000002000,
+    location: { directory },
+    durable: { aggregateID: sessionID, seq: 0, version: 1 },
+    data: { sessionID, assistantMessageID: assistantID, ordinal: 0 },
+  })
+  const paragraph = "The harbor wakes before the town does, and the lanterns along the mole are still turning. "
+  await timeline.send({
+    id: "evt_instant_text_delta",
+    type: "session.text.delta",
+    created: 1700000002001,
+    location: { directory },
+    data: {
+      sessionID,
+      assistantMessageID: assistantID,
+      ordinal: 0,
+      delta: Array.from({ length: 16 }, () => paragraph.repeat(3)).join("\n\n"),
+    },
+  })
+  await expect(page.locator(`[data-timeline-part-id="${assistantID}:text:0"]`)).toContainText("The harbor wakes")
+  await page.waitForTimeout(500)
+
+  const played = await page.evaluate(() =>
+    // SAFETY: the test stored this value on window itself, in this shape.
+    "played" in window ? (window.played as { moves: boolean; duration: number }[]) : [],
+  )
+
+  // Nothing that was on screen survives a move of more than a screen, so nothing moves: the reply only fades in.
+  expect(played.filter((item) => item.moves)).toEqual([])
+  expect(played.length).toBeGreaterThan(0)
+  expect(Math.max(...played.map((item) => item.duration))).toBeLessThanOrEqual(200)
+})
+
+test("parts that arrive out of view take their height and rest once scrolled to", async ({ page }) => {
+  const timeline = await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_read", notes("Read", 60))], { completed: false })],
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  await expect(page.getByText("Read note 60.", { exact: true })).toBeInViewport()
+  await scroller.hover()
+  await page.mouse.wheel(0, -100_000)
+  await expect(page.getByText("Read note 1.", { exact: true })).toBeInViewport()
+  // The reply's last part stays mounted and the first after the viewport are overscan; the middle ones never mount.
+  // Prices take the DOM-measured path, which has no model height to fall back on.
+  await timeline.send(
+    Array.from({ length: 6 }, (_, index) =>
+      partUpdated(textPart(`prt_unread_${index}`, `${notes(`Unread ${index}`, 6)}\n\nIt costs $1 or $2.`)),
+    ).flat(),
+  )
+  await page.waitForTimeout(1500)
+  await page.evaluate(() => {
+    const entered: string[] = []
+    Object.assign(window, { entered })
+    const animate = Element.prototype.animate
+    Element.prototype.animate = function (frames, options) {
+      const list = Array.isArray(frames) ? frames : []
+      const row = this.closest("[data-timeline-key]") ?? this.querySelector(":scope > [data-timeline-key]")
+
+      if (row && list.some((frame) => Number(frame.opacity ?? 1) < 0.99))
+        entered.push(row.getAttribute("data-timeline-key") ?? "")
+
+      return animate.call(this, frames, options)
+    }
+  })
+
+  await page.mouse.wheel(0, 100_000)
+  await expect(page.getByText("It costs $1 or $2.").last()).toBeInViewport()
+  await page.waitForTimeout(500)
+
+  // SAFETY: the test stored this value on window itself, in this shape.
+  expect(await page.evaluate(() => ("entered" in window ? (window.entered as string[]) : []))).toEqual([])
+})
+
+test("turning on reduced motion lands rows that are still moving", async ({ page }) => {
+  const timeline = await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_first", notes("First", 3))], { completed: false })],
+  })
+
+  await expect(page.getByText("First note 3.", { exact: true })).toBeInViewport()
+  await page.waitForTimeout(500)
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+
+  const moving = () =>
+    scroller.evaluate(
+      (element) =>
+        element
+          .getAnimations({ subtree: true })
+          .filter((animation) => !(animation instanceof CSSAnimation) && !(animation instanceof CSSTransition))
+          .filter((animation) => animation.playState === "running").length,
+    )
+
+  await timeline.send(partUpdated(textPart("prt_second", notes("Second", 4))))
+  await expect.poll(moving).toBeGreaterThan(0)
+  await page.evaluate(() => (document.documentElement.dataset.motion = "reduce"))
+  await expect.poll(moving, { timeout: 200 }).toBe(0)
 })
 
 test.describe("background shortcut", () => {
@@ -1038,17 +1175,28 @@ test.describe("background shortcut", () => {
     await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
     await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
     const hint = backgroundHint(page)
+    const working = page.locator('[data-component="session-working"]')
     await expect(hint).toBeVisible()
+    await expect(working).toBeVisible()
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+    // Working keeps its own row under the card, and the shortcut sits beside it.
     await expect
       .poll(async () => {
-        const [cardBox, hintBox] = await Promise.all([card.boundingBox(), hint.boundingBox()])
+        const [cardBox, workingBox, hintBox] = await Promise.all([
+          card.boundingBox(),
+          working.boundingBox(),
+          hint.boundingBox(),
+        ])
 
-        if (!cardBox || !hintBox) return undefined
+        if (!cardBox || !workingBox || !hintBox) return undefined
 
-        return { aligned: Math.abs(cardBox.x - hintBox.x) < 2, ordered: cardBox.y < hintBox.y }
+        return {
+          aligned: Math.abs(cardBox.x - workingBox.x) < 2,
+          beside: hintBox.x >= workingBox.x + workingBox.width,
+          ordered: cardBox.y < hintBox.y,
+        }
       })
-      .toEqual({ aligned: true, ordered: true })
+      .toEqual({ aligned: true, beside: true, ordered: true })
     await expectBackgroundRequest(page)
   })
 
@@ -1095,6 +1243,57 @@ test.describe("background shortcut", () => {
       if (name === "shell") await expectBackgroundRequest(page)
     })
   }
+
+  test("slides the background shortcut in beside Working without moving it", async ({ page }) => {
+    // Quarter speed, so even a slow runner draws many frames of the fade.
+    await seed(page, { storage: { "opencode.motion.v2": { speed: 0.25 } } })
+
+    const timeline = await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([toolPart("prt_hint_read", "read", "completed", { filePath: "package.json" })], {
+          completed: false,
+        }),
+      ],
+    })
+
+    const working = page.locator('[data-component="session-working"]')
+    await expect(working).toBeInViewport()
+    const left = (await working.boundingBox())!.x
+
+    // Every frame from the shell's start, the shortcut row's opacity and offset.
+    const frames = await page.evaluateHandle(() => {
+      // SAFETY: widens the empty initial list to its element type.
+      const state = { on: true, frames: [] as { opacity: number; x: number }[] }
+
+      const tick = () => {
+        if (!state.on) return
+        const row = document.querySelector('[data-component="session-background-hint-row"]')
+
+        if (row)
+          state.frames.push({
+            opacity: +getComputedStyle(row).opacity,
+            x: parseFloat(getComputedStyle(row).translate) || 0,
+          })
+        requestAnimationFrame(tick)
+      }
+
+      requestAnimationFrame(tick)
+
+      return state
+    })
+
+    await timeline.send(partUpdated(toolPart("prt_hint_shell", "shell", "running", { command: "sleep 10" })))
+    await expect(backgroundHint(page)).toBeInViewport()
+    await page.waitForTimeout(1500)
+    const trace = await frames.evaluate((state) => ((state.on = false), state.frames))
+
+    // It fades in over several frames, sliding out from Working, and comes to rest where it lays out.
+    expect(trace.filter((frame) => frame.opacity > 0.05 && frame.opacity < 0.95).length).toBeGreaterThanOrEqual(4)
+    expect(Math.min(...trace.map((frame) => frame.x))).toBeLessThan(-2)
+    expect(trace.at(-1)).toEqual({ opacity: 1, x: 0 })
+    expect((await working.boundingBox())!.x).toBe(left)
+  })
 
   for (const placement of ["right", "center"] as const) {
     test(`anchors the activity panel to a ${placement}-placed capsule`, async ({ page }) => {
@@ -1480,9 +1679,10 @@ test.describe("background shortcut", () => {
           .poll(async () => {
             const [header, shell] = await Promise.all([group.boundingBox(), shellTrigger.boundingBox()])
 
-            return header && shell ? Math.round(shell.y - (header.y + header.height)) : undefined
+            return header && shell ? Math.abs(shell.y - (header.y + header.height)) : Infinity
           })
-          .toBe(0)
+          // Rows sit on a 1/64 px grid and the scroll offset on whole pixels.
+          .toBeLessThanOrEqual(0.5)
 
       await expect(
         fixture.after ? page.getByText(`Follow-up note ${fixture.after}.`, { exact: true }) : group,
@@ -1507,6 +1707,28 @@ test.describe("background shortcut", () => {
       await timeline.send(partUpdated(textPart("prt_late", notes("Late", 30))))
       await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
       await aligned()
+
+      if (!fixture.searches) return
+      // The shell's own row grows above it; the shell holds still instead of springing back to where it was.
+
+      const drift = await page.evaluate(async () => {
+        const shell = document.querySelector('[data-timeline-part-id="prt_far_shell"]')!
+        const trigger = shell.querySelector('[data-slot="collapsible-trigger"]')!
+        const top = trigger.getBoundingClientRect().top
+        const spacer = document.createElement("div")
+        spacer.style.height = "120px"
+        shell.before(spacer)
+
+        const frames = await Array.fromAsync({ length: 40 }, async () => {
+          await new Promise(requestAnimationFrame)
+
+          return Math.abs(trigger.getBoundingClientRect().top - top)
+        })
+
+        return Math.max(...frames.slice(2))
+      })
+
+      expect(drift).toBeLessThanOrEqual(0.5)
     })
   }
 
@@ -2137,6 +2359,20 @@ test("quotes table rows and diff lines selected across a diff viewer", async ({ 
   const removed = page.locator('[data-line-type="change-deletion"][data-line]')
   const added = page.locator('[data-line-type="change-addition"][data-line]')
   await expect(added).toHaveText("export const value = 'after'")
+  // Rows spring to their measured heights after they render; drag across lines that rest.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation.playState === "running" && animation.effect?.getComputedTiming().endTime !== Infinity,
+            ).length,
+      ),
+    )
+    .toBe(0)
 
   const drag = async (from: Locator, to: Locator) => {
     const start = await from.boundingBox()

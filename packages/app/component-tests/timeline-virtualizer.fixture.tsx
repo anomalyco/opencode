@@ -1,11 +1,23 @@
 import { TimelineRow } from "@opencode/session-ui/timeline/projection"
-import { onCleanup } from "solid-js"
+import { Predicate } from "effect"
+import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { createTimelineVirtualizer } from "../src/session/timeline/virtualizer"
 
-export function mountTimelineVirtualizer(input: { count: number; rowHeight: number; immediate?: boolean }) {
+export function mountTimelineVirtualizer(input: {
+  count: number
+  rowHeight: number
+  immediate?: boolean
+  modeled?: number
+  growthRows?: number
+  viewportHeight?: number
+  insertedHeight?: number
+  activity?: boolean
+  /** The composer region's height over the timeline's bottom edge. */
+  inset?: number
+}) {
   const host = document.createElement("main")
   host.dataset.testid = "timeline-virtualizer-fixture"
   host.dataset.scrolls = "0"
@@ -14,15 +26,43 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
   document.body.appendChild(host)
 
   function Fixture() {
-    const [state, setState] = createStore({ pinned: true, ready: false })
+    const [state, setState] = createStore({
+      pinned: true,
+      ready: false,
+      growth: 0,
+      inserted: false,
+      removed: false,
+      activity: input.activity ?? false,
+      inset: input.inset ?? 0,
+      insetStep: 0,
+    })
 
-    const rows = Array.from(
+    const initial = Array.from(
       { length: input.count },
       (_, index) => new TimelineRow.UserMessage({ userMessageID: `message-${index}` }),
     )
 
-    const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row]))
-    const indexes = new Map(rows.map((row, index) => [row.userMessageID, index]))
+    const inserted = new TimelineRow.UserMessage({ userMessageID: "inserted" })
+    const activity = new TimelineRow.Activity({ userMessageID: `message-${input.count - 1}` })
+
+    const rows = createMemo(() => [
+      ...(state.inserted ? [...initial.slice(0, -1), inserted, initial.at(-1)!] : initial).filter(
+        (row) => !state.removed || row.userMessageID !== `message-${input.count - 3}`,
+      ),
+      ...(state.activity ? [activity] : []),
+    ])
+
+    const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row])))
+    const indexes = new Map([...initial, inserted].map((row, index) => [row.userMessageID, index]))
+
+    const height = (id: string) =>
+      (id === "inserted" ? (input.insertedHeight ?? input.rowHeight) : input.rowHeight) +
+      (indexes.get(id)! >= input.count - 1 - (input.growthRows ?? 1) && indexes.get(id)! < input.count - 1
+        ? state.growth
+        : 0)
+
+    let scrollToEnd = (_behavior?: ScrollBehavior) => {}
+
     let viewport!: HTMLDivElement
     let content!: HTMLDivElement
     let container!: HTMLDivElement
@@ -30,14 +70,20 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
     const timeline = createTimelineVirtualizer({
       sessionKey: () => "cold-reveal-fixture",
       projection: {
-        rows: () => rows,
-        rowByKey: () => rowByKey,
+        rows,
+        rowByKey,
         activeMessageID: () => undefined,
         messageByID: () => new Map(),
         messageRowIndex: () => indexes,
         messageLastRowIndex: () => indexes,
       },
       showHeader: () => false,
+      layout: (row) =>
+        Predicate.isTagged(row, "Activity")
+          ? { source: "fixed", height: 36 }
+          : Predicate.isTagged(row, "UserMessage") && indexes.get(row.userMessageID)! < (input.modeled ?? 0)
+            ? { source: "fixed", height: height(row.userMessageID) }
+            : { source: "dom", reason: "deferred fixture content" },
       pinned: () => state.pinned,
       scroll: () => ({ overflow: false, jump: false }),
       setScrollRef: (element) => {
@@ -50,6 +96,7 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         reveal.observe(element, { attributes: true, attributeFilter: ["style"] })
       },
       onPin: () => setState("pinned", true),
+      setScrollToEnd: (scroll) => (scrollToEnd = scroll),
       onUnpin: () => setState("pinned", false),
       onScheduleScrollState: (element) => {
         host.dataset.scrolls = String(Number(host.dataset.scrolls) + 1)
@@ -60,6 +107,8 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
       onUserScroll: () => {},
       onHistoryScroll: () => {},
       canRenderImmediately: () => input.immediate ?? false,
+      bottomInset: () => state.inset,
+      bottomInsetStep: () => state.insetStep,
     })
 
     const resize = new ResizeObserver((entries) => {
@@ -94,6 +143,48 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         <button type="button" onClick={() => setState("ready", true)}>
           Complete Markdown
         </button>
+        <button type="button" data-testid="grow-row" onClick={() => setState("growth", 120)}>
+          Grow penultimate row
+        </button>
+        <button type="button" data-testid="insert-row" onClick={() => setState("inserted", true)}>
+          Insert row
+        </button>
+        <button type="button" data-testid="remove-row" onClick={() => setState("removed", true)}>
+          Remove row
+        </button>
+        <button type="button" data-testid="remove-inserted" onClick={() => setState("inserted", false)}>
+          Remove inserted row
+        </button>
+        <button
+          type="button"
+          data-testid="clear-draft"
+          onClick={() => setState({ insetStep: state.inset - 40, inset: 40 })}
+        >
+          Clear a long draft
+        </button>
+        <button type="button" data-testid="toggle-activity" onClick={() => setState("activity", (value) => !value)}>
+          Toggle Working
+        </button>
+        <button
+          type="button"
+          data-testid="follow"
+          onClick={() => {
+            setState("pinned", true)
+            scrollToEnd()
+          }}
+        >
+          Follow latest
+        </button>
+        <button
+          type="button"
+          data-testid="resume"
+          onClick={() => {
+            setState("pinned", true)
+            scrollToEnd("smooth")
+          }}
+        >
+          Resume following
+        </button>
         <button type="button" onClick={() => (container.style.display = "none")}>
           Hide viewport
         </button>
@@ -112,7 +203,7 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         >
           Reconnect ready rows
         </button>
-        <div ref={container} style={{ height: "180px", width: "400px" }}>
+        <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
             deferred={() => false}
@@ -120,9 +211,13 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
               <div
                 data-component="markdown"
                 data-markdown-ready={state.ready ? "" : undefined}
-                style={{ height: `${input.rowHeight}px` }}
+                style={{ height: `${Predicate.isTagged(row(), "Activity") ? 36 : height(row().userMessageID)}px` }}
               >
-                {row().userMessageID}
+                {Predicate.isTagged(row(), "Activity") ? (
+                  <span data-slot="session-working-indicator">Working</span>
+                ) : (
+                  row().userMessageID
+                )}
               </div>
             )}
           />

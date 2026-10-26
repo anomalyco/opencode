@@ -20,9 +20,11 @@ import {
 } from "solid-js"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Icon } from "@opencode/ui/icon"
-import { Spring, frameLoop, prefersReducedMotion } from "@opencode/ui/motion"
-import { springStyle } from "@opencode/ui/motion/solid"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
+import { createTimelineTextLayout, type TimelineLayoutEnvironment, type TimelineRowLayout } from "./text-layout"
+import { createTimelineMarkdownLayout } from "./markdown-layout"
+import { attached } from "../components/message-file"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
 import { useSources } from "../context/sources"
@@ -48,8 +50,7 @@ import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
 import { currentToolFailed } from "../message/current-tool-state"
-import { userMessageRuns, userRunSpring } from "./user-runs"
-import { attached } from "../components/message-file"
+import { userMessageRuns } from "./user-runs"
 import {
   createReactiveTimelineProjection,
   Timeline,
@@ -58,6 +59,9 @@ import {
   type PartRef,
   type ReasoningMode,
 } from "./projection"
+
+// The gap above an assistant row: after a tool in the same run, or after other content.
+const assistantSpacing = { tool: 8, content: 16 }
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
@@ -71,6 +75,35 @@ type Projection = ReturnType<typeof createReactiveTimelineProjection>
 type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, TimelineRow.TurnGap>
 
 type Outcome = "completed" | "error" | "cancelled"
+
+// A stream that pauses mid-line shows its held word once the text has sat still this long.
+const tailHoldMs = 300
+
+// Hold an incomplete trailing word on an active prose line until its boundary arrives so it never
+// measures short at the end of a line and wraps to the next line as its remaining letters stream in.
+function settledStreamText(raw: string, live: boolean, released?: string) {
+  if (!live || !raw || released === raw) return raw
+
+  if ((raw.match(/```/g)?.length ?? 0) % 2 === 1) return raw.replace(/\n[ \t]*`{1,2}$/, "")
+  const lastNewline = raw.lastIndexOf("\n")
+  const line = raw.slice(lastNewline + 1)
+
+  if (lastNewline > 0 && /^[A-Za-z0-9\u00C0-\u024F]{1,24}$/.test(line)) {
+    return raw.slice(0, lastNewline).replace(/\n+$/, "")
+  }
+
+  const edge = line.search(/[ \t]+\S{1,24}$/)
+
+  if (edge < 0) return raw
+  const prefix = line.slice(0, edge)
+  const tail = line.slice(edge).trimStart()
+
+  if (!/[A-Za-z0-9\u00C0-\u024F]/.test(prefix)) return raw
+
+  if (/^`|[.,!?;:)\]]$/.test(tail)) return raw
+
+  return raw.slice(0, raw.length - tail.length)
+}
 
 export type SessionUserPresentation = {
   displayText?: string
@@ -107,6 +140,9 @@ export function createSessionTimelineRowRenderer(input: {
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
+  // The raw text whose held word each live part has released. The row and the layout model both read it, so a
+  // released word that wraps grows the modelled height with the row.
+  const [releasedTails, setReleasedTails] = createStore<Record<string, string | undefined>>({})
 
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
@@ -441,6 +477,49 @@ export function createSessionTimelineRowRenderer(input: {
       return item ? contentDefaultOpen(item) : undefined
     })
 
+    const live = createMemo(() => {
+      const value = content()
+      const assistant = message()
+
+      return value?.type === "text" && assistant?.time.completed === undefined && assistant?.content.at(-1) === value
+    })
+
+    const text = createMemo(() => {
+      const value = content()
+      const partID = ref()?.partID
+
+      if (value?.type !== "text" && value?.type !== "reasoning") return ""
+      const shown = settledStreamText(value.text, live(), partID === undefined ? undefined : releasedTails[partID])
+
+      if (shown === value.text || partID === undefined) return shown
+      const raw = value.text
+      const timer = setTimeout(() => setReleasedTails(partID, raw), tailHoldMs)
+      onCleanup(() => clearTimeout(timer))
+
+      return shown
+    })
+
+    createEffect(() => {
+      const partID = ref()?.partID
+
+      if (partID === undefined || live() || untrack(() => releasedTails[partID]) === undefined) return
+      setReleasedTails(partID, undefined)
+    })
+
+    const prepared = createMemo(() => {
+      const value = content()
+      const assistant = message()
+      const reference = ref()
+
+      if ((value?.type !== "text" && value?.type !== "reasoning") || !assistant || !reference) return
+
+      return markdownLayout.prepare(
+        reference.partID,
+        text(),
+        value.type === "text" && assistant.time.completed === undefined,
+      )
+    })
+
     // Only the finished turn's footer part derives them, and only while the host shows sources.
     const turnSourcesValue = createMemo(() => {
       const current = ref()
@@ -460,21 +539,30 @@ export function createSessionTimelineRowRenderer(input: {
       <Show when={message()}>
         {(message) => (
           <Show when={content()}>
-            {(content) => (
-              <SessionAssistantContent
-                message={message()}
-                content={content()}
-                contentID={ref()!.partID}
-                showAssistantCopyPartID={copyContentID(row().userMessageID)}
-                turnDurationMs={duration(row().userMessageID)}
-                sources={turnSourcesValue()}
-                onOpenSources={() => sourcesHost?.open(row().userMessageID)}
-                defaultOpen={defaultOpen()}
-                toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
-                onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
-                onContentRendered={onSizeChange}
-              />
-            )}
+            {(content) => {
+              const item = () => {
+                const value = content()
+
+                return value.type === "text" ? { ...value, text: text() } : value
+              }
+
+              return (
+                <SessionAssistantContent
+                  message={message()}
+                  content={item()}
+                  contentID={ref()!.partID}
+                  showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                  turnDurationMs={duration(row().userMessageID)}
+                  sources={turnSourcesValue()}
+                  onOpenSources={() => sourcesHost?.open(row().userMessageID)}
+                  defaultOpen={defaultOpen()}
+                  toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
+                  onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
+                  onContentRendered={onSizeChange}
+                  preparedMarkdown={prepared()}
+                />
+              )
+            }}
           </Show>
         )}
       </Show>
@@ -891,28 +979,11 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  // A run's messages sit as close as the iOS app's (4 px); the gap springs open as a message leaves.
+  // A run's messages sit as close as the iOS app's (4 px). The timeline draws the rows around a changed gap moving.
   function TurnGap(props: { messageID: string }) {
-    let element: HTMLDivElement | undefined
     const joined = run(props.messageID)
-    springStyle(
-      () => element,
-      () => ({ height: joined()?.above ? 4 : 16 }),
-      (el, value) => {
-        el.style.height = `${value.height}px`
-      },
-      // Closing up as a message joins is instant; the joining message grows in instead.
-      { ...userRunSpring, snap: () => !!joined()?.above },
-    )
 
-    return (
-      <div
-        ref={element}
-        data-timeline-row="TurnGap"
-        aria-hidden="true"
-        style={{ height: untrack(joined)?.above ? "4px" : "16px" }}
-      />
-    )
+    return <div data-timeline-row="TurnGap" aria-hidden="true" style={{ height: joined()?.above ? "4px" : "16px" }} />
   }
 
   const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
@@ -1104,6 +1175,7 @@ export function createSessionTimelineRowRenderer(input: {
                     }
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
+                    preparedMarkdown={markdownLayout.prepare(current().ref.partID, content().text, true)}
                   />
                 )}
               </Show>
@@ -1271,7 +1343,142 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  return { Row }
+  const textLayout = createTimelineTextLayout()
+  const markdownLayout = createTimelineMarkdownLayout(textLayout)
+
+  function layout(row: TimelineRow.TimelineRow, environment: TimelineLayoutEnvironment): TimelineRowLayout {
+    if (Predicate.isTagged(row, "TurnGap"))
+      return { source: "fixed", height: runs().get(row.userMessageID)?.above ? 4 : 16 }
+
+    if (Predicate.isTagged(row, "Activity")) return { source: "fixed", height: 36 }
+
+    const width =
+      (input.centered?.() && environment.desktop ? Math.min(744, environment.width) : environment.width) -
+      (environment.desktop ? 48 : 32)
+
+    if (Predicate.isTagged(row, "Thinking")) {
+      const open =
+        input.disclosure.value(row.ref.partID) ??
+        (input.timelineDetail
+          ? input.timelineDetail().thinking.details === "expanded"
+          : input.reasoningMode() === "full")
+
+      if (!open) return { source: "fixed", height: 40 }
+      const content = Timeline.resolveContent(input.projection.messageByID().get(row.ref.messageID), row.ref.partID)
+
+      if (content?.type === "reasoning") {
+        if (!content.text.trim()) return { source: "fixed", height: 40 }
+
+        const measured = markdownLayout.layout(
+          row.ref.partID,
+          content.text,
+          true,
+          width - 12,
+          environment.typography,
+          true,
+        )
+
+        return measured.source === "dom" ? measured : { source: "pretext", height: 44 + measured.height }
+      }
+    }
+
+    if (Predicate.isTagged(row, "AssistantPart")) {
+      const spacing = row.spacing ? assistantSpacing[row.spacing] : 0
+
+      if (row.group.type === "context" && input.disclosure.value(`context:${row.group.key}`) !== true)
+        return { source: "fixed", height: spacing + 28 }
+
+      if (row.group.type === "read" && input.disclosure.value(row.group.key) !== true)
+        return { source: "fixed", height: spacing + 32 }
+
+      if (row.group.type === "part") {
+        const content = Timeline.resolveContent(
+          input.projection.messageByID().get(row.group.ref.messageID),
+          row.group.ref.partID,
+        )
+
+        if (content?.type === "reasoning") {
+          if (!content.text.trim() || !(input.disclosure.value(row.group.ref.partID) ?? contentDefaultOpen(content)))
+            return { source: "fixed", height: spacing + 28 }
+
+          const measured = markdownLayout.layout(
+            row.group.ref.partID,
+            content.text,
+            false,
+            width - 12,
+            environment.typography,
+            true,
+          )
+
+          return measured.source === "dom" ? measured : { source: "pretext", height: spacing + 32 + measured.height }
+        }
+      }
+    }
+
+    if (Predicate.isTagged(row, "AssistantPart") && row.group.type === "part") {
+      const message = input.projection.messageByID().get(row.group.ref.messageID)
+      const content = Timeline.resolveContent(message, row.group.ref.partID)
+
+      if (message?.type === "assistant" && content?.type === "text") {
+        // The optional Sources footer can wrap; measure its complete row rather than clipping it to the copy-only model.
+        if (sourcesHost?.enabled && copyContentID(row.userMessageID) === row.group.ref.partID)
+          return { source: "dom", reason: "sources footer" }
+        const live = message.time.completed === undefined && message.content.at(-1) === content
+        const text = settledStreamText(content.text, live, releasedTails[row.group.ref.partID])
+
+        const measured = markdownLayout.layout(
+          row.group.ref.partID,
+          text,
+          message.time.completed === undefined,
+          width,
+          environment.typography,
+        )
+
+        if (measured.source === "dom") return measured
+
+        const extra =
+          (row.spacing === "content" ? 16 : 24 + (row.spacing === "tool" ? 8 : 0)) +
+          (copyContentID(row.userMessageID) === row.group.ref.partID ? 24 - Math.min(4, measured.trailingMargin) : 0)
+
+        return { source: "pretext", height: !text ? 0 : measured.height + extra }
+      }
+    }
+
+    if (!Predicate.isTagged(row, "UserMessage")) return { source: "dom", reason: row._tag }
+    const message = input.projection.messageByID().get(row.userMessageID)
+
+    if (message?.type !== "user") return { source: "fixed", height: 0 }
+    const presentation = input.presentation?.(message)
+
+    if (
+      message.files?.some((file) => file.mention || (attached(file) && !file.mime.startsWith("image/"))) ||
+      message.agents?.length ||
+      presentation?.comments?.length ||
+      presentation?.references?.length
+    )
+      return { source: "dom", reason: "user attachments or references" }
+    const text = presentation?.displayText ?? message.text
+
+    if (!text) return { source: "dom", reason: "empty user message" }
+    const contentWidth = Math.min(width * 0.82, 64 * textLayout.ch(environment.typography)) - 24
+    const images = message.files?.filter(attached).length ?? 0
+    const imageRows = Math.ceil(images / Math.max(1, Math.floor((contentWidth + 24 + 8) / (58 + 8))))
+    const joined = runs().get(row.userMessageID)
+    const pending = input.actions?.pending?.status(message.id)
+    const labelled = (pending === "steering" || pending === "stranded") && !joined?.above
+
+    return {
+      source: "pretext",
+      height:
+        (labelled ? 20 : 0) +
+        (imageRows ? imageRows * (46 + 8) : presentation?.voice ? 8 : 0) +
+        16 +
+        (joined?.below ? 0 : 24) +
+        textLayout.text(TimelineRow.key(row), text, contentWidth, environment.typography, "pre-wrap"),
+    }
+  }
+
+  return { Row, layout }
 }
 
 function capitalizeAgent(agent: string) {
@@ -1305,38 +1512,9 @@ function outcomeNoticeKey(state: string | undefined) {
   return "ui.sessionTimeline.notice.finished"
 }
 
-/** Grows a row from nothing to its natural height, clipping its content on the way. Rows below follow its edge. */
+/** The timeline reveals an arriving row; its labels settle in place meanwhile, since its pending status can land a few frames late. */
 function growIn(el: HTMLElement) {
-  if (prefersReducedMotion()) return
-  const spring = Spring.fromDuration(0, { duration: 0.2, bounce: 0 })
-  const content = el.firstElementChild
-  let natural = 0
-  el.style.height = "0px"
-  el.style.overflow = "clip"
   el.toggleAttribute("data-timeline-grow", true)
-
-  const remove = frameLoop.addMeasured(
-    () => {
-      natural = content instanceof HTMLElement ? content.offsetHeight : 0
-    },
-    (dt) => {
-      if (!el.isConnected) return true
-      spring.set(natural)
-      const height = spring.step(dt)
-
-      if (!spring.resting) {
-        el.style.height = `${height}px`
-
-        return true
-      }
-
-      el.style.height = ""
-      el.style.overflow = ""
-      el.toggleAttribute("data-timeline-grow", false)
-
-      return false
-    },
-  )
-
-  onCleanup(remove)
+  const timer = setTimeout(() => el.toggleAttribute("data-timeline-grow", false), 420)
+  onCleanup(() => clearTimeout(timer))
 }

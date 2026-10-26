@@ -72,6 +72,16 @@ export function stream(text: string, live: boolean): Block[] {
   return project(undefined, text, live).blocks
 }
 
+/** Measure-ahead needs block boundaries even for the first completed message. */
+export function createBlockProjection() {
+  const instance = createStream()
+
+  return (text: string, live: boolean): Projection => ({
+    text,
+    blocks: instance.update(text, { streaming: live }).blocks.map(toBlock),
+  })
+}
+
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
   if (!previous && !live) return completedProjection(text)
 

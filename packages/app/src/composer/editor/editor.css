@@ -30,6 +30,19 @@
   scroll-padding-block: 16px;
 }
 
+/* A sent prompt's copy lifts off over the cleared editor; the placeholder fades in once it has landed. */
+[data-slot="composer-placeholder"] {
+  transition: opacity 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-send-flight-launch] > [data-slot="composer-placeholder"] {
+  opacity: 0;
+}
+
+:root[data-motion="reduce"] [data-slot="composer-placeholder"] {
+  transition: none;
+}
+
 /* Reserving the scrollbar keeps a long prompt from rewrapping when it starts to scroll; the editor's end padding gives
    the reserved width back, so text keeps the same 12px inset. */
 [data-component="composer-scroll"] {

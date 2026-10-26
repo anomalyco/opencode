@@ -76,7 +76,15 @@ CPU and high-volume visual profiling are disabled by default. Set `TIMELINE_CPU_
 
 The streaming scenario's 30x CPU throttle is a deterministic stress profile, not a simulated end-user device.
 
-Benchmarks do not assert machine-dependent performance budgets. Streaming processes 160 deltas by default and reports renderer-observed completion time, throughput, RAF callback-gap distributions, frame-budget equivalents, and long tasks through final geometry settlement. Delta count and delivery batch are included in result context when overridden. These are main-thread callback diagnostics, not compositor presentation or dropped-frame measurements. Visual-only and geometry metrics are `null` when their probes are disabled. Tab metrics describe sampled DOM observations. Assertions verify scenario and metric collection completion. Repeated repaint states are run-length grouped, but every original observation timestamp is retained alongside raw mutation batches and layout shifts.
+The timeline motion CPU benchmark streams the same text with motion on and with reduced motion, alternating in ABBA order, and reports the ratio of their renderer main-thread CPU time. Reduced motion draws none of the growth, follow, soft-edge or word motion, so the ratio is the motion layer's cost on the machine that runs it. Its gate is opt-in because a few percent is inside the noise of a shared or busy machine; on a quiet, dedicated Mac run:
+
+```sh
+TIMELINE_MOTION_CPU_BUDGET=0.05 bun run test:bench -- timeline/motion-cpu-budget.spec.ts
+```
+
+It fails when motion costs more than 5% over still. `TIMELINE_MOTION_CPU_ROUNDS` (default 3, four samples each) and `TIMELINE_DELTA_COUNT` (default 400) trade time for precision.
+
+Other benchmarks do not assert machine-dependent performance budgets. Streaming processes 160 deltas by default and reports renderer-observed completion time, throughput, RAF callback-gap distributions, frame-budget equivalents, and long tasks through final geometry settlement. Delta count and delivery batch are included in result context when overridden. These are main-thread callback diagnostics, not compositor presentation or dropped-frame measurements. Visual-only and geometry metrics are `null` when their probes are disabled. Tab metrics describe sampled DOM observations. Assertions verify scenario and metric collection completion. Repeated repaint states are run-length grouped, but every original observation timestamp is retained alongside raw mutation batches and layout shifts.
 
 Committed smoke and regression tests continue to own correctness coverage for pagination, tab paint, context resize, collapse state, and composer spacing.
 

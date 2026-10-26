@@ -10,6 +10,7 @@ import {
 } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 import type { UserRun } from "../timeline/user-runs"
+import type { PreparedMarkdown } from "../components/markdown-prepared"
 import type { TurnSources } from "../sources/sources"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
@@ -59,6 +60,7 @@ export function SessionAssistantContent(props: {
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
+  preparedMarkdown?: PreparedMarkdown
 }) {
   return (
     <Switch>
@@ -70,6 +72,7 @@ export function SessionAssistantContent(props: {
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
             turnDurationMs={props.turnDurationMs}
+            preparedMarkdown={props.preparedMarkdown}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
           />
@@ -85,6 +88,7 @@ export function SessionAssistantContent(props: {
             open={props.toolOpen}
             onOpenChange={props.onToolOpenChange}
             onContentRendered={props.onContentRendered}
+            preparedMarkdown={props.preparedMarkdown}
           />
         )}
       </Match>

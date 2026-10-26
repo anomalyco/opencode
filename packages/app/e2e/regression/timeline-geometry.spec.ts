@@ -65,9 +65,18 @@ test("remeasures a recent explored context group before the next paint", async (
 
   // Samples every painted frame after the click until the open group's row holds its measured content, so a
   // stale row height shows up as overlap before the virtualizer catches up.
+  type Sample = {
+    frame: number
+    allocated: number
+    drawn: number
+    overlap: number
+    expanded: string | null
+    measured: boolean
+  }
+
   const samples = await page.evaluate(
     ({ contextSelector, following }) =>
-      new Promise<{ frame: number; overlap: number; expanded: string | null; measured: boolean }[]>((resolve) => {
+      new Promise<Sample[]>((resolve) => {
         const context = document.querySelector<HTMLElement>(contextSelector)
         const text = document.querySelector<HTMLElement>(following)
         const scroller = context?.closest<HTMLElement>(".scroll-view__viewport")
@@ -78,18 +87,30 @@ test("remeasures a recent explored context group before the next paint", async (
 
         if (!scroller || !trigger || !contextRow || !virtualRow || !textRow) throw new Error("missing regression nodes")
         scroller.scrollTop = scroller.scrollHeight
-        const samples: { frame: number; overlap: number; expanded: string | null; measured: boolean }[] = []
+        const samples: Sample[] = []
 
         const capture = (frame: number) => {
           const content = context!.querySelector<HTMLElement>('[data-slot="collapsible-content"]')
           const allocated = virtualRow.getBoundingClientRect().height
           const inner = virtualRow.firstElementChild?.getBoundingClientRect().height ?? Infinity
+
+          // A revealing row is drawn down to its box less the clip that trims the box's reach below the reveal.
+          const clip =
+            getComputedStyle(virtualRow)
+              .clipPath.match(/^inset\((.*)\)$/)?.[1]
+              ?.split(" ")
+              .map(parseFloat) ?? []
+
+          const shown = Math.min(
+            contextRow.getBoundingClientRect().bottom,
+            virtualRow.getBoundingClientRect().bottom - Math.max(0, clip[2] ?? clip[0] ?? 0),
+          )
+
           samples.push({
             frame,
-            overlap: Math.max(
-              0,
-              Math.round((contextRow.getBoundingClientRect().bottom - textRow.getBoundingClientRect().top) * 10) / 10,
-            ),
+            allocated,
+            drawn: shown - contextRow.getBoundingClientRect().top,
+            overlap: Math.max(0, Math.round((shown - textRow.getBoundingClientRect().top) * 10) / 10),
             expanded: trigger.getAttribute("aria-expanded"),
             measured:
               !!content &&
@@ -118,6 +139,8 @@ test("remeasures a recent explored context group before the next paint", async (
 
   expect(samples[0]?.overlap).toBe(0)
   expect(samples.filter((sample) => sample.frame >= 1 && sample.overlap > 0.5)).toEqual([])
+  // The row opens steadily onto its measured height, never shrinking back on the way.
+  expect(samples.filter((sample, index) => sample.drawn < (samples[index - 1]?.drawn ?? 0) - 0.5)).toEqual([])
   expect(samples.at(-1)).toMatchObject({ expanded: "true", measured: true })
 })
 
@@ -249,6 +272,22 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
     await expect(diff).toHaveCount(visible ? 1 : 0)
     await expect.poll(bottom).toBeLessThanOrEqual(1)
   }
+
+  // Following the end, the row eases onto its new height; let it land before scrolling away.
+  await expect.poll(measured).toBeLessThanOrEqual(1)
+  // Layout reaches its final height before compositor motion lands. The next assertion needs a resting header.
+  await expect
+    .poll(() =>
+      scroller.evaluate(
+        (element) =>
+          element
+            .getAnimations({ subtree: true })
+            .filter(
+              (animation) => animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity,
+            ).length,
+      ),
+    )
+    .toBe(0)
 
   // Scrolled away from the tail, the header keeps its viewport position.
   await expect
@@ -507,7 +546,7 @@ for (const failed of [false, true]) {
 
     // Records the prompt row in every frame from submission until Working has shown.
     const observation = await page.evaluateHandle((text) => {
-      const frames: { prompt: number | undefined; working: boolean }[] = []
+      const frames: { prompt: number | undefined; working: boolean; time: number }[] = []
       let frame = 0
 
       const sample = () => {
@@ -518,6 +557,7 @@ for (const failed of [false, true]) {
         frames.push({
           prompt: prompt?.getBoundingClientRect().y,
           working: !!document.querySelector('[data-component="session-working"]'),
+          time: performance.now(),
         })
         frame = requestAnimationFrame(sample)
       }
@@ -549,9 +589,20 @@ for (const failed of [false, true]) {
       await expect.poll(bottom).toBe(0)
       const frames = await observation.evaluate((value) => value.stop())
       expect(frames.some((frame) => frame.working && frame.prompt === undefined)).toBe(false)
-      const positions = frames.flatMap((frame) => (frame.prompt === undefined ? [] : [frame.prompt]))
-      expect(positions.length).toBeGreaterThan(0)
-      expect(new Set(positions).size).toBe(1)
+      const shown = frames.filter((frame) => frame.prompt !== undefined)
+      expect(shown.length).toBeGreaterThan(0)
+
+      // The prompt grows in at the followed end and rises into place: it never moves back down or jumps, including
+      // when Working shows. A jump is more than 40px in one 60Hz frame; a slow machine's longer frames carry the rise
+      // further, so the bound scales with the time each frame took.
+      const steps = shown.slice(1).map((frame, index) => ({
+        step: frame.prompt! - shown[index]!.prompt!,
+        elapsed: frame.time - shown[index]!.time,
+      }))
+
+      expect(
+        steps.filter((step) => step.step > 0.5 || step.step < -40 * Math.max(1, step.elapsed / (1000 / 60))),
+      ).toEqual([])
     } finally {
       release.resolve()
       await observation.dispose()
@@ -753,4 +804,17 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
   await bubble(first).hover()
   await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
   await expect(first.getByRole("button", { name: "Copy message" })).toHaveCount(1)
+  // Beside the bubble, never over its text.
+  const text = (await bubble(first).boundingBox())!
+
+  const buttons = await first
+    .locator('[data-slot="user-message-run-actions"] button')
+    .evaluateAll((items) =>
+      items
+        .filter((item) => item.checkVisibility({ visibilityProperty: true }))
+        .map((item) => item.getBoundingClientRect().right),
+    )
+
+  expect(buttons.length).toBeGreaterThan(0)
+  expect(Math.max(...buttons)).toBeLessThanOrEqual(text.x + 0.5)
 })

@@ -36,7 +36,8 @@ export function shouldReleaseMarkdownWorkerState(complete: boolean, latestID: nu
 }
 
 export function markdownBlockKey(owner: string, cacheKey: string | undefined, index: number, mode: string) {
-  return `${owner}:${cacheKey ? `${cacheKey}:${index}:${mode}` : `block:${index}`}`
+  // Settling prose changes its parser mode, not its DOM identity. Code still owns a separate renderer lifetime.
+  return `${owner}:${cacheKey ? `${cacheKey}:${index}:${mode === "live" ? "full" : mode}` : `block:${index}`}`
 }
 
 export function applyMarkdownWorkerResponse(

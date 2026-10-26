@@ -27,6 +27,29 @@ function coefficients(w: number, z: number, t: number) {
   matrix[6] = e * (c - zw * s)
 }
 
+/** Offset and velocity `t` seconds after a spring heading to 0 leaves `x0` at velocity `v0`. */
+export function springAt(x0: number, v0: number, omega: number, zeta: number, t: number): [number, number] {
+  if (t <= 0) return [x0, v0]
+  coefficients(omega, zeta, t)
+
+  return [matrix[3]! * x0 + matrix[4]! * v0, matrix[5]! * x0 + matrix[6]! * v0]
+}
+
+/** Seconds until a spring heading to 0 from `x0` at `v0` stays within `precision` of rest. */
+export function springSettle(x0: number, v0: number, omega: number, zeta: number, precision = 0.001 * Math.abs(x0)) {
+  const limit = Math.max(precision, 1e-4)
+  const step = 1 / 120
+  let t = 0
+  let state: [number, number] = [x0, v0]
+
+  while (t < 4 && (Math.abs(state[0]) > limit || Math.abs(state[1]) > limit * omega)) {
+    t += step
+    state = springAt(x0, v0, omega, zeta, t)
+  }
+
+  return Math.max(step, t)
+}
+
 /** Unit-mass spring. Exact analytic damped-harmonic step. */
 export class Spring {
   value = 0
@@ -69,6 +92,26 @@ export class Spring {
     }
 
     return new Spring(value, { omega: (2 * Math.PI) / duration, zeta: 1 - bounce })
+  }
+
+  tune({ duration, bounce }: DurationOptions): this {
+    if (
+      !Number.isFinite(duration) ||
+      duration < (2 * Math.PI) / 240 ||
+      !Number.isFinite(bounce) ||
+      bounce < 0 ||
+      bounce >= 1
+    ) {
+      throw new RangeError("duration must be >= 2π/240 seconds; bounce must be in [0, 1)")
+    }
+
+    const nextOmega = (2 * Math.PI) / duration
+
+    if (this.omega > 0) this.velocity *= nextOmega / this.omega
+    this.omega = nextOmega
+    this.zeta = 1 - bounce
+
+    return this
   }
 
   set(target: number, options?: { velocity?: number }): this {

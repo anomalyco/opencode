@@ -1,4 +1,88 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { writeFile } from "node:fs/promises"
+
+const layoutFixture = sourceURL(new URL("./timeline-layout.fixture.tsx", import.meta.url))
+
+// Windows draws the mixed Japanese and emoji prompt with fallback fonts that canvas measures slightly narrower, so it
+// can wrap one line later there; its row corrects on mount. Every other row must match to the pixel.
+const fallbackWrap = new Set(process.platform === "win32" ? ["user-message:layout-user-3"] : [])
+
+story("models row heights before mounting and after width changes", async ({ mount, page }, testInfo) => {
+  page.on("pageerror", (error) => console.error(error.stack))
+  page.on("console", (message) => {
+    if (message.type() === "error") console.error(message.text())
+  })
+  await mount("current-session-timeline-rows--agent-thinking")
+  await page.evaluate(async (url) => {
+    const fixture = await import(url)
+    await fixture.mountTimelineLayout(680)
+  }, layoutFixture)
+  const fixture = page.getByTestId("timeline-layout-fixture")
+  await expect(fixture.locator('[data-component="markdown"][data-markdown-ready]')).toHaveCount(6)
+
+  for (const width of [680, 370]) {
+    const report = await page.evaluate(
+      async ({ url, width }) => {
+        const fixture = await import(url)
+
+        return fixture.timelineLayoutReport(width)
+      },
+      { url: layoutFixture, width },
+    )
+
+    await writeFile(testInfo.outputPath(`row-layout-${width}.json`), JSON.stringify(report, null, 2))
+    expect(report.length).toBeGreaterThanOrEqual(8)
+    expect(report.filter((row: { source: string }) => row.source === "dom")).toEqual([])
+
+    for (const row of report)
+      expect(Math.abs(row.actual - row.expected), JSON.stringify(row)).toBeLessThanOrEqual(
+        fallbackWrap.has(row.key) ? 22 : 1,
+      )
+  }
+
+  const chunks = [
+    "A streaming paragraph with **emphasis",
+    "A streaming paragraph with **emphasis** and additional words.\n\n```ts\nconst value = 1",
+    "A streaming paragraph with **emphasis** and additional words.\n\n```ts\nconst value = 1\nconsole.log(value)\n```\n\nDone.",
+    "A streaming paragraph with **emphasis** and additional words.\n\n```ts\nconst value = 1\nconsole.log(value)\n```\n\nDone.\n\n- First result\n- Second result",
+  ]
+
+  for (const [index, text] of [...chunks, chunks.at(-1)!].entries()) {
+    const report = await page.evaluate(
+      async ({ url, text, complete }) => {
+        const fixture = await import(url)
+
+        return fixture.streamTimelineLayout(text, complete)
+      },
+      { url: layoutFixture, text, complete: index === chunks.length },
+    )
+
+    await writeFile(testInfo.outputPath(`row-stream-${index}.json`), JSON.stringify(report, null, 2))
+    expect(report.filter((row: { source: string }) => row.source === "dom")).toEqual([])
+
+    for (const row of report)
+      expect(Math.abs(row.actual - row.expected), JSON.stringify(row)).toBeLessThanOrEqual(
+        fallbackWrap.has(row.key) ? 22 : 1,
+      )
+  }
+
+  const reasoning = await page.evaluate(async (url) => {
+    const fixture = await import(url)
+
+    return fixture.reasonTimelineLayout(
+      "Consider the constraints carefully. ".repeat(8) +
+        "\n\n**The next step**\n\nInspect the source and decide what needs to change.",
+    )
+  }, layoutFixture)
+
+  await writeFile(testInfo.outputPath("row-reasoning.json"), JSON.stringify(reasoning, null, 2))
+  expect(reasoning.filter((row: { source: string }) => row.source === "dom")).toEqual([])
+
+  for (const row of reasoning)
+    expect(Math.abs(row.actual - row.expected), JSON.stringify(row)).toBeLessThanOrEqual(
+      fallbackWrap.has(row.key) ? 22 : 1,
+    )
+})
 
 story("spaces an error between a shell result and expanded updates", async ({ mount }) => {
   const timeline = await mount("current-session-error-spacing--error-and-updates")

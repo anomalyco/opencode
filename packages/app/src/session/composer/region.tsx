@@ -46,6 +46,7 @@ import { SubagentBar } from "./subagent-bar"
 import { createSessionRequestModel } from "../requests/model"
 import type { Region } from "@/runtime/extension/panels"
 import { SessionLocationMissing } from "./location-missing"
+import { getSessionMessageHandoffs } from "@/session/handoff"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -253,7 +254,16 @@ export function createActiveSessionRegion(input: {
     status: (messageID) => {
       const sessionID = input.session.identity.params.id
 
-      return sessionID ? data.session.pending.status(sessionID, messageID) : undefined
+      if (!sessionID) return undefined
+      const status = data.session.pending.status(sessionID, messageID)
+
+      if (status) return status
+      // A steer the composer just sent already takes the place admission gives it, so admission moves nothing.
+      const sent = getSessionMessageHandoffs(input.session.identity.sessionKey())
+
+      if (!sent.some((handoff) => handoff.message.id === messageID)) return undefined
+
+      return data.session.pending.admission(sessionID)
     },
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
@@ -411,9 +421,11 @@ export function ActiveSessionComposerRegion(props: {
   )
 
   const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
+
   // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
   const todosVisible = () =>
     todoEnabled() && props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
+
   // Matches the server: the highest-priority document that sets `experimental` decides. Migrated V1 sessions keep their
   // old `todowrite` calls, so without this check their last plan would come back.
   const todoEnabled = () =>
