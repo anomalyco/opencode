@@ -68,15 +68,12 @@ export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Ref = Schema.Struct({
   id: ID,
   name: Schema.String,
-  /** Declared in provider configuration, independently of credential connections. */
-  configured: optional(Schema.Boolean),
   metadata: optional(Schema.Record(Schema.String, Schema.Any)),
 }).annotate({ identifier: "Integration.Ref" })
 
 export const Info = Schema.Struct({
   id: ID,
   name: Schema.String,
-  configured: optional(Schema.Boolean),
   metadata: optional(Schema.Record(Schema.String, Schema.Any)),
   methods: Schema.Array(Method),
   connections: Schema.Array(Connection.Info),

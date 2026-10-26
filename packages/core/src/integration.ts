@@ -426,7 +426,6 @@ const layer = Layer.effect(
       Info.make({
         id: entry.ref.id,
         name: entry.ref.name,
-        ...(entry.ref.configured === undefined ? {} : { configured: entry.ref.configured }),
         ...(entry.ref.metadata === undefined ? {} : { metadata: entry.ref.metadata }),
         methods: entry.methods,
         connections: connections.map((connection) => {
