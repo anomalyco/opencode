@@ -219,19 +219,19 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
-  test("keeps at most the newest 40 images, cutting back to 30 so the prompt cache survives", () => {
+  test("keeps at most the newest 30 images, cutting back to 20 so the prompt cache survives", () => {
     const image = (name: string) =>
       Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
     const history = (count: number) => Array.from({ length: count }, (_, i) => image(`${i}.png`))
     const removed = (messages: ReturnType<typeof boundImages>) =>
       messages.filter((message) => message.content[0]?.type === "text").length
 
-    expect(removed(boundImages(history(40)))).toBe(0)
-    // The 41st image passes the trigger: the oldest 11 go, leaving 30.
-    expect(removed(boundImages(history(41)))).toBe(11)
+    expect(removed(boundImages(history(30)))).toBe(0)
+    // The 31st image passes the trigger: the oldest 11 go, leaving 20.
+    expect(removed(boundImages(history(31)))).toBe(11)
     // The cut holds until the kept count passes the trigger again.
-    expect(removed(boundImages(history(51)))).toBe(11)
-    expect(removed(boundImages(history(52)))).toBe(22)
+    expect(removed(boundImages(history(41)))).toBe(11)
+    expect(removed(boundImages(history(42)))).toBe(22)
   })
 
   test("names the removed file so the model can read it again", () => {
@@ -254,7 +254,7 @@ describe("SessionModelRequest.boundImages", () => {
           },
         }),
       )
-    const messages = Array.from({ length: 41 }, (_, i) => read(i))
+    const messages = Array.from({ length: 31 }, (_, i) => read(i))
     const result = boundImages(messages)
 
     expect(result[0]?.content[0]).toMatchObject({

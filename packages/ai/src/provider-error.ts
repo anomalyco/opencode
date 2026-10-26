@@ -58,6 +58,7 @@ const patterns = [
   // Image-count caps: compaction drops the replayed images, so these recover the same way.
   // OpenCode Console/Zen gateway
   /request contains \d+ images, exceeding the maximum/i,
+  /too many images in request/i,
   // Azure OpenAI
   /exceeded maximum number of images/i,
   // Anthropic and Bedrock

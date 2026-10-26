@@ -48,10 +48,10 @@ import type { SessionMessage } from "./message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
-// The lowest per-request image cap among supported providers is 50 (OpenCode Console/Zen, Azure OpenAI).
-// A per-model limit would replace this constant; the target stays a fixed fraction of it.
-const IMAGE_COUNT_TRIGGER = 40
-const IMAGE_COUNT_TARGET = 30
+// The lowest per-request image cap seen is 30 (some OpenCode Go routes); Console/Zen and Azure OpenAI allow 50.
+// A per-model limit would replace this constant.
+const IMAGE_COUNT_TRIGGER = 30
+const IMAGE_COUNT_TARGET = 20
 const imageRemoved = (name: string | undefined) =>
   name
     ? `[The image "${name}" was removed from this request and is no longer visible. Do not make claims about its contents from memory. If needed, read "${name}" again with an available tool or ask the user to attach it again.]`

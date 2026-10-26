@@ -52,6 +52,17 @@ describe("provider error classification", () => {
         },
       },
       {
+        message:
+          "Error from provider (Console Go): Upstream request failed: [invalid_request_error] Too many images in request: 31 > 30",
+        body: {
+          error: {
+            type: "invalid_request_error",
+            message:
+              "Error from provider (Console Go): Upstream request failed: [invalid_request_error] Too many images in request: 31 > 30",
+          },
+        },
+      },
+      {
         message: "Exceeded maximum number of images (50).",
         body: { error: { code: "BadRequest", message: "Exceeded maximum number of images (50)." } },
       },
@@ -76,7 +87,7 @@ describe("provider error classification", () => {
         })
         return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
       }),
-    ).toEqual(["context-overflow", "context-overflow", "context-overflow", "context-overflow"])
+    ).toEqual(Array.from({ length: 5 }, () => "context-overflow"))
   })
 
   test("classifies generic request size failures separately from context overflow", () => {
