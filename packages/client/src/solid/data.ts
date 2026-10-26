@@ -1125,6 +1125,10 @@ export function createData(config: CreateDataInput) {
           if (currentAssistant) currentAssistant.retry = undefined
         })
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        if (store.session.pending[event.data.sessionID]?.length || sync.pending(`session.pending:${event.data.sessionID}`)) {
+          result.session.pending.invalidate(event.data.sessionID)
+          refresh(() => result.session.pending.sync(event.data.sessionID))
+        }
         // Mirror the projected idle marker so turn boundaries match before the next message read.
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
@@ -1714,7 +1718,14 @@ export function createData(config: CreateDataInput) {
             return api().session.prompt({ ...request, id })
           },
           gate,
-        ).catch((error) => {
+        ).then((item) => {
+          // The response acknowledges admission even if both inbox events were missed.
+          if (fresh && outbox.delete(id)) {
+            result.session.pending.invalidate(request.sessionID)
+            refresh(() => result.session.pending.sync(request.sessionID))
+          }
+          return item
+        }).catch((error) => {
           // Roll back only rows this call admitted and the server has not
           // acknowledged: anything else is server state.
           if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
