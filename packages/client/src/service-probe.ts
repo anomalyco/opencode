@@ -1,5 +1,8 @@
 import { homedir } from "node:os"
+import { execFile } from "node:child_process"
+import { readdir, readFile, readlink } from "node:fs/promises"
 import { join } from "node:path"
+import { promisify } from "node:util"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
 import { defaultEnsureTiming } from "./service-timing.js"
 import { matchesVersion } from "./service-version.js"
@@ -59,6 +62,15 @@ export function alive(pid: number) {
   } catch (error) {
     return !(typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH")
   }
+}
+
+/** Whether the registered process owns the listener advertised by the registration. */
+export async function ownsListeningPort(info: Info) {
+  const port = registeredPort(info.url)
+  if (port === undefined) return false
+  if (process.platform === "win32") return windowsListeners(port).then((pids) => pids.includes(info.pid))
+  if (process.platform === "linux") return linuxOwnsListener(info.pid, port)
+  return lsofListeners(port).then((pids) => pids?.includes(info.pid))
 }
 
 /** Ask a registered owner for its health and classify the answer. */
@@ -129,4 +141,79 @@ function decodeInfo(input: unknown) {
   if (!("version" in input) || typeof input.version !== "string") return
   if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
   return { version: input.version, pid: input.pid }
+}
+
+function registeredPort(url: string) {
+  try {
+    const parsed = new URL(url)
+    const port = Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80))
+    return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function lsofListeners(port: number) {
+  try {
+    const result = await promisify(execFile)("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fp"], {
+      timeout: 1_000,
+      maxBuffer: 4_096,
+      windowsHide: true,
+    })
+    return result.stdout
+      .split("\n")
+      .filter((line) => line.startsWith("p"))
+      .map((line) => Number(line.slice(1)))
+      .filter(Number.isInteger)
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined
+    return []
+  }
+}
+
+async function linuxOwnsListener(pid: number, port: number) {
+  try {
+    const inodes = new Set(
+      (
+        await Promise.all(
+          (await readdir(`/proc/${pid}/fd`)).map((fd) =>
+            readlink(`/proc/${pid}/fd/${fd}`).catch(() => ""),
+          ),
+        )
+      )
+        .map((target) => /^socket:\[(\d+)\]$/.exec(target)?.[1])
+        .filter((inode): inode is string => inode !== undefined),
+    )
+    const tables = await Promise.all(["/proc/net/tcp", "/proc/net/tcp6"].map((file) => readFile(file, "utf8")))
+    return tables.some((table) =>
+      table.split("\n").some((line) => {
+        const fields = line.trim().split(/\s+/)
+        return (
+          fields[3] === "0A" &&
+          Number.parseInt(fields[1]?.split(":")[1] ?? "", 16) === port &&
+          inodes.has(fields[9] ?? "")
+        )
+      }),
+    )
+  } catch {
+    return false
+  }
+}
+
+async function windowsListeners(port: number) {
+  try {
+    const result = await promisify(execFile)("netstat", ["-ano", "-p", "tcp"], {
+      timeout: 1_000,
+      maxBuffer: 1_048_576,
+      windowsHide: true,
+    })
+    return result.stdout
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/))
+      .filter((fields) => fields[0] === "TCP" && fields[3] === "LISTENING" && fields[1]?.endsWith(`:${port}`))
+      .map((fields) => Number(fields[4]))
+      .filter(Number.isInteger)
+  } catch {
+    return []
+  }
 }

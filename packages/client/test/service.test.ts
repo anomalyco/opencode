@@ -221,21 +221,25 @@ test("keeps a busy registered service alive and reuses it when it answers", asyn
 test("replaces an unresponsive registered service after the recovery window", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
-  const existing = fixture.spawn("hanging")
+  using reserved = Bun.serve({ port: 0, fetch: () => new Response() })
+  const port = reserved.port
+  reserved.stop(true)
+  const existing = fixture.spawn("fixed-hanging", String(port))
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
+  if (process.platform !== "win32") process.kill(original.pid, "SIGSTOP")
 
   const endpoint = await run(
     ensure({
       file: registration,
       version: "test",
-      command: fixture.command("delayed", "10"),
+      command: fixture.command("fixed", String(port)),
     }),
   )
   const replacement = await Bun.file(registration).json()
   fixture.track(replacement.pid)
 
-  expect(existing.exitCode).toBe(null)
+  await existing.exited
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
 }, 10_000)

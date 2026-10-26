@@ -1,7 +1,11 @@
 import { appendFile, rename, rm, writeFile } from "node:fs/promises"
 
-const [registration, mode, delay] = process.argv.slice(2)
-if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
+const [registration, requestedMode, ...args] = process.argv.slice(2)
+if (registration === undefined || requestedMode === undefined) throw new Error("Missing service fixture arguments")
+const fixed = requestedMode.startsWith("fixed-")
+const mode = fixed ? requestedMode.slice("fixed-".length) : requestedMode
+const delay = args[fixed ? 1 : 0]
+const port = fixed ? Number(args[0]) : 0
 if (mode === "failed") process.exit(1)
 if (mode === "stderr-failed") {
   process.stderr.write("x".repeat(16_384) + "\nactionable startup failure\n")
@@ -55,7 +59,7 @@ const handoff = {
   expiresAt: Date.now() + 30_000,
 }
 const server = Bun.serve({
-  port: 0,
+  port,
   async fetch(request): Promise<Response> {
     const pathname = new URL(request.url).pathname
     if (mode === "protocol" && pathname === "/api/experimental/persistent-pty/handoff") {

@@ -5,7 +5,7 @@ import { recoveryPolicy } from "../service-recovery.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { alive, decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { alive, decide, fallback, headers, ownsListeningPort, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -76,8 +76,14 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           timeouts = undefined
         } else if (ownerAlive) {
           announce("missing")
-          console.warn("Background service is unresponsive; replacing its registration")
-          await abandon(owner, options)
+          if (await ownsListeningPort(owner)) {
+            console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+            await PtyHandoff.clear(options.file ?? fallback())
+            await terminate(owner, options, timing)
+          } else {
+            console.warn("Background service is unresponsive; replacing its registration")
+            await abandon(owner, options)
+          }
           pool.evict(owner.pid)
           pool.recruitNow()
           recovery.replaced()
