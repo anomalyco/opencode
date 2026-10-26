@@ -2,18 +2,7 @@ import { ToolDefinition, type JsonSchema, type LanguageModel, type LLMRequest } 
 import { isRecord } from "../../utils/record.js"
 import { GeminiJsonSchema } from "./gemini-json-schema.js"
 
-const SCHEMA_MAPS = new Set([
-  "properties",
-  "patternProperties",
-  "$defs",
-  "definitions",
-  "dependentSchemas",
-  "dependencies",
-])
-const VALUES = new Set(["const", "default", "enum", "examples", "dependentRequired"])
-
-const mapValues = (record: Record<string, unknown>, map: (value: unknown, key: string) => unknown) =>
-  Object.fromEntries(Object.entries(record).map(([key, value]) => [key, map(value, key)]))
+const { SCHEMA_MAPS, VALUES, mapValues } = GeminiJsonSchema
 
 const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   const projected = items.map(moonshotNode)
