@@ -7,7 +7,7 @@ import { LLM } from "./effect.js"
 import { Media } from "./media.js"
 import { RequestExecutor } from "./route/executor.js"
 import { AIError, InvalidRequestError, LanguageModel, type LLMRequest } from "./schema/index.js"
-import type { RequestInput } from "./llm.js"
+import type { LoopInput, RequestInput } from "./llm.js"
 import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
   Transcription,
@@ -137,6 +137,8 @@ export const make = (options: Options = {}) => {
         run(LLM.generate(input), options),
       stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
         iterate(LLM.stream(input), options),
+      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: RunOptions) =>
+        iterate(LLM.loop(input), options),
     },
     image: {
       request: Image.request,

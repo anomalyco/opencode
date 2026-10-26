@@ -50,6 +50,33 @@ Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`
 `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+### Tool loop
+
+`stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
+tools (at most `maxSteps` calls, default 10). Events from every step arrive on one stream, with a `tool-result` after
+each tool runs:
+
+```ts
+import { readFile } from "node:fs/promises"
+import { Effect, Schema } from "effect"
+import { Tool, ToolFailure } from "@opencode/ai/effect"
+
+const read_file = Tool.make({
+  description: "Read a UTF-8 file.",
+  parameters: Schema.Struct({ path: Schema.String }),
+  success: Schema.String,
+  execute: ({ path }) =>
+    Effect.tryPromise({
+      try: () => readFile(path, "utf8"),
+      catch: (error) => new ToolFailure({ message: `Failed to read ${path}`, error }),
+    }),
+})
+
+for await (const event of ai.llm.loop({ model, prompt: "Summarize package.json.", tools: { read_file } })) {
+  if (event.type === "text-delta") process.stdout.write(event.text)
+}
+```
+
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
@@ -1112,6 +1139,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
+- **`LLM.loop`** — stream model calls, running `Tool.make(...)` tools between them until the model stops calling tools.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
