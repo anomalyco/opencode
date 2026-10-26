@@ -68,6 +68,7 @@ function ComposerStory(props: {
 }) {
   const [fileSearch, setFileSearch] = createStore<{ pending?: string }>({})
   let returnFiles: (() => void) | undefined
+
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
     cursor: props.prompt ? promptLength(props.prompt) : 0,
