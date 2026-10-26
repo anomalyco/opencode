@@ -510,8 +510,11 @@ test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
 
 test("spells reasoning variants for every bundled native package", () => {
   const supports: Variant.Support[] = [{ type: "toggle" }, { type: "effort" }, { type: "budget_tokens" }]
+  // Image and decision entrypoints have no reasoning to configure.
   const missing = Array.from(Provider.builtinPackages).filter(
-    (packageName) => Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
+    (packageName) =>
+      !/\/(images|decisions)$/.test(packageName) &&
+      Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
   )
   expect(missing).toEqual([])
 })
