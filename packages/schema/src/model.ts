@@ -51,6 +51,7 @@ export type Family = typeof Family.Type
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     compaction: Provider.Compaction.pipe(optional),
+    cache: Provider.Cache.pipe(optional),
     encoding: Provider.Encoding.pipe(optional),
   }),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.

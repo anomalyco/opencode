@@ -23,6 +23,8 @@ export type ProviderID = string
 
 export type ProviderCompaction = { type: "summary" } | { type: "native" }
 
+export type ProviderCacheTTL = `${number}${"ms" | "s" | "m" | "h" | "d"}`
+
 export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
@@ -339,29 +341,7 @@ export type LocationPublicInfo = {
 
 export type ModelRef = { id: string; providerID: ProviderID; variant?: string }
 
-export type ProviderSettings = {
-  timeout?: number | false
-  headerTimeout?: number | false
-  chunkTimeout?: number | false
-  compaction?: ProviderCompaction
-  transport?: ProviderTransport
-  encoding?: ProviderEncoding
-} & { [x: string]: any }
-
-export type ModelSettings = { compaction?: ProviderCompaction; encoding?: ProviderEncoding } & { [x: string]: any }
-
-export type ConfigProviderSettings = {
-  timeout?: number | false
-  headerTimeout?: number | false
-  chunkTimeout?: number | false
-  compaction?: ProviderCompaction
-  transport?: ProviderTransport
-  encoding?: ProviderEncoding
-} & { [x: string]: JsonValue | null }
-
-export type ConfigModelSettings = { compaction?: ProviderCompaction; encoding?: ProviderEncoding } & {
-  [x: string]: JsonValue | null
-}
+export type ProviderCache = { ttl?: ProviderCacheTTL }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
@@ -934,18 +914,35 @@ export type SessionMessageCompactionCompleted = {
   tokens?: TokenUsageInfo
 }
 
-export type ProviderRequest = {
-  settings: ProviderSettings
-  headers: { [x: string]: string }
-  body: { [x: string]: any }
+export type ProviderSettings = {
+  timeout?: number | false
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
+  compaction?: ProviderCompaction
+  cache?: ProviderCache
+  transport?: ProviderTransport
+  encoding?: ProviderEncoding
+} & { [x: string]: any }
+
+export type ModelSettings = { compaction?: ProviderCompaction; cache?: ProviderCache; encoding?: ProviderEncoding } & {
+  [x: string]: any
 }
 
-export type ModelVariant = {
-  id: string
-  settings?: ModelSettings
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
+export type ConfigProviderSettings = {
+  timeout?: number | false
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
+  compaction?: ProviderCompaction
+  cache?: ProviderCache
+  transport?: ProviderTransport
+  encoding?: ProviderEncoding
+} & { [x: string]: JsonValue | null }
+
+export type ConfigModelSettings = {
+  compaction?: ProviderCompaction
+  cache?: ProviderCache
+  encoding?: ProviderEncoding
+} & { [x: string]: JsonValue | null }
 
 export type PermissionRuleset = Array<PermissionRule>
 
@@ -2000,19 +1997,6 @@ export type FormState =
   | { status: "answered"; answer: FormAnswer }
   | { status: "cancelled"; message?: string }
 
-export type ProviderInfo = {
-  id: ProviderID
-  canonical?: ProviderID
-  integrationID?: IntegrationID
-  name: string
-  activation: "auto" | "enabled" | "disabled"
-  package: string
-  compatibility?: ProviderCompatibility
-  settings?: ProviderSettings
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
-
 export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
@@ -2109,39 +2093,30 @@ export type SessionMessageCompaction =
   | SessionMessageCompactionCompleted
   | SessionMessageCompactionFailed
 
-export type ModelInfo = {
-  id: string
-  modelID: string
-  providerID: ProviderID
+export type ProviderRequest = {
+  settings: ProviderSettings
+  headers: { [x: string]: string }
+  body: { [x: string]: any }
+}
+
+export type ProviderInfo = {
+  id: ProviderID
   canonical?: ProviderID
-  family?: string
+  integrationID?: IntegrationID
   name: string
-  compatibility?: ModelCompatibility
-  package?: string
+  activation: "auto" | "enabled" | "disabled"
+  package: string
+  compatibility?: ProviderCompatibility
+  settings?: ProviderSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
+export type ModelVariant = {
+  id: string
   settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
-  capabilities: ModelCapabilities
-  variants: Array<ModelVariant>
-  time: { released: number }
-  cost: Array<ModelCost>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: { context: number; input?: number; output: number }
-}
-
-export type AgentInfo = {
-  id: AgentID
-  name: string
-  model?: ModelRef
-  request: ProviderRequest
-  system?: string
-  description?: string
-  mode: "subagent" | "primary" | "all"
-  hidden: boolean
-  color?: AgentColor
-  steps?: number
-  permissions: PermissionRuleset
 }
 
 export type SessionInfo = {
@@ -2440,6 +2415,41 @@ export type CredentialEntry = {
 }
 
 export type FormFields2 = [FormField1, ...Array<FormField1>]
+
+export type AgentInfo = {
+  id: AgentID
+  name: string
+  model?: ModelRef
+  request: ProviderRequest
+  system?: string
+  description?: string
+  mode: "subagent" | "primary" | "all"
+  hidden: boolean
+  color?: AgentColor
+  steps?: number
+  permissions: PermissionRuleset
+}
+
+export type ModelInfo = {
+  id: string
+  modelID: string
+  providerID: ProviderID
+  canonical?: ProviderID
+  family?: string
+  name: string
+  compatibility?: ModelCompatibility
+  package?: string
+  settings?: ModelSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+  capabilities: ModelCapabilities
+  variants: Array<ModelVariant>
+  time: { released: number }
+  cost: Array<ModelCost>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: { context: number; input?: number; output: number }
+}
 
 export type SessionsResponse = {
   data: Array<SessionInfo>
