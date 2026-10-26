@@ -325,15 +325,6 @@ export function Session(props: {
     ),
   )
 
-  createEffect(
-    on([descendantSessionIDs, () => client.connection.status()], ([sessionIDs, status]) => {
-      if (status !== "connected") return
-      void Promise.allSettled(
-        sessionIDs.flatMap((sessionID) => [data.session.permission.sync(sessionID), data.session.form.sync(sessionID)]),
-      )
-    }),
-  )
-
   createEffect(() => {
     if (client.connection.status() !== "connected") return
     setSynced(false)
@@ -342,11 +333,8 @@ export function Session(props: {
     let superseded = false
     onCleanup(() => (superseded = true))
     void (async () => {
-      await Promise.all([
-        data.session.sync(sessionID, { children: true }),
-        data.session.permission.sync(sessionID).catch(() => undefined),
-        data.session.form.sync(sessionID).catch(() => undefined),
-      ])
+      // The family read also loads every member's status, permissions and forms.
+      await data.session.sync(sessionID, { children: true })
       if (superseded) return
       const info = data.session.get(sessionID)
       if (!info) {

@@ -5,7 +5,7 @@ import { CliRenderEvents, TextAttributes } from "@opentui/core"
 import path from "path"
 import { testRender } from "@opentui/solid"
 import { createSignal, onMount } from "solid-js"
-import type { SessionInfo } from "@opencode/client"
+import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import { DialogOpen, DialogOpenKey } from "../../../src/component/dialog-open"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider } from "../../../src/context/client"
@@ -854,28 +854,56 @@ test("option arrows stay in the only visible section", async () => {
 
 test("surfaces sessions awaiting permissions or questions at the top with attention icons", async () => {
   const remote = { directory: "/tmp/opencode/remote" }
+  const roots = [
+    ...Array.from({ length: 9 }, (_, index) => ({
+      ...recentSession,
+      id: `ses_recent_${index + 1}`,
+      title: `Recent session ${index + 1}`,
+      time: { created: 1, updated: 100 - index },
+    })),
+    {
+      ...recentSession,
+      id: "ses_parent_question",
+      title: "Parent awaiting question",
+      location: remote,
+      time: { created: 1, updated: 5 },
+    },
+    {
+      ...recentSession,
+      id: "ses_blocked_permission",
+      title: "Old session awaiting permission",
+      time: { created: 1, updated: 1 },
+    },
+  ].map((session) =>
+    ["ses_recent_1", "ses_blocked_permission"].includes(session.id)
+      ? { ...session, status: "running" as const }
+      : session,
+  )
+  const child = {
+    ...recentSession,
+    id: "ses_child_question",
+    parentID: "ses_parent_question",
+    title: "Child subagent",
+    location: remote,
+    time: { created: 1, updated: 2 },
+  }
+  const question: Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"] = {
+    id: "frm_question",
+    sessionID: child.id,
+    title: "Questions",
+    fields: [{ key: "q0", type: "string", title: "Target" }],
+  }
   const fixture = await renderOpen((url) => {
     if (url.pathname === "/api/session/active") {
       return json({
         data: {
           ses_recent_1: { type: "running" },
           ses_blocked_permission: { type: "running" },
-          ses_child_question: { type: "running" },
         },
       })
     }
-    if (url.pathname === "/api/session/ses_child_question") {
-      return json({
-        data: {
-          ...recentSession,
-          id: "ses_child_question",
-          parentID: "ses_parent_question",
-          title: "Child subagent",
-          location: remote,
-          time: { created: 1, updated: 2 },
-        },
-      })
-    }
+    const info = [...roots, child].find((session) => url.pathname === `/api/session/${session.id}`)
+    if (info) return json({ data: info })
     if (url.pathname === "/api/session/ses_blocked_permission/permission") {
       return json({
         data: [
@@ -888,44 +916,15 @@ test("surfaces sessions awaiting permissions or questions at the top with attent
         ],
       })
     }
-    if (url.pathname === "/api/session/ses_child_question/form") {
-      return json({
-        data: [
-          {
-            id: "frm_question",
-            sessionID: "ses_child_question",
-            title: "Questions",
-            fields: [{ key: "q0", type: "string", title: "Target" }],
-          },
-        ],
-      })
-    }
+    if (url.pathname === "/api/session/ses_child_question/form") return json({ data: [question] })
     if (url.pathname !== "/api/session") return undefined
-    return json({
-      data: [
-        ...Array.from({ length: 9 }, (_, index) => ({
-          ...recentSession,
-          id: `ses_recent_${index + 1}`,
-          title: `Recent session ${index + 1}`,
-          time: { created: 1, updated: 100 - index },
-        })),
-        {
-          ...recentSession,
-          id: "ses_parent_question",
-          title: "Parent awaiting question",
-          location: remote,
-          time: { created: 1, updated: 5 },
-        },
-        {
-          ...recentSession,
-          id: "ses_blocked_permission",
-          title: "Old session awaiting permission",
-          time: { created: 1, updated: 1 },
-        },
-      ],
-      cursor: {},
-    })
+    const parentID = url.searchParams.get("parentID")
+    if (parentID && parentID !== "null") return json({ data: parentID === child.parentID ? [child] : [], cursor: {} })
+    return json({ data: roots, cursor: {} })
   })
+
+  // The idle child is unloaded and outside reconnect hydration, so only the dialog can read its family.
+  fixture.emit({ id: "evt_question", created: 2, type: "form.created", location: remote, data: { form: question } })
 
   try {
     const frame = await fixture.app.waitForFrame(
