@@ -311,12 +311,14 @@ story("leaves Enter and Escape to an IME composition in the custom answer", asyn
   const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
   await input.focus()
   await input.fill("にほん")
+
   const compose = (key: string, keyCode: number) =>
     input.evaluate(
       (element, init) =>
         element.dispatchEvent(new KeyboardEvent("keydown", { ...init, bubbles: true, cancelable: true })),
       { key, keyCode, isComposing: keyCode !== 229 },
     )
+
   await compose("Enter", 13)
   await compose("Escape", 27)
   await compose("Enter", 229)

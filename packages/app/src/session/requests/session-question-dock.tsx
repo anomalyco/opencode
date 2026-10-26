@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
@@ -114,10 +114,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     customOn: cached?.customOn ?? [],
     editing: false,
     focus: 0,
-    lit: "none" as "none" | "hover" | "keys",
     minimized: false,
     listHeight: 0,
   })
+
+  const [lit, setLit] = createSignal<"none" | "hover" | "keys">("none")
 
   let root: HTMLDivElement | undefined
   let detailsRef: HTMLDivElement | undefined
@@ -153,6 +154,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const optionsOff = createMemo(() => hidden() > 0.98)
   // The answers box follows its list's measured height, so the dock grows and shrinks with each question. Under
   // reduced motion it lands at once while the content fades.
+
   const listHeight = useSpring(
     () => store.listHeight,
     () => ({ visualDuration: prefersReducedMotion() ? 0.01 : 0.4, bounce: 0 }),
@@ -263,10 +265,13 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     const el = listRef
 
     if (!el) return
+
     const observer = new ResizeObserver((entries) => {
       const size = entries[0]?.borderBoxSize[0]?.blockSize
+
       if (size !== undefined) setStore("listHeight", size)
     })
+
     observer.observe(el)
     onCleanup(() => observer.disconnect())
   })
@@ -403,7 +408,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   // The pointer moves the highlight like the arrows do, but never takes focus from the custom answer's field.
   const hover = (i: number, event: PointerEvent) => {
     if (event.pointerType !== "mouse" || store.editing || sending()) return
-    setStore("lit", "hover")
+    setLit("hover")
     setStore("focus", i)
   }
 
@@ -473,7 +478,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     if (store.minimized || sending()) return
 
-    setStore("lit", "keys")
+    setLit("keys")
 
     if (intent.type === "number") {
       event.preventDefault()
@@ -559,12 +564,14 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     arrivals.length = 0
     const reduced = prefersReducedMotion()
     const x = (root?.matches(":dir(rtl)") ? -step : step) * 12
+
     const frames = reduced
       ? [{ opacity: 0 }, { opacity: 1 }]
       : [
           { opacity: 0, transform: `translate3d(${x}px,0,0)` },
           { opacity: 1, transform: "none" },
         ]
+
     ;[detailsRef, optionsRef].forEach((el) => {
       if (el?.animate) arrivals.push(el.animate(frames, { duration: reduced ? 150 : 300, easing: SPRING_EASE }))
     })
@@ -576,7 +583,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     // The highlight's index moves before the question does, so it lands on the new question's answer instead of
     // gliding from the old one.
     setStore("focus", pickFocus(tab))
-    if (store.lit === "hover") setStore("lit", "none")
+
+    if (lit() === "hover") setLit("none")
     setStore("tab", tab)
     setStore("editing", false)
 
@@ -751,12 +759,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
             data-slot="question-options-list"
             ref={(el) => (listRef = el)}
             onPointerLeave={() => {
-              if (store.lit === "hover") setStore("lit", "none")
+              if (lit() === "hover") setLit("none")
             }}
           >
             <span
               data-slot="question-highlight"
-              data-shown={store.lit !== "none"}
+              data-shown={lit() !== "none"}
               ref={(el) => (highlightRef = el)}
               aria-hidden="true"
             />
