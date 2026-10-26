@@ -10,6 +10,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
+import { createSteerBackground } from "@/session/requests/steer-background"
 import { useData } from "@/runtime/server/current"
 
 export function createSessionRequestModel() {
@@ -27,13 +28,21 @@ export function createSessionRequestModel() {
       () => undefined,
     )
   })
-  createEffect(() => {
-    const id = params.id
 
-    if (!id || serverSDK.connection.status() !== "connected") return
-    void Promise.all(
-      sessionTreeIDs(data.session.list(), id).map((sessionID) => data.session.form.sync(sessionID)),
-    ).catch(() => undefined)
+  // Only a running Session can hold a pending form, and events keep loaded forms current. Comparing by value
+  // keeps every session update in a large subagent tree from re-requesting forms.
+  const formSessions = createMemo(
+    () =>
+      sessionTreeIDs(data.session.list(), params.id).filter(
+        (id) => id === params.id || data.session.status(id) === "running",
+      ),
+    [],
+    { equals: (a, b) => a.join() === b.join() },
+  )
+
+  createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
+    void Promise.all(formSessions().map((sessionID) => data.session.form.sync(sessionID))).catch(() => undefined)
   })
 
   const formRequest = createMemo((): FormInfo | undefined => {
@@ -119,17 +128,8 @@ export function createSessionRequestModel() {
     return !!id && !data.session.get(id)?.parentID
   }
 
-  // Inside a subagent, running work is the parent's, so the header lists its siblings.
-  const owner = createMemo(() => {
-    const id = params.id
-
-    if (!id) return
-
-    return data.session.get(id)?.parentID ?? id
-  })
-
   const running = createSessionBackground({
-    sessionID: owner,
+    sessionID: () => params.id,
     messages: data.session.message.list,
     sessions: data.session.list,
     status: data.session.status,
@@ -138,6 +138,7 @@ export function createSessionRequestModel() {
 
   // Moving to the background and the extensions' background list stay with the primary session's own work.
   const blocking = createMemo(() => (primary() ? running.blocking() : []))
+  const subagents = createMemo(() => (primary() ? running.subagents() : []))
   const tasks = createMemo(() => (primary() ? running.tasks() : []))
 
   const moveToBackground = async () => {
@@ -152,6 +153,12 @@ export function createSessionRequestModel() {
       })
     })
   }
+
+  const steer = createSteerBackground({
+    sessionID: () => params.id,
+    blocking,
+    move: (sessionID) => serverSDK.api.session.background({ sessionID }),
+  })
 
   const [store, setStore] = createStore<{ responding: string | undefined }>({ responding: undefined })
 
@@ -193,9 +200,10 @@ export function createSessionRequestModel() {
     permissionResponding,
     background: {
       blocking,
+      subagents,
       tasks,
-      running: { sessionID: owner, blocking: running.blocking, tasks: running.tasks },
       move: moveToBackground,
+      steer,
     },
     decide,
   }

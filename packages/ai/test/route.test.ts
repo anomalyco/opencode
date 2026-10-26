@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import { AIError, HttpContext, InvalidProviderOutputError, LLM } from "../src/index.js"
+import { AIError, HttpContext, InvalidProviderOutputError, LLM } from "../src/effect.js"
 import { Anthropic } from "../src/providers.js"
 import { Auth, Framing, HttpTransport, LLMClient, Route } from "../src/route.js"
 import { fixedResponse, truncatedStream } from "./lib/http.js"

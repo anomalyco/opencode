@@ -31,6 +31,8 @@ describe("Provider", () => {
         reasoningEffort: "high",
         chunkTimeout: 1000,
         compaction: { type: "native" },
+        cache: { ttl: "1h" },
+        encoding: "gzip",
         transport: "websocket",
       }),
     ).toEqual({

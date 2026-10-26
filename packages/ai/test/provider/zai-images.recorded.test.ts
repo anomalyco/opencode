@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src/index.js"
+import { Image } from "../../src/effect.js"
 import { ZAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -19,7 +19,7 @@ describe("Z.ai Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat red circle centered on a plain white background.",
-        size: "1024x1024",
+        aspect: "1:1",
         providerOptions: { quality: "standard", userID: "opencode-image-test" },
       })
 

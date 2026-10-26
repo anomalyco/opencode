@@ -37,6 +37,7 @@ import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { initGit } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
@@ -127,6 +128,40 @@ describe("Session.create", () => {
         expect((yield* projects.list()).find((project) => project.id === first.projectID)?.canonical).toBe(main)
         expect((yield* sessions.get(first.id)).location.directory).toBe(main)
         expect((yield* sessions.get(second.id)).location.directory).toBe(clone)
+      }),
+    ),
+  )
+
+  testEffect(Layer.empty).live("repeat Session.create on the same location spawns no git", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => initGit(directory))
+        const counter = countingSpawner()
+        const layer = AppNodeBuilder.build(
+          LayerNode.group([
+            Database.node,
+            Bus.node,
+            Project.node,
+            LocationServiceMap.node,
+            SessionProjector.node,
+            SessionStore.node,
+            Session.node,
+          ]),
+          [
+            Bus.node.replace(Bus.configured({ persist: true })),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+            counter.node,
+          ],
+        )
+        yield* Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+          yield* sessions.create({ location: ref })
+          const before = counter.spawns()
+          yield* sessions.create({ location: ref })
+          expect(counter.spawns()).toBe(before)
+        }).pipe(Effect.provide(layer))
       }),
     ),
   )

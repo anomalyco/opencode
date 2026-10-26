@@ -22,7 +22,12 @@ export function GET(event: APIEvent) {
     client_uri: origin,
     logo_uri: origin + "/web-app-manifest-512x512.png",
     application_type: "native",
-    redirect_uris: ["http://127.0.0.1/callback", "http://localhost/callback"],
+    redirect_uris: [
+      "http://127.0.0.1/callback",
+      "http://localhost/callback",
+      // Older clients use this path; loopback ports still vary per login.
+      "http://127.0.0.1/mcp/oauth/callback",
+    ],
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: "none",

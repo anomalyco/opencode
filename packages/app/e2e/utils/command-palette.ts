@@ -26,11 +26,22 @@ export function captureConsoleWarnings(page: Page) {
 }
 
 export async function openCommandPalette(page: Page, home = false) {
+  const mock = await openPaletteWorkspace(page, home)
+  await page.keyboard.press("ControlOrMeta+Shift+P")
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  await expect(input).toBeFocused()
+  await expect(dialog.getByRole("option")).not.toHaveCount(0)
+
+  return { dialog, input, push: mock.push }
+}
+
+export async function openPaletteWorkspace(page: Page, home = false, sessions = [paletteSession]) {
   const mock = await mockOpenCodeServer(page, {
     directory: paletteSession.directory,
     project: project({ id: paletteSession.projectID, directory: paletteSession.directory, name: "command-palette" }),
     provider: NO_PROVIDER,
-    sessions: [paletteSession],
+    sessions,
     pageMessages: () => ({ items: [] }),
     findFiles: () => [],
   })
@@ -47,11 +58,5 @@ export async function openCommandPalette(page: Page, home = false) {
     await expect(page.locator('[data-component="composer-editor"]')).toBeEditable({ timeout: APP_READY_TIMEOUT })
   }
 
-  await page.keyboard.press("ControlOrMeta+Shift+P")
-  const dialog = page.getByRole("dialog")
-  const input = dialog.getByRole("textbox")
-  await expect(input).toBeFocused()
-  await expect(dialog.getByRole("option")).not.toHaveCount(0)
-
-  return { dialog, input, push: mock.push }
+  return mock
 }

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "تمام فائلیں۔",
-  "tree.empty": "کوئی فائل نہیں ہے۔",
-  "tree.changes.one": "⁨{{count}}⁩ فائل تبدیل ہوئی",
-  "tree.changes.other": "⁨{{count}}⁩ فائلیں تبدیل ہوئیں",
   "tab.notFound": "فائل نہیں ملی: ⁨{{name}}⁩",
   "mobile.title": "فائلیں",
   "mobile.openTabs": "کھلی فائلیں",

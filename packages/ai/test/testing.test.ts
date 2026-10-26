@@ -12,7 +12,7 @@ import {
   Message,
   ProviderID,
   RateLimitError,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { OpenAI } from "../src/providers.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"

@@ -1,6 +1,6 @@
 export * as Project from "./project.js"
 
-import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
+import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
 import { ChildProcess } from "effect/process"
 import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
@@ -15,6 +15,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
+import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
 
 export const ID = ProjectSchema.ID
@@ -117,6 +118,7 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
+    const scope = yield* Scope.Scope
 
     const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
@@ -149,6 +151,11 @@ const layer = Layer.effect(
           : undefined
       const changed = replaced ?? unarchived
       if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
+      yield* ProjectIcon.refresh(fs, db, project.id).pipe(
+        Effect.flatMap((row) => (row ? bus.publish(ProjectSchema.Event.Updated, fromRow(row)) : Effect.void)),
+        Effect.ignoreCause,
+        Effect.forkIn(scope),
+      )
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: Worktree.StrategyID }> = [
         { projectID: project.id, directory: project.canonical },
@@ -320,6 +327,44 @@ const layer = Layer.effect(
       return root ? ID.make(root) : undefined
     })
 
+    // Failures resolve like dev (no remote / no root / own worktree) but aren't cached.
+    const gitDiscover = Effect.fnUntraced(function* (dotGit: AbsolutePath) {
+      const repo = yield* git.repo.discover(AbsolutePath.make(path.dirname(dotGit)))
+      if (!repo) return { resolved: undefined, cacheable: false }
+      let cacheable = true
+      const fallback = <A>(value: A) =>
+        Effect.orElseSucceed(() => {
+          cacheable = false
+          return value
+        })
+      const previous = yield* cached(repo.commonDirectory)
+      const id =
+        (yield* remote(repo).pipe(fallback(undefined))) ??
+        previous ??
+        (yield* rootCommit(repo).pipe(fallback(undefined)))
+      const canonical =
+        repo.gitDirectory === repo.commonDirectory
+          ? repo.worktree
+          : yield* git.worktree.list(repo).pipe(
+              Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+              fallback(repo.worktree),
+            )
+      const resolved: Resolved = {
+        previous,
+        id: id ?? ID.global,
+        directory: repo.worktree,
+        canonical,
+        vcs: { type: "git" as const, store: repo.commonDirectory },
+      }
+      return { resolved, cacheable }
+    })
+
+    // Keyed by `.git` path plus its metadata fingerprint, so repeat resolves spawn no git.
+    const gitCache = yield* Cache.make({
+      capacity: 512,
+      lookup: (key: string) => gitDiscover(AbsolutePath.make(key.slice(0, key.indexOf("\u0000")))),
+    })
+
     // Mercurial identity uses the cached ID or the first root changeset; remote-derived
     // identity (the git `remote()` path) is a follow-up.
     const hgRoot = Effect.fnUntraced(function* (worktree: AbsolutePath) {
@@ -362,27 +407,16 @@ const layer = Layer.effect(
         Effect.map((matches) => matches[0]),
         Effect.orElseSucceed(() => undefined),
       )
-      const repo =
-        native && path.basename(native) === ".git"
-          ? yield* git.repo.discover(AbsolutePath.make(path.dirname(native)))
-          : undefined
-      if (repo) {
-        const previous = yield* cached(repo.commonDirectory)
-        const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
-        const canonical =
-          repo.gitDirectory === repo.commonDirectory
-            ? repo.worktree
-            : yield* git.worktree.list(repo).pipe(
-                Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
-                Effect.orElseSucceed(() => repo.worktree),
-              )
-        return yield* save({
-          previous,
-          id: id ?? ID.global,
-          directory: repo.worktree,
-          canonical,
-          vcs: { type: "git" as const, store: repo.commonDirectory },
-        })
+      if (native && path.basename(native) === ".git") {
+        const dotGit = AbsolutePath.make(native)
+        const fingerprint = yield* git.repo.fingerprint(dotGit)
+        const key = `${dotGit}\u0000${fingerprint}`
+        const discovered = fingerprint
+          ? yield* Cache.get(gitCache, key).pipe(
+              Effect.tap((entry) => (entry.cacheable ? Effect.void : Cache.invalidate(gitCache, key))),
+            )
+          : yield* gitDiscover(dotGit)
+        if (discovered.resolved) return yield* save(discovered.resolved)
       }
 
       const hg = native && path.basename(native) === ".hg" ? yield* hgDiscover(AbsolutePath.make(native)) : undefined

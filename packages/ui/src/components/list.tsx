@@ -139,21 +139,6 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   )
 
   createEffect(() => {
-    const scroll = scrollRef()
-
-    if (!scroll) return
-
-    if (!props.current) return
-    const key = props.key(props.current)
-    requestAnimationFrame(() => {
-      const element = findByKey(scroll, key)
-
-      if (!element) return
-      scrollIntoView(scroll, element, "center")
-    })
-  })
-
-  createEffect(() => {
     const all = flat()
 
     if (store.mouseActive || all.length === 0) return

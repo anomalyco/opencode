@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Бүх файлууд",
-  "tree.empty": "Файл байхгүй",
-  "tree.changes.one": "{{count}} файл өөрчлөгдсөн",
-  "tree.changes.other": "{{count}} файл өөрчлөгдсөн",
   "tab.notFound": "Файл олдсонгүй: {{name}}",
   "mobile.title": "Файлууд",
   "mobile.openTabs": "Нээлттэй файлууд",

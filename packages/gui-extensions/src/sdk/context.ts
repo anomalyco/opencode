@@ -69,7 +69,7 @@ export interface Context extends BaseContext {
    */
   provide<T>(token: Contract<T>, impl: T): Cleanup
   /**
-   * Side panel tabs, the dock, scroll offsets, and the settings and project dialogs.
+   * Side panel tabs, scroll offsets, and the settings and project dialogs.
    *
    * @example
    * ```ts

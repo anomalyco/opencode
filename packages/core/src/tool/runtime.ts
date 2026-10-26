@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@opencode/ai"
+import type { ToolDefinition } from "@opencode/ai/effect"
 import { emptyInputJsonSchema } from "@opencode/ai/tool"
 import { isRecord } from "@opencode/ai/utils/record"
 import { Tool } from "@opencode/schema/tool"

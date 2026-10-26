@@ -1,4 +1,27 @@
 import type { ContentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "./state"
+import { parseSessionMention, serializeSessionMention } from "@opencode/util/session-mention"
+
+export function serializePrompt(prompt: Prompt): Prompt {
+  // Editor offsets measure titles; wire offsets measure stable session tokens.
+  let offset = 0
+
+  return prompt.map((part) => {
+    if (!("content" in part)) return part
+    const mention = part.type === "session" ? parseSessionMention(part.id) : undefined
+    const content = mention ? serializeSessionMention(mention) : part.content
+
+    const next = {
+      ...part,
+      content,
+      start: part.start + offset,
+      end: part.end + offset + content.length - part.content.length,
+    }
+
+    offset += content.length - part.content.length
+
+    return next
+  })
+}
 
 /** Parts that sit beside the text rather than inside it. */
 export function isAttachment(part: ContentPart): part is ImageAttachmentPart | PathAttachmentPart {

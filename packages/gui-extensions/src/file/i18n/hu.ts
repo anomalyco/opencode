@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Minden fájl",
-  "tree.empty": "Nincsenek fájlok",
-  "tree.changes.one": "{{count}} fájl megváltozott",
-  "tree.changes.other": "{{count}} fájl megváltozott",
   "tab.notFound": "A fájl nem található: {{name}}",
   "mobile.title": "Fájlok",
   "mobile.openTabs": "Nyissa meg a fájlokat",

@@ -24,6 +24,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -35,7 +36,6 @@ import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
-import { Voice } from "@opencode/core/voice"
 import { WebSearch } from "@opencode/core/websearch"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
@@ -98,6 +98,7 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       ManagedPolicy.node,
       Mcp.node,
       Session.node,
+      InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,
       Permission.node,
@@ -108,7 +109,6 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       SkillDiscovery.node,
       Tool.node,
       Vcs.node,
-      Voice.node,
       Watcher.node,
       WebSearch.node,
       Worktree.node,

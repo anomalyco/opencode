@@ -1,8 +1,5 @@
 export default {
   "tree.all": "সমস্ত ফাইল",
-  "tree.empty": "কোনো ফাইল নেই",
-  "tree.changes.one": "{{count}}টি ফাইল পরিবর্তিত হয়েছে",
-  "tree.changes.other": "{{count}}টি ফাইল পরিবর্তিত হয়েছে",
   "tab.notFound": "ফাইল পাওয়া যায়নি: {{name}}",
   "mobile.title": "ফাইল",
   "mobile.openTabs": "খোলা ফাইল",

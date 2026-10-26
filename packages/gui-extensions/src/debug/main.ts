@@ -1,13 +1,17 @@
 import { app, contentTracing, screen, type BrowserWindow } from "electron"
 import { Schema } from "effect"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getHeapSpaceStatistics, getHeapStatistics, writeHeapSnapshot } from "node:v8"
 import type { MainSetup } from "../sdk/main"
-import { HeapSnapshots } from "./contract"
+import { HeapSnapshots, MemoryDiagnostics } from "./contract"
 import type definition from "./index"
 import { summarize, traceConfig } from "./memory-infra"
+import { startMemoryLog } from "./memory-log"
+import { debugBuild, memoryLogInterval } from "./options"
 import { captureServer } from "./server-heap"
+import { signalIncludesServer, snapshotDirectory } from "./signal"
+import { ProcessSignal } from "@opencode/util/process-signal"
 
 /** A desktop process the manifest lists: the file written, or why there is none. */
 type Snapshot = { readonly process: "main" | "window"; readonly pid: number; readonly window?: number } & (
@@ -50,18 +54,18 @@ const pageStatsScript = `(() => {
   }
 })()`
 
+/** Stops the running memory diagnostics, while they run. */
+type Running = { stop?: () => void }
+
 const setup: MainSetup<typeof definition> = (ctx) => {
   const queue: Queue = { tail: Promise.resolve() }
 
-  const capture = async () => {
-    const directory = path.join(
-      app.getPath("downloads"),
-      `opencode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`,
-    )
+  const capture = async (root: string, includeServer: boolean) => {
+    const directory = path.join(root, `opencode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`)
 
     // Snapshots hold prompts, file contents and credentials. Recursive, because Downloads can be missing on Linux.
     await mkdir(directory, { recursive: true, mode: 0o700 })
-    ctx.log.write("info", "capturing heap snapshots", { directory })
+    ctx.log.write("info", "capturing heap snapshots", { directory, includeServer })
 
     // Measurements first: writing a heap snapshot raises the memory of the process it serializes.
     const before = {
@@ -80,7 +84,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
     // snapshot can double a process's memory, and a leaking app may not have room for every window at once. Main goes
     // last: writing its own heap blocks the loop that receives the others.
     const [serverSnapshot, windowSnapshots] = await Promise.all([
-      captureServer(ctx.serverEndpoints.get("sidecar"), directory, ctx.scope.signal),
+      includeServer ? captureServer(ctx.serverEndpoints.get("sidecar"), directory, ctx.scope.signal) : undefined,
       (async () => {
         const list: Snapshot[] = []
 
@@ -97,14 +101,31 @@ const setup: MainSetup<typeof definition> = (ctx) => {
         (error: Error): Snapshot => ({ process: "main", pid: process.pid, error: error.message }),
       )
 
-    const snapshots = [serverSnapshot, ...windowSnapshots, main]
+    const snapshots = await Promise.all(
+      [...(serverSnapshot ? [serverSnapshot] : []), ...windowSnapshots, main].map(async (snapshot) => {
+        if ("error" in snapshot) return snapshot
+        const file = "file" in snapshot ? path.join(directory, snapshot.file) : snapshot.path
+
+        const bytes = await stat(file).then(
+          (info) => info.size,
+          () => null,
+        )
+
+        ctx.log.write("info", "heap snapshot written", { file, bytes })
+
+        return { ...snapshot, bytes }
+      }),
+    )
     const gpu = await app.getGPUInfo("basic").catch((error: Error) => ({ error: error.message }))
 
     // One readable answer to "where is the memory", per process, in MiB.
     await write(directory, "memory.json", {
       unit: "MiB",
       native: "summary" in native ? native.summary : native,
-      server: "error" in serverSnapshot || !serverSnapshot.memory ? undefined : mibs(serverSnapshot.memory),
+      server:
+        !serverSnapshot || "error" in serverSnapshot || !serverSnapshot.memory
+          ? undefined
+          : mibs(serverSnapshot.memory),
       pages,
       note: "native: Chromium's memory-infra dump per process, before the heap snapshots. Some allocators overlap: cc, skia, gpu and web_cache report memory that malloc, discardable or shared_memory also count. pages: what each app window's page held. server: the server's process.memoryUsage().",
     })
@@ -112,6 +133,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
     // Written last, so a script can wait for it.
     await write(directory, "manifest.json", {
       created: new Date().toISOString(),
+      includeServer,
       app: {
         name: app.getName(),
         version: app.getVersion(),
@@ -139,13 +161,75 @@ const setup: MainSetup<typeof definition> = (ctx) => {
     return { directory, complete }
   }
 
+  const enqueue = (directory: string, includeServer: boolean) => {
+    const run = queue.tail.then(() => capture(directory, includeServer))
+    queue.tail = run.catch(() => undefined)
+
+    return run
+  }
+
   ctx.provide(HeapSnapshots, {
     // A window that closes meanwhile does not cancel the capture.
-    write: () => {
-      const run = queue.tail.then(capture)
-      queue.tail = run.catch(() => undefined)
+    write: () => enqueue(app.getPath("downloads"), true),
+  })
 
-      return run
+  if (!debugBuild(ctx.build)) return
+
+  // The environment turns diagnostics on for this launch; otherwise the debug bar's stored toggle does.
+  const envInterval = memoryLogInterval(process.env.OPENCODE_DESKTOP_MEMORY_LOG)
+  const stored = ctx.stores.memory
+  const running: Running = {}
+  const directory = process.platform === "win32" ? undefined : snapshotDirectory(process.env)
+  let capturing = false
+
+  const onSignal = () => {
+    // Signals coalesce while a capture is running; repeated signals must not fill the disk with queued dumps.
+    if (!directory || capturing || ctx.scope.signal.aborted) return
+    capturing = true
+    void enqueue(directory, signalIncludesServer(process.env))
+      .catch((error: Error) => ctx.log.write("error", "heap snapshot capture failed", { error: error.message }))
+      .finally(() => {
+        capturing = false
+      })
+  }
+
+  const start = () => {
+    const stopLog = startMemoryLog(envInterval ?? 30_000, ctx.log)
+
+    if (!directory) return stopLog
+
+    // Installed the first time diagnostics turn on, and kept: a script's late signal while they are off, or while
+    // the extension reloads, is logged and ignored instead of killing the app.
+    ProcessSignal.install("SIGUSR2", () => ctx.log.write("warn", "heap snapshot signal ignored: diagnostics are off"))
+    const unsubscribe = ProcessSignal.subscribe("SIGUSR2", onSignal)
+    ctx.log.write("info", "heap snapshot signal enabled", { pid: process.pid, signal: "SIGUSR2", directory })
+
+    return () => {
+      unsubscribe()
+      stopLog()
+    }
+  }
+
+  const sync = () => {
+    const on = envInterval !== undefined || stored.value
+
+    if (on && !running.stop) running.stop = start()
+
+    if (on || !running.stop) return
+    running.stop()
+    running.stop = undefined
+  }
+
+  // Started before the Ipc is provided, so the first state windows receive already says whether diagnostics run.
+  sync()
+  ctx.scope.addFinalizer(() => running.stop?.())
+
+  const provider = ctx.provide(MemoryDiagnostics, {
+    state: () => ({ on: running.stop !== undefined, env: envInterval !== undefined }),
+    set: (enabled) => {
+      stored.set(enabled)
+      sync()
+      provider.changed()
     },
   })
 }

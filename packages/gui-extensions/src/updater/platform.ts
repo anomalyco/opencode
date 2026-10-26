@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import { app, autoUpdater } from "electron"
 import pkg from "electron-updater"
 import { Effect } from "effect"
@@ -5,7 +7,11 @@ import type { Platform } from "./machine"
 
 const updateClient = pkg.autoUpdater
 
+const execFileAsync = promisify(execFile)
+
 const restartTimeout = 10_000
+
+const unpackTimeout = 120_000
 
 export const make = Effect.fn("Updater.platform")(function* (channel: string) {
   const userAgent = `opencode/${channel === "prod" ? "latest" : channel}/${app.getVersion()}/desktop`
@@ -70,7 +76,7 @@ function stageUpdate(options: { readonly differential: boolean }) {
         return updateClient.downloadUpdate()
       },
       catch: (error) => error,
-    }).pipe(Effect.asVoid)
+    }).pipe(Effect.flatMap(unpackInstaller))
 
   return Effect.callback<void, Error>((resume) => {
     const cleanup = () => {
@@ -94,6 +100,27 @@ function stageUpdate(options: { readonly differential: boolean }) {
 
     return Effect.sync(cleanup)
   })
+}
+
+// The NSIS installer unpacks the update beside the install directory while the app keeps running, so the
+// install after the restart moves one directory into place instead of decompressing the whole app. When this
+// fails, the restart still installs the update, only slower.
+function unpackInstaller(files: string[]) {
+  const installer = files.find((file) => file.endsWith(".exe"))
+
+  if (process.platform !== "win32" || !app.isPackaged || !installer) return Effect.void
+
+  return Effect.tryPromise(() =>
+    execFileAsync(installer, ["--stage"], { windowsHide: true, timeout: unpackTimeout }),
+  ).pipe(
+    Effect.andThen(Effect.logInfo("update unpacked before restart", { installer })),
+    Effect.catch((error) =>
+      Effect.logWarning("update not unpacked before restart", {
+        installer,
+        message: error.cause instanceof Error ? error.cause.message : String(error.cause),
+      }),
+    ),
+  )
 }
 
 const installAndRestart = Effect.callback<void, Error>((resume) => {

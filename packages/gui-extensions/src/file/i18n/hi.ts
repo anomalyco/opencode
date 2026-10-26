@@ -1,8 +1,5 @@
 export default {
   "tree.all": "सभी फ़ाइलें",
-  "tree.empty": "कोई फ़ाइल नहीं",
-  "tree.changes.one": "{{count}} फ़ाइल बदली गई",
-  "tree.changes.other": "{{count}} फ़ाइलें बदली गईं",
   "tab.notFound": "फ़ाइल नहीं मिली: {{name}}",
   "mobile.title": "फ़ाइलें",
   "mobile.openTabs": "खुली फ़ाइलें",

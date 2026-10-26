@@ -1,15 +1,17 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner, untrack } from "solid-js"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
+import { createServerProjects, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
-import { createData } from "@opencode/client/solid"
+import { createData, createSessionRetention } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
+import { useCurrentRoute } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
@@ -19,7 +21,9 @@ import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
 import type { SessionInfo } from "@opencode/client/promise"
-import { resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
+import { projectForSession } from "@/shell/layout/helpers"
+import { isProjectDirectory } from "@/workspaces/paths"
+import type { Project } from "@/runtime/server/types"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -79,14 +83,23 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     // credentials, so its controller waits until health recovers and then starts with the current ones.
     createMemo(() => {
       for (const conn of server.list) {
-        if (serverHealth[ServerConnection.key(conn)]?.unauthorized) continue
+        if (serverHealth.status[ServerConnection.key(conn)]?.unauthorized) continue
         ensureServerCtx(conn)
       }
     })
 
     createEffect(() => {
+      for (const conn of server.list) {
+        const key = ServerConnection.key(conn)
+        const hostname = serverHealth.status[key]?.hostname
+
+        if (hostname) server.setHostname(key, hostname)
+      }
+    })
+
+    createEffect(() => {
       for (const [key] of serverCtxs) {
-        if (serverHealth[key]?.unauthorized || !server.list.find((conn) => ServerConnection.key(conn) === key))
+        if (serverHealth.status[key]?.unauthorized || !server.list.find((conn) => ServerConnection.key(conn) === key))
           disposeServerCtx(key)
       }
     })
@@ -94,7 +107,8 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     return {
       servers: {
         list: () => server.list,
-        health: serverHealth,
+        health: serverHealth.status,
+        retry: serverHealth.retry,
       },
       models,
       ensureServerCtx(conn: ServerConnection.Any) {
@@ -104,7 +118,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       serverCtx(key: ServerConnection.Key) {
         const conn = server.list.find((item) => ServerConnection.key(item) === key)
 
-        if (!conn || serverHealth[key]?.unauthorized) return
+        if (!conn || serverHealth.status[key]?.unauthorized) return
 
         return ensureServerCtx(conn)
       },
@@ -116,6 +130,7 @@ function createGlobalModels() {
   const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState, {
     user: [],
     recent: [],
+    favorite: [],
     variant: {},
   })
 
@@ -135,6 +150,11 @@ function createGlobalModels() {
       loaded()
 
       return store.recent
+    },
+    favorite: () => {
+      loaded()
+
+      return store.favorite
     },
     // Marks models visible in the picker regardless of the "latest per family" default.
     show(models: ReadonlyArray<{ providerID: string; modelID: string }>) {
@@ -168,6 +188,8 @@ function createServerController(
 ) {
   const language = useLanguage()
   const settings = useSettings()
+  const tabs = useTabs()
+  const currentRoute = useCurrentRoute()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
 
@@ -180,6 +202,8 @@ function createServerController(
     },
     connection: sdk.connection,
     directory: "",
+    // The timeline shows tool output as text only, so screenshots in tool results never need their bytes here.
+    omitToolFileData: true,
     onError(error) {
       showToast({
         variant: "error",
@@ -194,56 +218,106 @@ function createServerController(
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
   })
 
+  // Transcripts otherwise stay loaded for every session this window ever opened. Open tabs and the three most
+  // recently viewed sessions keep theirs; any other session reloads its transcript when it is opened again.
+  createSessionRetention({
+    session: data.session,
+    current: () => {
+      const route = currentRoute()
+
+      return route.type === "session" && route.server === connKey ? route.sessionId : undefined
+    },
+    // Until the stored tabs load, keep every transcript so startup never evicts a tab's session.
+    keep: () =>
+      tabs.ready()
+        ? tabs.store.flatMap((tab) =>
+            tab.type === "session" && tab.server === connKey
+              ? [tab.sessionId, ...(tab.routeSessionId ? [tab.routeSessionId] : [])]
+              : [],
+          )
+        : data.session.list().map((session) => session.id),
+    limit: 3,
+  })
+
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
 
-  function enrich(project: { worktree: string; expanded: boolean }) {
-    const [childStore] = sync.child(project.worktree, { bootstrap: false })
-    const projectID = childStore.project
+  // Projects whose repository has no root commit share the `global` ID; their name and icon stay local to the
+  // directory because the server cannot tell them apart.
+  function withLocalMeta(project: Project): Project {
+    if (project.id !== "global") return project
 
-    const metadata = projectID
-      ? sync.data.project.find((x) => x.id === projectID)
-      : sync.data.project.find((x) => x.worktree === project.worktree)
-
-    // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-    // Without this, different subdirectories of the same git repo would share the same
-    // icon from the database instead of using their individual overrides.
-    const base = {
-      ...metadata,
-      ...(!metadata || metadata.id === "global" ? childStore.projectMeta : undefined),
-      ...project,
-    }
-
-    if (childStore.icon) {
-      return { ...base, icon: { ...base.icon, override: childStore.icon } }
-    }
-
-    return base
+    return { ...project, ...sync.child(project.worktree, { bootstrap: false })[0].projectMeta }
   }
 
-  const projectsList = createMemo(() => projects.list().map(enrich))
+  const list = createMemo(() => sync.data.project.map(withLocalMeta))
 
-  const forSession = (session: SessionInfo) => {
-    const project = resolveProjectForSession(session, projectsList(), sync.data.project)
+  // One directory can belong to several project IDs, for example a folder resolved before `.git` existed and again
+  // after a remote was added. The list is most recent first, so the first project per path is the current one.
+  const unique = createMemo(() => {
+    const seen = new Set<string>()
 
-    if (!project) return
+    return list().filter((project) => {
+      const key = pathKey(project.worktree)
 
-    return "expanded" in project ? project : { ...project, expanded: false }
-  }
+      if (seen.has(key)) return false
+      seen.add(key)
 
-  const detailsForSession = (session: SessionInfo) =>
-    resolveSessionDetailsProject(session, projectsList(), sync.data.project)
-
-  const recentlyClosedList = createMemo(() => {
-    const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
-
-    return projects
-      .recentlyClosed()
-      .filter((worktree) => known.has(pathKey(worktree)))
-      .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
-      .map((worktree) => enrich({ worktree, expanded: false }))
+      return true
+    })
   })
+
+  // The projects this client has used, in server order. Using any ID of a path shows that path's current project.
+  const used = createMemo(() => {
+    const ids = new Set(projects.used())
+    const paths = new Set(list().flatMap((project) => (ids.has(project.id) ? [pathKey(project.worktree)] : [])))
+
+    return unique().filter((project) => paths.has(pathKey(project.worktree)))
+  })
+
+  const forDirectory = (directory: string): Project | undefined => {
+    const key = pathKey(directory)
+
+    return (
+      list().find(
+        (project) => pathKey(project.worktree) === key || project.sandboxes.some((sandbox) => pathKey(sandbox) === key),
+      ) ??
+      list()
+        .filter((project) => isProjectDirectory(project, directory))
+        .toSorted((a, b) => b.worktree.length - a.worktree.length)[0]
+    )
+  }
+
+  // Older builds kept opened directories locally; once the server's list loads they become used project IDs.
+  createEffect(() => {
+    const legacy = projects.legacy()
+
+    if (!legacy || !sync.project.ready()) return
+    untrack(() => projects.migrate(legacy.flatMap((directory) => forDirectory(directory)?.id ?? [])))
+  })
+
+  // Resolving a directory registers its project on the server; the list then reloads to include it, and the
+  // project becomes this client's last used one.
+  function add(directory: string) {
+    return sdk.api.location
+      .get({ location: { directory } })
+      .then(async (location) => {
+        await sync.project.refresh()
+        projects.touch(location.project.id)
+
+        return list().find((project) => project.id === location.project.id)
+      })
+      .catch((error) => {
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: formatServerError(error, language.t),
+        })
+
+        return undefined
+      })
+  }
 
   const isLocal =
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
@@ -254,12 +328,24 @@ function createServerController(
     sync,
     isLocal,
     projects: {
-      ...projects,
-      list: projectsList,
-      forSession,
-      detailsForSession,
-      resolve: enrich,
-      recentlyClosed: recentlyClosedList,
+      list,
+      unique,
+      used,
+      add,
+      forDirectory,
+      forSession: (session: SessionInfo): Project | undefined => projectForSession(session, list()),
+      last: () => list().find((project) => project.id === projects.last()),
+      // Marks the project of a directory as used from this client, and as the last one.
+      touch(directory: string) {
+        const id = forDirectory(directory)?.id
+
+        if (id) projects.touch(id)
+      },
+      // Removes a project from this client's used projects until it is used again; the server keeps it.
+      hide(project: Pick<Project, "worktree">) {
+        const key = pathKey(project.worktree)
+        projects.hide(list().flatMap((item) => (pathKey(item.worktree) === key ? [item.id] : [])))
+      },
     },
     notification,
   }

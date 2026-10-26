@@ -1,9 +1,5 @@
 export default {
   "tree.all": "כל הקבצים",
-  "tree.empty": "אין קבצים",
-  "tree.changes.one": "{{count}} קובץ השתנה",
-  "tree.changes.two": "{{count}} קבצים השתנו",
-  "tree.changes.other": "{{count}} קבצים השתנו",
   "tab.notFound": "הקובץ לא נמצא: ⁨{{name}}⁩",
   "mobile.title": "קבצים",
   "mobile.openTabs": "קבצים פתוחים",

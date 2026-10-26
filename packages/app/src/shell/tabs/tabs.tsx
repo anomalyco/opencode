@@ -38,9 +38,9 @@ export type PendingSession = {
 
 export type TabInfo = typeof TabStorage.Info.Type
 
-export type TabRegion = "dock" | "side"
+export type TabRegion = "side" | "bottom"
 
-export type TabRegionSize = "dockHeight" | "sessionWidth"
+export type TabRegionSize = "sessionWidth" | "bottomHeight" | "splitRatio"
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
@@ -597,10 +597,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       stateValue<T>(tab: Tab, name: string) {
         return memory.get<T>(tabKey(tab), name)
       },
-      region(tab: Tab | undefined, region: TabRegion) {
-        if (!tab) return false
+      region(tab: Tab | undefined, region: TabRegion, fallback = false) {
+        if (!tab) return fallback
 
-        return regions[tabKey(tab)]?.[region] ?? false
+        return regions[tabKey(tab)]?.[region] ?? fallback
       },
       setRegion(tab: Tab | undefined, region: TabRegion, opened: boolean) {
         if (!tab) return

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "모든 파일",
-  "tree.empty": "파일 없음",
-  "tree.changes.one": "{{count}}개의 파일이 변경되었습니다.",
-  "tree.changes.other": "{{count}}개의 파일이 변경되었습니다.",
   "tab.notFound": "파일을 찾을 수 없습니다: {{name}}",
   "mobile.title": "파일",
   "mobile.openTabs": "파일 열기",

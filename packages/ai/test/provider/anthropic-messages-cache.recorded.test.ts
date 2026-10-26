@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/index.js"
+import { CacheHint, LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"

@@ -2,7 +2,7 @@ import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
-import { Spinner } from "@opencode/ui/spinner"
+import { Loader } from "@opencode/ui/loader"
 import { Show } from "solid-js"
 import { useExtension, type ServerRow } from "../sdk"
 import { isSshConnecting, sshName } from "./name"
@@ -64,7 +64,7 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                   onClick={() => props.ssh.connect(item().config)}
                 >
                   <Show when={pending()}>
-                    <Spinner class="size-3.5" />
+                    <Loader class="size-3.5" />
                   </Show>
                   {pending() ? extension.t("session.connecting") : extension.t("action.authenticate")}
                 </Button>

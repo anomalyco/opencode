@@ -13,7 +13,8 @@
     "./domain/*": "./src/domain/*.ts",
     "./r2-sql": "./src/r2-sql.ts",
     "./runtime": "./src/runtime.ts",
-    "./stat-sync": "./src/stat-sync.ts"
+    "./stat-sync": "./src/stat-sync.ts",
+    "./sync-range": "./src/sync-range.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
