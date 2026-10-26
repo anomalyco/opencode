@@ -10,6 +10,9 @@ import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
 import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
+import { DialogImagePreview } from "../../component/dialog-image-preview"
+import { useDialog } from "../../ui/dialog"
+import { createMarkdownImageRenderer } from "./markdown-image"
 import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { use } from "./render-context"
@@ -170,6 +173,37 @@ function ReasoningHeader(props: {
   )
 }
 
+/** The plugin Markdown renderer, extended with local image blocks when transcript image previews are on. */
+export function useMarkdownRenderNode() {
+  const ctx = use()
+  const plugins = usePlugin()
+  const renderer = useRenderer()
+  const dialog = useDialog()
+  return createMemo(() => {
+    const base = plugins.markdown()
+    const images = ctx.markdownImages
+    if (!images || !ctx.config.session?.image_preview) return base
+    return createMarkdownImageRenderer({
+      renderer,
+      images,
+      base,
+      maxHeight: () => Math.max(3, Math.min(16, Math.floor(ctx.terminal.height / 3))),
+      open: (bytes, alt) =>
+        dialog.replace(() => (
+          <DialogImagePreview
+            images={[
+              {
+                uri: `data:application/octet-stream;base64,${Buffer.from(bytes).toString("base64")}`,
+                mention: alt ? { text: alt } : undefined,
+              },
+            ]}
+            initial={0}
+          />
+        )),
+    })
+  })
+}
+
 export function TextPart(props: {
   last: boolean
   part: SessionMessageAssistantText
@@ -178,14 +212,14 @@ export function TextPart(props: {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
-  const plugins = usePlugin()
+  const renderNode = useMarkdownRenderNode()
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
-          renderNode={plugins.markdown()}
+          renderNode={renderNode()}
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"

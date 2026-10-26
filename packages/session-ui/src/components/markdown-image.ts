@@ -1,25 +1,6 @@
+import { localImagePath } from "@opencode/util/markdown-image"
 import { isLineRangeHash, parsePathLineSuffix } from "@opencode/util/path"
 import type { ReadMarkdownImage } from "../context/markdown"
-
-export function localImagePath(source: string) {
-  // Marked percent-encodes image sources, so `C:\tmp\chart.png` arrives as `C:%5Ctmp%5Cchart.png`.
-  const value = source.trim().replace(/\\|%5c/gi, "/")
-
-  if (!value || /[\u0000-\u001f\u007f]/.test(value) || value.startsWith("//")) return
-
-  if (/^file:/i.test(value)) {
-    if (!URL.canParse(value)) return
-    const url = new URL(value)
-
-    if (url.hostname && url.hostname !== "localhost") return
-
-    return decodePath(url.pathname.replace(/^\/([a-z]:\/)/i, "$1"))
-  }
-
-  if (/^[a-z][a-z\d+.-]*:/i.test(value) && !/^[a-z]:\//i.test(value)) return
-
-  return decodePath(value)
-}
 
 /**
  * A link is local when it names a file on disk instead of a web resource. Fragment-only and
@@ -48,18 +29,6 @@ export function localLinkPath(href: string) {
   }
 
   return `${base}${isLineRangeHash(hash) ? hash : ""}`
-}
-
-function decodePath(value: string) {
-  try {
-    const path = decodeURIComponent(value)
-
-    if (/[\u0000-\u001f\u007f]/.test(path) || path.startsWith("//") || path.startsWith("\\\\")) return
-
-    return path
-  } catch {
-    return
-  }
 }
 
 type ImageEntry = { controller: AbortController; result: Promise<string | undefined>; url?: string }
