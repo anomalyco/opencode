@@ -24,10 +24,15 @@ import { fromRow } from "@opencode/core/session/info"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionStored } from "@opencode/core/session/stored"
+import { SessionBlob } from "@opencode/core/session/blob"
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionHistory } from "@opencode/core/session/history"
 import { Shell } from "@opencode/schema/shell"
 import {
   InstructionStateTable,
+  BlobRefTable,
   BlobTable,
   SessionInboxTable,
   SessionMessageTable,
@@ -48,6 +53,22 @@ const created = DateTime.makeUnsafe(0)
 const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
 const previousModel = { ...model, variant: Model.VariantID.make("medium") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
+const mediaBlob = Config.testLayer([
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
+  }),
+])
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+)
+const attachment = (name: string, bytes = png, mime = "image/png") => ({
+  data: bytes.toString("base64"),
+  mime,
+  source: { type: "inline" as const },
+  name,
+})
 const build = Agent.defaultID
 
 const assistantRow = (
@@ -1302,5 +1323,240 @@ describe("SessionProjector", () => {
         { id: compactionID, metadata: { recent: "[User]: look\n[Attached image/png: shot.png]" } },
       ])
     }),
+  )
+
+  it.effect("keeps media inline unless experimental.media_blob is on", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const inbox = yield* SessionInbox.Service
+      const id = SessionMessage.ID.make("msg_media_inline")
+      yield* inbox.admit({
+        id,
+        sessionID,
+        item: { type: "user", payload: { text: "inline", files: [attachment("shot.png")] }, delivery: "queue" },
+      })
+
+      const row = yield* db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.payload).toEqual({ text: "inline", files: [attachment("shot.png")] })
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+    }),
+  )
+
+  it.effect("stores media once and refs it from inbox, message, and tool rows when experimental.media_blob is on", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const store = yield* SessionStore.Service
+      const hash = SessionBlob.hashBytes(png)
+      const uri = SessionStored.ref(hash)
+      const id = SessionMessage.ID.make("msg_media_user")
+      const files = [attachment("shot.png"), attachment("copy.png")]
+      const refs = [
+        { mime: "image/png", source: { type: "inline" }, name: "shot.png", uri },
+        { mime: "image/png", source: { type: "inline" }, name: "copy.png", uri },
+      ]
+
+      yield* inbox.admit({ id, sessionID, item: { type: "user", payload: { text: "look", files }, delivery: "steer" } })
+      const queued = yield* db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(queued?.payload).toEqual({ text: "look", files: refs })
+      expect(yield* inbox.list(sessionID)).toMatchObject([{ id, payload: { text: "look", files } }])
+
+      const delivered = yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: id })
+      const message = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(message?.data).toMatchObject({ text: "look", files: refs })
+      expect((yield* store.message(id))?.message).toMatchObject({ type: "user", files })
+
+      const assistantMessageID = SessionMessage.ID.make("msg_media_tool")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      const tool = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(tool?.data).toMatchObject({
+        content: [{ state: { status: "completed", content: [{ type: "file", uri, mime: "image/png" }] } }],
+      })
+      expect((yield* store.message(assistantMessageID))?.message).toMatchObject({
+        content: [
+          {
+            state: {
+              content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+            },
+          },
+        ],
+      })
+
+      expect(
+        yield* db
+          .select({
+            hash: BlobTable.hash,
+            mime: BlobTable.mime,
+            bytes: BlobTable.bytes,
+          })
+          .from(BlobTable)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ hash, mime: "image/png", bytes: png.byteLength }])
+      expect(
+        yield* db
+          .select({ message: BlobRefTable.message_id, hash: BlobRefTable.hash, seq: BlobRefTable.seq })
+          .from(BlobRefTable)
+          .orderBy(asc(BlobRefTable.seq))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([
+        { message: assistantMessageID, hash, seq: 0 },
+        { message: id, hash, seq: delivered.durable?.seq },
+      ])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect("deletes a cancelled inbox row's blob refs and blobs", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const inbox = yield* SessionInbox.Service
+      const id = SessionMessage.ID.make("msg_media_cancel")
+      yield* inbox.admit({
+        id,
+        sessionID,
+        item: { type: "user", payload: { text: "later", files: [attachment("shot.png")] }, delivery: "queue" },
+      })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toHaveLength(1)
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* inbox.cancel({ id, sessionID })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect("deletes reverted messages' blob refs and the blobs only they referenced", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const text = Buffer.from("reverted attachment")
+      const deliver = (id: SessionMessage.ID, files: ReturnType<typeof attachment>[]) =>
+        Effect.gen(function* () {
+          yield* inbox.admit({ id, sessionID, item: { type: "user", payload: { text: id, files }, delivery: "steer" } })
+          yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: id })
+        })
+      const kept = SessionMessage.ID.make("msg_media_kept")
+      const reverted = SessionMessage.ID.make("msg_media_reverted")
+      const shared = SessionMessage.ID.make("msg_media_shared")
+      yield* deliver(kept, [attachment("shot.png")])
+      yield* deliver(reverted, [attachment("notes.txt", text, "text/plain")])
+      yield* deliver(shared, [attachment("again.png")])
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toHaveLength(3)
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: reverted })
+      expect(
+        yield* db
+          .select({ message: BlobRefTable.message_id, hash: BlobRefTable.hash })
+          .from(BlobRefTable)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ message: kept, hash: SessionBlob.hashBytes(png) }])
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([
+        { hash: SessionBlob.hashBytes(png) },
+      ])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect("keeps a blob while a fork references it and deletes it with the last session", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const id = SessionMessage.ID.make("msg_media_forked")
+      const childID = Session.ID.make("ses_media_fork")
+      yield* inbox.admit({
+        id,
+        sessionID,
+        item: { type: "user", payload: { text: "fork me", files: [attachment("shot.png")] }, delivery: "steer" },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: id })
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: id },
+      })
+      expect(
+        yield* db.select({ session: BlobRefTable.session_id }).from(BlobRefTable).all().pipe(Effect.orDie),
+      ).toEqual(expect.arrayContaining([{ session: sessionID }, { session: childID }]))
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(
+        yield* db.select({ session: BlobRefTable.session_id }).from(BlobRefTable).all().pipe(Effect.orDie),
+      ).toEqual([{ session: childID }])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: childID })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect("releases a tool's blob when a content update drops its ref", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_media_rewritten")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toHaveLength(1)
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.MessageContentUpdated, { sessionID, messageID: assistantMessageID, content: [] })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
   )
 })

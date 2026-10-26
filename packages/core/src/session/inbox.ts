@@ -52,7 +52,7 @@ export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
 const decodeStoredUser = Schema.decodeUnknownSync(SessionStored.UserPayload)
-const encodeUser = Schema.encodeSync(UserPayload)
+const encodeStoredUser = Schema.encodeSync(SessionStored.UserPayload)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticPayload)
 const encodeSynthetic = Schema.encodeSync(SyntheticPayload)
 const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
@@ -306,20 +306,21 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  const payload =
+    request.item.type === "user"
+      ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, request.item.payload))
+      : request.item.type === "synthetic"
+        ? encodeSynthetic(request.item.payload)
+        : request.item.type === "compaction"
+          ? encodeCompaction(request.item.payload)
+          : encodeMove(request.item.payload)
   const stored = yield* db
     .insert(SessionInboxTable)
     .values({
       id: request.id,
       session_id: request.sessionID,
       type: request.item.type,
-      payload:
-        request.item.type === "user"
-          ? encodeUser(request.item.payload)
-          : request.item.type === "synthetic"
-            ? encodeSynthetic(request.item.payload)
-            : request.item.type === "compaction"
-              ? encodeCompaction(request.item.payload)
-              : encodeMove(request.item.payload),
+      payload,
       delivery: request.item.delivery,
       enqueued_seq: request.enqueuedSeq,
       time_created: request.timeCreated,
@@ -329,6 +330,11 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  yield* SessionBlob.recordRefs(
+    db,
+    { sessionID: request.sessionID, messageID: request.id, seq: request.enqueuedSeq },
+    payload,
+  )
 })
 
 /**
@@ -379,6 +385,7 @@ export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  yield* SessionBlob.releaseMessage(db, input.sessionID, input.id)
 })
 
 const projectDelivery = Effect.fn("SessionInbox.projectDelivery")(function* (

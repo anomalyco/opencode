@@ -431,6 +431,7 @@ test("concurrent service processes elect one server", async () => {
     ).toEqual({
       version: info.version,
       pid: info.pid,
+      hostname: os.hostname(),
       urls: [info.url],
       // The server reports the canonical tmp directory; Windows os.tmpdir() can be an 8.3 short name.
       paths: { tmp: await fs.realpath(path.join(os.tmpdir(), "opencode")) },
@@ -850,6 +851,7 @@ function serviceEnv(root: string) {
     ...process.env,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: transpilerCache,
     HOME: root,
+    OPENCODE_CONFIG_DIR: undefined,
     OPENCODE_DB: path.join(root, "opencode.db"),
     OPENCODE_TEST_HOME: root,
     XDG_CACHE_HOME: path.join(root, "cache"),

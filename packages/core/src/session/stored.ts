@@ -9,13 +9,16 @@ import { SessionMessage } from "./message.js"
 
 /**
  * Stored rows may reference a `blob` row as `media:` and the lowercase hex SHA-256 of its raw bytes. The blob
- * row holds the bytes, size and dimensions; the ref names no server route.
+ * row holds the bytes and size; the ref names no server route.
  */
 export const Ref = Schema.String.check(Schema.isPattern(/^media:[0-9a-f]{64}$/))
 export type Ref = typeof Ref.Type
 
 /** The `blob` hash a {@link Ref} names. */
 export const refHash = (ref: Ref) => ref.slice("media:".length)
+
+/** The {@link Ref} naming a `blob` hash. */
+export const ref = (hash: string): Ref => `media:${hash}`
 
 const { data: _, ...attachment } = FileAttachment.fields
 
