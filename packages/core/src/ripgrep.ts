@@ -110,6 +110,7 @@ const layer = Layer.effect(
       readonly args: string[]
       readonly limit: number
       readonly signal?: AbortSignal
+      readonly nullSeparated?: boolean
       readonly parse: (line: string) => Effect.Effect<A | undefined, Error>
       readonly pattern?: string
       readonly onItem?: (item: A) => Effect.Effect<void>
@@ -125,8 +126,20 @@ const layer = Layer.effect(
             Effect.forkScoped,
           )
           let observed = 0
-          const rows = yield* Stream.decodeText(handle.stdout).pipe(
-            Stream.splitLines,
+          const text = Stream.decodeText(handle.stdout)
+          const records = input.nullSeparated
+            ? text.pipe(
+                Stream.mapAccum(
+                  () => "",
+                  (remainder, chunk) => {
+                    const parts = (remainder + chunk).split("\0")
+                    return [parts.pop() ?? "", parts] as const
+                  },
+                  { onHalt: (remainder) => (remainder.length > 0 ? [remainder] : []) },
+                ),
+              )
+            : text.pipe(Stream.splitLines)
+          const rows = yield* records.pipe(
             Stream.filter((line) => line.length > 0),
             Stream.mapEffect(input.parse),
             Stream.filter((row): row is A => row !== undefined),
@@ -167,9 +180,11 @@ const layer = Layer.effect(
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
+          nullSeparated: true,
           args: [
             "--no-config",
             "--files",
+            "--null",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
@@ -195,9 +210,11 @@ const layer = Layer.effect(
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
+          nullSeparated: true,
           args: [
             "--no-config",
             "--files",
+            "--null",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),

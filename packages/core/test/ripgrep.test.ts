@@ -59,6 +59,31 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("preserves newlines and Unicode in glob and find paths", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          // Windows does not permit control characters in filenames.
+          if (process.platform === "win32") return
+          const names = ["line\nbreak.ts", "ordinary.ts", "space name.ts", "unicode-😀.ts"]
+          yield* Effect.promise(() => Promise.all(names.map((name) => fs.writeFile(path.join(tmp.path, name), ""))))
+          const ripgrep = yield* Ripgrep.Service
+          const expected = names.map((name) => RelativePath.make(name)).sort()
+
+          const globbed = yield* ripgrep.glob({ cwd: tmp.path, pattern: "**/*.ts", limit: 10 })
+          expect(globbed.map((item) => item.path).sort()).toEqual(expected)
+
+          const found = yield* ripgrep.find({ cwd: tmp.path, pattern: "**/*.ts", limit: 10 })
+          expect(found.map((item) => item.path).sort()).toEqual(expected)
+
+          const limited = yield* ripgrep.glob({ cwd: tmp.path, pattern: "line*", limit: 1 })
+          expect(limited.map((item) => item.path)).toEqual([RelativePath.make("line\nbreak.ts")])
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("greps files with include filtering", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
