@@ -1348,9 +1348,10 @@ function placeStateTransitionLabels(
           const dy = distance - Math.abs(dx)
           for (const candidateY of dy === 0 ? [y] : [y - dy, y + dy]) {
             const candidateX = x + dx
-            if (!isClear(candidateX, candidateY)) continue
+            // Reject by path distance before isClear: it is far cheaper and rules out most of the spiral.
             const pathDistance = labelDistanceToPath(candidateX, candidateY, width, plan.label!.lines.length, plan.path)
             if (pathDistance < 2 || pathDistance > 8) continue
+            if (!isClear(candidateX, candidateY)) continue
             x = candidateX
             y = candidateY
             break search

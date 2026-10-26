@@ -70,10 +70,18 @@
   opacity: 1;
 }
 
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-unread-slot"] {
+  inset-inline-end: 44px;
+}
+
 [data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-link"] {
   padding-inline-end: 38px;
   -webkit-mask-image: none;
   mask-image: none;
+}
+
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab][data-unread="true"] [data-slot="tab-link"] {
+  padding-inline-end: 58px;
 }
 
 [data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-title"] {

@@ -2,7 +2,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -11,7 +11,7 @@ import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
 
@@ -98,6 +98,8 @@ export interface CommandOption {
   /** Section of Settings > Shortcuts. Host commands leave it unset and are placed by id prefix. */
   section?: CommandSection
   keybind?: KeybindConfig
+  /** Command id whose custom keybind this command takes; Settings > Shortcuts lists only that command. */
+  follows?: string
   slash?: string
   slashArguments?: boolean
   /** Listed right after the option whose slash name this is, when one is registered. */
@@ -133,6 +135,7 @@ export const CommandCatalogItem = Persistence.struct({
   category: Schema.optional(Schema.String),
   section: Persistence.optional(CommandSection),
   keybind: Schema.optional(Schema.String),
+  follows: Schema.optional(Schema.String),
   slash: Schema.optional(Schema.String),
   hidden: Schema.optional(Schema.Boolean),
 })
@@ -262,39 +265,37 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
   if (!kb.key) return parts
 
-  const keys: Record<string, string> = {
-    arrowup: "↑",
-    arrowdown: "↓",
-    arrowleft: "←",
-    arrowright: "→",
-    comma: ",",
-    plus: "+",
-  }
+  const keys = new Map<string, string>([
+    ["arrowup", "↑"],
+    ["arrowdown", "↓"],
+    ["arrowleft", "←"],
+    ["arrowright", "→"],
+    ["comma", ","],
+    ["plus", "+"],
+  ])
 
-  const named: Record<string, KeyLabel> = {
-    backspace: "common.key.backspace",
-    delete: "common.key.delete",
-    end: "common.key.end",
-    enter: "common.key.enter",
-    esc: "common.key.esc",
-    escape: "common.key.esc",
-    home: "common.key.home",
-    insert: "common.key.insert",
-    pagedown: "common.key.pageDown",
-    pageup: "common.key.pageUp",
-    space: "common.key.space",
-    tab: "common.key.tab",
-  }
+  const named = new Map<string, KeyLabel>([
+    ["backspace", "common.key.backspace"],
+    ["delete", "common.key.delete"],
+    ["end", "common.key.end"],
+    ["enter", "common.key.enter"],
+    ["esc", "common.key.esc"],
+    ["escape", "common.key.esc"],
+    ["home", "common.key.home"],
+    ["insert", "common.key.insert"],
+    ["pagedown", "common.key.pageDown"],
+    ["pageup", "common.key.pageUp"],
+    ["space", "common.key.space"],
+    ["tab", "common.key.tab"],
+  ])
 
   const key = kb.key.toLowerCase()
 
+  const label = named.get(key)
+
   const displayKey =
-    keys[key] ??
-    (named[key]
-      ? keyText(named[key], t)
-      : key.length === 1
-        ? key.toUpperCase()
-        : key.charAt(0).toUpperCase() + key.slice(1))
+    keys.get(key) ??
+    (label ? keyText(label, t) : key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1))
 
   parts.push(displayKey)
 
@@ -335,8 +336,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
 
-    const [store, setStore] = createStore({
-      registrations: [] as CommandRegistration[],
+    const [store, setStore] = createStore<{ registrations: CommandRegistration[]; suspendCount: number }>({
+      registrations: [],
       suspendCount: 0,
     })
 
@@ -344,8 +345,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const [catalog, setCatalog, _, catalogReady] = persisted(Persist.global("command.catalog.v1"), CommandCatalog, {})
 
-    const bind = (id: string, def: KeybindConfig | undefined) => {
-      const custom = settings.keybinds.get(actionId(id))
+    const bind = (id: string, def: KeybindConfig | undefined, follows?: string) => {
+      const custom = settings.keybinds.get(actionId(id)) ?? (follows ? settings.keybinds.get(follows) : undefined)
       const config = custom ?? def
 
       if (!config || config === "none") return
@@ -390,6 +391,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
               category: opt.category,
               section: opt.section,
               keybind: opt.keybind,
+              follows: opt.follows,
               slash: opt.slash,
             }),
           )
@@ -411,7 +413,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const options = createMemo(() => {
       const resolved = registered().map((opt) => ({
         ...opt,
-        keybind: bind(opt.id, opt.keybind),
+        keybind: bind(opt.id, opt.keybind, opt.follows),
       }))
 
       const suggested = resolved.filter((x) => x.suggested && !x.disabled)
@@ -517,8 +519,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     function register(cb: () => CommandOption[]): void
     function register(key: string, cb: () => CommandOption[]): void
     function register(key: string | (() => CommandOption[]), cb?: () => CommandOption[]) {
-      const id = typeof key === "string" ? key : undefined
-      const next = typeof key === "function" ? key : cb
+      const id = Predicate.isString(key) ? key : undefined
+      const next = Predicate.isString(key) ? cb : key
 
       if (!next) return
       const options = createMemo(next)
@@ -540,7 +542,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       if (id === PALETTE_ID) return settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
       const base = actionId(id)
 
-      return options().find((x) => actionId(x.id) === base)?.keybind ?? bind(base, catalog[base]?.keybind)
+      return (
+        options().find((x) => actionId(x.id) === base)?.keybind ??
+        bind(base, catalog[base]?.keybind, catalog[base]?.follows)
+      )
     }
 
     return {

@@ -14,6 +14,7 @@ import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
 import { createSessionRetention } from "./session-retention"
+import { createProgramStatus, type PendingSession } from "./program-status"
 import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {
   closeSessionTab,
@@ -175,6 +176,29 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         renaming: data.session.title.pending(session),
       }
     }
+
+    createProgramStatus({
+      renderer,
+      sessions: () => {
+        const viewed = route.data.type === "session" && route.data.sessionID !== "dummy" ? current() : undefined
+        const tabs = enabled() ? state().tabs.map((tab) => tab.sessionID) : []
+        return Array.from(new Set(viewed ? [...tabs, viewed] : tabs)).flatMap((sessionID): PendingSession[] => {
+          const session = status(sessionID)
+          if (session.attention)
+            return [
+              {
+                id: sessionID,
+                title: title(sessionID),
+                state: "blocked",
+                kind: session.attention,
+                message: session.attention === "permission" ? "Permission needs input" : "Input needs response",
+              },
+            ]
+          if (session.busy) return [{ id: sessionID, title: title(sessionID), state: "working" }]
+          return []
+        })
+      },
+    })
 
     // Shared storage updates must not re-admit a tab unless this client changes route or scope.
     createEffect(

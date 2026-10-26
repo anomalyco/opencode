@@ -12,6 +12,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode/schema/session-event"
+import { SessionLegacy } from "@opencode/schema/session-legacy"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
 
@@ -70,6 +71,10 @@ const envelope = (aggregateID: string, seq: number, version: number) => ({
   version: Event.Version.make(version),
 })
 
+// Every stored event decodes through here, so payloads written in older shapes are upgraded in one place.
+const decodeStoredData = (definition: Event.DurableDefinition, data: unknown) =>
+  Schema.decodeUnknownSync(definition.data)(SessionLegacy.event(definition.type, data))
+
 const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
@@ -80,7 +85,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
     created: event.created ?? 0,
     type: definition.type,
     durable: envelope(event.aggregateID, event.seq, definition.durable.version),
-    data: Schema.decodeUnknownSync(definition.data)(event.data),
+    data: decodeStoredData(definition, event.data),
   }
 }
 
@@ -325,7 +330,8 @@ export function configured(options?: Options) {
                           .get()
                           .pipe(Effect.orDie)
                         const latest = row?.seq ?? -1
-                        const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<string, unknown>
+                        const encode = () =>
+                          Schema.encodeUnknownSync(definition.data)(event.data) as Record<string, unknown>
                         if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                           yield* Effect.die(
                             new InvalidDurableEventError({
@@ -346,7 +352,8 @@ export function configured(options?: Options) {
                             stored?.id === event.id &&
                             stored.type === versionedType(definition.type, durable.version) &&
                             stored.created === (event.created ?? 0) &&
-                            isDeepStrictEqual(stored.data, encoded)
+                            // Rows written before a payload rename compare in their upgraded shape.
+                            isDeepStrictEqual(SessionLegacy.event(definition.type, stored.data), encode())
                           ) {
                             if (input.ownerID && row?.ownerID == null) {
                               yield* db
@@ -423,7 +430,7 @@ export function configured(options?: Options) {
                                 seq,
                                 created: event.created ?? 0,
                                 type: versionedType(definition.type, durable.version),
-                                data: encoded,
+                                data: encode(),
                               },
                             ])
                             .run()
@@ -596,10 +603,6 @@ export function configured(options?: Options) {
                           const ids = new Set<Event.ID>()
                           for (const [index, item] of payloads.entries()) {
                             const seq = firstSeq + index
-                            const encoded = Schema.encodeUnknownSync(item.definition.data)(item.event.data) as Record<
-                              string,
-                              unknown
-                            >
                             if (persist) {
                               if (ids.has(item.event.id))
                                 yield* Effect.die(
@@ -637,7 +640,10 @@ export function configured(options?: Options) {
                                 seq,
                                 created: event.created,
                                 type: versionedType(item.definition.type, item.definition.durable.version),
-                                data: encoded,
+                                data: Schema.encodeUnknownSync(item.definition.data)(item.event.data) as Record<
+                                  string,
+                                  unknown
+                                >,
                               })
                           }
                           yield* db
@@ -684,7 +690,7 @@ export function configured(options?: Options) {
                   id: event.id,
                   created: event.created ?? 0,
                   type: definition.type,
-                  data: Schema.decodeUnknownSync(definition.data)(event.data),
+                  data: decodeStoredData(definition, event.data),
                 } as Event.Payload
                 const committed = yield* commitDurableEvent(definition, payload, {
                   seq: event.seq,

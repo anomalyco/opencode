@@ -86,7 +86,9 @@ test("Git initialization belongs to its session and refreshes after a session sw
   await expect(pending).toHaveCount(0)
 })
 
-test("a rejected Git init releases its session's button without showing an error in another session", async ({ page }) => {
+test("a rejected Git init releases its session's button without showing an error in another session", async ({
+  page,
+}) => {
   await openSession(page, {
     name: "ReviewInitFailure",
     project: { vcs: undefined },
@@ -143,7 +145,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   const panel = page.locator("#review-panel")
   const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
   const sidebarToggle = panel.getByRole("button", { name: "Toggle file tree" })
-  const contextButton = page.getByRole("button", { name: "View context usage" })
+  const contextButton = page.getByRole("button", { name: "Toggle session context" })
   const openFile = panel.getByRole("button", { name: "Open file" })
   const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
   await contextButton.click()
@@ -181,7 +183,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   const missingResponse = page.waitForResponse((response) => response.url().includes("/api/fs/read/README.md"))
   await workspace.push([filesystemEvent(directory, "README.md", "unlink")])
   await missingResponse
-  await expect(page.getByText("Failed to load file", { exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
   await expect(tab("File not found: README.md")).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("File not found: README.md", { exact: true })).toBeVisible()
 
@@ -309,7 +311,7 @@ test("context closes the side region only when its button opened it", async ({ p
   })
   const panel = page.locator("#review-panel")
   const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
-  const contextButton = page.getByRole("button", { name: "View context usage" })
+  const contextButton = page.getByRole("button", { name: "Toggle session context" })
   const context = panel.getByRole("tab", { name: "Context", exact: true })
 
   await contextButton.click()
@@ -331,6 +333,83 @@ test("context closes the side region only when its button opened it", async ({ p
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
+})
+
+test("context hides free-model cost but keeps paid-model zero cost", async ({ page }) => {
+  const cases = [
+    { id: "ses_context_free", title: "Free model", model: "free", cost: 0, usage: false, text: "0" },
+    { id: "ses_context_paid", title: "Paid model", model: "paid", cost: 0, usage: false, text: "0·$0.00" },
+    { id: "ses_context_used", title: "Paid usage", model: "paid", cost: 1.25, usage: true, text: "2k·$1.25" },
+    { id: "ses_context_free_used", title: "Free usage", model: "free", cost: 0, usage: true, text: "2k" },
+    { id: "ses_context_mixed", title: "Previously paid", model: "free", cost: 1.25, usage: true, text: "2k·$1.25" },
+    { id: "ses_context_unknown", title: "Unknown pricing", model: "missing", cost: 0, usage: false, text: "0·$0.00" },
+    { id: "ses_context_output", title: "Output pricing", model: "output", cost: 0, usage: false, text: "0·$0.00" },
+    // The root's model is free, but its subagent spent on a paid model: the family total shows.
+    { id: "ses_context_family", title: "Paid subagent", model: "free", cost: 0, usage: true, text: "2k·$1.25" },
+    // A completed compaction resets the context until the next reply reports usage, as in the TUI.
+    { id: "ses_context_compacted", title: "Compacted", model: "paid", cost: 1.25, usage: true, text: "0·$1.25" },
+  ]
+
+  await openSession(page, {
+    name: "ContextPricing",
+    provider: provider(
+      { id: "free", name: "Free", cost: { input: 0, output: 0 } },
+      { id: "paid", name: "Paid", cost: { input: 1, output: 3 } },
+      { id: "output", name: "Output", cost: { input: 0, output: 1 } },
+    ),
+    sessions: [
+      ...cases.map((item) => ({
+        id: item.id,
+        title: item.title,
+        model: { id: item.model, providerID: "opencode" },
+        cost: item.cost,
+      })),
+      {
+        id: "ses_context_family_child",
+        parentID: "ses_context_family",
+        title: "Subagent run",
+        model: { id: "paid", providerID: "opencode" },
+        cost: 1.25,
+      },
+    ],
+    pageMessages: (id) => ({
+      items: cases.flatMap((item): SessionMessageInfo[] =>
+        item.id === id && item.usage
+          ? [
+              {
+                id: `msg_${item.id}`,
+                type: "assistant",
+                agent: "build",
+                model: { id: item.model, providerID: "opencode" },
+                tokens: { input: 1500, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+                content: [{ type: "text", text: "Done." }],
+                time: { created: 1, completed: 2 },
+              },
+              ...(item.id === "ses_context_compacted"
+                ? [
+                    {
+                      id: `msg_${item.id}_compaction`,
+                      type: "compaction" as const,
+                      status: "completed" as const,
+                      reason: "manual" as const,
+                      summary: "Current state",
+                      recent: "",
+                      time: { created: 3 },
+                    },
+                  ]
+                : []),
+            ]
+          : [],
+      ),
+    }),
+  })
+  const button = page.getByRole("button", { name: "Toggle session context", exact: true })
+
+  for (const item of cases) {
+    await page.locator("[data-titlebar-tab-slot]", { hasText: item.title }).click()
+    await expectSessionTitle(page, item.title)
+    await expect(button).toHaveText(item.text)
+  }
 })
 
 test("file tree expands Windows paths and scrolls long names in both directions", async ({ page }) => {
@@ -422,7 +501,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
 })
 
-test("a restored file tab keeps the file tree on Files Changed", async ({ page }) => {
+test("a restored file tab keeps the file tree on files changed", async ({ page }) => {
   const directory = "C:/OpenCode/TreeRestore"
   await openSession(page, {
     name: "TreeRestore",
@@ -443,13 +522,13 @@ test("a restored file tab keeps the file tree on Files Changed", async ({ page }
   await treeTab("All files").click()
   await tree.getByRole("button", { name: "README.md" }).click()
   await expect(readme).toHaveAttribute("aria-selected", "true")
-  await treeTab("Files Changed 1").click()
-  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
+  await treeTab("1 file changed").click()
+  await expect(treeTab("1 file changed")).toHaveAttribute("aria-selected", "true")
 
   await page.reload()
   await expect(readme).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
-  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
+  await expect(treeTab("1 file changed")).toHaveAttribute("aria-selected", "true")
 
   // Selecting a file tab after load still shows it among all files.
   await panel.locator("#session-side-panel-review-tab").click()
@@ -493,12 +572,156 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(tab).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
   await expect(panel.getByText("first draft", { exact: true })).toHaveCount(0)
+
+  // A restored file tab whose file was deleted shows its inline not-found state without a toast; clicking a broken link
+  // when no tab is open for it shows the toast.
+  await page.route("**/api/fs/read/shopping.txt*", (route) =>
+    route.fulfill({
+      status: 404,
+      headers: { "access-control-allow-origin": "*" },
+      // SAFETY: the server's wire body for a missing file, which the client decodes into its own error.
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+      json: { _tag: "FileNotFoundError", path: "shopping.txt", message: "File not found: shopping.txt" },
+    }),
+  )
+  await page.reload()
+  const missingTab = panel.getByRole("tab", { name: "File not found: shopping.txt", exact: true })
+  await expect(missingTab).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("File not found: shopping.txt", { exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+
+  await missingTab.locator("..").getByRole("button", { name: "Close tab" }).click()
+  await expect(missingTab).toHaveCount(0)
+  await link.click()
+  await expect(page.getByText("Failed to load file", { exact: true })).toBeVisible()
+  await expect(missingTab).toHaveCount(0)
 })
 
 /** What the image case's frame probe records on the window. */
 type ImageProbe = { problems: string[]; frames: number; running: boolean }
 
-test("image files keep the review panel painted while loading", async ({ page }) => {
+test("image gestures anchor zoom, pan, and reset independently of the pane", async ({ page }) => {
+  // Some browsers expose no natural dimensions for a viewBox-only SVG.
+  await page.addInitScript(() => {
+    for (const name of ["naturalWidth", "naturalHeight"]) {
+      const original = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, name)!
+      Object.defineProperty(HTMLImageElement.prototype, name, {
+        ...original,
+        get() {
+          return this.alt === "second.svg" ? 0 : original.get?.call(this)
+        },
+      })
+    }
+  })
+  await openSession(page, {
+    name: "ImageGestures",
+    fileList: () => [],
+    fileContent: (path) => ({
+      content:
+        path === "second.svg"
+          ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>'
+          : '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>',
+    }),
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_images",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [{ type: "text", text: "[First](first.svg) [Second](second.svg)" }],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+  })
+  await page.getByRole("link", { name: "First", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  const image = panel.getByRole("img", { name: "first.svg", exact: true })
+  const stage = panel.locator('[data-slot="artifact-stage"]')
+  const fit = panel.getByRole("button", { name: "Fit", exact: true })
+  await expect(image).toBeVisible()
+  await expect(fit).toBeDisabled()
+  // Wait for the side pane's opening motion before choosing a gesture anchor.
+  await image.hover()
+  const initial = (await image.boundingBox())!
+  const pane = (await panel.boundingBox())!
+  const anchor = { x: Math.round(initial.x + initial.width * 0.55), y: Math.round(initial.y + initial.height * 0.55) }
+  await page.mouse.move(anchor.x, anchor.y)
+  // A continuous pinch catches anchor drift while the image still fits one axis.
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send("Input.synthesizePinchGesture", {
+    ...anchor,
+    scaleFactor: 2,
+    relativeSpeed: 500,
+    gestureSourceType: "mouse",
+  })
+  await cdp.detach()
+  await expect(fit).toBeEnabled()
+  const zoomed = (await image.boundingBox())!
+  expect(zoomed.width).toBeCloseTo(initial.width * 2, 1)
+  expect((anchor.x - zoomed.x) / zoomed.width).toBeCloseTo((anchor.x - initial.x) / initial.width, 4)
+  expect((anchor.y - zoomed.y) / zoomed.height).toBeCloseTo((anchor.y - initial.y) / initial.height, 4)
+  expect(await panel.boundingBox()).toEqual(pane)
+  expect(await page.evaluate(() => window.visualViewport?.scale)).toBe(1)
+  await page.mouse.wheel(40, 60)
+  await expect.poll(async () => (await image.boundingBox())!.x).toBeCloseTo(zoomed.x - 40, 1)
+  expect((await image.boundingBox())!.y).toBeCloseTo(zoomed.y - 60, 1)
+  const scrolled = (await image.boundingBox())!
+  await page.mouse.down()
+  await page.mouse.move(anchor.x + 60, anchor.y + 40, { steps: 5 })
+  await page.mouse.up()
+  await expect(fit).toBeEnabled()
+  expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 60, 1)
+  expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 40, 1)
+  // Touch uses the same captured-pointer path and must not generate a click-to-fit.
+  const touch = await page.context().newCDPSession(page)
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: anchor.x, y: anchor.y }] })
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ x: anchor.x - 30, y: anchor.y - 20 }],
+  })
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+  await touch.detach()
+  await expect(fit).toBeEnabled()
+  expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 30, 1)
+  expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 20, 1)
+  // Keyboard-accessible fit restores the exact original geometry.
+  await fit.focus()
+  await page.keyboard.press("Enter")
+  await expect(fit).toBeDisabled()
+  expect(await image.boundingBox()).toEqual(initial)
+  expect(
+    await stage.evaluate((element) =>
+      element.dispatchEvent(new WheelEvent("wheel", { deltaY: 40, bubbles: true, cancelable: true })),
+    ),
+  ).toBe(true)
+  await image.click()
+  await expect(fit).toBeEnabled()
+  await page.getByRole("link", { name: "Second", exact: true }).click()
+  await expect(panel.getByRole("img", { name: "second.svg", exact: true })).toBeVisible()
+  await expect(fit).toBeDisabled()
+  await panel.getByRole("img", { name: "second.svg", exact: true }).hover()
+  const second = (await panel.getByRole("img", { name: "second.svg", exact: true }).boundingBox())!
+  expect(second.width).toBeGreaterThan(0)
+  expect(second.height).toBeGreaterThan(0)
+  await page.keyboard.down("Control")
+  await page.mouse.wheel(0, -50)
+  await expect(fit).toBeEnabled()
+  await page.keyboard.up("Control")
+  await fit.click()
+  await page.setViewportSize({ width: 1200, height: 700 })
+  await expect
+    .poll(async () => {
+      const frame = (await stage.boundingBox())!
+      const media = (await panel.getByRole("img", { name: "second.svg", exact: true }).boundingBox())!
+
+      return media.width <= frame.width - 47 && media.height <= frame.height - 47
+    })
+    .toBe(true)
+})
+
+test("image files load into the review panel and keep it painted while loading", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 900 })
   const directory = "C:/OpenCode/ReviewImage"
   const image = "assets/preview.png"
@@ -512,7 +735,13 @@ test("image files keep the review panel painted while loading", async ({ page })
       read.resolve()
       await release.promise
 
-      return { type: "binary", content: "iVBORw0KGgo=", encoding: "base64", mimeType: "image/png" }
+      // A 1x1 PNG.
+      return {
+        type: "binary",
+        content: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+        encoding: "base64",
+        mimeType: "image/png",
+      }
     },
     fileList: (path) => {
       if (!path) return [fileNode(directory, "assets", "directory"), fileNode(directory, "src", "directory")]
@@ -568,6 +797,10 @@ test("image files keep the review panel painted while loading", async ({ page })
   release.resolve()
   await response
   await expect(page.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("preview.png")
+  await expect(page.locator("#review-panel").getByRole("img", { name: image, exact: true })).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  )
   const loaded = await frames()
   await expect.poll(frames).toBeGreaterThan(loaded)
   expect(
@@ -579,6 +812,90 @@ test("image files keep the review panel painted while loading", async ({ page })
       return probe.problems
     }),
   ).toEqual([])
+})
+
+test("video files over 25 MB play in the viewer, expand into the theatre overlay, and collapse on Escape without remounting", async ({
+  page,
+}) => {
+  const directory = "C:/OpenCode/ReviewVideo"
+  const file = "arcade-update-draft.mp4"
+
+  const head = Buffer.from(
+    "AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAAMm1kYXSCSYNCAAPwAjYAOCQcGEIAADBgAABYS///mpmB/////7FMC////+OkgAAAAAL+bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAil0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAEAAAAAkAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAAAAABAAAAAAGhbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAQABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABTG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAQxzdGJsAAAAqHN0c2QAAAAAAAAAAQAAAJh2cDA5AAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAEAAJABIAAAASAAAAAAAAAABF0xhdmM2My4xLjEwMiBsaWJ2cHgtdnA5AAAAAAAAAAAAGP//AAAAFHZwY0MBAAAAAAqCAgICAAAAAAAKZmllbAEAAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAAJxAAAAAAAAAAGHN0dHMAAAAAAAAAAQAAAAEAAEAAAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAABAAAAAQAAABRzdHN6AAAAAAAAACoAAAABAAAAFHN0Y28AAAAAAAAAAQAAACwAAABhdWR0YQAAAFltZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAACxpbHN0AAAAJKl0b28AAAAcZGF0YQAAAAEAAAAATGF2ZjYzLjEuMTAy",
+    "base64",
+  )
+
+  const mp4 = Buffer.alloc(38_400_000)
+
+  head.copy(mp4)
+  mp4.writeUInt32BE(mp4.length - head.length, head.length)
+  mp4.write("free", head.length + 4, "ascii")
+
+  await openSession(page, {
+    name: "ReviewVideo",
+    fileList: (path) => (path ? [] : [fileNode(directory, file)]),
+    seed: {
+      panes: { ses_reviewvideo: { review: true } },
+    },
+  })
+  await page.route(`**/api/fs/read/${file}*`, (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "access-control-allow-origin": "*", "content-type": "application/octet-stream" },
+      body: mp4,
+    }),
+  )
+
+  const panel = page.locator("#review-panel")
+  await panel.getByRole("button", { name: "Open file" }).click()
+  await panel.getByRole("button", { name: file }).click()
+  await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
+
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]')
+  const stage = panel.locator('[data-slot="artifact-stage"]')
+  const video = stage.locator('video[data-slot="artifact-media"]')
+  const fullscreen = stage.getByRole("button", { name: "Enter full screen", exact: true })
+  const exitFullscreen = stage.getByRole("button", { name: "Exit full screen", exact: true })
+
+  await expect(video).toBeVisible()
+  await expect(toolbar).toContainText("64 × 36")
+  await expect(toolbar).toContainText("0:01")
+  await expect(toolbar).toContainText("38.4 MB")
+  await expect(panel.getByText(/Binary file/)).toHaveCount(0)
+  await expect(fullscreen).toHaveAttribute("aria-pressed", "false")
+  const inlineBounds = (await stage.boundingBox())!
+  expect(inlineBounds.width).toBeLessThan(1000)
+
+  await video.evaluate((element) => {
+    element.dataset.e2eProbe = "retained"
+  })
+
+  await fullscreen.click()
+  await expect(exitFullscreen).toHaveAttribute("aria-pressed", "true")
+  await expect(stage).toHaveAttribute("data-expanded", "")
+  expect(await stage.evaluate((element) => element.matches(":popover-open"))).toBe(true)
+  expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
+  expect(await video.evaluate((element) => element.dataset.e2eProbe)).toBe("retained")
+  await expect.poll(() => stage.boundingBox()).toEqual({ x: 0, y: 0, width: 1440, height: 900 })
+
+  await page.keyboard.press("Escape")
+  await expect(fullscreen).toHaveAttribute("aria-pressed", "false")
+  await expect(stage).not.toHaveAttribute("data-expanded")
+  expect(await stage.evaluate((element) => element.matches(":popover-open"))).toBe(false)
+  expect(await video.evaluate((element) => element.dataset.e2eProbe)).toBe("retained")
+  await expect.poll(() => stage.boundingBox()).toEqual(inlineBounds)
+
+  await video.dblclick()
+  await expect(exitFullscreen).toHaveAttribute("aria-pressed", "true")
+  await page.mouse.click(8, 8)
+  await expect(fullscreen).toHaveAttribute("aria-pressed", "false")
+  expect(await video.evaluate((element) => element.dataset.e2eProbe)).toBe("retained")
+
+  // Chromium's controls also answer a double click with native fullscreen, which covers the backdrop. Opting out with
+  // controlslist="nofullscreen" would end their click-to-play as well.
+  await video.click()
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
 })
 
 test("restores review state and the side-panel tab per session", async ({ page }) => {
@@ -630,7 +947,7 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await page.getByRole("option", { name: "Branch changes" }).click()
   await page.getByRole("button", { name: "beta.ts" }).click()
   await selectedFile("beta.ts")
-  await page.getByRole("button", { name: "View context usage" }).click()
+  await page.getByRole("button", { name: "Toggle session context" }).click()
   await selectedTab("Context")
 
   await switchSession("Gamma review state")
@@ -664,9 +981,22 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await selectedFile("gamma.ts")
   await review.press("End")
   await selectedTab("README.md")
+
+  // A hidden side-panel tab does not claim Close Tab while the side region is collapsed.
+  await toggle.click()
+  await expect(panel).toBeHidden()
+  await page.keyboard.press("Control+w")
+  await expect(page.locator("[data-titlebar-tab-slot]", { hasText: "Alpha review state" })).toHaveCount(0)
+  await expectSessionTitle(page, "Beta review state")
+  await page.keyboard.press("Control+Shift+T")
+  await expectSessionTitle(page, "Alpha review state")
+  await toggle.click()
+  await selectedTab("README.md")
+
   await page.keyboard.press("Control+w")
   await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(0)
   await expect(review).toHaveAttribute("aria-selected", "true")
+  await expectSessionTitle(page, "Alpha review state")
 })
 
 test("shows and restores last turn changes from the session diff", async ({ page }) => {

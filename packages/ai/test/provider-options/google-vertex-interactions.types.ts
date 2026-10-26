@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { GoogleVertexInteractions } from "../../src/providers.js"
 import { Auth } from "../../src/route/auth.js"
 import { model } from "../../src/providers/google-vertex/interactions.js"

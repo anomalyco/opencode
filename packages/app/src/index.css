@@ -107,6 +107,11 @@
     animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
+  /* A collapsing frame's elevation outlives its height as a flat line over the panel beside it, so it fades out. */
+  [data-slot="session-side-region-presence"][data-opened="false"] #review-panel {
+    animation: side-panel-frame-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
   [data-slot="terminal-panel-presence"][data-opened="true"] {
     animation: terminal-panel-presence-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -137,6 +142,7 @@
     [data-slot="session-side-panel-presence"],
     [data-slot="session-review-content"],
     [data-slot="session-side-region-presence"],
+    [data-slot="session-side-region-presence"] #review-panel,
     [data-component="terminal-panel"] {
       animation: none !important;
     }
@@ -173,6 +179,7 @@
     }
   }
 
+  /* Like `side-panel-frame-out`, the collapsing terminal frame drops its elevation. */
   @keyframes side-terminal-panel-presence-out {
     from {
       opacity: 1;
@@ -180,6 +187,13 @@
     to {
       opacity: 0.999999;
       visibility: hidden;
+      box-shadow: none;
+    }
+  }
+
+  @keyframes side-panel-frame-out {
+    to {
+      box-shadow: none;
     }
   }
 

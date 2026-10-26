@@ -134,18 +134,83 @@
   inset: 0;
 }
 
+/* Every row ends in the change letter or a blank end that sticks inside the pane while long rows
+   scroll. It fades the label out over 16px like tab titles and redraws the row's rounded end, so a
+   row that runs past the pane edge looks like a row that fits. */
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"]) {
+  --file-tree-v2-end-inset: 8px;
+
+  flex: none;
+  align-self: stretch;
+  position: sticky;
+  inset-inline-end: var(--file-tree-v2-end-inset);
+  z-index: 1;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-end"] {
+  --file-tree-v2-end-inset: 10px;
+}
+
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before,
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  pointer-events: none;
+}
+
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+  inset-inline-end: 100%;
+  width: 16px;
+  background:
+    linear-gradient(to right, transparent, var(--file-tree-v2-row-overlay)),
+    linear-gradient(to right, transparent, var(--v2-background-bg-base));
+}
+
+[data-component="file-tree-v2"]:dir(rtl)
+  :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+  background:
+    linear-gradient(to left, transparent, var(--file-tree-v2-row-overlay)),
+    linear-gradient(to left, transparent, var(--v2-background-bg-base));
+}
+
+/* The row through its rounded end. The shadow paints the pane past it, outside its corners too. */
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  inset-inline: 0 calc(-1 * var(--file-tree-v2-end-inset));
+  z-index: -1;
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
+  background:
+    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
+  box-shadow: 8px 0 0 6px var(--v2-background-bg-base);
+}
+
+[data-component="file-tree-v2"]:dir(rtl) :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  box-shadow: -8px 0 0 6px var(--v2-background-bg-base);
+}
+
+@keyframes file-tree-v2-end-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Scrolled to the end, every label is whole, so the fade clears. */
+@supports (animation-timeline: scroll()) {
+  [data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+    animation: file-tree-v2-end-fade linear both;
+    animation-timeline: scroll(nearest inline);
+    animation-range: calc(100% - 16px) 100%;
+  }
+}
+
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"] {
   box-sizing: border-box;
-  flex: none;
-  position: sticky;
-  inset-inline-end: 8px;
-  z-index: 1;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   width: 16px;
-  height: 16px;
   font-size: 11px;
   font-weight: 530;
   line-height: 1;
@@ -156,37 +221,6 @@
   font-feature-settings:
     "tnum" on,
     "lnum" on;
-  background:
-    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
-}
-
-[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"]::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 100%;
-  width: 16px;
-  pointer-events: none;
-  background:
-    linear-gradient(to right, transparent, var(--file-tree-v2-row-overlay)),
-    linear-gradient(to right, transparent, var(--v2-background-bg-base));
-}
-
-[data-component="file-tree-v2"]:dir(rtl) [data-slot="file-tree-v2-change"]::before {
-  background:
-    linear-gradient(to left, transparent, var(--file-tree-v2-row-overlay)),
-    linear-gradient(to left, transparent, var(--v2-background-bg-base));
-}
-
-[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"]::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 100%;
-  width: 16px;
-  pointer-events: none;
-  background:
-    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {

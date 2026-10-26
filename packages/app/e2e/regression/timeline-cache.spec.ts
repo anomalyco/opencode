@@ -30,7 +30,7 @@ for (const width of [1440, 390]) {
 
         const spacer = content.querySelector('[data-timeline-row="bottom-spacer"]')
 
-        ;(window as Window & { __coldReveal?: Reveal }).__coldReveal = {
+        window.__coldReveal = {
           pending: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
           clipped: [...content.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap((row) =>
             (row.firstElementChild?.getBoundingClientRect().height ?? 0) > row.getBoundingClientRect().height + 1
@@ -55,7 +55,7 @@ for (const width of [1440, 390]) {
       await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "hidden")
       release.resolve()
       await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
-      const reveal = await page.evaluate(() => (window as Window & { __coldReveal?: Reveal }).__coldReveal)
+      const reveal = await page.evaluate(() => window.__coldReveal)
       expect(reveal).toMatchObject({ pending: 0, clipped: [], tables: 1, codeBlocks: 4 })
       expect(Math.abs(reveal?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
       // The gap above the composer is part of the tail.
@@ -274,7 +274,23 @@ test("loads the transcript code font before opening rich history", async ({ page
   await page.goto(sessionHref(fixture.sourceID))
   await expect(page.getByText("A transcript with no code", { exact: true })).toBeVisible()
   expect((await font).ok()).toBe(true)
-  await expect.poll(() => page.evaluate(() => document.fonts.check('440 13px "IBM Plex Mono"'))).toBe(true)
+  // Chromium recreates every @font-face as "unloaded", keeping its downloaded file, whenever a lazily loaded
+  // stylesheet with @layer rules activates ahead of one already applied, so the preloaded face's status alone is
+  // not stable. Once fonts settle, the first layout of new code must take that file at once, which marks the
+  // current face loaded; a face that still has to fetch its file reports "loading" here instead.
+  expect(
+    await page.evaluate(async () => {
+      await document.fonts.ready
+      const code = document.body.appendChild(document.createElement("code"))
+      code.style.font = "440 13px var(--font-family-mono)"
+      code.textContent = "code"
+      code.getBoundingClientRect()
+      const loaded = document.fonts.check('440 13px "IBM Plex Mono"')
+      code.remove()
+
+      return loaded
+    }),
+  ).toBe(true)
 })
 
 test("waits for the requested session's history before constructing its cold timeline", async ({ page }) => {
@@ -464,6 +480,13 @@ async function expectAtTail(page: Page, lastUserID: string) {
 
 type TabPaint = { first?: { last: boolean; bottomError?: number }; settled: boolean; removed: number; stop(): void }
 
+declare global {
+  interface Window {
+    __coldReveal?: Reveal
+    __tabPaint?: TabPaint
+  }
+}
+
 // Samples painted frames of the timeline showing `sessionID`: the first frame that shows any of its messages, and
 // every node of the first settled frame (at the tail, Markdown rendered) that is later removed.
 async function sampleTabPaint(page: Page, sessionID: string) {
@@ -482,7 +505,7 @@ async function sampleTabPaint(page: Page, sessionID: string) {
         },
       }
 
-      ;(window as Window & { __tabPaint?: TabPaint }).__tabPaint = state
+      window.__tabPaint = state
       new MutationObserver((records) => {
         if (!state.settled || !running) return
         records.forEach((record) =>
@@ -520,10 +543,11 @@ async function sampleTabPaint(page: Page, sessionID: string) {
             )
           }
 
-          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-            .filter(inView)
-            .map((element) => element.dataset.messageId!)
-            .filter((id) => destination.has(id))
+          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].flatMap((element) => {
+            const id = element.dataset.messageId
+
+            return id && inView(element) && destination.has(id) ? [id] : []
+          })
 
           const spacer = root.querySelector('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           const bottomError = spacer ? spacer.bottom - view.bottom : undefined
@@ -556,20 +580,20 @@ async function sampleTabPaint(page: Page, sessionID: string) {
       last: history.findLast((message) => message.type === "user")!.id,
     },
   )
-  const read = () => page.evaluate(() => (window as Window & { __tabPaint?: TabPaint }).__tabPaint!.first)
+  const read = () => page.evaluate(() => window.__tabPaint!.first)
 
   return {
     async firstPaint() {
       await expect.poll(read).toBeDefined()
       await expect
-        .poll(() => page.evaluate(() => (window as Window & { __tabPaint?: TabPaint }).__tabPaint!.settled))
+        .poll(() => page.evaluate(() => window.__tabPaint!.settled))
         .toBe(true)
 
       return (await read())!
     },
     stop: () =>
       page.evaluate(() => {
-        const state = (window as Window & { __tabPaint?: TabPaint }).__tabPaint!
+        const state = window.__tabPaint!
         state.stop()
 
         return state.removed

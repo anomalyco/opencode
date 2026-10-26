@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js"
-import { Dialog, DialogBody, DialogHeader, DialogTitleGroup, type DialogProps } from "@opencode/ui/dialog"
+import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -14,11 +14,11 @@ const texts = crateNotices.texts.map((text) => ({
   crates: [...new Set(crateNotices.crates.filter((crate) => crate.texts.includes(text.id)).map((crate) => crate.name))],
 }))
 
-export default function DialogThirdPartyNotices(props: { onCloseAutoFocus?: DialogProps["onCloseAutoFocus"] }) {
+export default function DialogThirdPartyNotices() {
   const language = useLanguage()
 
   return (
-    <Dialog size="large" onCloseAutoFocus={props.onCloseAutoFocus}>
+    <Dialog size="large">
       <DialogHeader>
         <DialogTitleGroup
           title={language.t("settings.about.notices.title")}

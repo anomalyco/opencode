@@ -196,7 +196,12 @@ export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnT
                 },
               },
             ]}
-            footerHints={[{ title: "ctrl+a", label: `${showInternal() ? "hide" : "show"} internal` }]}
+            footerHints={[
+              ...(pluginError(focusedEntry()) && !focusedTui()
+                ? [{ title: "view error", label: "enter", group: "primary" as const }]
+                : []),
+              { title: `${showInternal() ? "hide" : "show"} internal`, label: "ctrl+a" },
+            ]}
             onMove={(option) => setFocused(option.value)}
             onSelect={(option) => {
               const entry = entries().find((entry) => entry.key === option.value)
@@ -243,16 +248,6 @@ export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnT
                 onTrigger: (option) => update(entries().find((entry) => entry.key === option.value)),
               },
             ]}
-            footer={
-              <Show when={pluginError(focusedEntry()) && !focusedTui()}>
-                <text>
-                  <span style={{ fg: props.context.theme.text.base }}>
-                    <b>enter</b>
-                  </span>
-                  <span style={{ fg: props.context.theme.text.muted }}> view error</span>
-                </text>
-              </Show>
-            }
           />
         }
       >

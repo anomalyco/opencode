@@ -31,6 +31,12 @@ export interface Command {
   readonly section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
   /** The default keybind, e.g. `mod+shift+t`. The user can change it in Settings > Shortcuts. */
   readonly bind?: string
+  /**
+   * Published command id whose shortcut this command shares, e.g. `tab.close` for a command that closes a tab inside
+   * its `scope`. The command takes that command's custom shortcut, or `bind` while it has none, and Settings >
+   * Shortcuts lists only that command. Pair it with `scope`, so the shared shortcut reaches this command only there.
+   */
+  readonly follows?: string
   /** Also offers the command as a composer slash command. */
   readonly slash?: {
     /** The name after the slash, e.g. `open` for `/open`. */

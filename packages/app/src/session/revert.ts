@@ -115,7 +115,10 @@ export function createSessionRevert(input: {
     )
   }
 
-  return { to, undo, redo }
+  /** Puts a sent prompt back in the composer without rewinding the Session. */
+  const recall = (message: SessionMessageUser) => restore(prompt.capture(), message)
+
+  return { to, undo, redo, recall }
 }
 
 export type SessionRevert = ReturnType<typeof createSessionRevert>

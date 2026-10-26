@@ -249,7 +249,7 @@ function AuthenticationHome() {
         projectsForServer={() => projects}
         collapsed={() => false}
         canRevealProject={() => false}
-        unseenCount={() => 0}
+        hasUnread={() => false}
         onWheel={() => {}}
         onChooseProject={(server) => {
           authenticate(server)

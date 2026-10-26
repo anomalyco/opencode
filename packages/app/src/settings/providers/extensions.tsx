@@ -22,6 +22,7 @@ interface PluginRowItem {
 }
 
 export const SettingsExtensions: Component<{
+  directory?: string
   subtab?: SettingsView["subtab"]
   onSubtab: (value: SettingsView["subtab"]) => void
 }> = (props) => {
@@ -29,18 +30,17 @@ export const SettingsExtensions: Component<{
   const serverSdk = useServerSDK()
   const data = useData()
 
-  const [mcpList, { refetch: refetchMcp }] = createResource(
-    () => serverSdk.connection.status() === "connected",
-    () => serverSdk.api.mcp.list().then((result) => result.data),
-    { initialValue: [] },
-  )
-
-  const toggleMcp = useMcpToggle(() => undefined, refetchMcp)
+  // MCP connections are per Location, so read and toggle them where the active session runs, as the TUI does. The
+  // names come from the default Location so this page lists only the servers available to all projects.
+  const location = () => (props.directory ? { directory: props.directory } : undefined)
+  const toggleMcp = useMcpToggle(() => props.directory)
 
   const mcps = createMemo<McpRowItem[]>(() => {
-    return (mcpList.latest ?? []).map((server) => ({
-      name: server.name,
-      enabled: server.status.status === "connected",
+    const active = data.location.mcp.server.list(location()) ?? []
+
+    return [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.name))].sort().map((name) => ({
+      name,
+      enabled: active.find((server) => server.name === name)?.status.status === "connected",
     }))
   })
 
@@ -51,7 +51,11 @@ export const SettingsExtensions: Component<{
 
   const [pluginList] = createResource(
     () => serverSdk.connection.status() === "connected",
-    () => serverSdk.api.plugin.list().then((result) => result.data),
+    () =>
+      serverSdk.api.plugin
+        .list()
+        .then((result) => result.data)
+        .catch(() => []),
     { initialValue: [] },
   )
 
@@ -59,7 +63,11 @@ export const SettingsExtensions: Component<{
 
   createEffect(() => {
     if (serverSdk.connection.status() !== "connected") return
-    void data.location.skill.sync().catch(() => undefined)
+    void Promise.all([
+      data.location.skill.sync(),
+      data.location.mcp.server.sync(),
+      data.location.mcp.server.sync(location()),
+    ]).catch(() => undefined)
   })
   const skills = () => data.location.skill.list() ?? []
 
@@ -148,7 +156,7 @@ export const SettingsExtensions: Component<{
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/docs/skills/">
+                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/v2/docs/skills">
                   {language.t("settings.extensions.addSkills")}
                 </ExternalLink>
               </div>

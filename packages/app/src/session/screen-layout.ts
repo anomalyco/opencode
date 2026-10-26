@@ -1,4 +1,4 @@
-import { createEffect, createMemo, type Accessor } from "solid-js"
+import { createMemo, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLayout } from "@/shell/state/layout"
@@ -74,14 +74,6 @@ export function createSessionScreenLayout(
     stacked: tabsOpen() && dockSideOpen(),
   }))
 
-  const [motion, setMotion] = createStore({ gap: panelLayout().stacked, closing: false })
-  createEffect((previous) => {
-    const stacked = panelLayout().stacked
-
-    if (previous !== stacked) setMotion({ gap: stacked, closing: !stacked })
-
-    return stacked
-  }, panelLayout().stacked)
   const sideRegionOpen = createMemo(() => tabsOpen() || fileTreeOpen())
 
   const dockRegion = createMemo(() =>
@@ -124,10 +116,7 @@ export function createSessionScreenLayout(
     },
     side: {
       contentWidth: sideContentWidth,
-      gap: {
-        closing: () => motion.closing,
-        height: createMemo(() => (motion.gap ? "8px" : "0px")),
-      },
+      gap: { height: createMemo(() => (panelLayout().stacked ? "8px" : "0px")) },
       layout: panelLayout,
       region: {
         height: createMemo(() => {

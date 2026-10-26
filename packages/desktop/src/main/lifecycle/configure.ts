@@ -52,9 +52,7 @@ export function acquireApplicationLock() {
 function createTestRoot() {
   const root = testOnboarding
     ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
-    : app.isPackaged
-      ? undefined
-      : process.env.OPENCODE_DESKTOP_TEST_ROOT
+    : process.env.OPENCODE_DESKTOP_TEST_ROOT
 
   if (!root) return undefined
 
@@ -64,6 +62,7 @@ function createTestRoot() {
     mkdirSync(path.join(root, dir), { recursive: true })
 
   if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
+
   process.env.XDG_DATA_HOME = path.join(root, "data")
   process.env.XDG_CONFIG_HOME = path.join(root, "config")
   process.env.XDG_CACHE_HOME = path.join(root, "cache")

@@ -51,7 +51,7 @@ Puede personalizar la URL base para cualquier proveedor configurando la opción 
 ## OpenCode Zen
 
 OpenCode Zen es una lista de modelos proporcionados por el equipo OpenCode que han sido
-probado y verificado para funcionar bien con OpenCode. [Más información](/docs/zen).
+probado y verificado para funcionar bien con OpenCode. [Más información](https://opencode.ai/v2/docs/console/).
 
 :::tip
 Si eres nuevo, te recomendamos comenzar con OpenCode Zen.
@@ -560,7 +560,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -759,13 +759,12 @@ para almacenar el token en el almacenamiento de autenticación opencode.
 OpenCode utiliza un modelo pequeño para algunas tareas de IA, como generar el título de la sesión.
 Está configurado para usar gpt-5-nano de forma predeterminada, alojado por Zen. Para bloquear OpenCode
 Para usar solo su propia instancia alojada en GitLab, agregue lo siguiente a su
-Archivo `opencode.json`. También se recomienda desactivar el uso compartido de sesiones.
+Archivo `opencode.json`.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1401,7 +1400,7 @@ Si ya tiene una clave API, puede seleccionar **Ingresar manualmente la clave API
 
 ### OpenCode Zen
 
-OpenCode Zen es una lista de modelos probados y verificados proporcionada por el equipo OpenCode. [Más información](/docs/zen).
+OpenCode Zen es una lista de modelos probados y verificados proporcionada por el equipo OpenCode. [Más información](https://opencode.ai/v2/docs/console/).
 
 1. Inicie sesión en **<a href={console}>OpenCode Zen</a>** y haga clic en **Crear API clave**.
 

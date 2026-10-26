@@ -19,6 +19,24 @@
 
 - Always prefer `createStore` over multiple `createSignal` calls
 
+## Suspense
+
+A flash, a blanked area, a dialog that resizes or a reset scroll on first open almost always means a read entered Suspense. Do not ship UI that reads async data without the guard below.
+
+- Reading `resource()` suspends while it loads. So does `resource.latest` until the resource has resolved once: before the first value, `latest` behaves like a plain read. `resource.loading` and `resource.state` never suspend.
+- Guard every render-time read on state, and show the data you already have until then:
+
+  ```ts
+  const loaded = () => resource.state === "ready" || resource.state === "refreshing"
+  const items = () => (loaded() ? resource.latest : cached) ?? []
+  ```
+
+  Precedent: `src/new-session/workspace/controller.ts` (`worktreesLoaded`).
+
+- When the source can change (a drilled project, a selected session), include its key in the fetched value and use the result only when the key matches. Otherwise `latest` shows the previous key's data while the next loads.
+- A `<Suspense>` boundary only chooses what blanks; it does not prevent the suspension. Without a local boundary, the nearest one is often a whole dialog or route.
+- Suspend only on purpose, on first load, with a comment that says why.
+
 ## Typography
 
 - Use `--line-height-compact` (`16px`) for `13px` compact UI text and `--line-height-base` (`20px`) for body text.

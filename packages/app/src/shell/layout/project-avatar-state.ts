@@ -1,13 +1,15 @@
 import { createMemo, type Accessor } from "solid-js"
+import type { SessionInfo } from "@opencode/client/promise"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useSettings } from "@/settings/model"
+import { projectSettingsKey, useSettings } from "@/settings/model"
 
 export function useSessionTabAvatarState(
   server: Accessor<ServerConnection.Key>,
   sessionId: Accessor<string>,
   root?: Accessor<boolean>,
+  snapshot?: Accessor<SessionInfo | undefined>,
 ) {
   const global = useGlobal()
   const settings = useSettings()
@@ -30,10 +32,13 @@ export function useSessionTabAvatarState(
   })
 
   const hasPermissions = createMemo(() => {
-    if (settings.permissions.autoApprove()) return false
     const ctx = serverCtx()
 
     if (!ctx) return false
+
+    const project = projectSettingsKey(ctx.sdk.scope, ctx.data.session.get(sessionId())?.projectID)
+
+    if (settings.permissions.autoApproves(project)) return false
 
     return !!sessionPermissionRequest(sessions(), ctx.data.session.permission.list, sessionId())
   })
@@ -49,7 +54,7 @@ export function useSessionTabAvatarState(
   const needsAttention = createMemo(() => hasPermissions() || hasForms())
 
   const unread = createMemo(
-    () => needsAttention() || (serverCtx()?.notification.session.unseenCount(sessionId()) ?? 0) > 0,
+    () => needsAttention() || (serverCtx()?.notification.session.unread(sessionId(), snapshot?.()) ?? false),
   )
 
   const loading = createMemo(() => {

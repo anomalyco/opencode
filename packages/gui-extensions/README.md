@@ -192,15 +192,15 @@ Pairing's shipping page uses a query, not `createLatest`. It passes the query's 
 
 ```tsx
 const screenActive = useQuery(() => ({
-  queryKey: [ctx.id, "screen-active", display()?.generation],
+  queryKey: [ctx.id, "screen-active", main()?.generation],
   queryFn: (input) => {
-    const live = display()
+    const live = main()
 
     if (!live) throw new Error("Pairing's main side is not active")
 
     return live.value.screenActive({ signal: input.signal })
   },
-  enabled: !!display(),
+  enabled: !!main(),
   gcTime: 0,
 }))
 ```
@@ -328,13 +328,13 @@ const act = (name: "check" | "install") => {
 }
 ```
 
-The pairing settings page waits for its main side only where it needs it. The link and QR code come from the local server's `ServerRef`, so they render without main; the display setting renders only while main is active, so it never offers a switch that cannot answer:
+The pairing settings page waits for its main side only where it needs it. Pairing codes come from the local server's `ServerRef`, so they never wait for main; remote access and the display setting render only while main is active, so the page never offers a switch that cannot answer:
 
-<!-- source: src/pairing/page.tsx#display -->
+<!-- source: src/pairing/page.tsx#main -->
 
 ```tsx
-// Only the display setting needs pairing's main side; the link and QR code come from the server, so they never wait.
-const display = () => {
+// Remote access and the display setting need pairing's main side; codes come from the server, so they never wait.
+const main = () => {
   const live = props.pairing()
 
   return live.status === "active" ? live : undefined
@@ -441,9 +441,9 @@ legacy: ["summary"],
 
 ## Build your first extension
 
-Pairing shows another device how to reach this machine's server, and keeps the display awake. It is small and uses both processes: a main entry that owns a power-save blocker, and a window entry that adds a settings page and a command. The window asks the local server for its addresses and pairing codes through `ctx.servers`: that server's `ServerRef` is already authenticated in the window, so its credentials never leave main. Each block below is its shipping source.
+Pairing connects another device to this machine's server from anywhere, and keeps the display awake. It is small and uses both processes: a main entry that turns on remote access through the CLI and owns a power-save blocker, and a window entry that adds a settings page and a command. The window asks the local server for its remote address and pairing codes through `ctx.servers`: that server's `ServerRef` is already authenticated in the window, so its credentials never leave main. Each block below is its shipping source.
 
-1. **Define the contract.** `contract.ts` holds the tokens other code may import, here the Ipc between pairing's main and window entries. It carries only what needs the main process, the display sleep blocker. The schemas type both sides and encode every value.
+1. **Define the contract.** `contract.ts` holds the tokens other code may import, here the Ipc between pairing's main and window entries. It carries only what needs the main process: remote access, a setting of the background service, and the display sleep blocker. The schemas type both sides and encode every value.
 
 <!-- source: src/pairing/contract.ts -->
 
@@ -452,12 +452,20 @@ import { Schema } from "effect"
 import { Ipc } from "../sdk"
 
 /**
- * Keeps this machine's display awake while another device uses it. The window asks the local server for addresses and
- * pairing codes through its own `ServerRef`; only the display sleep blocker needs the main process.
+ * Turns on remote access and keeps this machine's display awake while another device uses it. The window asks the
+ * local server for its remote address and pairing codes through its own `ServerRef`; remote access, which changes
+ * the background service's settings through the CLI, and the display sleep blocker need the main process.
  */
 export const Pairing = Ipc.define({
   id: "pairing",
   methods: {
+    /** Whether remote access is on: the background service serves an OpenTunnel address. */
+    remote: { output: Schema.Boolean },
+    /**
+     * Turns remote access on or off, then starts the background service again. Turning it on the first time creates
+     * the tunnel, which can take a minute.
+     */
+    setRemote: { input: Schema.Boolean },
     /** Whether main holds the display sleep blocker. */
     screenActive: { output: Schema.Boolean },
     /** Holds or releases the display sleep blocker, and remembers the choice. */
@@ -466,7 +474,7 @@ export const Pairing = Ipc.define({
 })
 ```
 
-2. **Write the definition.** Pairing provides its Ipc, so its window entry reads it as `ctx.uses.pairing` with no second declaration. Whether main keeps the display awake is a main store, imported once from the key the desktop kept it under before. The addresses pairing links use are a window store, which the settings page reads.
+2. **Write the definition.** Pairing provides its Ipc, so its window entry reads it as `ctx.uses.pairing` with no second declaration. Whether main keeps the display awake is a main store, imported once from the key the desktop kept it under before.
 
 <!-- source: src/pairing/index.ts -->
 
@@ -482,18 +490,17 @@ export default Extension.define({
   stores: {
     // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
     keepScreenActive: Store.main(Schema.Boolean, false, { state: ["opencode.settings", "keepScreenActive"] }),
-    // An address of this computer the server cannot see (a VPN, tunnel or proxy), and the address links use.
-    links: Store.global(Schema.Struct({ custom: Schema.String, selected: Schema.String }), { custom: "", selected: "" }),
   },
   i18n: { en },
 })
 ```
 
-3. **Provide it from main.** `MainSetup<typeof definition>` types `ctx.stores`, which main reads synchronously. A finalizer releases the blocker when the instance goes away.
+3. **Provide it from main.** `MainSetup<typeof definition>` types `ctx.stores`, which main reads synchronously. Remote access runs `opencode service` through `ctx.cli`, with the caller's signal for a read and `ctx.scope.signal` for a change a closing window must not cancel. A finalizer releases the blocker when the instance goes away.
 
 <!-- source: src/pairing/main.ts -->
 
 ```ts
+import { execFile } from "node:child_process"
 import { powerSaveBlocker } from "electron"
 import type { MainSetup } from "../sdk/main"
 import { Pairing } from "./contract"
@@ -502,9 +509,15 @@ import type definition from "./index"
 /** The display sleep blocker this instance holds, if any. */
 type Blocker = { id?: number }
 
+/** The last `opencode service` command; the next one starts after it settles. */
+type Queue = { tail: Promise<unknown> }
+
 const setup: MainSetup<typeof definition> = (ctx) => {
   const stored = ctx.stores.keepScreenActive
+  const cli = ctx.cli
+  const log = ctx.log
   const blocker: Blocker = {}
+  const queue: Queue = { tail: Promise.resolve() }
 
   const release = () => {
     if (blocker.id === undefined) return
@@ -519,10 +532,41 @@ const setup: MainSetup<typeof definition> = (ctx) => {
     stored.set(enabled)
   }
 
+  // Remote access is a setting of the background service, so it changes through the CLI the app runs, as with
+  // `opencode pair --remote`. A change restarts the service, so commands run one at a time.
+  const service = (args: readonly string[], signal: AbortSignal) => {
+    const run = queue.tail.then(
+      () =>
+        new Promise<string>((resolve, reject) => {
+          execFile(
+            cli.command[0] ?? "opencode",
+            [...cli.command.slice(1), "service", ...args],
+            { signal, windowsHide: true },
+            (error, stdout, stderr) => {
+              if (!error) return resolve(stdout.trim())
+              log.write("error", "pairing service command failed", { args, error: error.message, stderr })
+              reject(error)
+            },
+          )
+        }),
+    )
+
+    queue.tail = run.catch(() => undefined)
+
+    return run
+  }
+
   if (stored.value) keepScreenActive(true)
   ctx.scope.addFinalizer(release)
 
   ctx.provide(Pairing, {
+    remote: async (_, caller) => (await service(["get", "remote"], caller.signal)) === "true",
+    // Changing the setting stops the service. Starting it here brings it back, with the tunnel when remote access is
+    // on. A window that closes meanwhile does not cancel the change.
+    setRemote: async (enabled) => {
+      await service(["set", "remote", String(enabled)], ctx.scope.signal)
+      await service(["start"], ctx.scope.signal)
+    },
     screenActive: () => blocker.id !== undefined && powerSaveBlocker.isStarted(blocker.id),
     setScreenActive: (enabled) => keepScreenActive(enabled),
   })
@@ -531,7 +575,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
 export default setup
 ```
 
-4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. The page receives the desktop's own server, found through `ctx.servers` by `builtin`, and `ctx.uses.pairing`. The search entry for the display setting, like the setting itself, exists only while main answers (see `display` under [Live and failure handling](#live-and-failure-handling)).
+4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. The page receives the desktop's own server, found through `ctx.servers` by `builtin`, and `ctx.uses.pairing`. The search entries for remote access and the display setting, like the settings themselves, exist only while main answers (see `main` under [Live and failure handling](#live-and-failure-handling)).
 
 <!-- source: src/pairing/renderer.tsx -->
 
@@ -564,13 +608,19 @@ const setup: Setup<typeof definition> = (ctx) => {
       return ctx.t("title")
     },
     get entries() {
-      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: "pair device qr local" }
+      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: "pair device qr phone remote" }
 
-      // The display setting exists only while pairing's main side answers.
+      // Remote access and the display setting exist only while pairing's main side answers.
       if (pairing().status !== "active") return [pairingEntry]
 
       return [
         pairingEntry,
+        {
+          id: "settings-remote-access",
+          title: ctx.t("remote.title"),
+          description: ctx.t("remote.description"),
+          keywords: "internet tunnel opentunnel",
+        },
         {
           id: "settings-keep-screen-active",
           title: ctx.t("screenActive.title"),
@@ -613,7 +663,7 @@ export default setup
 export const builtins = Extension.compose(
   context,
   btw,
-  debug,
+  { ...debug, main: () => import("./debug/main") },
   terminal,
   file,
   review,

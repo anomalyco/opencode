@@ -23,6 +23,7 @@ import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
+import { parseVoiceDelegation } from "./voice-delegation"
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
@@ -186,7 +187,8 @@ function MessageTimelineView(
       if (
         Predicate.isTagged(row, "TurnGap") ||
         Predicate.isTagged(row, "TurnDivider") ||
-        Predicate.isTagged(row, "CompactionQueued")
+        Predicate.isTagged(row, "CompactionQueued") ||
+        Predicate.isTagged(row, "Activity")
       )
         return true
 
@@ -292,11 +294,13 @@ function MessageTimelineView(
     presentation: (message) => {
       const value = readPromptPresentation(message.metadata)
       const parsed = value ? undefined : parseCommentNote(message.text)
+      const voice = parseVoiceDelegation(value?.displayText ?? message.text)
 
       return {
-        displayText: value?.displayText,
+        displayText: voice ? (voice.framing ?? voice.instruction) : value?.displayText,
         comments: value?.comments ?? (parsed ? [parsed] : []),
         references: value?.attachments,
+        voice: !!voice,
       }
     },
     actions: props.actions,
@@ -391,6 +395,42 @@ function MessageTimelineView(
     })
   })
 
+  // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
+  const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
+
+  const activity = () => (
+    <Show when={showWorking() || backgroundHintPresence.present()}>
+      <div
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-session md:mx-auto": props.centered,
+        }}
+      >
+        <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
+          <Show when={showWorking()}>
+            <div data-component="session-working" role="status">
+              <TextShimmer text={language.t("session.timeline.working")} active />
+            </div>
+          </Show>
+          <Show when={backgroundHintPresence.present()}>
+            <div
+              ref={setBackgroundHintRef}
+              data-component="session-background-hint-row"
+              class="duration-150 motion-reduce:animate-none"
+              classList={{
+                "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
+                "animate-out fade-out fill-mode-forwards":
+                  backgroundHintPresence.animate() && !backgroundHintPresence.show(),
+              }}
+            >
+              <BackgroundMoveHint onMove={props.background.move} />
+            </div>
+          </Show>
+        </div>
+      </div>
+    </Show>
+  )
+
   const runningMenu = (title?: string) => (
     <SessionRunningMenu
       sessionID={sessionID()}
@@ -405,47 +445,21 @@ function MessageTimelineView(
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
-      bottomSpacer={
-        <Show when={showWorking() || backgroundHintPresence.present()}>
-          <div
-            classList={{
-              "min-w-0 w-full max-w-full": true,
-              "md:max-w-session md:mx-auto": props.centered,
-            }}
-          >
-            <div
-              class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}
-            >
-              <Show when={showWorking()}>
-                <div data-component="session-working" role="status">
-                  <TextShimmer text={language.t("session.timeline.working")} active />
-                </div>
-              </Show>
-              <Show when={backgroundHintPresence.present()}>
-                <div
-                  ref={setBackgroundHintRef}
-                  data-component="session-background-hint-row"
-                  class="duration-150 motion-reduce:animate-none"
-                  classList={{
-                    "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-                    "animate-out fade-out fill-mode-forwards":
-                      backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-                  }}
-                >
-                  <BackgroundMoveHint onMove={props.background.move} />
-                </div>
-              </Show>
-            </div>
-          </div>
-        </Show>
-      }
+      bottomSpacer={<Show when={!activityRow()}>{activity()}</Show>}
       deferred={(row) => {
         if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
 
         return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
-      renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
+      renderRow={(row, onSizeChange) => (
+        <Show
+          when={Predicate.isTagged(row(), "Activity")}
+          fallback={<rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
+        >
+          {activity()}
+        </Show>
+      )}
       header={
         <Show when={!props.hideHeader}>
           <SessionTitleHeader>

@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpOptions, LanguageModel, mergeHttpOptions, ProviderConfigurationError } from "@opencode/ai"
+import { HttpOptions, LanguageModel, mergeHttpOptions, ProviderConfigurationError } from "@opencode/ai/effect"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -199,8 +199,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   dependencies?: Dependencies,
 ) {
   const resolved = prepareRuntimeModel(model)
-  const configuration = credential?.type === "key" ? credential.configuration : undefined
-  const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
+  const configured = { ...resolved.settings, ...credential?.metadata }
   if (Provider.isAISDK(resolved.package)) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
@@ -209,7 +208,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       Provider.mergeOverlay(resolved.settings, {
         ...nativeCredentialSettings(resolved, resolved.package ?? "", credential),
         ...credential?.metadata,
-        ...configuration,
       }) ?? {},
     )
     return yield* loadAISDK({ ...resolved, settings }).pipe(
@@ -237,10 +235,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
-        // Timeouts are transport policy, so they land on the route's HTTP defaults instead of package settings.
+        // Timeouts and body encoding are transport policy, so they land on the route's HTTP defaults instead of package settings.
         defaults: {
           ...runtime.defaults,
-          http: mergeHttpOptions(runtime.defaults?.http, new HttpOptions(Provider.timeouts(configured))),
+          http: mergeHttpOptions(
+            runtime.defaults?.http,
+            new HttpOptions({ ...Provider.timeouts(configured), encoding: Provider.encoding(configured) }),
+          ),
         },
       })
     },
@@ -277,7 +278,7 @@ function prepareProviderSettings(
 ): Effect.Effect<Readonly<Record<string, unknown>>, UnresolvedProviderVariablesError> {
   const baseURL = settings.baseURL
   if (typeof baseURL !== "string") return Effect.succeed(settings)
-  return prepareProviderURL(model, baseURL).pipe(
+  return prepareProviderURL(model, baseURL, settings).pipe(
     Effect.map((prepared) => (prepared === baseURL ? settings : { ...settings, baseURL: prepared })),
   )
 }
@@ -285,9 +286,15 @@ function prepareProviderSettings(
 function prepareProviderURL(
   model: RuntimeInfo,
   baseURL: string,
+  settings: Readonly<Record<string, unknown>>,
 ): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
-  const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
+  // Catalog Bedrock URLs are model settings while `region` is a provider setting, so they only meet here.
+  const prepared = baseURL.replace(
+    /\$\{([^}]+)\}/g,
+    (placeholder, name: string) =>
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+  )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
 }

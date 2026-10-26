@@ -1,5 +1,6 @@
-import type { ToolDefinition } from "@opencode/ai"
+import type { ToolDefinition } from "@opencode/ai/effect"
 import { emptyInputJsonSchema } from "@opencode/ai/tool"
+import { isRecord } from "@opencode/ai/utils/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
@@ -198,9 +199,6 @@ const flattenAllOf = (value: unknown): unknown => {
   return flattenAllOf({ ...Object.assign({}, ...allOf), ...rest })
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
 const canFlattenAllOf = (allOf: ReadonlyArray<Record<string, unknown>>, parent: Record<string, unknown>) => {
   const keys = new Set(Object.keys(parent).filter((key) => key !== "allOf"))
   return allOf.every((item) =>
@@ -264,7 +262,7 @@ export const normalizeContent = (value: string | ReadonlyArray<Tool.Content> | u
   return [{ type: "text" as const, text: stringify(output) }]
 }
 
-const stringify = (value: unknown) => {
+export const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
     return JSON.stringify(value) ?? String(value)

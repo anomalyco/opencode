@@ -24,23 +24,27 @@ export function LineCommentOverflowIcon(props: ComponentProps<"svg">) {
   )
 }
 
-export interface LineCommentProps extends ComponentProps<"div"> {
+export interface LineCommentProps extends Omit<ComponentProps<"div">, "onClick"> {
   /** Main comment body (text or rich content). */
   comment: JSX.Element
-  /** Line / selection context (e.g. “Comment on line 40”). */
-  selection: JSX.Element
+  /** Optional context under the comment, e.g. the page or element it is about. */
+  selection?: JSX.Element
   /** Typically an overflow menu trigger; use `LineCommentOverflowIcon` inside `line-comment-v2-overflow`. */
   actions?: JSX.Element
+  /** Opens the comment, e.g. its editor, from a click anywhere on the card. Keep a keyboard path in `actions`. */
+  onOpen?: VoidFunction
 }
 
 export function LineComment(props: LineCommentProps) {
-  const [local, rest] = splitProps(props, ["comment", "selection", "actions", "class", "classList"])
+  const [local, rest] = splitProps(props, ["comment", "selection", "actions", "onOpen", "class", "classList"])
 
   return (
     <div
       {...rest}
       data-component="line-comment-v2"
       data-variant="display"
+      data-clickable={local.onOpen ? "" : undefined}
+      onClick={() => local.onOpen?.()}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
@@ -49,7 +53,7 @@ export function LineComment(props: LineCommentProps) {
       <div data-slot="line-comment-v2-shell">
         <div data-slot="line-comment-v2-column">
           <div data-slot="line-comment-v2-text">{local.comment}</div>
-          <div data-slot="line-comment-v2-meta">{local.selection}</div>
+          <Show when={local.selection}>{(selection) => <div data-slot="line-comment-v2-meta">{selection()}</div>}</Show>
         </div>
         <Show when={local.actions}>{(actions) => <div data-slot="line-comment-v2-tools">{actions()}</div>}</Show>
       </div>
@@ -62,13 +66,14 @@ export type LineCommentEditorMention = {
 }
 
 export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "children" | "onInput" | "onSubmit"> {
-  /** Visible field label above the textarea (default: “Comment”). */
-  heading?: JSX.Element | string
+  /** Accessible name of the text field (default: “Comment”). */
+  label?: string
   value: string
   onInput: (value: string) => void
   onCancel: () => void
   onSubmit: (value: string) => void
-  selection: JSX.Element
+  /** Optional context in the footer, e.g. the page or element being commented on. */
+  selection?: JSX.Element
   placeholder?: string
   rows?: number
   cancelLabel?: string
@@ -95,7 +100,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
   const [mentionOpen, setMentionOpen] = createSignal(false)
 
   const [local, rest] = splitProps(props, [
-    "heading",
+    "label",
     "value",
     "onInput",
     "onCancel",
@@ -111,7 +116,6 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     "classList",
   ])
 
-  const heading = () => local.heading ?? i18n.t("ui.lineComment.submit")
   const canSubmit = () => local.value.trim().length > 0
 
   const closeMention = () => {
@@ -220,14 +224,14 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     >
       <div data-slot="line-comment-v2-shell">
         <div data-slot="line-comment-v2-field">
-          <div data-slot="line-comment-v2-label">{heading()}</div>
           <textarea
             ref={(el) => {
               textareaRef = el
             }}
             data-slot="line-comment-v2-textarea"
+            aria-label={local.label ?? i18n.t("ui.lineComment.submit")}
             dir="auto"
-            rows={local.rows ?? 3}
+            rows={local.rows ?? 4}
             placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
             value={local.value}
             style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
@@ -314,12 +318,14 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
           </Show>
         </div>
         <div data-slot="line-comment-v2-footer">
-          <div data-slot="line-comment-v2-footer-meta">{local.selection}</div>
+          <Show when={local.selection}>
+            {(selection) => <div data-slot="line-comment-v2-footer-meta">{selection()}</div>}
+          </Show>
           <div data-slot="line-comment-v2-footer-actions">
-            <Button type="button" size="normal" variant="ghost" onClick={() => local.onCancel()}>
+            <Button type="button" size="small" variant="ghost" onClick={() => local.onCancel()}>
               {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
             </Button>
-            <Button type="button" size="normal" variant="contrast" disabled={!canSubmit()} onClick={submit}>
+            <Button type="button" size="small" variant="contrast" disabled={!canSubmit()} onClick={submit}>
               {local.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </div>

@@ -5,14 +5,18 @@ import {
   ProjectAvatar,
   PROJECT_AVATAR_VARIANTS,
 } from "@opencode/ui/project-avatar"
+import { Select } from "@opencode/ui/select"
 import { Textarea } from "@opencode/ui/textarea"
 import { TextInput } from "@opencode/ui/text-input"
-import { For, Show, type Component } from "solid-js"
+import { For, Show, createMemo, type Component } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useSettingsServers } from "@/settings/servers/inventory"
+import { useServerCtx } from "@/runtime/server/runtime"
+import { projectSettingsKey, useSettings } from "@/settings/model"
 import { ProjectIcon } from "@/shell/layout/project-icon"
+import { ProjectFolderMissing } from "./project-folder-missing"
 import { ProjectOptions } from "./project-options"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
@@ -60,6 +64,7 @@ export const SettingsProjectGeneral: Component<{
       </div>
 
       <div class="settings-tab-body project-settings-general" aria-busy={model.store.saving > 0}>
+        <ProjectFolderMissing />
         <SettingsList>
           <SettingsRow
             title={language.t("project.settings.name.title")}
@@ -156,6 +161,8 @@ export const SettingsProjectGeneral: Component<{
             </SettingsRow>
           </Show>
 
+          <AutoAcceptPermissionsSetting project={props.project} server={props.server} />
+
           <div class="project-settings-startup">
             <div class="project-settings-startup-copy">
               <span class="project-settings-startup-title">{language.t("dialog.project.edit.worktree.startup")}</span>
@@ -181,6 +188,52 @@ export const SettingsProjectGeneral: Component<{
         </SettingsList>
       </div>
     </>
+  )
+}
+
+// A project uses the app-wide default unless it is explicitly turned on or off here.
+const AutoAcceptPermissionsSetting: Component<{ project: LocalProject; server: ServerConnection.Any }> = (props) => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const serverCtx = useServerCtx(() => props.server)
+
+  const key = createMemo(() => {
+    const scope = serverCtx()?.sdk.scope
+
+    return scope ? projectSettingsKey(scope, props.project.id) : undefined
+  })
+
+  const options = createMemo(() => [
+    {
+      value: undefined,
+      label: settings.permissions.autoApproveDefault()
+        ? language.t("project.settings.autoAccept.default.on")
+        : language.t("project.settings.autoAccept.default.off"),
+    },
+    { value: true, label: language.t("project.settings.autoAccept.on") },
+    { value: false, label: language.t("project.settings.autoAccept.off") },
+  ])
+
+  return (
+    <Show when={key()}>
+      {(project) => (
+        <SettingsRow
+          title={language.t("command.permissions.autoaccept.enable")}
+          description={language.t("project.settings.autoAccept.description")}
+        >
+          <Select
+            data-action="settings-project-auto-accept-permissions"
+            options={options()}
+            current={options().find((option) => option.value === settings.permissions.autoApproveOverride(project()))}
+            value={(option) => String(option.value)}
+            label={(option) => option.label}
+            placement="bottom-end"
+            gutter={6}
+            onSelect={(option) => option && settings.permissions.setAutoApproveOverride(project(), option.value)}
+          />
+        </SettingsRow>
+      )}
+    </Show>
   )
 }
 

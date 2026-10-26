@@ -17,7 +17,7 @@ import {
   ToolResultPart,
   TransportError,
   Usage,
-} from "../../src/index.js"
+} from "../../src/effect.js"
 import {
   Auth,
   LLMClient,
@@ -30,6 +30,8 @@ import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import * as XAI from "../../src/providers/xai.js"
+import { Meta } from "../../src/providers/meta.js"
+import { OpenAICompatibleResponses } from "../../src/protocols/openai-compatible-responses.js"
 import * as OpenAIResponses from "../../src/protocols/openai-responses.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenResponsesContinuation } from "../../src/protocols/open-responses-continuation.js"
@@ -312,6 +314,20 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
+    }),
+  )
+
+  it.effect("lowers reasoning mode and context into the reasoning object", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: { reasoningEffort: "high", reasoningMode: "pro", reasoningContext: "current_turn" },
+        }),
+      )
+
+      expect(prepared.body.reasoning).toEqual({ effort: "high", mode: "pro", context: "current_turn" })
+      expect(prepared.body).not.toHaveProperty("reasoningMode")
+      expect(prepared.body).not.toHaveProperty("reasoningContext")
     }),
   )
 
@@ -604,6 +620,30 @@ describe("OpenAI Responses route", () => {
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "hi" }), { webSocket }).pipe(
         Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
       )
+      expect(response.finishReason?.normalized).toBe("stop")
+    }),
+  )
+
+  it.effect("ignores untyped SSE frames", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {},
+              { type: "response.created", response: { id: "resp_1" } },
+              { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", item_id: "msg_1", delta: "PO" },
+              { gateway: "keep-alive" },
+              { type: "response.output_text.delta", item_id: "msg_1", delta: "NG" },
+              { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("PONG")
       expect(response.finishReason?.normalized).toBe("stop")
     }),
   )
@@ -1839,29 +1879,93 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("lowers tool-result videos as input_video", () =>
+  it.effect("lowers Responses video by provider and preserves ordered tool results", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({
-          model,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "record", input: {} })]),
-            Message.tool({
-              id: "call_1",
-              name: "record",
-              resultType: "content",
-              result: [
-                { type: "file", uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" },
-                { type: "file", uri: "https://example.com/demo.mp4", mime: "video/mp4" },
-              ],
-            }),
-          ],
-        }),
+      const videoResult = Message.tool({
+        id: "call_video",
+        name: "record",
+        resultType: "content",
+        result: [{ type: "file", uri: "https://example.com/clip.mp4", mime: "video/mp4", name: "clip.mp4" }],
+      })
+      const messages = [
+        Message.user({ type: "media", media: Media.base64("AAECAw==", "video/mp4"), filename: "inline.mp4" }),
+        Message.assistant([ToolCallPart.make({ id: "call_video", name: "record", input: {} })]),
+        videoResult,
+      ]
+      const expectedInput = (user: object, tool: object) => [
+        { type: "message", role: "user", content: [user] },
+        { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
+        { type: "function_call_output", call_id: "call_video", output: [tool] },
+      ]
+      const custom = OpenAICompatibleResponses.route
+        .with({ provider: "custom", endpoint: { baseURL: "https://provider.example/v1" } })
+        .model({ id: "video-model" })
+      expect(
+        (yield* compileRequest(LLM.request({ model: custom, messages }))).body.input,
+        "unknown provider uses input_video for user and tool video",
+      ).toMatchObject(
+        expectedInput(
+          { type: "input_video", video_url: "data:video/mp4;base64,AAECAw==" },
+          { type: "input_video", video_url: "https://example.com/clip.mp4" },
+        ),
+      )
+      expect(
+        (yield* compileRequest(LLM.request({ model: xaiModel, messages }))).body.input,
+        "xAI uses input_file for user and tool video",
+      ).toMatchObject(
+        expectedInput(
+          { type: "input_file", filename: "inline.mp4", file_data: "data:video/mp4;base64,AAECAw==" },
+          { type: "input_file", filename: "clip.mp4", file_url: "https://example.com/clip.mp4" },
+        ),
       )
 
-      expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_video", video_url: "data:video/mp4;base64,AAECAw==" },
-        { type: "input_video", video_url: "https://example.com/demo.mp4" },
+      const meta = Meta.configure({ apiKey: "test" }).responses("muse-spark-1.3")
+      const metaRequest = LLM.request({
+        model: meta,
+        messages: [
+          Message.assistant([
+            ToolCallPart.make({ id: "call_video", name: "record", input: {} }),
+            ToolCallPart.make({ id: "call_text", name: "read", input: {} }),
+          ]),
+          videoResult,
+          Message.tool({ id: "call_text", name: "read", resultType: "text", result: "plain result" }),
+        ],
+      })
+      const metaInput = [
+        { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
+        { type: "function_call", call_id: "call_text", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_video",
+          output: "Video attached in the following user message.",
+        },
+        { type: "function_call_output", call_id: "call_text", output: "plain result" },
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_video", video_url: "https://example.com/clip.mp4" }],
+        },
+      ]
+      expect((yield* compileRequest(metaRequest)).body.input, "Meta flushes videos at end of history").toMatchObject(
+        metaInput,
+      )
+      const continued = yield* compileRequest(
+        LLMRequest.update(metaRequest, { messages: [...metaRequest.messages, Message.user("continue")] }),
+      )
+      expect(continued.body.input, "Meta flushes videos before the next user message").toMatchObject([
+        ...metaInput,
+        { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
+      ])
+      const nested = yield* compileRequest(LLMRequest.update(metaRequest, { model: custom }))
+      expect(nested.body.input, "the shared protocol keeps tool video nested").toMatchObject([
+        { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
+        { type: "function_call", call_id: "call_text", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_video",
+          output: [{ type: "input_video", video_url: "https://example.com/clip.mp4" }],
+        },
+        { type: "function_call_output", call_id: "call_text", output: "plain result" },
       ])
     }),
   )
@@ -2117,6 +2221,24 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("omits the prompt cache key when compatibility disables it", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
+          prompt: "Hello",
+          promptCacheKey: "request_cache",
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+      expect(model.compatibility?.supportsPromptCacheKey).toBeUndefined()
+      expect(
+        (yield* compileRequest(LLM.request({ model, prompt: "Hello", promptCacheKey: "request_cache" }))).body,
+      ).toHaveProperty("prompt_cache_key", "request_cache")
+    }),
+  )
+
   it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -2179,6 +2301,25 @@ describe("OpenAI Responses route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("reports the cost the endpoint billed", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
+        { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
+        {
+          type: "response.completed",
+          response: {
+            id: "resp_1",
+            usage: { input_tokens: 5, output_tokens: 2, cost: 0, opencode: { allowance: 0.0042 } },
+          },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0 })
     }),
   )
 

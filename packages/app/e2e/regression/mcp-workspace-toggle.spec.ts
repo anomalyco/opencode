@@ -12,11 +12,12 @@ const sessionID = "ses_mcp_workspace"
 
 const title = "Workspace MCP routing"
 
-type Surface = "popover" | "dialog"
+type Surface = "popover" | "dialog" | "settings"
 
 // A session in a worktree of the project. The harness answers the MCP list for each location directory and stores
 // connect/disconnect results per directory; `requests` records every MCP request and the directory it targeted.
-// The popover belongs to the summary extension; the dialog (Ctrl+;) is the app's own MCP toggle.
+// The popover belongs to the summary extension; the dialog (Ctrl+;) is the app's own MCP toggle; settings is the
+// Extensions page opened (Ctrl+,) from the session.
 async function open(page: Page, input: { surface: Surface } & Pick<MockServerConfig, "mcp" | "onMcpAction">) {
   const requests: { path: string; directory: string }[] = []
   page.on("request", (request) => {
@@ -38,16 +39,32 @@ async function open(page: Page, input: { surface: Surface } & Pick<MockServerCon
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
-  const panel = page.getByRole("dialog", { name: input.surface === "popover" ? "MCP" : "MCPs", exact: true })
+
+  const panel =
+    input.surface === "settings"
+      ? page.getByTestId("settings-screen")
+      : page.getByRole("dialog", { name: input.surface === "popover" ? "MCP" : "MCPs", exact: true })
 
   const show = async () => {
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
+
+    if (input.surface === "settings") {
+      await page.keyboard.press("Control+,")
+
+      return panel.getByRole("tab", { name: "Extensions", exact: true }).click()
+    }
+
     await page.getByRole("button", { name: "Session details", exact: true }).click()
     await page.getByRole("button", { name: "MCP", exact: true }).click()
   }
 
   await show()
-  await expect(panel.getByText("figma-desktop", { exact: true })).toBeVisible()
+  // The settings row also names its switch with a visually hidden label.
+  await expect(
+    input.surface === "settings"
+      ? panel.getByRole("switch", { name: "figma-desktop", exact: true })
+      : panel.getByText("figma-desktop", { exact: true }),
+  ).toBeVisible()
 
   return { requests, panel, show, toggle: panel.getByRole("switch") }
 }
@@ -92,6 +109,26 @@ for (const shared of [true, false]) {
     expect(view.requests.every((request) => request.directory === workspace)).toBe(true)
   })
 }
+
+test("settings shows and toggles the MCP of the session it was opened from", async ({ page }) => {
+  const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
+
+  const view = await open(page, {
+    surface: "settings",
+    mcp: (target) => [{ name: "figma-desktop", status: { status: target === workspace ? "connected" : "disabled" } }],
+    onMcpAction: (action) => void actions.push(action),
+  })
+
+  await expect(view.toggle).toBeChecked()
+  await expect(view.toggle).toBeEnabled()
+  view.requests.length = 0
+
+  await view.panel.locator('[data-slot="switch-control"]').click()
+  await expect(view.toggle).not.toBeChecked()
+  await expect(view.toggle).toBeEnabled()
+  expect(actions).toEqual([{ server: "figma-desktop", action: "disconnect", directory: workspace }])
+  expect(view.requests).toContainEqual({ path: "/api/experimental/mcp/figma-desktop/disconnect", directory: workspace })
+})
 
 for (const surface of ["popover", "dialog"] as const) {
   test(`shows connection failures from the MCP ${surface} and allows reconnecting`, async ({ page }) => {

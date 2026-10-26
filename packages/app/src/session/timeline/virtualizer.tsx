@@ -645,6 +645,13 @@ export function createTimelineVirtualizer(input: Input) {
     if (active()) input.setScrollRef(root)
     viewportObserver?.observe(root)
     settleColdBottom()
+    // The scrollbar thumb sits beside the viewport and stops its pointerdown from propagating, so
+    // listen on the ScrollView root in the capture phase: thumb drags are user scrolls too.
+    const scrollView = root.parentElement
+
+    if (!scrollView) return
+    scrollView.addEventListener("pointerdown", handleListPointerDown, { capture: true })
+    onCleanup(() => scrollView.removeEventListener("pointerdown", handleListPointerDown, { capture: true }))
   }
 
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
@@ -714,7 +721,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
   // so a held pointer is what separates those from the virtualizer's own measurement adjustments.
-  const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+  const handleListPointerDown = (event: PointerEvent) => {
     releaseAnchor()
     input.onUserScroll(event.target)
     pointerHeld = true
@@ -881,7 +888,6 @@ export function createTimelineVirtualizer(input: Input) {
           verticalScrollAdjustment={rendering.scrollAdjustment}
           onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}
-          onPointerDown={handleListPointerDown}
           onKeyDown={handleListKeyDown}
           onScroll={handleListScroll}
           onClick={input.onSelectionInteraction}

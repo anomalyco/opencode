@@ -967,7 +967,7 @@ export function createBrowserPage(
 
         if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
           throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
-        const format = action.format ?? "png"
+        const format = action.format ?? "jpeg"
 
         const capture = await cdp.send("Page.captureScreenshot", {
           format,

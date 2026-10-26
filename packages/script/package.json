@@ -3,6 +3,9 @@
   "name": "@opencode/script",
   "type": "module",
   "license": "MIT",
+  "scripts": {
+    "test": "bun test"
+  },
   "dependencies": {
     "semver": "^7.6.3"
   },
@@ -11,6 +14,7 @@
     "@types/semver": "^7.5.8"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./highlights": "./src/highlights.ts"
   }
 }

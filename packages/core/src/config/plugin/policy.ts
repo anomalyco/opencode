@@ -21,17 +21,24 @@ export const Plugin = define({
       Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     )
-    // Authored documents reverse so user-global policy outranks repository policy; organization statements
-    // from the connected Console follow every authored one and have the final say.
+    // Documents reverse so earlier-loaded policy wins: managed policy, then a Console config document, then user
+    // and project files. Statements from a Console serving the legacy format follow every document and have the
+    // final say.
     const policies = () => ManagedPolicy.statements(loaded.entries, managed.current())
+    const runSync = Effect.runSyncWith(yield* Effect.context())
     yield* ctx.provider.transform((providers) => {
       const current = policies()
+      const denied: string[] = []
       for (const record of providers.list()) {
         const policy = current.findLast(
           (policy) => policy.action === "provider.use" && Wildcard.match(record.provider.id, policy.resource),
         )
-        if (policy?.effect === "deny") providers.remove(record.provider.id)
+        if (policy?.effect !== "deny") continue
+        providers.remove(record.provider.id)
+        // Skip unconfigured catalog entries; deny-all policies would otherwise log the whole catalog.
+        if (record.provider.activation === "enabled") denied.push(record.provider.id)
       }
+      if (denied.length) runSync(Effect.logDebug("providers denied by policy", { providers: denied }))
     })
     yield* ctx.mcp.transform((servers) => {
       const current = policies()

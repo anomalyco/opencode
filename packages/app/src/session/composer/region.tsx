@@ -4,7 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on, onMount, Show, type Accessor } from "solid-js"
+import { createEffect, createMemo, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
@@ -190,6 +190,43 @@ export function createActiveSessionRegion(input: {
 
   const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
 
+  const recalled = new Set<string>()
+
+  // The free allowance stops a prompt after it was sent. Hand its text back so switching models and resending is one
+  // step, unless the user has already started typing something else.
+  onCleanup(
+    location().event.on("session.step.failed", (event) => {
+      const sessionID = input.session.identity.params.id
+
+      if (!sessionID || event.data.sessionID !== sessionID || event.data.error.type !== "provider.free-limit") return
+
+      if (recalled.has(event.data.assistantMessageID)) return
+      recalled.add(event.data.assistantMessageID)
+
+      if (
+        !prompt.ready() ||
+        !prompt.current().every((part) => part.type === "text" && part.content.length === 0) ||
+        prompt.context.items().length > 0
+      )
+        return
+
+      const messages = input.session.history.messages()
+      const end = messages.findIndex((item) => item.id === event.data.assistantMessageID)
+
+      for (let i = end - 1; i >= 0; i--) {
+        const item = messages[i]
+
+        if (!item || item.type === "shell" || item.type === "idle") return
+
+        if (item.type === "user" && !data.session.input.has(sessionID, item.id)) {
+          revert.recall(item)
+
+          return
+        }
+      }
+    }),
+  )
+
   const notifyFailed = () => {
     showToast({ title: language.t("common.requestFailed") })
   }
@@ -250,7 +287,15 @@ export function createActiveSessionRegion(input: {
   const active = createMemo(
     on(
       () => (input.visible() ? input.session.identity.sessionID() : undefined),
-      (sessionID) => (sessionID ? createSessionComposerController({ sessionID, controls, dock }) : undefined),
+      (sessionID) =>
+        sessionID
+          ? createSessionComposerController({
+              sessionID,
+              sessionKey: input.session.identity.sessionKey,
+              controls,
+              dock,
+            })
+          : undefined,
     ),
   )
 

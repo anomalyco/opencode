@@ -1,13 +1,17 @@
+import { existsSync } from "fs"
+import path from "path"
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { registerOpencodeSpinner } from "./component/register-spinner"
+import "./component/spinner-renderable"
 import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
+import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
+import { epilogue, type SessionEpilogue } from "./util/presentation"
 import { Selection } from "./util/selection"
 import {
   CliRenderEvents,
@@ -37,6 +41,7 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
+  useTuiPaths,
   useTuiStartup,
   useTuiTerminalEnvironment,
   type TuiApp,
@@ -60,10 +65,13 @@ import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
+import { DialogUsage } from "./component/usage"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair } from "./component/dialog-pair"
+import { DialogHighlights } from "./component/dialog-highlights"
+import { claim } from "./util/highlights"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -96,16 +104,15 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
-import { destroyRenderer } from "./util/renderer"
+import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { ClientMcp } from "./context/client-mcp"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
-
-registerOpencodeSpinner()
 
 const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
 
@@ -149,6 +156,7 @@ const appBindingCommands = [
   "model.cycle_favorite_reverse",
   "agent.list",
   "mcp.list",
+  "usage.show",
   "agent.cycle",
   "agent.cycle.reverse",
   "variant.cycle",
@@ -208,7 +216,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
-  const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
+  const headers = Service.headers(input.server.endpoint)
+  const options = {
+    baseUrl: input.server.endpoint.url,
+    headers,
+    fetch: noTimeoutFetch,
+  }
   const api = OpenCode.make(options)
   const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
     Effect.map((response) => response.location),
@@ -222,13 +235,17 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     ? {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
-          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
-          return { api: OpenCode.make(next), url: endpoint.url }
+          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint), fetch: noTimeoutFetch }
+          return { api: OpenCode.make(next), url: endpoint.url, headers: next.headers }
         },
         restart: managed.restart,
       }
     : undefined
-  const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
+  const exit = {
+    session: undefined as SessionEpilogue | undefined,
+    updatedVersion: undefined as string | undefined,
+    reason: undefined as unknown,
+  }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const options = {
@@ -248,7 +265,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         if (handoff) {
           handoff.renderer.useMouse = options.useMouse
           return yield* Effect.acquireRelease(Effect.succeed(handoff.renderer), (renderer) =>
-            Effect.sync(() => destroyRenderer(renderer)),
+            Effect.promise(async () => {
+              destroyRenderer(renderer)
+              // closed rejects when the terminal is gone or the final flush times out; nothing is left to restore.
+              await renderer.closed.catch(() => {})
+            }),
           )
         }
         if (process.env.OPENCODE_DRIVE) {
@@ -260,7 +281,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             try: () => createCliRenderer(options),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
-          (renderer) => Effect.sync(() => destroyRenderer(renderer)),
+          (renderer) =>
+            Effect.promise(async () => {
+              destroyRenderer(renderer)
+              await renderer.closed.catch(() => {})
+            }),
         )
       })
       renderer.setMaxListeners(15)
@@ -301,7 +326,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                   destroyRenderer(renderer)
                 }}
               >
-                <EpilogueProvider set={(value) => (exit.epilogue = value)}>
+                <EpilogueProvider
+                  value={{
+                    session: (value) => (exit.session = value),
+                    updatedVersion: (version) => (exit.updatedVersion = version),
+                  }}
+                >
                   <TuiAppProvider value={input.app}>
                     <ErrorBoundary
                       fallback={(error, reset) => (
@@ -371,7 +401,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 : undefined
                                             }
                                           >
-                                            <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
+                                            <ClientProvider
+                                              api={api}
+                                              url={input.server.endpoint.url}
+                                              headers={headers}
+                                              service={service}
+                                            >
                                               <PermissionProvider>
                                                 <DataProvider directory={directory}>
                                                   <LocationProvider>
@@ -382,6 +417,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                           source={createThemeSource(global.config)}
                                                         >
                                                           <ThemeErrorToast />
+                                                          <ClientMcp />
                                                           <LocalProvider>
                                                             <PromptStashProvider>
                                                               <DialogProvider>
@@ -441,13 +477,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }
       })
       yield* shutdown.await
-      return { epilogue: exit.epilogue, reason: exit.reason }
+      return { session: exit.session, updatedVersion: exit.updatedVersion, reason: exit.reason }
     }),
   )
   yield* Effect.sync(() => {
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
-    if (result.epilogue) process.stdout.write(result.epilogue + "\n")
+    const text = epilogue({ session: result.session, updatedVersion: result.updatedVersion })
+    if (text) process.stdout.write(text + "\n")
   })
 })
 
@@ -602,23 +639,23 @@ function App() {
     if (!terminalTitleEnabled()) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      setTerminalTitle(renderer, "OpenCode")
       return
     }
 
     if (route.data.type === "session") {
       const title = session?.title
       if (!title || isFallbackTitle(title)) {
-        renderer.setTerminalTitle("OpenCode")
+        setTerminalTitle(renderer, "OpenCode")
         return
       }
 
-      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
+      setTerminalTitle(renderer, `OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
       return
     }
 
     if (route.data.type === "plugin") {
-      renderer.setTerminalTitle(`OC | ${route.data.name}`)
+      setTerminalTitle(renderer, `OC | ${route.data.name}`)
     }
   })
 
@@ -682,6 +719,30 @@ function App() {
     void client.api.session
       .fork({ sessionID: args.sessionID })
       .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
+      .catch(toast.error)
+  })
+
+  // Opens the release highlights once after an update, but only into an idle home screen during startup.
+  const storage = useStorage()
+  const paths = useTuiPaths()
+  let highlighted = false
+  createEffect(() => {
+    if (highlighted || !plugins.ready() || client.connection.status() !== "connected") return
+    highlighted = true
+    const items = app.highlights ?? []
+    if (config.data.highlights === false) return
+    if (route.data.type !== "home" || dialog.stack.length > 0 || promptRef.current?.current.text) return
+    if (args.prompt || args.continue || args.sessionID || args.newSessionID) return
+    if (process.env.OPENCODE_DRIVE || process.env.OPENCODE_STORY || process.env.OPENCODE_ROUTE) return
+    void claim(storage, {
+      version: app.version,
+      count: items.length,
+      history: existsSync(path.join(paths.state, "prompt-history.jsonl")),
+    })
+      .then((show) => {
+        if (show && dialog.stack.length === 0)
+          dialog.replace(() => <DialogHighlights version={app.version} items={items} />)
+      })
       .catch(toast.error)
   })
 
@@ -892,6 +953,15 @@ function App() {
         },
       },
       {
+        name: "usage.show",
+        title: "View usage",
+        category: "Agent",
+        slash: { name: "usage" },
+        run: () => {
+          dialog.replace(() => <DialogUsage />)
+        },
+      },
+      {
         name: "mcp.list",
         title: "MCP servers",
         category: "Agent",
@@ -957,6 +1027,17 @@ function App() {
         },
         category: "Integration",
       },
+      ...(app.highlights?.length
+        ? [
+            {
+              name: "opencode.highlights",
+              title: "Show release highlights",
+              slash: { name: "highlights" },
+              run: () => dialog.replace(() => <DialogHighlights version={app.version} items={app.highlights ?? []} />),
+              category: "System",
+            },
+          ]
+        : []),
       {
         name: "opencode.settings",
         title: "Open settings",
@@ -1086,7 +1167,7 @@ function App() {
         name: "docs.open",
         title: "Open docs",
         run: () => {
-          openUrl("https://opencode.ai/docs").catch(() => {})
+          openUrl("https://opencode.ai/v2/docs").catch(() => {})
           dialog.clear()
         },
         category: "System",
@@ -1123,8 +1204,8 @@ function App() {
         category: "System",
         palette: undefined,
         enabled: process.platform !== "win32",
-        run: () => {
-          renderer.suspend()
+        run: async () => {
+          await renderer.suspend()
           process.once("SIGCONT", () => renderer.resume())
           process.kill(0, "SIGTSTP")
         },
@@ -1136,7 +1217,7 @@ function App() {
         palette: undefined,
         run: () => {
           const next = !terminalTitleEnabled()
-          if (!next) renderer.setTerminalTitle("")
+          if (!next) setTerminalTitle(renderer, "")
           void config
             .update((draft) => {
               draft.terminal = { ...draft.terminal, title: next }

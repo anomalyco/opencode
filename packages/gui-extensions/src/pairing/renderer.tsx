@@ -26,13 +26,19 @@ const setup: Setup<typeof definition> = (ctx) => {
       return ctx.t("title")
     },
     get entries() {
-      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: "pair device qr local" }
+      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: "pair device qr phone remote" }
 
-      // The display setting exists only while pairing's main side answers.
+      // Remote access and the display setting exist only while pairing's main side answers.
       if (pairing().status !== "active") return [pairingEntry]
 
       return [
         pairingEntry,
+        {
+          id: "settings-remote-access",
+          title: ctx.t("remote.title"),
+          description: ctx.t("remote.description"),
+          keywords: "internet tunnel opentunnel",
+        },
         {
           id: "settings-keep-screen-active",
           title: ctx.t("screenActive.title"),

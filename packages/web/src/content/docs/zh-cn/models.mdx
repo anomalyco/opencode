@@ -57,7 +57,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-这里完整的 ID 格式为 `provider_id/model_id`。例如，如果你使用 [OpenCode Zen](/docs/zen)，则 GPT 5.1 Codex 对应的值为 `opencode/gpt-5.1-codex`。
+这里完整的 ID 格式为 `provider_id/model_id`。例如，如果你使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，则 GPT-6.1 Sol 对应的值为 `opencode/gpt-6.1-sol`。
 
 如果你配置了[自定义提供商](/docs/providers#custom)，`provider_id` 是配置中 `provider` 部分的键名，`model_id` 是 `provider.models` 中的键名。
 
@@ -73,7 +73,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -85,7 +85,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -99,7 +99,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-这里我们为两个内置模型配置了全局设置：通过 `openai` 提供商访问的 `gpt-5`，以及通过 `anthropic` 提供商访问的 `claude-sonnet-4-20250514`。
+这里我们为两个内置模型配置了全局设置：通过 `openai` 提供商访问的 `gpt-6.1-sol`，以及通过 `anthropic` 提供商访问的 `claude-sonnet-5-5`。
 内置的提供商和模型名称可以在 [Models.dev](https://models.dev) 上查阅。
 
 你还可以为使用中的任何代理配置这些选项。代理配置会覆盖此处的全局选项。[了解更多](/docs/agents/#additional)。
@@ -112,7 +112,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -177,7 +177,7 @@ OpenCode 为许多提供商提供了默认变体：
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -211,7 +211,7 @@ OpenCode 启动时，会按以下优先顺序加载模型：
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

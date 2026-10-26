@@ -5,6 +5,8 @@ import type { FileContent } from "../sdk"
 export function contentBytes(content: FileContent) {
   if (content.size !== undefined) return content.size
 
+  if (content.bytes !== undefined) return content.bytes.byteLength
+
   if (content.encoding === "base64") {
     const padding = content.content.endsWith("==") ? 2 : content.content.endsWith("=") ? 1 : 0
 
@@ -87,6 +89,9 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
 
 /** The raw bytes of loaded content. */
 export function bytesFromContent(content: FileContent) {
+  // A copy, as a viewer may move the returned buffer to a worker.
+  if (content.bytes !== undefined) return content.bytes.slice()
+
   if (content.encoding !== "base64") return new TextEncoder().encode(content.content)
 
   return base64ToBytes(content.content)
@@ -95,6 +100,16 @@ export function bytesFromContent(content: FileContent) {
 /** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */
 export function blobUrlFromContent(content: FileContent) {
   const type = content.mimeType ?? "application/octet-stream"
+  const bytes = content.bytes
+
+  if (bytes !== undefined) {
+    const view =
+      bytes.buffer instanceof ArrayBuffer
+        ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        : bytes.slice()
+
+    return URL.createObjectURL(new Blob([view], { type }))
+  }
 
   if (content.encoding !== "base64") return URL.createObjectURL(new Blob([content.content], { type }))
 

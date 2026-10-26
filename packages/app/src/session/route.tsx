@@ -1,8 +1,12 @@
 import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { Title } from "@solidjs/meta"
 import { useParams } from "@solidjs/router"
+import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { DataProvider } from "@opencode/session-ui/context"
 import { SessionUserMessage } from "@opencode/session-ui/message"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
@@ -36,8 +40,9 @@ export function TargetSessionRouteContent() {
 
   return (
     <>
-      <MarkSessionNotificationsViewed sessionID={() => params.id} />
-      <ModelsProvider directory={directory}>
+      <MarkSessionViewed sessionID={() => params.id} />
+      <SessionDocumentTitle sessionID={() => params.id} />
+      <ModelsProvider directory={directory()}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
           <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
@@ -186,16 +191,40 @@ function SessionPage() {
   return <SessionScreenView session={session} />
 }
 
-function MarkSessionNotificationsViewed(props: { sessionID: () => string | undefined }) {
+function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
   const notification = useNotification()
+  const [focus, setFocus] = createStore({ window: document.hasFocus() })
+  const update = () => setFocus("window", document.hasFocus())
+  makeEventListener(window, "focus", update)
+  makeEventListener(window, "blur", update)
+  makeEventListener(document, "visibilitychange", update)
+
+  // Viewed state is shared by every client, so only a focused window reports what its user has seen.
+  // markViewed reads the session's idle watermark, so a turn finishing while it stays open re-runs this.
   createEffect(() => {
     const sessionID = props.sessionID()
 
-    if (!notification.ready() || !sessionID) return
-
-    if (notification.session.unseenCount(sessionID) === 0) return
+    if (!sessionID || !focus.window) return
     notification.session.markViewed(sessionID)
   })
 
   return null
+}
+
+// Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
+function SessionDocumentTitle(props: { sessionID: () => string }) {
+  const data = useData()
+
+  const title = createMemo(() => {
+    const value = data.session.get(props.sessionID())?.title
+
+    return isFallbackTitle(value) ? undefined : value
+  })
+
+  // Keyed: <Title> reads its text inside a meta effect, which would hit a stale Show accessor once the session is deleted.
+  return (
+    <Show when={title()} keyed>
+      {(value) => <Title>{`${value} · OpenCode`}</Title>}
+    </Show>
+  )
 }

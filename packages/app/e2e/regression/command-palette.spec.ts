@@ -48,6 +48,15 @@ test("lists recent sessions before a query is entered", async ({ page }) => {
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
 })
 
+test("reopens from its shortcut as soon as it closes", async ({ page }) => {
+  const { dialog, input } = await openCommandPalette(page)
+  await input.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  // A closed dialog stops blocking shortcuts when it leaves the screen, not when it is disposed afterwards.
+  await page.keyboard.press("ControlOrMeta+Shift+P")
+  await expect(dialog.getByRole("textbox")).toBeFocused()
+})
+
 test("appends search results without resetting the selected command", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   const files = Promise.withResolvers<void>()
@@ -85,12 +94,51 @@ test("appends search results without resetting the selected command", async ({ p
   await expect(dialog.getByRole("option", { name: "Copy Project ID", exact: true })).toHaveCount(0)
 })
 
-test("keeps the automatically selected file when session results arrive later", async ({ page }) => {
-  const warnings = captureConsoleWarnings(page)
+test("selects the first session when it arrives above automatically selected files", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   const sessions = Promise.withResolvers<void>()
   await page.route("**/api/fs/find?*", (route) =>
     route.fulfill({ json: { data: [{ path: "README.md", type: "file" }] } }),
+  )
+  await page.route("**/api/session?*", async (route) => {
+    await sessions.promise
+    await route.fulfill({
+      json: {
+        data: Array.from({ length: 18 }, (_, index) => ({
+          ...paletteSession,
+          id: index === 0 ? paletteSession.id : `ses_palette_readme_${index}`,
+          location: { directory: paletteSession.directory },
+          title: `README work ${index + 1}`,
+        })),
+      },
+    })
+  })
+  await input.fill("README")
+  await expect(dialog.getByRole("option", { name: "/ README.md", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  sessions.resolve()
+  const first = dialog.getByRole("option", { name: /README work 1 command-palette/ })
+  const second = dialog.getByRole("option", { name: /README work 2 command-palette/ })
+  await expect(first).toHaveAttribute("aria-selected", "true")
+  await expect(first).toBeInViewport()
+  await input.press("ArrowDown")
+  await expect(second).toHaveAttribute("aria-selected", "true")
+  await expect(second).toBeInViewport()
+  await input.press("ArrowUp")
+  await expect(first).toHaveAttribute("aria-selected", "true")
+  await input.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
+test("keeps a keyboard-selected file when session results arrive later", async ({ page }) => {
+  const warnings = captureConsoleWarnings(page)
+  const { dialog, input } = await openCommandPalette(page)
+  const sessions = Promise.withResolvers<void>()
+  await page.route("**/api/fs/find?*", (route) =>
+    route.fulfill({ json: { data: [{ path: "README.txt", type: "file" }, { path: "README.md", type: "file" }] } }),
   )
   await page.route("**/api/session?*", async (route) => {
     await sessions.promise
@@ -102,6 +150,11 @@ test("keeps the automatically selected file when session results arrive later", 
   })
   await input.fill("README")
   const file = dialog.getByRole("option", { name: "/ README.md", exact: true })
+  await expect(dialog.getByRole("option", { name: "/ README.txt", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await input.press("ArrowDown")
   await expect(file).toHaveAttribute("aria-selected", "true")
   sessions.resolve()
   await expect(dialog.getByRole("option", { name: /README work/ })).toBeVisible()
@@ -178,4 +231,20 @@ test("navigation replaces commands without retaining disposed owners", async ({ 
     "true",
   )
   expect(warnings).toEqual([])
+})
+
+test("keeps the same height as the number of results changes", async ({ page }) => {
+  const { dialog, input } = await openCommandPalette(page)
+  const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
+  const height = async () => (await container.boundingBox())?.height
+  const initial = await height()
+  expect(initial).toBe(480)
+
+  await input.fill("copy session")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  expect(await height()).toBe(initial)
+
+  await input.fill("zzzz no palette match")
+  await expect(dialog.getByText("No results found")).toBeVisible()
+  expect(await height()).toBe(initial)
 })

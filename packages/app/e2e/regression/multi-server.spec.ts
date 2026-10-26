@@ -74,14 +74,32 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
       )
       .toBe(true)
 
-  const enableAutoAccept = async () => {
-    await page.keyboard.press("Control+,")
-    const autoAccept = page.getByTestId("settings-screen").locator('[data-action="settings-auto-accept-permissions"]')
-    await autoAccept.locator('[data-slot="switch-control"]').click()
-    await expect(autoAccept.getByRole("switch")).toBeChecked()
+  return {
+    replies,
+    sessionGets,
+    transport: servers[SERVER]!.transport,
+    listed,
+    enableAutoAccept: () => enableAutoAccept(page),
   }
+}
 
-  return { replies, sessionGets, transport: servers[SERVER]!.transport, listed, enableAutoAccept }
+async function enableAutoAccept(page: Page) {
+  await page.keyboard.press("Control+,")
+  const autoAccept = page.getByTestId("settings-screen").locator('[data-action="settings-auto-accept-permissions"]')
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(autoAccept.getByRole("switch")).toBeChecked()
+}
+
+async function chooseProjectAutoAccept(page: Page, project: string, current: string, choice: "On" | "Off") {
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  await settings.getByRole("button", { name: project, exact: true }).click()
+  const autoAccept = settings.locator('[data-action="settings-project-auto-accept-permissions"]')
+  await expect(autoAccept).toHaveText(current)
+  await autoAccept.click()
+  await page.getByRole("option", { name: choice, exact: true }).click()
+  await expect(autoAccept).toHaveText(choice)
+  await settings.getByRole("button", { name: "Back to projects", exact: true }).click()
 }
 
 const reply = (sessionID: string, permissionID: string) => ({
@@ -200,4 +218,61 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
   await expectSessionTitle(page, sessionA.title)
   await view.enableAutoAccept()
   await expect.poll(() => view.replies).toEqual([reply(sessionA.id, "permission-synced-a")])
+})
+
+test("a project's auto-accept choice overrides the default in both directions", async ({ page }) => {
+  const api = session({ id: "ses_project_api", directory: "/work/api", title: "API session", projectID: "proj_api" })
+  const web = session({ id: "ses_project_web", directory: "/work/web", title: "Web session", projectID: "proj_web" })
+  const requests = { [api.id]: [pending("permission-api", api.id)], [web.id]: [pending("permission-web", web.id)] }
+  const replies: string[] = []
+  await mockServers(page, {
+    [SERVER]: {
+      directory: "/work/api",
+      project: project({ id: "proj_api", directory: "/work/api" }),
+      projects: [
+        project({ id: "proj_api", directory: "/work/api" }),
+        project({ id: "proj_web", directory: "/work/web" }),
+      ],
+      provider: { all: [], connected: [], default: {} },
+      sessions: [api, web],
+      pageMessages: () => ({ items: [] }),
+      sessionStatus: { [api.id]: { type: "running" }, [web.id]: { type: "running" } },
+      permissions: () => Object.values(requests).flat(),
+      sessionPermissions: requests,
+      onPermissionReply: (reply) => replies.push(reply.permissionID),
+    },
+  })
+  await seed(page, {
+    projects: { local: [{ worktree: "/work/api" }, { worktree: "/work/web" }] },
+    tabs: [api.id, web.id],
+  })
+  const dock = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const settings = page.getByTestId("settings-screen")
+
+  await page.goto(sessionHref(web.id))
+  await expectSessionTitle(page, web.title)
+  await expect(dock.getByText("git status")).toBeVisible()
+
+  // On for api while the default is off; off for web before the default turns on.
+  await page.keyboard.press("Control+,")
+  await chooseProjectAutoAccept(page, "api", "Use default (Off)", "On")
+  await expect.poll(() => replies).toEqual(["permission-api"])
+  await chooseProjectAutoAccept(page, "web", "Use default (Off)", "Off")
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  const autoAccept = settings.locator('[data-action="settings-auto-accept-permissions"]')
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(autoAccept.getByRole("switch")).toBeChecked()
+  await settings.getByRole("button", { name: "Back to app" }).click()
+
+  await expectSessionTitle(page, web.title)
+  await expect(dock.getByText("git status")).toBeVisible()
+  expect(replies).toEqual(["permission-api"])
+
+  // Back on the default, web follows it.
+  await page.keyboard.press("Control+,")
+  await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  await settings.getByRole("button", { name: "web", exact: true }).click()
+  await settings.locator('[data-action="settings-project-auto-accept-permissions"]').click()
+  await page.getByRole("option", { name: "Use default (On)" }).click()
+  await expect.poll(() => replies).toEqual(["permission-api", "permission-web"])
 })

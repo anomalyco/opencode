@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type { CacheHint } from "../../schema/index.js"
+import type { CacheHint, LLMRequest } from "../../schema/index.js"
 import { newBreakpoints, ttlBucket } from "./cache.js"
 
 // Bedrock cache markers are positional: emit a `cachePoint` block immediately
@@ -28,14 +28,17 @@ const CLAUDE_5M = [
 // Callers share the four-breakpoint budget across system, messages, and tools.
 export const BEDROCK_BREAKPOINT_CAP = 4
 
-export const breakpoints = (modelID: string) => {
+export const breakpoints = (model: LLMRequest["model"]) => {
   // Substring matching also handles regional prefixes and model-bearing ARNs.
-  const short = CLAUDE_5M.some((id) => modelID.includes(id))
+  const short = CLAUDE_5M.some((id) => model.id.includes(id))
   return {
     ...newBreakpoints(BEDROCK_BREAKPOINT_CAP),
+    // An explicit Anthropic cache format opts opaque IDs such as application inference profile ARNs in.
     // Assume modern Claude releases retain caching support; older generations need an explicit exception.
     // Other model families use implicit caching where available.
-    supported: modelID.includes("anthropic.claude-") && (short || !LEGACY_CLAUDE.some((id) => modelID.includes(id))),
+    supported:
+      model.compatibility?.cacheFormat === "anthropic" ||
+      (model.id.includes("anthropic.claude-") && (short || !LEGACY_CLAUDE.some((id) => model.id.includes(id)))),
     ttl1h: !short,
   }
 }

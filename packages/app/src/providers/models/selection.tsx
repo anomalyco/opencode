@@ -269,19 +269,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const current = createMemo(() => {
       if (!configuredModel.ready()) return
 
-      const item = firstModel(
-        () => scope()?.model,
-        () => {
-          const session = durable()
+      const session = durable()
 
-          if (session?.agent && session.agent !== agent.current()?.name) return
-          const model = session?.model
-
-          return model && { providerID: model.providerID, modelID: model.id }
-        },
-        () => agent.current()?.model,
-        fallback,
-      )
+      // Catalog availability must not replace a user's choice with a default on the next submission.
+      const item =
+        scope()?.model ??
+        (session?.model && (!session.agent || session.agent === agent.current()?.name)
+          ? { providerID: session.model.providerID, modelID: session.model.id }
+          : undefined) ??
+        firstModel(() => agent.current()?.model, fallback)
 
       if (!item) return
 

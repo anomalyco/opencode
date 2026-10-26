@@ -19,19 +19,29 @@ export const Question = {
   render: () => (
     <DockPrompt
       kind="question"
-      header={<div class="text-13-medium text-text-strong">Session layout</div>}
+      header={
+        <>
+          <div data-slot="question-header-top">
+            <div data-slot="question-header-title">Question</div>
+          </div>
+          <div data-slot="question-details">
+            <div data-slot="question-text">Which Session layout should I implement?</div>
+            <div data-slot="question-hint">Select one answer</div>
+          </div>
+        </>
+      }
       footer={
         <>
-          <Button size="normal" variant="ghost">
+          <Button size="large" variant="ghost">
             Dismiss
           </Button>
-          <Button size="normal" variant="contrast">
+          <Button size="large" variant="submit">
             Submit
           </Button>
         </>
       }
     >
-      <div class="text-13-regular text-text-base">Which Session layout should I implement?</div>
+      <div data-slot="question-options" />
     </DockPrompt>
   ),
 }

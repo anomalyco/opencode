@@ -154,8 +154,6 @@ opencode 伺服器暴露以下 API。
 | `POST`   | `/session/:id/init`                      | 分析應用程式並建立 `AGENTS.md` | 請求主體：`{ messageID, providerID, modelID }`，回傳 `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 在某條訊息處分岔現有工作階段   | 請求主體：`{ messageID? }`，回傳 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 中止正在執行的工作階段         | 回傳 `boolean`                                                                      |
-| `POST`   | `/session/:id/share`                     | 分享工作階段                   | 回傳 <a href={typesUrl}><code>Session</code></a>                                    |
-| `DELETE` | `/session/:id/share`                     | 取消分享工作階段               | 回傳 <a href={typesUrl}><code>Session</code></a>                                    |
 | `GET`    | `/session/:id/diff`                      | 取得本次工作階段的差異         | 查詢參數：`messageID?`，回傳 <a href={typesUrl}><code>FileDiff[]</code></a>         |
 | `POST`   | `/session/:id/summarize`                 | 摘要工作階段                   | 請求主體：`{ providerID, modelID }`，回傳 `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | 還原訊息                       | 請求主體：`{ messageID, partID? }`，回傳 `boolean`                                  |

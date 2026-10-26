@@ -9,7 +9,6 @@
   },
   "devDependencies": {
     "@opencode/client": "workspace:*",
-    "@tailwindcss/vite": "catalog:",
     "@opencode/session-ui": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@playwright/test": "catalog:",
@@ -20,6 +19,8 @@
     "@storybook/addon-onboarding": "10.4.4",
     "@storybook/addon-vitest": "10.4.4",
     "@storybook/builder-vite": "10.4.4",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/solid-query": "5.91.4",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "18.0.25",

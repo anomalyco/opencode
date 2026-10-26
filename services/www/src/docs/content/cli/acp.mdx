@@ -169,7 +169,7 @@ New sessions use the directory's default model and primary agent. The responses 
 `session/set_config_option` takes string values:
 
 ```json
-{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-4" }
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
 ```
 
 `session/set_mode` also sets the agent. OpenCode sends `config_option_update` when the available models or agents
@@ -222,6 +222,11 @@ The client can pass stdio and HTTP MCP servers on `session/new`, `session/load`,
 OpenCode adds them to the session's directory for the life of the `opencode acp` process, so other sessions in that
 directory can use them. OpenCode passes HTTP headers through and doesn't use OAuth for these servers. It doesn't
 advertise MCP over SSE, and it doesn't support MCP over ACP.
+
+| Case                             | Behavior                                                            |
+| -------------------------------- | ------------------------------------------------------------------- |
+| Same name as a configured server | The client's server replaces the configured one in that directory. |
+| [Policies](/policies)            | `integration.use` rules still apply.                                |
 
 ```json
 { "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }

@@ -9,29 +9,28 @@ import {
 } from "effect/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
-import { Service, type HttpMiddleware, type Interface } from "./executor-service.js"
+import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
-export { Service } from "./executor-service.js"
+export { responseHttp, Service } from "./executor-service.js"
 export type { HttpHandler, HttpMiddleware, Interface } from "./executor-service.js"
-
-const headerDetails = (headers: Headers.Headers) =>
-  Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, String(value)]))
 
 const normalizedHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
 
+const clampRetryAfterMs = (millis: number) => Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.ceil(millis)))
+
 const retryAfterMs = (headers: Record<string, string>) => {
   const millis = Number(headers["retry-after-ms"])
-  if (Number.isFinite(millis)) return Math.max(0, millis)
+  if (Number.isFinite(millis)) return clampRetryAfterMs(millis)
 
   const value = headers["retry-after"]
   if (!value) return undefined
 
   const seconds = Number(value)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+  if (Number.isFinite(seconds)) return clampRetryAfterMs(seconds * 1000)
 
   const date = Date.parse(value)
-  if (!Number.isNaN(date)) return Math.max(0, date - Date.now())
+  if (!Number.isNaN(date)) return clampRetryAfterMs(date - Date.now())
   return undefined
 }
 
@@ -76,13 +75,6 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
     reset: Object.keys(reset).length === 0 ? undefined : reset,
   })
 }
-
-export const responseHttp = (response: HttpClientResponse.HttpClientResponse) =>
-  new HttpContext({
-    url: response.request.url,
-    status: response.status,
-    headers: headerDetails(response.headers),
-  })
 
 const MAX_BODY_CHARS = 2000
 

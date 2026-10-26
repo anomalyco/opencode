@@ -52,13 +52,13 @@ export interface Interface {
     targets: readonly Target[],
     context: Invocation,
     metadata?: Permission.AssertInput["metadata"],
-  ) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
+  ) => Effect.Effect<void, Permission.Error | SessionErrors.NotFoundError>
   /** Resolve a read target and obtain external-directory approval before read approval. */
   readonly authorizeRead: (
     file: string,
     context: Invocation,
     options?: ReadOptions,
-  ) => Effect.Effect<Target, FSUtil.Error | Error | SessionErrors.NotFoundError>
+  ) => Effect.Effect<Target, FSUtil.Error | Permission.Error | SessionErrors.NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileAccess") {}

@@ -151,6 +151,7 @@
     "**/.sst",
     "**/*.d.ts",
     "**/sdk.gen.ts",
+    "packages/plugins/figma/skills/**",
     ".agent/**",
     ".agents/**",
     ".claude/**",

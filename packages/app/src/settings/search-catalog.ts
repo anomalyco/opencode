@@ -39,7 +39,8 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     tab: "general",
     label: "command.permissions.autoaccept.enable",
     target: "settings-auto-accept-permissions",
-    keywords: "permissions approve allow auto accept",
+    description: "settings.permissions.autoAccept.default.description",
+    keywords: "permissions approve allow auto accept default",
   },
   {
     tab: "general",
@@ -187,6 +188,12 @@ export const projectSettings: Entry<SettingsProjectTab>[] = [
   { tab: "general", label: "project.settings.name.title", target: "settings-project-name", keywords: "rename" },
   { tab: "general", label: "dialog.project.edit.icon", target: "settings-project-icon" },
   { tab: "general", label: "dialog.project.edit.color", target: "settings-project-color" },
+  {
+    tab: "general",
+    label: "command.permissions.autoaccept.enable",
+    target: "settings-project-auto-accept-permissions",
+    keywords: "permissions approve allow auto accept",
+  },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "extensions", label: "settings.tab.extensions" },
   {

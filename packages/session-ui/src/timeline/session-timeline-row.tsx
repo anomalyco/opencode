@@ -6,7 +6,8 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Option, Predicate, Schema } from "effect"
-import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, type Accessor, type JSX } from "solid-js"
+import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Dynamic } from "solid-js/web"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
@@ -25,7 +26,8 @@ import {
   SessionCompactionMessage,
   SessionCompactionQueued,
 } from "../message/message-content"
-import type { ContextGroupPart } from "../tools/tool-renderer"
+import { ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
+import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
@@ -41,6 +43,9 @@ import {
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
+// Past this many files, the rest of a turn's changes wait behind "Show all".
+const turnDiffFileLimit = 5
+
 const decodeMetadataFile = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
 
 type Projection = ReturnType<typeof createReactiveTimelineProjection>
@@ -51,6 +56,8 @@ export type SessionUserPresentation = {
   displayText?: string
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  /** A voice call's agent sent it on the user's behalf. */
+  voice?: boolean
 }
 
 export function createSessionTimelineRowRenderer(input: {
@@ -511,13 +518,19 @@ export function createSessionTimelineRowRenderer(input: {
 
       if (value?.type !== "model-switched") return undefined
       const match = data.store.provider?.all?.get(value.model.providerID)
+      const variantOnly = value.previous?.providerID === value.model.providerID && value.previous.id === value.model.id
+      const variant = value.model.variant ?? "default"
 
       return {
         providerID: value.model.providerID,
-        variant: value.model.variant,
-        label: i18n.t("ui.sessionTimeline.notice.modelSwitched", {
-          model: match?.models?.[value.model.id]?.name ?? value.model.id,
-        }),
+        variant: variantOnly ? undefined : value.model.variant,
+        label: variantOnly
+          ? variant === "default"
+            ? i18n.t("ui.sessionTimeline.notice.variantDefault")
+            : i18n.t("ui.sessionTimeline.notice.variantSwitched", { variant })
+          : i18n.t("ui.sessionTimeline.notice.modelSwitched", {
+              model: match?.models?.[value.model.id]?.name ?? value.model.id,
+            }),
       }
     })
 
@@ -698,8 +711,61 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
+  function TurnDiff(props: { row: TimelineRow.TurnDiff; onSizeChange?: () => void }) {
+    const render = ToolRegistry.render("patch") ?? GenericTool
+    // Until the diff loads, list the paths the turn's steps recorded, without change counts.
+    const turn = () => ({ sessionID: input.sessionID(), from: props.row.from })
+    const diffs = () => data.turnDiff?.get(turn())
+    const paths = () => diffs()?.map((diff) => diff.file) ?? props.row.files
+    const showAllKey = () => `turn-diff:${props.row.messageID}`
+    const showAll = () => input.disclosure.value(showAllKey()) === true
+    const limit = <T,>(items: readonly T[]) => (showAll() ? items : items.slice(0, turnDiffFileLimit))
+    const overflow = () => paths().length > turnDiffFileLimit
+    const fileKey = (path: string) => `turn-diff:${props.row.messageID}:file:${path}`
+
+    createEffect(() => data.turnDiff?.load(turn()))
+
+    return (
+      <Show when={data.turnDiff && paths().length > 0}>
+        <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
+          <div class="flex h-6 min-w-0 items-center gap-2">
+            <span class="text-14-medium text-text-strong tabular-nums">
+              {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
+            </span>
+            <DiffChanges changes={[...(diffs() ?? [])]} />
+            <Show when={overflow()}>
+              <button
+                type="button"
+                class="ml-auto text-14-regular text-text-interactive-base"
+                onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+              >
+                {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
+              </button>
+            </Show>
+          </div>
+          <Dynamic
+            component={render}
+            tool="patch"
+            input={{}}
+            metadata={{ files: limit(diffs() ?? []) }}
+            pendingFiles={diffs() ? undefined : limit(props.row.files)}
+            status="completed"
+            fileOpen={(path: string) => input.disclosure.value(fileKey(path))}
+            onFileOpenChange={(path: string, open: boolean) => input.disclosure.set(fileKey(path), open)}
+            deferContent
+            virtualizeDiff={false}
+            onContentRendered={props.onSizeChange}
+          />
+        </div>
+      </Show>
+    )
+  }
+
   const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
     if (Predicate.isTagged(row(), "TurnGap")) return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
+
+    // The host owns live status and renders this slot itself.
+    if (Predicate.isTagged(row(), "Activity")) return null
 
     if (Predicate.isTagged(row(), "UserMessage")) {
       const current = () => {
@@ -733,6 +799,7 @@ export function createSessionTimelineRowRenderer(input: {
                       displayText={presentation()?.displayText}
                       comments={presentation()?.comments}
                       references={presentation()?.references}
+                      voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={input.actions}
@@ -889,6 +956,24 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
+    if (Predicate.isTagged(row(), "TurnDiff")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "TurnDiff")) throw new Error("Expected a turn-diff timeline row")
+
+        return value
+      }
+
+      return (
+        <Frame row={current()}>
+          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+            <TurnDiff row={current()} onSizeChange={onSizeChange} />
+          </div>
+        </Frame>
+      )
+    }
+
     if (Predicate.isTagged(row(), "Retry")) {
       const current = () => {
         const value = row()
@@ -925,10 +1010,37 @@ export function createSessionTimelineRowRenderer(input: {
       return value
     }
 
+    const freeLimit = createMemo(() => {
+      if (current().kind !== "free-limit") return
+      const at = current().resetAt
+
+      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime()))
+        return i18n.t("ui.sessionTurn.freeLimit.title")
+
+      const now = Date.now()
+      const sameDay = new Date(at).toDateString() === new Date(now).toDateString() && at - now < 86_400_000
+
+      const time = new Intl.DateTimeFormat(
+        i18n.locale(),
+        sameDay ? { timeStyle: "short" } : { dateStyle: "medium", timeStyle: "short" },
+      ).format(at)
+
+      return i18n.t("ui.sessionTurn.freeLimit.lineReset", { time })
+    })
+
     return (
       <Frame row={current()}>
         <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-          <SessionError message={current().text} />
+          <Show when={freeLimit()} fallback={<SessionError message={current().text} />}>
+            {(text) => (
+              <div
+                role="status"
+                class="text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted"
+              >
+                {text()}
+              </div>
+            )}
+          </Show>
         </div>
       </Frame>
     )

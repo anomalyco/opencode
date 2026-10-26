@@ -1,5 +1,16 @@
 import { expect } from "bun:test"
-import { LanguageModel, LLMClient } from "@opencode/ai"
+import {
+  AIError,
+  AuthenticationError,
+  InvalidRequestError,
+  LanguageModel,
+  LLMClient,
+  LLMEvent,
+  ProviderInternalError,
+  QuotaExceededError,
+  RateLimitError,
+  TransportError,
+} from "@opencode/ai/effect"
 import { RequestExecutor } from "@opencode/ai/route"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -10,7 +21,8 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { ID, Info, Model, Ref } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Npm } from "@opencode/util/npm"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Fiber, Layer } from "effect"
+import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 
@@ -19,6 +31,7 @@ const selected = Info.make({
   package: Provider.aisdk("@ai-sdk/perplexity"),
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
+const reference = Ref.make({ providerID: selected.providerID, id: selected.id })
 
 const providers = Layer.mock(Provider.Service, {
   get: () => Effect.undefined,
@@ -66,6 +79,7 @@ const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
+const retryIt = testEffect(Generate.layer.pipe(Layer.provideMerge(Layer.merge(resolver, TestLLM.testLayer()))))
 
 it.effect("loads dynamic AI SDK models", () =>
   Effect.gen(function* () {
@@ -78,6 +92,91 @@ it.effect("loads dynamic AI SDK models", () =>
     expect(result).toBe("OK")
   }),
 )
+
+for (const operation of ["request", "read"] as const) {
+  retryIt.effect(`regenerates the full stateless response after a ${operation} failure`, () =>
+    Effect.gen(function* () {
+      const generate = yield* Generate.Service
+      const llm = yield* TestLLM.Test
+      yield* llm.push(
+        TestLLM.failAfter(
+          new AIError({ reason: new TransportError({ message: "Disconnected", transport: "http", operation }) }),
+          ...(operation === "read"
+            ? [LLMEvent.textStart({ id: "failed" }), LLMEvent.textDelta({ id: "failed", text: "Discard this" })]
+            : []),
+        ),
+        TestLLM.text("Fresh answer", "success"),
+      )
+      const result = yield* generate
+        .text({ prompt: "Answer privately", model: reference })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* llm.wait(1)
+      yield* TestClock.adjust("3 seconds")
+      expect(yield* Fiber.join(result)).toBe("Fresh answer")
+      const requests = yield* llm.requests()
+      expect(requests).toHaveLength(2)
+      expect(requests[1]).toBe(requests[0])
+    }),
+  )
+}
+
+for (const reason of [
+  new AuthenticationError({ message: "Invalid credentials" }),
+  new QuotaExceededError({ message: "No quota" }),
+  new InvalidRequestError({ message: "Invalid prompt" }),
+]) {
+  retryIt.effect(`does not retry stateless ${reason._tag} failures`, () =>
+    Effect.gen(function* () {
+      const generate = yield* Generate.Service
+      const llm = yield* TestLLM.Test
+      yield* llm.push(TestLLM.failAfter(new AIError({ reason })))
+      const result = yield* generate.text({ prompt: "Answer privately", model: reference }).pipe(Effect.flip)
+      expect(result).toBeInstanceOf(Generate.UnavailableError)
+      expect(result.message).toBe(reason.message)
+      expect(yield* llm.requests()).toHaveLength(1)
+    }),
+  )
+}
+
+retryIt.effect("honors provider backoff and cancels without another generation", () =>
+  Effect.gen(function* () {
+    const generate = yield* Generate.Service
+    const llm = yield* TestLLM.Test
+    yield* llm.always(
+      TestLLM.failAfter(new AIError({ reason: new RateLimitError({ message: "Wait", retryAfterMs: 5_000 }) })),
+    )
+    const result = yield* generate
+      .text({ prompt: "Answer privately", model: reference })
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* llm.wait(1)
+    yield* TestClock.adjust("4999 millis")
+    expect(yield* llm.requests()).toHaveLength(1)
+    yield* Fiber.interrupt(result)
+    yield* TestClock.adjust("1 minute")
+    expect(Exit.hasInterrupts(yield* Fiber.await(result))).toBe(true)
+    expect(yield* llm.requests()).toHaveLength(1)
+  }),
+)
+
+for (const [reason, attempts] of [
+  [new ProviderInternalError({ message: "Unavailable" }), 11],
+  [new TransportError({ message: "Timed out", transport: "http", operation: "request", code: "Timeout" }), 4],
+] as const) {
+  retryIt.effect(`bounds stateless ${reason._tag} retries`, () =>
+    Effect.gen(function* () {
+      const generate = yield* Generate.Service
+      const llm = yield* TestLLM.Test
+      yield* llm.always(TestLLM.failAfter(new AIError({ reason })))
+      const result = yield* generate
+        .text({ prompt: "Answer privately", model: reference })
+        .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* llm.wait(1)
+      yield* TestClock.adjust("2 minutes")
+      expect(yield* Fiber.join(result)).toBeInstanceOf(Generate.UnavailableError)
+      expect(yield* llm.requests()).toHaveLength(attempts)
+    }),
+  )
+}
 
 resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
   Effect.gen(function* () {

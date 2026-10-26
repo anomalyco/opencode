@@ -14,7 +14,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -34,7 +34,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 配置文件是合并在一起的，而不是被替换。来自以下配置位置的设置会被合并。后面的配置仅在键冲突时覆盖前面的配置。所有配置中的非冲突设置都会被保留。
 
-例如，如果您的全局配置设置了 `autoupdate: true`，而您的项目配置设置了 `model: "anthropic/claude-sonnet-4-5"`，则最终配置将包含这两个设置。
+例如，如果您的全局配置设置了 `autoupdate: true`，而您的项目配置设置了 `model: "anthropic/claude-sonnet-5-5"`，则最终配置将包含这两个设置。
 
 ---
 
@@ -231,8 +231,8 @@ opencode run "Hello world"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -321,7 +321,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -354,27 +354,6 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 
 ---
 
-### 分享
-
-您可以通过 `share` 选项配置[分享](/docs/share)功能。
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "manual"
-}
-```
-
-该选项接受：
-
-- `"manual"` - 允许通过命令手动分享（默认）
-- `"auto"` - 自动分享新会话
-- `"disabled"` - 完全禁用分享
-
-默认情况下，分享设置为手动模式，您需要使用 `/share` 命令显式分享会话。
-
----
-
 ### 命令
 
 您可以通过 `command` 选项为重复任务配置自定义命令。
@@ -387,7 +366,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",

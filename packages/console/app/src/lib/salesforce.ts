@@ -48,7 +48,21 @@ export interface SalesforceLeadInput {
   message: string
 }
 
-export async function createLead(input: SalesforceLeadInput): Promise<boolean> {
+export async function createLead(
+  input: SalesforceLeadInput,
+  submit?: (payload: Record<string, unknown>) => Promise<boolean>,
+): Promise<boolean> {
+  const payload = {
+    LastName: input.name,
+    Company: input.company?.trim() || "Website",
+    Email: input.email,
+    Phone: input.phone ?? null,
+    Title: input.role,
+    Description: input.message,
+    Current_Monthly_Inference_Spend__c: input.inferenceSpend,
+    LeadSource: "enterprise website form",
+  }
+  if (submit) return submit(payload)
   const auth = await login()
   if (!auth) return false
 
@@ -58,18 +72,7 @@ export async function createLead(input: SalesforceLeadInput): Promise<boolean> {
       Authorization: `Bearer ${auth.token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      LastName: input.name,
-      Company: input.company?.trim() || "Website",
-      Email: input.email,
-      Phone: input.phone ?? null,
-      Title: input.role,
-      Description: input.inferenceSpend
-        ? `Current monthly inference spend: ${input.inferenceSpend}\n\n${input.message}`
-        : input.message,
-      Current_Monthly_Inference_Spend__c: input.inferenceSpend,
-      LeadSource: "Website",
-    }),
+    body: JSON.stringify(payload),
   }).catch((err) => {
     console.error("Failed to create Salesforce lead:", err)
   })

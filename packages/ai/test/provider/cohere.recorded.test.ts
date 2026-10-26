@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, SystemPart } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, SystemPart } from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { LLMClient } from "../../src/route.js"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"

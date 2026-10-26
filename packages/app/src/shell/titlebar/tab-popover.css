@@ -21,7 +21,8 @@
   color: var(--v2-text-text-base);
   font-variant-numeric: tabular-nums;
   user-select: none;
-  pointer-events: none;
+  /* Kobalte's dismissable layer writes an inline pointer-events value. */
+  pointer-events: none !important;
 
   transform-origin: var(--kb-hovercard-content-transform-origin);
   /* Entrance: instant (trying no animation — may revert to 120ms ease-out). */

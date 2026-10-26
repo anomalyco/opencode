@@ -32,6 +32,11 @@
   color: var(--v2-text-text-contrast);
 }
 
+[data-component="tag"][data-variant="subtle"] {
+  border: 0;
+  background: var(--v2-background-bg-layer-03);
+}
+
 [data-component="tag"][data-appearance="standard"] {
   height: 18px;
   padding: 0 6px;

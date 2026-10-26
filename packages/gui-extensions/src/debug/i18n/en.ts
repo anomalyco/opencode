@@ -1,5 +1,12 @@
 export default {
   "command.toggle": "Toggle debug bar",
+  "command.heap": "Capture heap snapshots",
+  "command.heap.description": "Saves the memory of the app and its server to a folder",
+  "heap.loading": "Capturing heap snapshots…",
+  "heap.done": "Heap snapshots saved",
+  "heap.partial": "Some heap snapshots failed. See manifest.json.",
+  "heap.failed": "Could not capture heap snapshots",
+  "heap.reveal": "Show in folder",
   "status.toggle": "Toggle debug tools",
   ariaLabel: "Development performance diagnostics",
   providerAriaLabel: "Provider performance diagnostics",

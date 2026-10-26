@@ -43,9 +43,6 @@ const moonshot = (schema: JsonSchema): JsonSchema => {
   return isRecord(projected) ? projected : {}
 }
 
-const openAI = (schema: JsonSchema): JsonSchema => schema
-const responses = openAI
-
 const gemini = GeminiJsonSchema.normalize
 
 const MODEL_NAMES = [
@@ -106,7 +103,5 @@ const tools = (entries: LLMRequest["tools"], model: LanguageModel): LLMRequest["
 export const ToolSchemaProjection = {
   gemini,
   moonshot,
-  openAI,
-  responses,
   tools,
 } as const

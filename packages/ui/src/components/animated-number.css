@@ -7,17 +7,23 @@
 
   [data-slot="animated-number-value"] {
     display: inline-flex;
-    flex-direction: row-reverse;
+    /* Digits keep numeric order in RTL documents. */
+    direction: ltr;
     align-items: baseline;
     justify-content: flex-end;
     line-height: inherit;
     width: var(--animated-number-width, 1ch);
     overflow: hidden;
+  }
+
+  [data-slot="animated-number-value"][data-resizing="true"] {
     transition: width var(--tool-motion-spring-ms, 560ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 
   [data-slot="animated-number-digit"] {
     display: inline-grid;
+    /* Digits outside the width are clipped at the start edge, not squeezed. */
+    flex-shrink: 0;
     width: 1ch;
     height: 1em;
     line-height: 1em;
@@ -56,6 +62,11 @@
     line-height: 1em;
   }
 
+  [data-slot="animated-number-static"]::before,
+  [data-slot="animated-number-cell"]::before {
+    content: attr(data-digit);
+  }
+
   [data-slot="animated-number-digit"][data-animating="true"] [data-slot="animated-number-static"] {
     visibility: hidden;
   }
@@ -63,8 +74,10 @@
   [data-slot="animated-number-strip"] {
     display: inline-flex;
     flex-direction: column;
-    margin-top: calc(var(--animated-number-offset, 10) * -1em);
-    transition-property: margin-top;
+    /* Not transform: a composited roll lands on whole pixels, then the digit shifts as it settles. */
+    position: relative;
+    top: calc(var(--animated-number-offset, 10) * -1em);
+    transition-property: top;
     transition-duration: var(--animated-number-duration, 560ms);
     transition-timing-function: var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
@@ -76,7 +89,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="animated-number"] [data-slot="animated-number-value"] {
+  [data-component="animated-number"] [data-slot="animated-number-value"][data-resizing] {
     transition-duration: 0ms;
   }
 

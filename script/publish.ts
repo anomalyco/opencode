@@ -10,6 +10,13 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 const tag = `v${Script.version}`
 
+// Beta dogfoods the desktop app. The CLI and SDK packages ship from dev.
+if (Script.channel === "beta") {
+  console.log("\n=== desktop ===\n")
+  await $`bun ./packages/desktop/scripts/publish.ts`
+  process.exit(0)
+}
+
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
     absolute: true,
@@ -116,3 +123,11 @@ if (Script.release) {
   console.log("\n=== desktop ===\n")
   await $`bun ./packages/desktop/scripts/publish.ts`
 }
+
+// WinGet submission is paused until our packages are accepted into microsoft/winget-pkgs.
+// if (Script.release && Script.channel === "latest") {
+//   console.log("\n=== winget ===\n")
+//   // Everything else is published by now, and WinGet validation can reject a submission for reasons unrelated to the release.
+//   if ((await $`bun ./script/publish-winget.ts`.nothrow()).exitCode !== 0)
+//     console.log("::warning::WinGet submission failed; see the winget step output above")
+// }

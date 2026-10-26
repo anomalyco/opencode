@@ -358,7 +358,7 @@ const setup: Setup<typeof File> = (ctx) => {
       if (!isFileTab(input.tab.id)) return
 
       focused.set(input.screen, input.tab.id)
-      void input.screen.file.sync(fileTabPath(input.screen.file, input.tab.id))
+      void input.screen.file.sync(fileTabPath(input.screen.file, input.tab.id), { silent: true })
 
       // A restored file tab keeps the tree tab the user left, e.g. Changes across a reload.
       if (!input.restored && tree.value.tab === "changes") shared.tree.setTab("all")
@@ -643,7 +643,8 @@ const setup: Setup<typeof File> = (ctx) => {
 
     const id = focused.get(screen)
 
-    if (id && active(session, id)) void screen.file.sync(fileTabPath(screen.file, id), { force: true })
+    if (id && active(session, id))
+      void screen.file.sync(fileTabPath(screen.file, id), { force: true, silent: true })
   })
 }
 

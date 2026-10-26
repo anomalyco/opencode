@@ -51,7 +51,7 @@ config.
 ## OpenCode Zen
 
 OpenCode Zen, opencode ekibi tarafından sağlanan modellerin bir listesidir.
-opencode ile iyi çalıştığı test edilip doğrulandı. [Daha fazla bilgi](/docs/zen).
+opencode ile iyi çalıştığı test edilip doğrulandı. [Daha fazla bilgi](https://opencode.ai/v2/docs/console/).
 
 :::tip
 Yeniyseniz OpenCode Zen ile başlamanızı öneririz.
@@ -561,7 +561,7 @@ Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki model
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -759,13 +759,12 @@ to store token in opencode auth storage.
 opencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
 Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. opencode'u kilitlemek için
 yalnızca kendi GitLab tarafından barındırılan örneğinizi kullanmak için aşağıdakileri ekleyin:
-`opencode.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
+`opencode.json` dosyası.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1400,7 +1399,7 @@ Zaten bir API anahtarınız varsa, **API Anahtarını Manuel Olarak Girin** seç
 
 ### OpenCode Zen
 
-OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesidir. [Daha fazla bilgi](/docs/zen).
+OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesidir. [Daha fazla bilgi](https://opencode.ai/v2/docs/console/).
 
 1. **<a href={console}>OpenCode Zen</a>**'de oturum açın ve **API Anahtarı Oluştur**'u tıklayın.
 

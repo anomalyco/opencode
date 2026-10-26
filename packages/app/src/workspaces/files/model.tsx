@@ -48,7 +48,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
 
-    const inflight = new Map<string, Promise<void>>()
+    const inflight = new Map<string, { promise: Promise<void>; silent: boolean }>()
 
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
@@ -139,7 +139,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    const setLoadError = (file: string, message: string, notFound = false) => {
+    const setLoadError = (file: string, message: string, notFound = false, silent = false) => {
       if (notFound) removeFileContentBytes(file)
       setStore(
         "file",
@@ -154,6 +154,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           draft.content = undefined
         }),
       )
+
+      if (silent || (notFound && extensions.files.opened().includes(file))) return
+
       showToast({
         variant: "error",
         title: language.t("toast.file.loadFailed.title"),
@@ -161,7 +164,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     }
 
-    const load = (input: string, options?: { force?: boolean }) => {
+    const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {
       const file = path.normalize(input)
 
       if (!file) return Promise.resolve()
@@ -174,9 +177,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       if (!options?.force && current?.loaded) return Promise.resolve()
 
+      const silent = Boolean(options?.silent)
       const pending = inflight.get(key)
 
-      if (pending) return pending
+      if (pending) {
+        if (!silent) pending.silent = false
+
+        return pending.promise
+      }
 
       setLoading(file)
 
@@ -186,7 +194,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         ? { path: getFilename(file), location: { directory: getDirectory(file) } }
         : { path: file, location: { directory } }
 
-      const promise = serverSDK.api.file
+      const entry = {
+        silent,
+        promise: Promise.resolve(),
+      }
+
+      entry.promise = serverSDK.api.file
         .read(request)
         .then((data) => {
           if (scope() !== directory) return
@@ -201,15 +214,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
             file,
             formatServerError(e, language.t, language.t("error.chain.unknown")),
             isFileNotFoundError(e),
+            entry.silent,
           )
         })
         .finally(() => {
           inflight.delete(key)
         })
 
-      inflight.set(key, promise)
+      inflight.set(key, entry)
 
-      return promise
+      return entry.promise
     }
 
     // Lists the parent directory instead of reading the file, so checking a path a message names transfers no content.
@@ -253,7 +267,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           hasFile: (file) => Boolean(store.file[file]),
           isOpen: (file) => extensions.files.opened().includes(file),
           loadFile: (file) => {
-            void load(file, { force: true })
+            void load(file, { force: true, silent: true })
           },
           node: tree.node,
           isDirLoaded: tree.isLoaded,

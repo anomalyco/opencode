@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.0.26",
+  "version": "2.1.4",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -47,7 +47,8 @@
   },
   "scripts": {
     "generate:progress-indicator": "bun script/generate-session-progress-indicator.ts",
-    "typecheck": "tsgo -b",
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b",
     "test": "bun test src --only-failures",
     "test:components": "playwright test --config playwright.components.config.ts",
     "test:components:ui": "playwright test --config playwright.components.config.ts --ui"
@@ -57,17 +58,18 @@
     "@playwright/test": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",
     "@pierre/diffs": "catalog:",
-    "@shikijs/stream": "catalog:",
+    "@pierre/highlights": "catalog:",
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/media": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
@@ -76,11 +78,8 @@
     "effect": "catalog:",
     "dompurify": "3.4.14",
     "marked": "catalog:",
-    "mermaid": "11.17.2",
-    "motion": "12.34.5",
+    "pele": "1.7.0",
     "remend": "catalog:",
-    "shiki": "catalog:",
-    "solid-js": "catalog:",
-    "strip-ansi": "7.1.2"
+    "solid-js": "catalog:"
   }
 }

@@ -57,9 +57,13 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
     await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
     await expectSessionTitle(page, parentTitle)
 
+    // The title first renders in the loading header, which the timeline replaces once messages arrive.
+    // Measuring before then can read the detached heading, whose empty bounds put the start at 0.
+    const agents = page.getByRole("button", { name: "Used 1 Agent", exact: true })
+    await expect(agents).toBeVisible()
     const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
 
-    await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+    await agents.click()
     await page.locator(`a[href="${sessionHref(childID)}"]`).click()
     await expectSessionTitle(page, taskDescription)
 

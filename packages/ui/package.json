@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.0.26",
+  "version": "2.1.4",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -91,7 +91,8 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
@@ -101,7 +102,7 @@
     "@solidjs/meta": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "solid-js": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
@@ -113,15 +114,12 @@
     "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
     "@pierre/diffs": "catalog:",
+    "@pierre/highlights": "catalog:",
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
     "fuzzysort": "catalog:",
     "katex": "0.16.47",
     "marked": "catalog:",
-    "marked-shiki": "catalog:",
-    "motion": "12.34.5",
-    "remeda": "catalog:",
-    "shiki": "catalog:",
     "solid-list": "catalog:",
     "solid-sonner": "catalog:"
   },

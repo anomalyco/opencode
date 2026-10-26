@@ -21,8 +21,8 @@
 ## Events
 
 - Classify event definitions by protocol role before adding them to a public manifest: `current`, `shared transitional`, or `V1-only`.
-- Being emitted by V1 is not enough to include an event in Protocol or SDK Next.
-- Keep clearly V1-only events, such as `message.updated` and `message.part.*`, out of the current Protocol/SDK Next event surface unless a current-client requirement is documented.
+- Being emitted by V1 is not enough to include an event in Protocol or the SDK.
+- Keep clearly V1-only events, such as `message.updated` and `message.part.*`, out of the current Protocol/SDK event surface unless a current-client requirement is documented.
 - Keep compatibility events available only to the existing App/TUI/CLI compatibility surface while they are still needed.
 - Preserve a single canonical event definition. Do not duplicate definitions for generation convenience.
 

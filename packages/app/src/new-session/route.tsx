@@ -1,5 +1,5 @@
 import { Navigate, useSearchParams } from "@solidjs/router"
-import { createMemo, Show, type ParentProps } from "solid-js"
+import { createMemo, ErrorBoundary, Show, type ParentProps } from "solid-js"
 import { CommentsProvider } from "@/composer/comments"
 import { FileProvider } from "@/workspaces/files/model"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -12,6 +12,7 @@ import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
 import { IncompatibleServerPanel } from "@/session/incompatible-server-panel"
+import { ErrorPage } from "@/shell/errors/error"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 
 export function DraftRoute() {
@@ -67,15 +68,25 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
         </SessionRouteFrame>
       }
     >
-      <ModelsProvider directory={props.draft.directory}>
-        <LocationProvider directory={props.draft.directory}>
-          <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
-            <DraftProviders>
-              <NewSession draftId={props.draft.draftID} />
-            </DraftProviders>
-          </SessionUIProvider>
-        </LocationProvider>
-      </ModelsProvider>
+      <ErrorBoundary
+        fallback={(error) => (
+          <SessionRouteFrame padded>
+            <SessionPanelFrame raised>
+              <ErrorPage error={error} />
+            </SessionPanelFrame>
+          </SessionRouteFrame>
+        )}
+      >
+        <ModelsProvider directory={props.draft.directory}>
+          <LocationProvider directory={props.draft.directory}>
+            <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
+              <DraftProviders>
+                <NewSession draftId={props.draft.draftID} />
+              </DraftProviders>
+            </SessionUIProvider>
+          </LocationProvider>
+        </ModelsProvider>
+      </ErrorBoundary>
     </Show>
   )
 }

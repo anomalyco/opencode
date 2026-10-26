@@ -23,6 +23,11 @@ export type NotificationSettings = Settings["notifications"]
 
 export type SoundSettings = Settings["sounds"]
 
+// Names a project for per-project settings: project IDs are only unique within one server.
+export function projectSettingsKey(scope: ServerScope, projectID: string | undefined) {
+  return projectID ? ScopedKey.from(scope, projectID) : undefined
+}
+
 export const monoDefault = "IBM Plex Mono"
 
 export const sansDefault = "Inter"
@@ -111,6 +116,7 @@ const generalSchema = Persistence.struct({
     tools: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
+  showTurnDiffs: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review extension, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -127,7 +133,12 @@ const appearanceSchema = Persistence.struct({
 })
 
 const permissionsSchema = Persistence.struct({
+  // The default for every project.
   autoApprove: Schema.Boolean,
+  // Projects that override the default, keyed by server scope and project ID. Absent projects use the default.
+  autoApproveProjects: Persistence.record(
+    Schema.Boolean.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
+  ),
 })
 
 const workspacesSchema = Persistence.struct({
@@ -268,13 +279,14 @@ export const defaultSettings: Settings = {
     showFileTree: false,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
+    showTurnDiffs: false,
     mobileTitlebarPosition: "top",
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
-  permissions: { autoApprove: false },
+  permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
   notifications: { agent: true, permissions: true, errors: false },
   sounds: {
@@ -314,6 +326,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)
     })
 
+    const autoApproveDefault = withFallback(
+      () => store.permissions?.autoApprove,
+      defaultSettings.permissions.autoApprove,
+    )
+
+    // A project's explicit choice, or undefined when it uses the default.
+    const autoApproveOverride = (project: ScopedKey | undefined) =>
+      project ? store.permissions?.autoApproveProjects?.[project] : undefined
+
     return {
       ready,
       get current() {
@@ -331,6 +352,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
+        },
+        showTurnDiffs: withFallback(() => store.general?.showTurnDiffs, defaultSettings.general.showTurnDiffs),
+        setShowTurnDiffs(value: boolean) {
+          setStore("general", "showTurnDiffs", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,
@@ -396,9 +421,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       permissions: {
-        autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
-        setAutoApprove(value: boolean) {
+        autoApproveDefault,
+        setAutoApproveDefault(value: boolean) {
           setStore("permissions", "autoApprove", value)
+        },
+        autoApproveOverride,
+        // Undefined makes the project use the default again.
+        setAutoApproveOverride(project: ScopedKey, value: boolean | undefined) {
+          const projects = { ...store.permissions?.autoApproveProjects }
+
+          if (value === undefined) delete projects[project]
+          else projects[project] = value
+          setStore("permissions", "autoApproveProjects", reconcile(projects))
+        },
+        // Whether a project's requests are approved without asking.
+        autoApproves: (project: ScopedKey | undefined) => autoApproveOverride(project) ?? autoApproveDefault(),
+        // Whether any request on the server may be approved without asking.
+        autoApprovesOnServer(scope: ServerScope) {
+          if (autoApproveDefault()) return true
+          const prefix = ScopedKey.prefix(scope)
+
+          return Object.entries(store.permissions?.autoApproveProjects ?? {}).some(
+            ([key, value]) => value && key.startsWith(prefix),
+          )
         },
       },
       workspaces: {

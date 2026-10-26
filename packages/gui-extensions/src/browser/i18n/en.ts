@@ -3,6 +3,7 @@ export default {
   "command.reload": "Reload browser page",
   "command.inspect": "Select an element in the browser page",
   "command.address": "Focus browser address",
+  "command.close": "Close browser tab",
   "tab.title": "Browser",
   "tab.new": "New tab",
   "address.label": "Browser address",

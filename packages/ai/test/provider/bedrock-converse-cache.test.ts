@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message, ToolCallPart } from "../../src/index.js"
+import { CacheHint, LanguageModel, LLM, Message, ToolCallPart } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -115,5 +115,54 @@ describe("Bedrock Converse cache policy", () => {
         }),
       )
     }
+  }
+
+  const arn = "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123"
+
+  for (const ttlSeconds of [undefined, 3600]) {
+    it.effect(
+      `emits checkpoints for an opaque ARN declaring the Anthropic cache format (TTL: ${ttlSeconds ?? "default"})`,
+      () =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: LanguageModel.update(bedrock.model(arn), { compatibility: { cacheFormat: "anthropic" } }),
+              system: [
+                { type: "text", text: "Agent" },
+                { type: "text", text: "Project" },
+              ],
+              tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
+              prompt: "Question",
+              cache:
+                ttlSeconds === undefined ? undefined : { tools: true, system: true, messages: { tail: 1 }, ttlSeconds },
+            }),
+          )
+          const marker = { cachePoint: ttlSeconds === undefined ? { type: "default" } : { type: "default", ttl: "1h" } }
+
+          expect(prepared.body).toMatchObject({
+            modelId: arn,
+            toolConfig: { tools: [{ toolSpec: { name: "lookup" } }, marker] },
+            system: [{ text: "Agent" }, marker, { text: "Project" }, marker],
+            messages: [{ role: "user", content: [{ text: "Question" }, marker] }],
+          })
+          if (ttlSeconds === undefined) expect(JSON.stringify(prepared.body)).not.toContain('"ttl"')
+        }),
+    )
+  }
+
+  for (const id of [arn, "amazon.nova-lite-v1:0"]) {
+    it.effect(`ignores the Alibaba cache format for ${id}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: LanguageModel.update(bedrock.model(id), { compatibility: { cacheFormat: "alibaba" } }),
+            system: "System prefix",
+            prompt: "Question",
+          }),
+        )
+
+        expect(JSON.stringify(prepared.body)).not.toContain("cachePoint")
+      }),
+    )
   }
 })

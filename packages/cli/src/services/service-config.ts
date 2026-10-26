@@ -2,7 +2,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
@@ -17,6 +17,9 @@ export const Info = Schema.Struct({
   // Present when remote access is on. The route is generated, never user-set: the secret subdomain the service is
   // served on.
   remote: Schema.optional(Schema.Struct({ route: Schema.String })),
+  // Set once the user has accepted exposing the service to the internet, or had remote access on before, so turning
+  // remote access off and on again does not ask a second time.
+  remoteAccepted: Schema.optional(Schema.Literal(true)),
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
@@ -40,7 +43,17 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL) {
+export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+  const port = channelPort(channel)
+  // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
+  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
+  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
+  // 12 bits: 0xC0DE becomes 0x70DE.
+  if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
+  return port
+}
+
+function channelPort(channel: string) {
   if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
@@ -118,13 +131,22 @@ const paths = Effect.gen(function* () {
   }
 })
 
+// Clients find the service at its registration under XDG_STATE_HOME. A saved value would move the
+// registration away from them, and children of the service (tool shells, a relaunched Desktop) would
+// look for it in the wrong place, so the service keeps the state directory it was launched with.
+export function processEnv(env: Info["env"]) {
+  if (env === undefined) return undefined
+  const { XDG_STATE_HOME: _state, ...rest } = env
+  return rest
+}
+
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: (yield* read()).env,
+    env: processEnv((yield* read()).env),
     command: [
       ...selfCommand(),
       "serve",
@@ -156,10 +178,10 @@ function route() {
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   const { fs, configFile } = yield* paths
-  const temp = configFile + ".tmp"
+  const temp = configFile + "." + process.pid + ".tmp"
   yield* fs.makeDirectory(path.dirname(configFile), { recursive: true })
   yield* fs.writeFileString(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })
-  yield* fs.rename(temp, configFile)
+  yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
 })
 
 export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {
@@ -171,6 +193,17 @@ export const password = Effect.fn("cli.service-config.password")(function* (valu
   // can reconnect without exposing a password flag or environment variable.
   yield* write({ ...existing, password: next })
   return next
+})
+
+export const acceptRemote = Effect.fn("cli.service-config.accept-remote")(function* () {
+  yield* write({ ...(yield* read()), remoteAccepted: true })
+})
+
+// Disabling forgets the address, so enabling again issues a new unguessable one. Having had it on counts as
+// accepting remote access.
+const disableRemote = Effect.fnUntraced(function* () {
+  const { remote, ...next } = yield* read()
+  yield* write(remote === undefined ? next : { ...next, remoteAccepted: true })
 })
 
 // Turns remote access on and returns its route, created once and kept so the remote URL survives restarts.
@@ -238,9 +271,7 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
         yield* remote()
         return
       }
-      // Disabling forgets the address, so enabling again issues a new unguessable one.
-      const { remote: _remote, ...next } = yield* read()
-      yield* write(next)
+      yield* disableRemote()
       return
     }
     case "hostname": {
@@ -294,8 +325,7 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
     }
     case "remote": {
       yield* Service.stop(yield* options())
-      const { remote: _remote, ...next } = yield* read()
-      yield* write(next)
+      yield* disableRemote()
       return
     }
     case "hostname": {

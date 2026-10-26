@@ -10,7 +10,8 @@ import { tmpdir } from "./fixture/fixture"
 // after scrolling to the top) must still toggle when its disclosure is clicked.
 test("clicking a backfilled thought group toggles it", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 112, height: 34, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width: 112, height: 34, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const session = {
     id: "ses_backfill",

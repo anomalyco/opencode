@@ -3,12 +3,12 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type ModelID, type OpenString } from "../schema/index.js"
+import { ProviderID, type ModelID, type OpenString } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { SystemOne } from "../experimental/system-one.js"
+import { SystemOne } from "../protocols/system-one.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { cacheControl } from "../protocols/utils/cache.js"
-import { isRecord, ProviderShared } from "../protocols/shared.js"
+import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -70,7 +70,7 @@ export interface OpenRouterOptions {
 
 export type OpenRouterProviderOptionsInput = OpenRouterOptions
 
-export interface OpenRouterEvaluationOptions {
+export interface OpenRouterDecisionOptions {
   readonly [key: string]: unknown
   readonly provider?: OpenRouterProviderRouting
   readonly session_id?: string
@@ -90,9 +90,26 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
   }
 
-const OpenRouterBody = Schema.StructWithRest(Schema.Struct(OpenAIChat.bodyFields), [
-  Schema.Record(Schema.String, Schema.Any),
-])
+const Options = Schema.Struct({
+  usage: lenient(Schema.Union([Schema.Boolean, JsonObject])),
+  models: lenient(Schema.Array(Schema.String)),
+  provider: lenient(JsonObject),
+  plugins: lenient(Schema.Array(JsonObject)),
+  web_search_options: lenient(JsonObject),
+  debug: lenient(JsonObject),
+  user: lenient(Schema.String),
+  reasoning: lenient(JsonObject),
+})
+const decodeOptions = Schema.decodeUnknownSync(Options)
+
+const OpenRouterBody = Schema.StructWithRest(
+  Schema.Struct({
+    ...OpenAIChat.bodyFields,
+    ...Options.fields,
+    usage: Schema.optional(JsonObject),
+  }),
+  [JsonObject],
+)
 export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 
 export const protocol = Protocol.make({
@@ -100,33 +117,24 @@ export const protocol = Protocol.make({
   body: {
     schema: OpenRouterBody,
     from: (request) =>
-      OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }).pipe(
-        Effect.map((body) => {
-          const sourceAssistants = request.messages.filter((message) => message.role === "assistant")
-          let assistantIndex = 0
-          const messages = body.messages.map((message) => {
-            if (message.role !== "assistant") return message
-            const source = sourceAssistants[assistantIndex++]
-            const reasoning = source?.content
-              .filter((part) => part.type === "reasoning")
-              .map((part) => part.text)
-              .join("")
-            const reasoningDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
-            return {
-              ...message,
-              reasoning_content: undefined,
-              reasoning_text: undefined,
-              reasoning: reasoning && reasoningDetails && reasoningDetails.length > 0 ? reasoning : undefined,
-              reasoning_details: reasoningDetails,
-            }
-          })
+      OpenAIChat.fromRequest(request, {
+        cacheControl: cacheControl(),
+        assistant: (source, message) => {
+          if (message.role !== "assistant") return message
+          const reasoning = source.content
+            .filter((part) => part.type === "reasoning")
+            .map((part) => part.text)
+            .join("")
+          const reasoningDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
           return {
-            ...body,
-            messages,
-            ...bodyOptions(request.providerOptions, request.generation?.maxTokens),
-          } as OpenRouterBody
-        }),
-      ),
+            ...message,
+            reasoning_content: undefined,
+            reasoning_text: undefined,
+            reasoning: reasoning && reasoningDetails && reasoningDetails.length > 0 ? reasoning : undefined,
+            reasoning_details: reasoningDetails,
+          }
+        },
+      }).pipe(Effect.map((body) => bodyOptions(body, request.providerOptions, request.generation?.maxTokens))),
   },
   stream: OpenAIChat.protocol.stream,
 })
@@ -138,26 +146,29 @@ const fitReasoning = (reasoning: Record<string, unknown>, maxTokens: number | un
     ? { ...reasoning, max_tokens: ProviderShared.fitThinkingBudget(reasoning.max_tokens, maxTokens, 1_024) }
     : reasoning
 
-const bodyOptions = (input: unknown, maxTokens: number | undefined) => {
+const bodyOptions = (body: OpenAIChat.OpenAIChatBody, input: unknown, maxTokens: number | undefined) => {
   const openrouter = isRecord(input) ? input : {}
-  const { usage, models, provider, plugins, web_search_options, debug, user, reasoning, promptCacheKey, ...options } =
-    openrouter
+  const options = Object.fromEntries(
+    Object.entries(openrouter).filter(([key]) => !(key in Options.fields) && key !== "promptCacheKey"),
+  )
+  const known = decodeOptions(openrouter)
+  const usage =
+    openrouter.usage === undefined || known.usage === true
+      ? { include: true }
+      : known.usage === false
+        ? { include: false }
+        : known.usage
   return {
     ...options,
-    ...(usage === undefined || usage === true
-      ? { usage: { include: true } }
-      : usage === false
-        ? { usage: { include: false } }
-        : isRecord(usage)
-          ? { usage }
-          : {}),
-    ...(Array.isArray(models) ? { models } : {}),
-    ...(isRecord(provider) ? { provider } : {}),
-    ...(Array.isArray(plugins) ? { plugins } : {}),
-    ...(isRecord(web_search_options) ? { web_search_options } : {}),
-    ...(isRecord(debug) ? { debug } : {}),
-    ...(typeof user === "string" ? { user } : {}),
-    ...(isRecord(reasoning) ? { reasoning: fitReasoning(reasoning, maxTokens) } : {}),
+    ...body,
+    ...(usage !== undefined ? { usage } : {}),
+    ...(known.models !== undefined ? { models: known.models } : {}),
+    ...(known.provider !== undefined ? { provider: known.provider } : {}),
+    ...(known.plugins !== undefined ? { plugins: known.plugins } : {}),
+    ...(known.web_search_options !== undefined ? { web_search_options: known.web_search_options } : {}),
+    ...(known.debug !== undefined ? { debug: known.debug } : {}),
+    ...(known.user !== undefined ? { user: known.user } : {}),
+    ...(known.reasoning !== undefined ? { reasoning: fitReasoning(known.reasoning, maxTokens) } : {}),
   }
 }
 
@@ -183,27 +194,27 @@ const configuredRoute = (input: LanguageModelOptions) => {
 
 export const configure = (input: LanguageModelOptions = {}) => {
   const route = configuredRoute(input)
-  const evaluation = (modelID: string | ModelID) =>
-    SystemOne.model<OpenRouterEvaluationOptions>({
-      id: modelID,
-      provider: id,
-      providerMetadataKey: "openrouter",
-      auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
-      baseURL: input.baseURL ?? baseURL,
-      headers: input.headers,
-      http: HttpOptions.make(input.http),
-    })
+  const decisionRoute = SystemOne.route.with({
+    provider: id,
+    providerMetadataKey: "openrouter",
+    endpoint: { baseURL: input.baseURL ?? baseURL },
+    auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
+    headers: input.headers,
+    http: input.http,
+  })
+  const decision = (modelID: string | ModelID) =>
+    decisionRoute.model<OpenRouterDecisionOptions>({ id: modelID, compatibility: { imageInput: "state" } })
   return {
     id,
     model: (modelID: string | ModelID) =>
       route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
-    experimental: { evaluation },
+    decision,
     configure,
   }
 }
 
 export const provider = configure()
-export const experimental = provider.experimental
+export const decision = provider.decision
 export const model: ProviderPackage.Definition<Settings, OpenRouterProviderOptionsInput>["model"] = (
   modelID,
   { apiKey, baseURL, body, headers, ...providerOptions },

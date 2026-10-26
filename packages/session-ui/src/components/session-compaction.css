@@ -1,0 +1,262 @@
+/* The quiet automatic compaction divider. Every state keeps the same box: only opacity, transforms, a light blur and
+   the light's position move, so the timeline never shifts. */
+[data-component="session-compaction-message"][data-quiet] {
+  --session-compaction-delay: 0ms;
+  --session-compaction-cycle: 3.2s;
+
+  &[data-enter="grace"] {
+    --session-compaction-delay: 400ms;
+  }
+
+  &[data-enter] [data-slot="session-compaction-divider"] {
+    animation: session-compaction-fade 320ms ease-out var(--session-compaction-delay) both;
+  }
+
+  /* Its own name restarts the fade when a compaction ends inside the grace, and nothing inside transitions, so only
+     Compacted appears. */
+  &[data-enter="now"] {
+    [data-slot="session-compaction-divider"] {
+      animation-name: session-compaction-enter;
+    }
+
+    [data-slot="session-compaction-line"]::before,
+    [data-slot="session-compaction-light"],
+    [data-slot="session-compaction-running"],
+    [data-slot="session-compaction-glint-stem"],
+    [data-slot="session-compaction-glint-ending"] {
+      transition: none;
+    }
+
+    [data-slot="session-compaction-done"] {
+      transition: color 150ms ease-out;
+    }
+  }
+
+  [data-slot="session-compaction-divider"] {
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+    }
+  }
+
+  [data-slot="session-compaction-line"] {
+    position: relative;
+    overflow: hidden;
+
+    &[data-side="end"] {
+      transform: scaleX(-1);
+    }
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--v2-border-border-strong);
+      opacity: 0.6;
+      transition: opacity 360ms ease-out;
+    }
+  }
+
+  /* Each light starts at the outer end and travels to the label. Its brightest point reaches the line's end at 49.5% of
+     the cycle, where it starts to cool as it slides off. */
+  [data-slot="session-compaction-light"] {
+    position: absolute;
+    inset: 0;
+    transition:
+      opacity 360ms ease-out,
+      display 360ms allow-discrete;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      left: 0;
+      width: 40%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--v2-text-text-muted) 55%, transparent) 65%,
+        transparent
+      );
+      animation: session-compaction-gather var(--session-compaction-cycle) linear var(--session-compaction-delay)
+        infinite backwards;
+    }
+  }
+
+  [data-slot="session-compaction-ending"] > span {
+    grid-area: 1 / 1;
+  }
+
+  /* Only the ending changes when the compaction ends: ing rolls up and out, then ed rolls up into its place. The
+     ending's box fits the wider of the two, so the stem and lines hold still. */
+  [data-slot="session-compaction-running"],
+  [data-slot="session-compaction-glint-ending"] {
+    transition:
+      opacity 200ms cubic-bezier(0.4, 0, 1, 1),
+      transform 200ms cubic-bezier(0.4, 0, 1, 1),
+      filter 200ms cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  [data-slot="session-compaction-done"] {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(2px);
+    transition:
+      opacity 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms,
+      transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms,
+      filter 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms,
+      color 150ms ease-out;
+  }
+
+  /* The label warms only once each light lands on it, then cools before the next one arrives. */
+  [data-slot="session-compaction-glint"] {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    pointer-events: none;
+    color: var(--v2-text-text-muted);
+    opacity: 0;
+    animation: session-compaction-glint var(--session-compaction-cycle) linear var(--session-compaction-delay) infinite
+      backwards;
+  }
+
+  [data-slot="session-compaction-glint-stem"] {
+    transition: opacity 200ms ease-out;
+  }
+
+  [data-state="done"] {
+    [data-slot="session-compaction-line"]::before {
+      opacity: 1;
+    }
+
+    [data-slot="session-compaction-light"] {
+      display: none;
+      opacity: 0;
+    }
+
+    [data-slot="session-compaction-running"],
+    [data-slot="session-compaction-glint-ending"] {
+      opacity: 0;
+      transform: translateY(-3px);
+      filter: blur(2px);
+    }
+
+    [data-slot="session-compaction-glint"] {
+      animation-play-state: paused;
+    }
+
+    [data-slot="session-compaction-glint-stem"] {
+      opacity: 0;
+    }
+
+    [data-slot="session-compaction-done"] {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+
+    &:not(:disabled):hover [data-slot="session-compaction-done"],
+    &[aria-expanded="true"] [data-slot="session-compaction-done"] {
+      color: var(--v2-text-text-muted);
+    }
+  }
+
+  /* The summary is reference material, so its body sits a step quieter than the conversation around it. */
+  [data-slot="session-compaction-summary"] {
+    padding-bottom: 8px;
+    animation: session-compaction-fade 200ms ease-out both;
+
+    [data-component="markdown"] {
+      color: var(--v2-text-text-muted);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="session-compaction-line"]::before {
+      opacity: 1;
+      transition: none;
+    }
+
+    [data-slot="session-compaction-light"],
+    [data-slot="session-compaction-glint"] {
+      display: none;
+    }
+
+    &[data-enter] [data-slot="session-compaction-divider"] {
+      animation-duration: 200ms;
+    }
+
+    [data-slot="session-compaction-running"],
+    [data-state="done"] [data-slot="session-compaction-running"],
+    [data-slot="session-compaction-done"] {
+      transform: none;
+      filter: none;
+    }
+  }
+}
+
+:dir(rtl) [data-component="session-compaction-message"][data-quiet] [data-slot="session-compaction-line"] {
+  transform: scaleX(-1);
+
+  &[data-side="end"] {
+    transform: none;
+  }
+}
+
+@keyframes session-compaction-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes session-compaction-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Travel runs 0–70% on one ease-in-out, so the light never stops or jumps. Opacity has its own keyframes: it fades up
+   early, holds, and cools from the moment the light reaches the label. */
+@keyframes session-compaction-gather {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  14%,
+  49.5% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    transform: translateX(250%);
+    opacity: 0;
+  }
+}
+
+@keyframes session-compaction-glint {
+  0%,
+  49% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  57% {
+    opacity: 0.75;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  82%,
+  100% {
+    opacity: 0;
+  }
+}

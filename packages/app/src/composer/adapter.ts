@@ -3,6 +3,7 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import type { Accessor } from "solid-js"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { ServerSDK } from "@/runtime/server/client"
+import type { SessionMessageHandoff } from "@/session/handoff"
 import type { ComposerStateTarget } from "./submission-state"
 import type { createComposerSubmission } from "./submission-state"
 
@@ -51,8 +52,8 @@ export type ComposerQueue = {
 export type ComposerSession = {
   id: string
   directory: string
-  handoff?: {
-    set: (message: SessionMessageUser) => void
+  handoff: {
+    set: (handoff: SessionMessageHandoff) => void
     clear: (messageID: string) => void
   }
   api: {

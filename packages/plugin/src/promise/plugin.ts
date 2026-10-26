@@ -1,5 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client"
-import type { GenerateApi, PluginApi } from "@opencode/client/promise/api"
+import type { CredentialApi, GenerateApi, PluginApi } from "@opencode/client/promise/api"
 import type { Location } from "@opencode/schema/location"
 import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
@@ -30,6 +30,7 @@ export interface Context {
   readonly agent: AgentDomain
   readonly aisdk: AISDKDomain
   readonly command: CommandDomain
+  readonly credential: Pick<CredentialApi, "activate">
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<OpenCodeClient["experimental"]["persistentPty"], "read">

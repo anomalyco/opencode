@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
@@ -8,6 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
 import { State } from "@opencode/core/state"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
@@ -31,17 +33,18 @@ const failingIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [Credential.node.replace(failingCredentialNode)]),
 )
 
+// Bounded by elapsed time rather than attempts, so a slow child process start on a busy machine still fits.
 function eventually<A, E, R>(
   effect: Effect.Effect<A, E, R>,
   predicate: (value: A) => boolean,
-  remaining = 1000,
+  deadline = Date.now() + 10_000,
 ): Effect.Effect<A, E | Error, R> {
   return Effect.gen(function* () {
     const value = yield* effect
     if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
+    if (Date.now() > deadline) return yield* Effect.fail(new Error("Timed out waiting for value"))
     yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
+    return yield* eventually(effect, predicate, deadline)
   })
 }
 
@@ -184,7 +187,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Work",
-          value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "account" } }),
         }),
       ])
       expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
@@ -224,6 +227,8 @@ describe("Integration", () => {
       const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("company")
       const methodID = Integration.MethodID.make("login")
+      // The command prints its secret only after the test has seen it pending, however slow the machine is.
+      const release = path.join((yield* tmpdirScoped()).path, "release")
       yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
@@ -234,7 +239,7 @@ describe("Integration", () => {
             command: [
               process.execPath,
               "-e",
-              'console.error("https://example.com/login"); await Bun.sleep(50); console.log("secret")',
+              `console.error("https://example.com/login"); while (!(await Bun.file(${JSON.stringify(release)}).exists())) await Bun.sleep(10); console.log("secret")`,
             ],
           },
         }),
@@ -246,6 +251,7 @@ describe("Integration", () => {
         (status) => status.status === "pending" && status.message?.includes("https://example.com/login") === true,
       )
       expect(pending).toMatchObject({ status: "pending", message: "https://example.com/login\n" })
+      yield* Effect.promise(() => Bun.write(release, ""))
 
       expect(
         yield* eventually(

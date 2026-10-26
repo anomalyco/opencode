@@ -11,6 +11,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { File } from "@opencode/session-ui/file"
 import { Markdown } from "@opencode/session-ui/markdown"
 import type { SessionMessageInfo } from "@opencode/client/promise"
+import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
@@ -108,10 +109,11 @@ export default function SessionContextTab(props: { session: MountedSession }) {
       }),
   )
 
+  // Same step as the TUI and the header button: after the last completed compaction and before an undo boundary.
   const context = createMemo(() => {
-    const message = messages().findLast((item) => item.type === "assistant" && !!item.tokens)
+    const message = lastAssistantWithUsage(messages(), info()?.revert?.messageID)
 
-    if (message?.type !== "assistant" || !message.tokens) return
+    if (!message) return
     const entry = catalogModel(props.session, message.model)
 
     const total =
@@ -135,9 +137,8 @@ export default function SessionContextTab(props: { session: MountedSession }) {
 
   const formatter = createMemo(() => createSessionContextFormatter(i18n.locale()))
 
-  const cost = createMemo(() => {
-    return usd().format(info()?.cost ?? 0)
-  })
+  // A root session's cost includes its subagent sessions, as in the TUI.
+  const cost = createMemo(() => usd().format(props.session.id ? data().session.cost(props.session.id) : 0))
 
   const counts = createMemo(() => {
     const all = messages()

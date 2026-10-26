@@ -3,6 +3,7 @@ import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show, Su
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
+import { isFreeModel } from "@/providers/models/models"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
 import { Button } from "@opencode/ui/button"
@@ -30,6 +31,7 @@ import {
   ProviderModelIcon,
   ProviderModelSections,
 } from "@/providers/models/provider-group"
+import { consoleProviderName } from "@/providers/catalog/console"
 import "@/settings/settings.css"
 import "./select-dialog.css"
 
@@ -38,9 +40,6 @@ const MobilePanelDrawer = lazy(async () => {
 
   return { default: MobilePanelDrawer }
 })
-
-const isFree = (provider: string, cost: { input: number } | undefined) =>
-  provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ModelSelection
 
@@ -157,12 +156,12 @@ const ModelList: Component<{
                     gutter={12}
                     openDelay={0}
                     value={
-                      <ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} v2 />
+                      <ModelTooltip model={item} latest={item.latest} free={isFreeModel(item)} v2 />
                     }
                   >
                     <span class="min-w-0 truncate">{item.name}</span>
                   </Tooltip>
-                  <Show when={isFree(item.provider.id, item.cost)}>
+                  <Show when={isFreeModel(item)}>
                     <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
                   </Show>
                   <Show when={item.latest}>
@@ -299,6 +298,7 @@ export function ModelSelectorPopover(props: {
       fallback={
         <ModelSelectorPopoverView
           trigger={props.trigger}
+          all={controller.all}
           models={controller.models}
           groups={controller.groups}
           current={controller.current()}
@@ -494,6 +494,7 @@ function createModelSelectorController(input: {
 
 export function ModelSelectorPopoverView(props: {
   trigger: ModelSelectorTrigger
+  all: () => ModelItem[]
   models: (search: string) => ModelItem[]
   groups: (models: ModelItem[]) => { category: string; items: ModelItem[] }[]
   current: string | undefined
@@ -511,6 +512,21 @@ export function ModelSelectorPopoverView(props: {
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
   const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey]
+
+  const managed = createMemo(() => consoleModelGroup(props.all()))
+  const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id)))
+  const canonical = (provider: ModelItem["provider"]) => provider.canonical ?? provider.id.replace(/^console-/, "")
+
+  // The workspace badge only disambiguates a managed provider that is also connected directly.
+  const direct = createMemo(
+    () =>
+      new Set(
+        props
+          .all()
+          .filter((item) => !managedIDs().has(item.provider.id))
+          .map((item) => canonical(item.provider)),
+      ),
+  )
 
   const initialActive = () => {
     const selected = props.current
@@ -677,8 +693,26 @@ export function ModelSelectorPopoverView(props: {
                 <For each={groups()}>
                   {(group) => (
                     <Menu.Group>
-                      <Menu.GroupLabel class="gap-2 px-3">
-                        <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
+                      <Menu.GroupLabel
+                        class="gap-1.5 pe-3"
+                        style={{ "padding-inline-start": group.items[0].provider.id === "opencode" ? "10px" : "12px" }}
+                      >
+                        <ProviderModelIcon provider={group.items[0].provider} class="shrink-0" />
+                        <Show
+                          when={managedIDs().has(group.category) ? managed() : undefined}
+                          fallback={<span class="min-w-0 truncate">{group.items[0].provider.name}</span>}
+                        >
+                          {(workspace) => (
+                            <>
+                              <span class="min-w-0 truncate">
+                                {consoleProviderName(workspace(), group.items[0].provider.name)}
+                              </span>
+                              <Show when={direct().has(canonical(group.items[0].provider))}>
+                                <Badge class="shrink-0">{workspace().workspace}</Badge>
+                              </Show>
+                            </>
+                          )}
+                        </Show>
                       </Menu.GroupLabel>
                       <Menu.RadioGroup value={props.current}>
                         <For each={group.items}>
@@ -692,7 +726,7 @@ export function ModelSelectorPopoverView(props: {
                                 <ModelTooltip
                                   model={item}
                                   latest={item.latest}
-                                  free={isFree(item.provider.id, item.cost)}
+                                  free={isFreeModel(item)}
                                   v2
                                 />
                               }
@@ -710,7 +744,7 @@ export function ModelSelectorPopoverView(props: {
                                 onSelect={() => selectModel(item)}
                               >
                                 <span class="min-w-0 truncate leading-5">{item.name}</span>
-                                <Show when={isFree(item.provider.id, item.cost)}>
+                                <Show when={isFreeModel(item)}>
                                   <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
                                 </Show>
                                 <Show when={item.latest}>

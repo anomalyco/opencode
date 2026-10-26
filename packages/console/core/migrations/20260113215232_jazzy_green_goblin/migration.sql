@@ -1,1 +1,0 @@
-ALTER TABLE `billing` ADD `time_subscription_booked` timestamp(3);

@@ -17,6 +17,7 @@ import { VcsGitPlugin } from "@opencode/core/plugin/vcs/git"
 import type { VcsDefinition, VcsDiffInput } from "@opencode/plugin/effect/vcs"
 import { FileSystem } from "@opencode/schema/filesystem"
 import { VcsEvent } from "@opencode/schema/vcs-event"
+import { initGit } from "./fixture/git"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it, testEffect } from "./lib/effect"
@@ -61,7 +62,7 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
 const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>, input: { scope?: string } = {}) =>
   withTmp((directory) =>
     Effect.promise(async () => {
-      await initRepo(directory)
+      await initGit(directory, "-b", "main")
       if (input.scope) await fs.mkdir(path.join(directory, input.scope), { recursive: true })
     }).pipe(
       Effect.andThen(
@@ -77,14 +78,6 @@ const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>, inpu
       ),
     ),
   )
-
-async function initRepo(directory: string) {
-  await $`git init -b main`.cwd(directory).quiet()
-  await $`git config core.fsmonitor false`.cwd(directory).quiet()
-  await $`git config commit.gpgsign false`.cwd(directory).quiet()
-  await $`git config user.email test@opencode.test`.cwd(directory).quiet()
-  await $`git config user.name Test`.cwd(directory).quiet()
-}
 
 async function commitAll(directory: string, message: string) {
   await $`git add -A`.cwd(directory).quiet()
@@ -586,7 +579,7 @@ describe("Vcs", () => {
       Effect.gen(function* () {
         const count = 40
         yield* Effect.promise(async () => {
-          await initRepo(directory)
+          await initGit(directory, "-b", "main")
           await fs.writeFile(path.join(directory, "keep.txt"), "one\n")
           await fs.writeFile(path.join(directory, ".gitignore"), "*.log\n")
           await commitAll(directory, "initial")
