@@ -76,8 +76,10 @@ jobs:
   tag:
     needs: plan
     runs-on: ubuntu-24.04
+    # Stable tags are pushed with the release deploy key, the only non-ci-owners actor the v* tag ruleset admits.
+    environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
-      contents: write
+      contents: read
     env: &env
       OPENCODE_VERSION: ${{ needs.plan.outputs.version }}
       OPENCODE_CHANNEL: ${{ needs.plan.outputs.channel }}
@@ -89,6 +91,8 @@ jobs:
       - name: Check out
         if: needs.plan.outputs.channel == 'latest'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ssh-key: ${{ secrets.RELEASE_TAG_KEY }}
       - id: tag
         name: Tag
         if: needs.plan.outputs.channel == 'latest'
