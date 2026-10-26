@@ -618,9 +618,10 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   const tab = panel.getByRole("tab", { name: "shopping.txt" })
   const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
 
-  // A long file opens at its top and mounts only the rows near the viewport, so its last line needs a scroll.
+  // A long file mounts only the rows near the viewport, so its last line needs a scroll. A reopened tab may restore its
+  // earlier scroll position, so this starts from wherever the view is once its rows overflow.
   const scrollToEnd = async () => {
-    await expect(panel.getByText("item 1", { exact: true })).toBeVisible()
+    await expect.poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
     await code.hover()
     await page.mouse.wheel(0, 100_000)
     await expect
@@ -630,6 +631,8 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
 
   await link.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
+  // The first open starts at the top.
+  await expect(panel.getByText("item 1", { exact: true })).toBeVisible()
   await scrollToEnd()
   await expect(panel.getByText("first draft", { exact: true })).toBeVisible()
 
