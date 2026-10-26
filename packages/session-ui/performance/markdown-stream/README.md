@@ -49,6 +49,12 @@ to `@opencode/patchmark` (#57016), run through the same fixtures and timing loop
 with its `marked` lexer counters. `Current` is the patchmark-backed projection in
 `src/components/markdown-stream.ts`.
 
+The baseline harness is not part of this PR. The numbers were produced by checking
+out `f2735ef79b^` in a separate worktree, copying both benchmark scripts there, and
+replacing the patchmark scanner counters with `Marked.prototype.lexer` counters.
+The fixtures and timing loop are otherwise identical. This is a one-off comparison,
+not something CI regenerates.
+
 | Workload                       | Marked baseline | Current  | Speedup | Baseline lex chars | Current chars scanned |
 | ------------------------------ | --------------- | -------- | ------- | ------------------ | --------------------- |
 | `many-paragraph-deltas`        | 160.6 ms        | 4.6 ms   | 35.0×   | 928,093            | 9,251                 |

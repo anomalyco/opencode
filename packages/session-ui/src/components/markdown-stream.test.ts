@@ -380,7 +380,7 @@ describe("markdown stream", () => {
     expect(next.blocks.at(-1)).toEqual({ raw: "- final item", src: "- final item", mode: "live" })
   })
 
-  test("grows ordinary prose in place without re-lexing earlier blocks", () => {
+  test("grows ordinary prose in place without reprojecting earlier blocks", () => {
     let grown = project(undefined, "# Title\n\nA paragraph", true)
     const heading = grown.blocks[0]
 
@@ -395,30 +395,30 @@ describe("markdown stream", () => {
     })
   })
 
-  test("boundedly re-lexes the live tail once it exceeds the cap", () => {
+  test("freezes completed paragraphs while the tail keeps growing", () => {
     const unit = "para\n\n"
     let grown = project(undefined, unit, true)
 
-    for (let index = 0; index < 400; index++) grown = project(grown, `${grown.text}${unit}`, true)
+    for (let index = 0; index < 20; index++) grown = project(grown, `${grown.text}${unit}`, true)
 
     expect(grown.blocks.at(-1)!.mode).toBe("live")
     expect(grown.blocks.filter((block) => block.mode === "full").length).toBeGreaterThan(0)
     expect(grown.blocks.map((block) => block.raw).join("")).toBe(grown.text)
   })
 
-  test("grows a boundary-less oversized tail in place without splitting", () => {
+  test("keeps a boundary-less paragraph in one live block", () => {
     const word = "word "
     let grown = project(undefined, word, true)
 
-    for (let index = 0; index < 600; index++) grown = project(grown, `${grown.text}${word}`, true)
+    for (let index = 0; index < 20; index++) grown = project(grown, `${grown.text}${word}`, true)
 
     expect(grown.blocks).toHaveLength(1)
     expect(grown.blocks[0]!.mode).toBe("live")
-    expect(grown.blocks[0]!.raw).toBe(word.repeat(601))
+    expect(grown.blocks[0]!.raw).toBe(word.repeat(21))
   })
 
-  test("re-projects the live tail when an oversized tail crosses a blank-line boundary", () => {
-    const body = "sentence ".repeat(300)
+  test("starts a new block when a blank line follows a long paragraph", () => {
+    const body = "sentence ".repeat(20)
     let grown = project(undefined, body, true)
     expect(grown.blocks).toHaveLength(1)
 
@@ -429,12 +429,12 @@ describe("markdown stream", () => {
     expect(grown.blocks.map((block) => block.raw).join("")).toBe(grown.text)
   })
 
-  test("splits an oversized live tail when blank-line separators are split across deltas", () => {
-    const paragraph = (index: number) => `Paragraph ${index} ${"filler ".repeat(30).trim()}`
+  test("splits blocks when blank-line separators arrive across deltas", () => {
+    const paragraph = (index: number) => `Paragraph ${index} ${"filler ".repeat(3).trim()}`
     let text = ""
     let previous: ReturnType<typeof project> | undefined
 
-    for (let index = 0; index < 60; index++) {
+    for (let index = 0; index < 5; index++) {
       text += paragraph(index)
       previous = project(previous, text, true)
 
@@ -448,9 +448,9 @@ describe("markdown stream", () => {
     }
 
     // Each paragraph is a completed block even though every blank-line separator
-    // arrived as two deltas, so the tail never grows into one oversized block.
+    // arrived as two deltas.
     const completed = previous!
-    expect(completed.blocks).toHaveLength(60)
+    expect(completed.blocks).toHaveLength(5)
     expect(completed.blocks.at(-1)!.mode).toBe("live")
 
     const frozen = completed.blocks.slice(0, -1)
@@ -589,7 +589,7 @@ describe("markdown stream", () => {
     }
   })
 
-  test("does not accumulate a normalized list marker across appended deltas", () => {
+  test("keeps a list marker that arrives across deltas", () => {
     let grown = project(undefined, "1. ", true)
     grown = project(grown, `${grown.text}first`, true)
     grown = project(grown, `${grown.text}\n2. second`, true)

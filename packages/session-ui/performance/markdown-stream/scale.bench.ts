@@ -1,9 +1,10 @@
 // Scaling sweep for `project()` in `src/components/markdown-stream.ts`.
 //
 // Streams one boundary-less paragraph of N words (one word per delta) and
-// records total projection time plus the characters scanned by patchmark. The
-// incremental parser re-scans only the active line, so per-delta work stays
-// bounded as the accumulated text grows.
+// records total projection time plus the characters scanned by patchmark. A
+// paragraph with no newline is a single active line, so each delta re-scans the
+// whole line: scanned characters grow with the square of the text length, while
+// wall time stays far below the pre-patchmark baseline.
 //
 // Run from `packages/session-ui`:
 //   bun performance/markdown-stream/scale.bench.ts [output.json]
