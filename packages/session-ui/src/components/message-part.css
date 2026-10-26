@@ -873,7 +873,7 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  max-height: 100dvh;
+  max-height: min(40dvh, calc(100dvh - var(--sticky-accordion-top, 0px)));
 
   [data-slot="permission-body"] {
     display: flex;
@@ -897,6 +897,13 @@
 
   [data-slot="permission-row"][data-variant="header"] {
     align-items: center;
+  }
+
+  [data-slot="permission-row"]:has(> [data-slot="permission-patterns"]) {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
   }
 
   [data-slot="permission-icon"] {
