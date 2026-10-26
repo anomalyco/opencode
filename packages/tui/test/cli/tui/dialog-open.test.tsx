@@ -611,6 +611,7 @@ const recentSession = {
   time: { created: 1, updated: 2 },
   title: "Recent session",
   location: { directory: "/fixture" },
+  status: "idle" as const,
 }
 
 test("sessions remain selectable while projects are still loading", async () => {

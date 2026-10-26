@@ -1321,7 +1321,7 @@
                 "type": "object",
                 "properties": {
                   "info": {
-                    "$ref": "#/components/schemas/Session.Info"
+                    "$ref": "#/components/schemas/Session.Persisted"
                   },
                   "messages": {
                     "type": "array"
@@ -23084,11 +23084,15 @@
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
           },
+          "status": {
+            "type": "string",
+            "enum": ["idle", "running"]
+          },
           "location": {
             "$ref": "#/components/schemas/Location.PublicRef"
           }
         },
-        "required": ["id", "projectID", "cost", "tokens", "time", "location"],
+        "required": ["id", "projectID", "cost", "tokens", "time", "status", "location"],
         "additionalProperties": false
       },
       "Session.Message.AgentSelected": {
@@ -23986,6 +23990,94 @@
       "Session.Metadata": {
         "type": "object"
       },
+      "Session.Persisted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "parentID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "fork": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "boundary": {
+                "$ref": "#/components/schemas/Session.ForkBoundary"
+              }
+            },
+            "required": ["sessionID", "boundary"],
+            "additionalProperties": false
+          },
+          "projectID": {
+            "$ref": "#/components/schemas/Project.ID"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/Agent.ID"
+          },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage.Info"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": ["succeeded", "failed", "interrupted"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              },
+              "busy": {
+                "type": "number"
+              },
+              "idle": {
+                "type": "number"
+              },
+              "viewed": {
+                "type": "number"
+              },
+              "archived": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          },
+          "title": {
+            "type": "string"
+          },
+          "subpath": {
+            "$ref": "#/components/schemas/RelativePath"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Session.Metadata"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/Permission.Ruleset"
+          },
+          "revert": {
+            "$ref": "#/components/schemas/Session.Revert"
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
+          }
+        },
+        "required": ["id", "projectID", "cost", "tokens", "time", "location"],
+        "additionalProperties": false
+      },
       "Session.Revert": {
         "type": "object",
         "properties": {
@@ -24514,7 +24606,7 @@
         "type": "object",
         "properties": {
           "info": {
-            "$ref": "#/components/schemas/Session.Info"
+            "$ref": "#/components/schemas/Session.Persisted"
           },
           "messages": {
             "type": "array",

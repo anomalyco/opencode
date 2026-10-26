@@ -6,6 +6,6 @@ import { SessionMessage } from "./session-message.js"
 
 export interface Data extends Schema.Schema.Type<typeof Data> {}
 export const Data = Schema.Struct({
-  info: Session.Info,
+  info: Session.Persisted,
   messages: Schema.Array(SessionMessage.Info),
 }).annotate({ identifier: "SessionTransfer.Data" })

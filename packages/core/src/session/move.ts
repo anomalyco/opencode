@@ -72,7 +72,7 @@ const layer = Layer.effect(
     })
 
     const resolveDestination = Effect.fn("SessionMove.resolveDestination")(function* (
-      session: Session.Info,
+      session: Session.Persisted,
       input: Parameters<Interface["move"]>[0],
     ) {
       const value = input.directory.trim()
@@ -101,7 +101,7 @@ const layer = Layer.effect(
       return destination
     })
 
-    const sourceUnavailable = Effect.fn("SessionMove.sourceUnavailable")(function* (session: Session.Info) {
+    const sourceUnavailable = Effect.fn("SessionMove.sourceUnavailable")(function* (session: Session.Persisted) {
       if (yield* execution.isActive(session.id)) return false
       if (!(yield* fs.isDir(session.location.directory))) return true
       return yield* SessionRunner.Service.pipe(

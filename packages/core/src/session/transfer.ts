@@ -23,6 +23,7 @@ import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionProjector } from "./projector.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionStore } from "./store.js"
 
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
@@ -54,12 +55,15 @@ const layer = Layer.effect(
     const instances = yield* Instance.Service
     const projects = yield* Project.Service
     const sessions = yield* Session.Service
+    const store = yield* SessionStore.Service
     const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
     return Service.of({
       export: Effect.fn("SessionTransfer.export")(function* (input) {
+        const info = yield* store.get(input.sessionID)
+        if (!info) return yield* new Session.NotFoundError({ sessionID: input.sessionID })
         const data = {
-          info: yield* sessions.get(input.sessionID),
+          info,
           messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
         }
         return input.sanitize ? sanitize(data) : data
@@ -196,7 +200,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [App.node, Bus.node, Database.node, Instance.node, Project.node, Session.node],
+  deps: [App.node, Bus.node, Database.node, Instance.node, Project.node, Session.node, SessionStore.node],
 })
 
 function isSettled(message: SessionMessage.Info) {

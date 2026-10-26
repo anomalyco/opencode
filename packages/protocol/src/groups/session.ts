@@ -47,8 +47,13 @@ const PublicSessionInfo = Schema.Struct({
   location: Location.PublicRef,
 }).annotate({ identifier: "Session.Info" })
 
+const PublicSessionPersisted = Schema.Struct({
+  ...Struct.omit(Session.Persisted.fields, ["location"]),
+  location: Location.PublicRef,
+}).annotate({ identifier: "Session.Persisted" })
+
 const PublicSessionTransfer = Schema.Struct({
-  info: PublicSessionInfo,
+  info: PublicSessionPersisted,
   messages: Schema.Array(PublicSessionMessage),
 }).annotate({ identifier: "SessionTransfer.Data" })
 

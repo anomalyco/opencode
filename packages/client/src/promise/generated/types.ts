@@ -2285,6 +2285,26 @@ export type SessionInfo = {
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
   revert?: SessionRevert
+  status: "idle" | "running"
+  location: LocationPublicRef
+}
+
+export type SessionPersisted = {
+  id: SessionID
+  parentID?: SessionID
+  fork?: { sessionID: SessionID; boundary: SessionForkBoundary }
+  projectID: ProjectID
+  agent?: AgentID
+  model?: ModelRef
+  cost: MoneyUSD
+  tokens: TokenUsageInfo
+  outcome?: "succeeded" | "failed" | "interrupted"
+  time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
+  title?: string
+  subpath?: RelativePath
+  metadata?: SessionMetadata
+  permissions?: PermissionRuleset
+  revert?: SessionRevert
   location: LocationPublicRef
 }
 
@@ -2728,7 +2748,7 @@ export type FormCreated = {
   data: { form: FormInfo1 }
 }
 
-export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
+export type SessionTransferData = { info: SessionPersisted; messages: Array<SessionMessageInfo> }
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessageInfo>

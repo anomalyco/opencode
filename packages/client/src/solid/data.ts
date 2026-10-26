@@ -1664,6 +1664,7 @@ export function createData(config: CreateDataInput) {
             time: { created: now, updated: now },
             title: payload.title,
             location,
+            status: "idle",
           })
           // A mounted optimistic session must not fetch its empty collections
           // before creation settles. The session.created echo re-syncs info.

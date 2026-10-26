@@ -28,8 +28,8 @@ export { Revert }
 export const ForkBoundary = SessionFork.Boundary
 export type ForkBoundary = SessionFork.Boundary
 
-export interface Info extends Schema.Schema.Type<typeof Info> {}
-export const Info = Schema.Struct({
+export interface Persisted extends Schema.Schema.Type<typeof Persisted> {}
+export const Persisted = Schema.Struct({
   id: ID,
   parentID: ID.pipe(optional),
   fork: Schema.Struct({
@@ -60,7 +60,14 @@ export const Info = Schema.Struct({
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),
-}).annotate({ identifier: "Session.Info" })
+}).annotate({ identifier: "Session.Persisted" })
+
+/** `running` while SessionExecution in this process owns a busy period for the Session. */
+export const Status = Schema.Literals(["idle", "running"])
+export type Status = typeof Status.Type
+
+export interface Info extends Schema.Schema.Type<typeof Info> {}
+export const Info = Schema.Struct({ ...Persisted.fields, status: Status }).annotate({ identifier: "Session.Info" })
 
 export const ListAnchor = Schema.Struct({
   id: ID,

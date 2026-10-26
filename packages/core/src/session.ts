@@ -280,15 +280,24 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.make()
-    const mediaBlob = (session: SessionSchema.Info) => SessionBlob.enabledFor(instances, session)
+    const mediaBlob = (session: SessionSchema.Persisted) => SessionBlob.enabledFor(instances, session)
+    // Snapshot `active` before reading rows so `idle` never pairs with a row from before the terminal commit.
+    const withStatus = (
+      active: ReadonlySet<SessionSchema.ID>,
+      session: SessionSchema.Persisted,
+    ): SessionSchema.Info => ({
+      ...session,
+      status: active.has(session.id) ? "running" : "idle",
+    })
     const isDurableSessionEvent = (item: Bus.LogItem): item is SessionEvent.DurableEvent =>
       Object.hasOwn(SessionEvent.Durable.cases, item.type)
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
+        const active = yield* execution.active
         const recorded = yield* store.get(sessionID)
-        if (recorded) return recorded
+        if (recorded) return withStatus(active, recorded)
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
         const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
@@ -332,7 +341,7 @@ const layer = Layer.effect(
                 )
             }),
           )
-        if (projected.type === "existing") return projected.session
+        if (projected.type === "existing") return withStatus(active, projected.session)
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -381,7 +390,10 @@ const layer = Layer.effect(
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
-      get: (sessionID) => sessions.forSession(sessionID).get(),
+      get: Effect.fn("Session.get")(function* (sessionID) {
+        const active = yield* execution.active
+        return withStatus(active, yield* sessions.forSession(sessionID).get())
+      }),
       environment: Effect.fn("Session.environment")(function* (input) {
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
@@ -407,6 +419,7 @@ const layer = Layer.effect(
             : yield* ListCursor.parse(input.cursor).pipe(Effect.mapError(() => new InvalidListCursorError()))
         const limit = input.limit ?? DefaultListLimit
         const backward = "anchor" in filter && filter.anchor.direction === "previous"
+        const active = yield* execution.active
         // One extra row reveals whether another page exists; a backward page arrives reversed, so it sits first.
         const rows = yield* store.list({ ...filter, limit: limit + 1 })
         const more = rows.length > limit
@@ -414,7 +427,7 @@ const layer = Layer.effect(
         const first = data[0]
         const last = data.at(-1)
         return {
-          data,
+          data: data.map((session) => withStatus(active, session)),
           cursor: {
             previous:
               first && (more || !backward)

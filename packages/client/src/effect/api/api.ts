@@ -543,7 +543,7 @@ export type ExperimentalSessionStatsOperation<E = never> = (
 ) => Effect.Effect<ExperimentalSessionStatsOutput, E>
 
 export type ExperimentalSessionImportInput = {
-  readonly info: Session.Info
+  readonly info: Session.Persisted
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly location?: Location.PublicRef | undefined
 }
@@ -554,7 +554,7 @@ export type ExperimentalSessionImportOperation<E = never> = (
 
 export type ExperimentalSessionExportInput = { readonly sessionID: Session.ID; readonly sanitize?: boolean | undefined }
 export type ExperimentalSessionExportOutput = {
-  readonly info: Session.Info
+  readonly info: Session.Persisted
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }
 export type ExperimentalSessionExportOperation<E = never> = (

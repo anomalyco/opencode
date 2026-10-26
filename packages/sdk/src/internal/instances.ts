@@ -15,7 +15,7 @@ export interface Configuration {
 
 export interface Options<R = never> {
   /** Select a sharing key within the Session's current Location. Must not initialize plugins. */
-  readonly key: (session: Session.Info) => string
+  readonly key: (session: Session.Persisted) => string
   /**
    * Reconstruct configuration on a cache miss. Resources belong to the instance Scope; other requirements
    * are the services the SDK entrypoint was built with.
@@ -51,11 +51,11 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
     Effect.gen(function* () {
       const scope = yield* Effect.scope
       const locations = yield* LocationServiceMap.Service
-      const key = (session: Session.Info) => ({
+      const key = (session: Session.Persisted) => ({
         key: options.key(session),
         ...LocationServiceMap.canonical(session.location),
       })
-      const provide = (session: Session.Info) => Effect.provide(instances.get(key(session)))
+      const provide = (session: Session.Persisted) => Effect.provide(instances.get(key(session)))
       const ready = MutableHashSet.empty<ReturnType<typeof key>>()
       const instances: LayerMap.LayerMap<
         ReturnType<typeof key>,

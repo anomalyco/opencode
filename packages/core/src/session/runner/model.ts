@@ -36,7 +36,7 @@ export type Resolved = ModelResolver.Resolved
 export interface Interface {
   /** Availability is sampled lazily for each explicitly selected model resolution. */
   readonly resolve: (
-    session: SessionSchema.Info,
+    session: SessionSchema.Persisted,
     available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
   ) => Effect.Effect<Resolved, Error>
 }

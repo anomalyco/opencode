@@ -687,7 +687,7 @@ describe("LocationServiceMap", () => {
             const modelState = yield* Model.Service
             const models = yield* SessionRunnerModel.Service
             return yield* models.resolve(
-              Session.Info.make({
+              Session.Persisted.make({
                 id: Session.ID.make("ses_unavailable_model"),
                 projectID: Project.ID.global,
                 title: "test",
@@ -730,7 +730,7 @@ describe("LocationServiceMap", () => {
               const modelState = yield* Model.Service
               const models = yield* SessionRunnerModel.Service
               return yield* models.resolve(
-                Session.Info.make({
+                Session.Persisted.make({
                   id: Session.ID.make(`ses_removed_${providerID}`),
                   projectID: Project.ID.global,
                   title: "test",
@@ -784,7 +784,7 @@ describe("LocationServiceMap", () => {
             })
             const models = yield* SessionRunnerModel.Service
             return yield* models.resolve(
-              Session.Info.make({
+              Session.Persisted.make({
                 id: Session.ID.make("ses_aliased_model"),
                 projectID: Project.ID.global,
                 title: "test",

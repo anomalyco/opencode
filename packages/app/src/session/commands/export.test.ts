@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionPersisted } from "@opencode/client/promise"
 import type { ServerApi, ServerRequestOptions } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
@@ -18,13 +18,13 @@ describe("sessionExportFilename", () => {
 
 describe("fetchSessionExport", () => {
   test("fetches every native message page with inline media and without exporting cursors", async () => {
-    const info = { id: "ses_1", title: "Test Session" } as SessionInfo
+    const info = { id: "ses_1", title: "Test Session" } as SessionPersisted
     const first = { id: "msg_1", type: "model-selected" } as unknown as SessionMessageInfo
     const second = { id: "msg_2", type: "user" } as SessionMessageInfo
     const calls: unknown[] = []
 
     const api = {
-      session: { get: async () => info },
+      session: { get: async () => ({ ...info, status: "running" }) },
       message: {
         list: async (input: { cursor?: string }, options: ServerRequestOptions) => {
           calls.push([input, options])
@@ -59,7 +59,7 @@ describe("saveSessionExport", () => {
       },
     }
 
-    const data = { info: { id: "ses_1" } as SessionInfo, messages: [] }
+    const data = { info: { id: "ses_1" } as SessionPersisted, messages: [] }
 
     expect(await saveSessionExport("session.json", data, platform)).toBe(saved)
     expect(writes).toEqual([["session.json", '{\n  "info": {\n    "id": "ses_1"\n  },\n  "messages": []\n}']])
