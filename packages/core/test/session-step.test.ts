@@ -196,10 +196,15 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       },
     )
     yield* llm.push(
-      TestLLM.complete({
-        reason: { normalized: "stop" },
-        usage: { inputTokens: 10, outputTokens: 4, nonCachedInputTokens: 10, cost: 0 },
-      }),
+      TestLLM.complete(
+        {
+          reason: { normalized: "stop" },
+          usage: { inputTokens: 10, outputTokens: 4, nonCachedInputTokens: 10, cost: 0 },
+        },
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: "Hello" }),
+        LLMEvent.textEnd({ id: "text-1" }),
+      ),
     )
     yield* steps.attempt({
       isLocationClosed: () => false,
