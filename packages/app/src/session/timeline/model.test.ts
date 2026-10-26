@@ -47,6 +47,7 @@ describe("timeline model", () => {
     const messages: SessionMessageInfo[] = [assistant("msg_latest")]
     let current = true
     let loads = 0
+
     const input = {
       current: () => current,
       messages: () => messages,
@@ -77,6 +78,7 @@ describe("timeline model", () => {
   test("resumes the original leading turn after a failed page", async () => {
     const messages: SessionMessageInfo[] = [assistant("msg_latest")]
     let loads = 0
+
     const input = {
       current: () => true,
       messages: () => messages,
@@ -84,6 +86,7 @@ describe("timeline model", () => {
       loading: () => false,
       loadMore: async () => {
         loads += 1
+
         if (loads === 1) throw new Error("history failed")
         messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
       },
@@ -103,6 +106,7 @@ describe("timeline model", () => {
   test("resumes the original leading turn after the transcript reconnects", async () => {
     const messages: SessionMessageInfo[] = [assistant("msg_latest")]
     let loads = 0
+
     const input = {
       current: () => true,
       messages: () => messages,
