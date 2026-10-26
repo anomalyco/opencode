@@ -77,6 +77,8 @@ import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
+import { retrySessionSync } from "../../util/session-sync"
+import { abort } from "@opencode/util/abort"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
@@ -286,6 +288,7 @@ export function Session(props: {
     (id) => {
       if (id === sessionID) setRowsSynced(true)
     },
+    (message) => toast.show({ title: "Failed to load session history", message, variant: "error", duration: 5000 }),
   )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
   const anchors = createTimelineAnchors()
@@ -330,48 +333,29 @@ export function Session(props: {
     }),
   )
 
-  createEffect(() => {
-    if (client.connection.status() !== "connected") return
-    setSynced(false)
-    const sessionID = route.sessionID
-    let cancelled = false
-    onCleanup(() => {
-      cancelled = true
-    })
-    void (async () => {
-      // Resuming can race a concurrent writer (API-driven prompts, background
-      // turns): the first read may fail while the session is being written.
-      // Retry transient failures instead of abandoning the route to home.
-      let lastError: unknown = new Error(`Session not found: ${sessionID}`)
-      for (let attempt = 0; attempt < 5; attempt++) {
-        if (cancelled || route.sessionID !== sessionID) return
-        try {
-          await Promise.all([
-            data.session.sync(sessionID, { children: true }),
-            data.session.permission.sync(sessionID).catch(() => undefined),
-            data.session.form.sync(sessionID).catch(() => undefined),
-          ])
-          if (cancelled || route.sessionID !== sessionID) return
+  createEffect(
+    on([() => route.sessionID, () => client.connection.status()], ([sessionID, status]) => {
+      if (status !== "connected") return
+      setSynced(false)
+      const controller = new AbortController()
+      onCleanup(() => abort(controller))
+      void data.session.permission.sync(sessionID).catch(() => undefined)
+      void data.session.form.sync(sessionID).catch(() => undefined)
+      void retrySessionSync(() => data.session.sync(sessionID, { children: true }), controller.signal)
+        .then(() => {
+          if (controller.signal.aborted) return
           const info = data.session.get(sessionID)
-          if (info) {
-            editor.reconnect(info.location.directory)
-            setSynced(true)
-            return
-          }
-        } catch (error) {
-          lastError = error
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt))
-      }
-      if (cancelled || route.sessionID !== sessionID) return
-      toast.show({
-        message: errorMessage(lastError),
-        variant: "error",
-        duration: 5000,
-      })
-      sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
-    })()
-  })
+          if (!info) throw new Error(`Session not found: ${sessionID}`)
+          editor.reconnect(info.location.directory)
+          setSynced(true)
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) return
+          toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+          sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+        })
+    }),
+  )
 
   let seeded = false
   let sent = false

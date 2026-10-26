@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
-import { Effect, FileSystem } from "effect"
-import { Global } from "@opencode/util/global"
-import { createTestRenderer } from "@opentui/core/testing"
-import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
-import { tmpdir } from "./fixture/fixture"
+import { createAppFixture } from "./fixture/app"
+import { directory, json } from "./fixture/tui-client"
 import { waitForHighlightedFrame } from "./fixture/frame"
+import { logo } from "../src/logo"
+
+type Read = "session" | "message"
 
 const session = {
   id: "ses_retry",
@@ -15,126 +15,132 @@ const session = {
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: { created: 0, updated: 0 },
 }
+const location = { directory, project: { id: "project", directory, canonical: directory } }
+const messages = [
+  { id: "message-1", type: "user", text: "Restore this history", time: { created: 1 } },
+  {
+    id: "message-2",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "demo", id: "demo-model" },
+    content: [{ type: "text", text: "History recovered" }],
+    finish: "stop",
+    time: { created: 2, completed: 3 },
+  },
+]
 
-const location = {
-  directory,
-  project: { id: "project", directory, canonical: directory },
-}
-
-const messages = Array.from({ length: 400 }, (_, index) =>
-  index % 2
-    ? {
-        id: `message-${index}`,
-        type: "assistant",
-        agent: "build",
-        model: { providerID: "demo", id: "demo-model" },
-        content: [{ type: "text", text: `History message ${String(index).padStart(4, "0")}` }],
-        finish: "stop",
-        time: { created: index, completed: index + 1 },
+async function launch(options: { target: Read; failures?: number; status?: number; block?: boolean }) {
+  const reads = { session: 0, message: 0 }
+  const release = Promise.withResolvers<void>()
+  const setup = await createAppFixture({
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" }, keybinds: { "session.new": "f6" } },
+    fetch: async (url) => {
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
+      if (url.pathname === "/api/model")
+        return json({ location, data: [{ id: "demo-model", providerID: "demo", name: "Demo Model", variants: [] }] })
+      if (url.pathname === "/api/session")
+        return json({ data: url.searchParams.get("parentID") === session.id ? [] : [session], cursor: {} })
+      const read =
+        url.pathname === `/api/session/${session.id}`
+          ? "session"
+          : url.pathname === `/api/session/${session.id}/message`
+            ? "message"
+            : undefined
+      if (read) {
+        reads[read]++
+        if (options.block && read === options.target) await release.promise
+        if (read === options.target && reads[read] <= (options.failures ?? 2)) {
+          const status = options.status ?? 503
+          return json(
+            status === 404
+              ? { _tag: "SessionNotFoundError", sessionID: session.id, message: `Session not found: ${session.id}` }
+              : { message: "temporarily unavailable" },
+            { status },
+          )
+        }
+        return json(read === "session" ? { data: session } : { data: messages.toReversed(), cursor: {} })
       }
-    : {
-        id: `message-${index}`,
-        type: "user",
-        text: `History message ${String(index).padStart(4, "0")}`,
-        time: { created: index },
-      },
-)
-
-async function launch(options: { failures: number; alwaysFail?: boolean }) {
-  let remaining = options.failures
-  let gets = 0
-  const state = await tmpdir()
-  const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
-  await setup.renderer.setupTerminal()
-  setup.renderer.start()
-  const events = createEventStream()
-  const calls = createFetch(async (url, request) => {
-    if (url.pathname === "/api/agent")
-      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
-    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
-    if (url.pathname === "/api/model")
-      return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo Model", variants: [] }] })
-    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-    if (url.pathname === "/api/session/ses_retry") {
-      gets++
-      if (options.alwaysFail || remaining > 0) {
-        if (!options.alwaysFail) remaining--
-        return json({ message: "gone fishin" }, { status: 500 })
-      }
-      return json({ data: session })
-    }
-    if (url.pathname === "/api/session/ses_retry/message") {
-      const end = Number(url.searchParams.get("cursor") ?? messages.length)
-      const limit = Number(url.searchParams.get("limit"))
-      const start = Math.max(0, end - limit)
-      return json({ data: messages.slice(start, end).toReversed(), cursor: end ? { next: String(start) } : {} })
-    }
-    if (
-      url.pathname === "/api/session/ses_retry/inbox" ||
-      url.pathname === "/api/session/ses_retry/permission" ||
-      url.pathname === "/api/session/ses_retry/form"
-    )
-      return json({ data: [] })
-    return undefined
-  }, events)
-  const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
-
-  const { run } = await import("../src/app")
-  const task = Effect.runPromise(
-    run({
-      app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
-      config: {
-        get: async () => ({
-          animations: false,
-          tabs: { mode: "off" },
-          keybinds: {},
-        }),
-        update: async () => ({}),
-      },
-      packages: { prepare: async () => ({ directory: "" }) },
-      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-      args: { sessionID: "ses_retry" },
-      log: () => {},
-    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
-  )
+      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.ready
   return {
-    setup,
-    gets: () => gets,
-    [Symbol.asyncDispose]: async () => {
-      try {
-        if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-        await task.catch(() => undefined)
-      } finally {
-        server.stop()
-        await state[Symbol.asyncDispose]()
-      }
+    ...setup,
+    reads,
+    release: release.resolve,
+    async [Symbol.asyncDispose]() {
+      release.resolve()
+      await setup[Symbol.asyncDispose]()
     },
   }
 }
 
-// waitForFrame stops polling once the screen goes static, which is exactly
-// what happens while the retry loop sleeps between attempts. Poll on a wall
-// clock instead, then assert on frames once rendering resumes.
-async function poll(condition: () => boolean, timeout = 20000) {
-  const start = Date.now()
+async function wait(condition: () => boolean) {
+  const deadline = Date.now() + 10_000
   while (!condition()) {
-    if (Date.now() - start > timeout) throw new Error("timed out waiting for condition")
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    if (Date.now() > deadline) throw new Error("Timed out waiting for session recovery")
+    await Bun.sleep(10)
   }
 }
 
-test("a resume racing a concurrent writer retries instead of parking on home", async () => {
-  await using run = await launch({ failures: 2 })
-  await poll(() => run.gets() >= 3)
-  await waitForHighlightedFrame(run.setup, (frame) => frame.includes("History message 0399"))
-  expect(run.gets()).toBeGreaterThanOrEqual(3)
+test.each(["session", "message"] satisfies Read[])(
+  "recovers history after transient %s read failures",
+  async (target) => {
+    await using setup = await launch({ target })
+    await wait(() => setup.reads[target] === 3)
+    await waitForHighlightedFrame(setup, (frame) => frame.includes("History recovered"))
+    expect(setup.captureCharFrame()).toContain("Restore this history")
+    expect(setup.captureCharFrame()).not.toContain(logo.left[1])
+    expect(setup.reads[target]).toBe(3)
+  },
+)
+
+test("a missing session reports the error and returns to the actual home screen without retrying", async () => {
+  await using setup = await launch({ target: "session", failures: Infinity, status: 404 })
+  await setup.waitForFrame(
+    (frame) => frame.includes(`Session not found: ${session.id}`) && frame.includes(logo.left[1]),
+  )
+  expect(setup.reads.session).toBe(1)
+  expect(setup.captureCharFrame()).not.toContain("Restore this history")
 })
 
-test("a persistently failing resume still surfaces the error and goes home", async () => {
-  await using run = await launch({ failures: 0, alwaysFail: true })
-  await poll(() => run.gets() >= 5)
-  await poll(() => run.setup.captureCharFrame().includes("UnexpectedStatus: 500"))
-  await poll(() => run.setup.captureCharFrame().includes("Demo Model"))
-  expect(run.gets()).toBeGreaterThanOrEqual(5)
+// The shared retry tests control time and verify each delay. This case exercises the complete
+// app's real 7.5-second retry budget and the user-visible error after all five reads fail.
+test("exhausted history reads report an error instead of silently leaving an empty transcript", async () => {
+  await using setup = await launch({ target: "message", failures: Infinity })
+  await wait(() => setup.captureCharFrame().includes("Failed to load session history"))
+  expect(setup.reads.message).toBe(5)
+  expect(setup.captureCharFrame()).toContain("UnexpectedStatus: 503")
+  expect(setup.captureCharFrame()).not.toContain(logo.left[1])
+})
+
+test.each(["session", "message"] satisfies Read[])(
+  "leaving during an in-flight %s read cancels stale recovery",
+  async (target) => {
+    await using setup = await launch({ target, block: true, failures: Infinity })
+    await wait(() => setup.reads[target] === 1)
+    setup.mockInput.pressKey("F6")
+    await setup.waitForFrame((frame) => frame.includes(logo.left[1]))
+    setup.release()
+    // Cross the first retry boundary to catch an obsolete read starting after the route was left.
+    await Bun.sleep(600)
+    expect(setup.reads[target]).toBe(1)
+    expect(setup.captureCharFrame()).toContain(logo.left[1])
+    expect(setup.captureCharFrame()).not.toContain("UnexpectedStatus")
+    expect(setup.captureCharFrame()).not.toContain("Failed to load session history")
+  },
+)
+
+test("reconnecting restarts a failed history read without stale retries or errors", async () => {
+  await using setup = await launch({ target: "message", failures: 1 })
+  await wait(() => setup.reads.message === 1)
+  setup.events.disconnect()
+  await wait(() => setup.reads.message === 2)
+  await waitForHighlightedFrame(setup, (frame) => frame.includes("History recovered"))
+  expect(setup.reads.message).toBe(2)
+  expect(setup.captureCharFrame()).not.toContain("Failed to load session history")
 })
