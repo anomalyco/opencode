@@ -74,6 +74,10 @@ test("pointer selection, keyboard navigation, the empty state, and the local fin
   await expect(view.settings.getByRole("textbox", { name: "Code Font", exact: true })).toBeInViewport()
   await view.search.press("ArrowDown")
   await expect(terminal).toHaveAttribute("aria-selected", "true")
+  // Shift+arrows select text in the field instead of moving through the results.
+  await view.search.press("Shift+ArrowUp")
+  await expect(view.search).toHaveJSProperty("selectionStart", 0)
+  await expect(terminal).toHaveAttribute("aria-selected", "true")
   await view.search.press("Enter")
   await expect(view.search).toBeFocused()
   await expect(view.settings.getByRole("textbox", { name: "Terminal Font", exact: true })).toBeInViewport()
@@ -128,6 +132,28 @@ test("the narrow layout floats the results in the shared search list popover", a
   await expect(body.locator('[data-slot="search-list-empty"]').getByRole("status")).toHaveText(
     'No results for "zzzzzzzzzz"',
   )
+})
+
+test("a category's results stay under one run of headers when its groups interleave by rank", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    server: REMOTE_SERVER,
+    directory: "/remote/opencode",
+    project: project({ id: "proj_search_remote", directory: "/remote/opencode", name: "Remote app" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  const view = await open(page, { seed: { servers: [{ url: REMOTE_SERVER, name: "Build server" }] } })
+  // With two servers, "e" ranks a This computer setting between unscoped settings and the project results.
+  await view.search.fill("e")
+  const headers = view.results.locator('[data-slot="search-list-header"]')
+  await expect(headers.filter({ hasText: "This computer" })).not.toHaveCount(0)
+  const categories = await headers.evaluateAll((elements) =>
+    elements.map((element) => element.firstElementChild?.textContent ?? ""),
+  )
+  const runs = categories.filter((category, index) => category !== categories[index - 1])
+  expect(categories.filter((category) => category === "Settings")).toHaveLength(2)
+  expect(runs).toEqual([...new Set(runs)])
 })
 
 test("a long empty-state query keeps its closing quote beside the ellipsis while typing and resizing", async ({

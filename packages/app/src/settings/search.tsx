@@ -53,6 +53,8 @@ export function SettingsSearch() {
       keybind: "mod+f",
       hidden: true,
       onSelect: () => {
+        // A root pick in a wide window closes the results but keeps focus, so focusing again would not reopen them.
+        search.expand()
         input?.focus({ preventScroll: true })
         input?.select()
       },
@@ -62,7 +64,6 @@ export function SettingsSearch() {
   const catalog = createSettingsSearchCatalog()
 
   const matches = createMemo(() => rankSettings(search.state.query, catalog()))
-  const shown = createMemo(() => matches().slice(0, 60))
 
   const category = (item: SettingsSearchResult) =>
     item.topLevel
@@ -72,6 +73,14 @@ export function SettingsSearch() {
         : item.project
           ? "settings.search.group.projects"
           : "settings.search.group.servers"
+
+  // A category's rows stay together, whichever of its groups ranks first, so its header shows once.
+  const shown = createMemo(() => {
+    const top = matches().slice(0, 60)
+    const order = [...new Set(top.map(category))]
+
+    return order.flatMap((key) => top.filter((item) => category(item) === key))
+  })
 
   const iconGroups = createMemo(
     () =>
@@ -156,7 +165,15 @@ export function SettingsSearch() {
             return
           }
 
-          if (!expanded() && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+          if (
+            !expanded() &&
+            search.state.query.trim() &&
+            (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+            !event.shiftKey &&
+            !event.ctrlKey &&
+            !event.altKey &&
+            !event.metaKey
+          ) {
             event.preventDefault()
             search.expand()
           }
