@@ -65,6 +65,8 @@ story("drops a pending footer at once on delivery with and without hover", async
   await page.mouse.move(0, 0)
   await expect(footer).toHaveCSS("height", "20px")
   await expect(footer).toHaveCSS("margin-top", "8px")
+  // A steer names only the model it changes, so change it to measure the gap after the labels.
+  await timeline.getByLabel("Changes model", { exact: true }).check()
 
   for (const hover of [true, false]) {
     await timeline.getByLabel("Delivery state").selectOption("steering")
@@ -154,7 +156,12 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   await expect(separator).toHaveText("\u00B7")
   await expect(timeline.locator('[data-slot="user-message-meta-label"]')).toHaveCSS("gap", "4px")
 
+  // A steer with the previous prompt's agent and model joins the running turn unchanged, so it names neither.
   await timeline.getByLabel("Delivery state").selectOption("steering")
+  await expect(timeline.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending$/, { useInnerText: true })
+  await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveCount(0)
+  await timeline.getByLabel("Changes model", { exact: true }).check()
+  await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveText(["Claude Sonnet 4", "Balanced"])
   await timeline.getByLabel("Voice message", { exact: true }).check()
   const voice = timeline.getByRole("img", { name: "Voice", exact: true })
   await expect(voice).toBeVisible()

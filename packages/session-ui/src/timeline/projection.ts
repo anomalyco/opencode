@@ -124,6 +124,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     rows,
     sessionMessageByID,
     userContextByID: indexUserContext(input.sessionMessages),
+    previousSelectionByID: indexPreviousSelection(input.sessionMessages),
   }
 }
 
@@ -144,6 +145,7 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
+  const previousSelectionByID = createMemo(() => indexPreviousSelection(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
@@ -224,6 +226,7 @@ export function createReactiveTimelineProjection(input: {
     rows,
     sessionMessageByID,
     userContextByID,
+    previousSelectionByID,
   }
 }
 
@@ -792,8 +795,24 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   return next
 }
 
+type UserSelection = { agent: string; model: ModelRef }
+
+/** The agent and model a user message's metadata names, when it names them. */
+function localSelection(message: SessionMessageUser): Partial<UserSelection> {
+  const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
+  const localModelID = localModel?.id ?? localModel?.modelID
+
+  return {
+    agent: Option.getOrUndefined(decodeLocalAgent(message.metadata))?.agent,
+    model:
+      localModel && localModelID
+        ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
+        : undefined,
+  }
+}
+
 function indexUserContext(messages: SessionMessageInfo[]) {
-  const result = new Map<string, { agent: string; model: ModelRef }>()
+  const result = new Map<string, UserSelection>()
   let agent = ""
   let model: ModelRef = { id: "", providerID: "" }
   let userID: string | undefined
@@ -805,19 +824,8 @@ function indexUserContext(messages: SessionMessageInfo[]) {
 
     if (message.type === "user") {
       userID = message.id
-      const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
-      const localModelID = localModel?.id ?? localModel?.modelID
-
-      result.set(message.id, {
-        agent: Option.match(decodeLocalAgent(message.metadata), {
-          onNone: () => agent,
-          onSome: (local) => local.agent,
-        }),
-        model:
-          localModel && localModelID
-            ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
-            : model,
-      })
+      const local = localSelection(message)
+      result.set(message.id, { agent: local.agent ?? agent, model: local.model ?? model })
     }
 
     if (message.type === "shell") userID = undefined
@@ -827,6 +835,45 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     model = message.model
 
     if (userID) result.set(userID, { agent, model })
+  })
+
+  return result
+}
+
+/**
+ * The agent and model the previous user message chose, for each user message after the first. A message whose
+ * metadata names neither chose what its first reply ran with; later replies, which a steer's switch reconfigures,
+ * do not count, so a waiting steer can tell whether it changes the agent or model of the turn it joins.
+ */
+function indexPreviousSelection(messages: SessionMessageInfo[]) {
+  const result = new Map<string, UserSelection>()
+  let agent = ""
+  let model: ModelRef = { id: "", providerID: "" }
+  let previous: { chosen: Partial<UserSelection>; current: UserSelection } | undefined
+
+  messages.forEach((message) => {
+    if (message.type === "agent-switched") agent = message.agent
+
+    if (message.type === "model-switched") model = message.model
+
+    if (message.type === "assistant") {
+      agent = message.agent
+      model = message.model
+
+      if (previous) {
+        previous.chosen.agent ??= message.agent
+        previous.chosen.model ??= message.model
+      }
+    }
+
+    if (message.type !== "user") return
+
+    if (previous)
+      result.set(message.id, {
+        agent: previous.chosen.agent ?? previous.current.agent,
+        model: previous.chosen.model ?? previous.current.model,
+      })
+    previous = { chosen: localSelection(message), current: { agent, model } }
   })
 
   return result

@@ -92,6 +92,12 @@ function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssis
   return [{ label: name }, { label: model.variant[0]?.toUpperCase() + model.variant.slice(1), variant: true }]
 }
 
+function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
+  return (
+    a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
+  )
+}
+
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
   return (
     <For each={props.items}>
@@ -304,6 +310,8 @@ export function CurrentUserMessageDisplay(props: {
   text: string
   agent: string
   model: SessionMessageAssistant["model"]
+  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
+  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
@@ -353,13 +361,31 @@ export function CurrentUserMessageDisplay(props: {
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
 
-  const labels = createMemo<MetaItem[]>(() => {
+  const agentItems = createMemo<MetaItem[]>(() => {
     const agent = agentLabel(props.agent, data.agents)
 
-    return [...(agent ? [{ label: agent }] : []), ...modelItems(data, props.model)]
+    return agent ? [{ label: agent }] : []
   })
 
-  const metaLabels = createMemo(() => (mobile() ? [] : labels()))
+  // A waiting steer joins the running turn, so its agent and model only say something when it changes them.
+  const changedLabels = createMemo<MetaItem[]>(() => {
+    const previous = props.previousSelection
+
+    if (!previous) return [...agentItems(), ...modelItems(data, props.model)]
+
+    return [
+      ...(previous.agent === props.agent ? [] : agentItems()),
+      ...(sameModel(previous.model, props.model) ? [] : modelItems(data, props.model)),
+    ]
+  })
+
+  const metaLabels = createMemo(() => {
+    if (mobile()) return []
+
+    if (waiting()) return changedLabels()
+
+    return [...agentItems(), ...modelItems(data, props.model)]
+  })
 
   // In a run, only the last message keeps the meta line; the others offer their actions beside the bubble.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.

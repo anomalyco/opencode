@@ -938,6 +938,7 @@ export function createSessionTimelineRowRenderer(input: {
       })
 
       const context = createMemo(() => input.projection.userContextByID().get(current().userMessageID))
+      const previous = createMemo(() => input.projection.previousSelectionByID().get(current().userMessageID))
       const joined = run(current().userMessageID)
       const grow = arriving(current().userMessageID)
 
@@ -959,6 +960,7 @@ export function createSessionTimelineRowRenderer(input: {
                       voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
+                      previousSelection={previous()}
                       actions={input.actions}
                       run={joined()}
                       fold={input.foldUserMessages?.()}
