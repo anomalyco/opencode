@@ -11,15 +11,16 @@ import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Scope, Stream } from "effect"
-import { HttpRouter, HttpServer } from "effect/http"
+import { HttpRouter, HttpServer, HttpServerRequest } from "effect/http"
 import { HttpApi, HttpApiBuilder } from "effect/http-api"
+import { createBrotliDecompress, createGunzip } from "node:zlib"
 import { it } from "../../core/test/lib/effect"
 import { EventGroup } from "@opencode/protocol/groups/event"
 import { EventFeed } from "../src/event-feed"
-import { EventHandler } from "../src/handlers/event"
+import { EventHandler, isLocalEventClient, negotiateEventEncoding } from "../src/handlers/event"
 import { schemaErrorLayer } from "../src/middleware/schema-error"
 
-const EventApi = HttpApi.make("event").add(EventGroup)
+const EventApi = HttpApi.make("server").add(EventGroup)
 
 const Internal = Bus.ephemeral({ type: "test.internal", schema: { value: Schema.String } })
 
@@ -311,7 +312,7 @@ describe("EventFeed", () => {
             ),
           ),
           Layer.provide(HttpServer.layerServices),
-        ) as Layer.Layer<HttpRouter.HttpRouter>,
+        ),
       ).handler
 
       const api = OpenCode.make({
@@ -393,6 +394,125 @@ describe("EventFeed", () => {
         ),
       )
       expect(afterClose.status).toBe(404)
+    }),
+  )
+
+  test("negotiates gzip or br for remote event streams and skips local loopback clients unless proxied", () => {
+    const makeRequest = (headers: Record<string, string>, remoteAddress?: string) =>
+      HttpServerRequest.fromWeb(new Request("http://opencode.local/api/experimental/event", { headers })).modify({
+        remoteAddress: Option.fromNullishOr(remoteAddress),
+      })
+
+    expect(negotiateEventEncoding(makeRequest({}, "100.64.0.2"))).toBeUndefined()
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "gzip" }, "100.64.0.2"))).toBe("gzip")
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "br" }, "100.64.0.2"))).toBe("br")
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "gzip, deflate, br" }, "100.64.0.2"))).toBe("gzip")
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "br;q=1, gzip;q=0.5" }, "100.64.0.2"))).toBe("br")
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "gzip;q=0" }, "100.64.0.2"))).toBeUndefined()
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "deflate" }, "100.64.0.2"))).toBeUndefined()
+
+    // Loopback clients without proxy headers skip compression.
+    expect(isLocalEventClient(makeRequest({ "accept-encoding": "gzip" }, "127.0.0.1"))).toBe(true)
+    expect(isLocalEventClient(makeRequest({ "accept-encoding": "gzip" }, "::1"))).toBe(true)
+    expect(isLocalEventClient(makeRequest({ "accept-encoding": "gzip" }, "::ffff:127.0.0.1"))).toBe(true)
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "gzip, br" }, "127.0.0.1"))).toBeUndefined()
+    expect(negotiateEventEncoding(makeRequest({ "accept-encoding": "gzip, br" }, "::1"))).toBeUndefined()
+
+    // Loopback connections carrying reverse-proxy headers are remote clients and get compressed.
+    expect(
+      negotiateEventEncoding(
+        makeRequest({ "accept-encoding": "gzip", "x-forwarded-for": "100.64.0.9" }, "127.0.0.1"),
+      ),
+    ).toBe("gzip")
+    expect(
+      negotiateEventEncoding(
+        makeRequest({ "accept-encoding": "br", forwarded: "for=198.51.100.1;proto=https" }, "127.0.0.1"),
+      ),
+    ).toBe("br")
+    expect(
+      negotiateEventEncoding(
+        makeRequest({ "accept-encoding": "gzip", "tailscale-user-login": "user@example.com" }, "::1"),
+      ),
+    ).toBe("gzip")
+  })
+
+  it.live("flushes compressed experimental event frames after every event while the stream stays open", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe)
+      const webHandler = HttpRouter.toWebHandler(
+        HttpApiBuilder.layer(EventApi).pipe(
+          Layer.provide(EventHandler),
+          Layer.provide(Layer.succeed(EventFeed.Service, feed)),
+          Layer.provide(schemaErrorLayer),
+          Layer.provide(
+            Layer.succeed(
+              Authorization,
+              Authorization.of((effect) => effect),
+            ),
+          ),
+          Layer.provide(HttpServer.layerServices),
+        ),
+      ).handler
+
+      for (const encoding of ["gzip", "br"] as const) {
+        const abort = new AbortController()
+        const response = yield* Effect.promise(() =>
+          webHandler(
+            new Request("http://opencode.local/api/experimental/event?detail=subscribed", {
+              headers: { "accept-encoding": encoding },
+              signal: abort.signal,
+            }),
+          ),
+        )
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get("content-encoding")).toBe(encoding)
+        expect(response.headers.get("vary")).toContain("Accept-Encoding")
+        if (!response.body) throw new Error("Expected response stream body")
+
+        const reader = response.body.getReader()
+        const decompressor = encoding === "gzip" ? createGunzip() : createBrotliDecompress()
+        const chunks: Array<string> = []
+        let notify: (() => void) | undefined
+        decompressor.on("data", (chunk: Buffer) => {
+          chunks.push(chunk.toString("utf8"))
+          notify?.()
+        })
+
+        const nextDecompressedFrame = async (): Promise<string> => {
+          while (!chunks.join("").includes("\n\n")) {
+            const waitData = new Promise<void>((resolve) => {
+              notify = resolve
+            })
+            const part = await reader.read()
+            if (part.done) break
+            decompressor.write(part.value)
+            await waitData
+          }
+          const combined = chunks.join("")
+          const splitIndex = combined.indexOf("\n\n")
+          const frame = combined.slice(0, splitIndex)
+          const rest = combined.slice(splitIndex + 2)
+          chunks.length = 0
+          if (rest) chunks.push(rest)
+          if (frame.startsWith(":")) return nextDecompressedFrame()
+          return frame
+        }
+
+        // First frame (server.connected) arrives and decompresses while the stream remains open.
+        const firstFrame = yield* Effect.promise(() => nextDecompressedFrame())
+        expect(firstFrame).toContain('"type":"server.connected"')
+
+        // Publish a live event and verify it flushes immediately without closing the stream.
+        yield* source.publish(event(`live_${encoding}`))
+        const secondFrame = yield* Effect.promise(() => nextDecompressedFrame())
+        expect(secondFrame).toContain(`"id":"evt_live_${encoding}"`)
+
+        abort.abort()
+        yield* Effect.promise(() => reader.cancel())
+        decompressor.destroy()
+      }
     }),
   )
 })
