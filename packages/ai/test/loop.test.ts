@@ -16,8 +16,8 @@ const read_file = Tool.make({
     path === "missing.txt" ? new ToolFailure({ message: `No such file: ${path}` }) : Effect.succeed("hello"),
 })
 
-const collect = (stopWhen?: LLM.LoopInput["stopWhen"]) =>
-  LLM.loop({ model, prompt: "Read the file.", tools: { read_file }, stopWhen }).pipe(
+const collect = (until?: LLM.LoopInput["until"]) =>
+  LLM.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )
@@ -78,7 +78,7 @@ describe("LLM.loop", () => {
     }),
   )
 
-  it.effect("stops when stopWhen returns true without running that step's tools", () =>
+  it.effect("stops when until returns true without running that step's tools", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       yield* client.always(TestLLM.tool("call-1", "read_file", { path: "a.txt" }))

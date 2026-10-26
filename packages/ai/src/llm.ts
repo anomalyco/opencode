@@ -59,19 +59,19 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
 > & {
   readonly tools: ExecutableTools
   /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
-  readonly stopWhen?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
+  readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
 }
 
 /**
  * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls or
- * `stopWhen` returns `true`. Each step's `step-start` and `step-finish` carry its step index.
+ * `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index.
  */
 export function loop<const Model extends LanguageModel>(
   input: LoopInput<Model>,
   options?: StreamOptions,
 ): Stream.Stream<LLMEvent, AIError, Service>
 export function loop(input: LoopInput, options?: StreamOptions) {
-  const { tools, stopWhen, ...rest } = input
+  const { tools, until, ...rest } = input
   const step = (request: LLMRequest, steps: ReadonlyArray<LLMResponse>): Stream.Stream<LLMEvent, AIError, Service> =>
     Stream.suspend(() => {
       const events: LLMEvent[] = []
@@ -87,7 +87,7 @@ export function loop(input: LoopInput, options?: StreamOptions) {
               const calls = response?.toolCalls.filter((call) => call.providerExecuted !== true) ?? []
               if (!response || calls.length === 0) return Stream.empty
               const done = [...steps, response]
-              if (stopWhen?.({ steps: done })) return Stream.empty
+              if (until?.({ steps: done })) return Stream.empty
               const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call), {
                 concurrency: "unbounded",
               })

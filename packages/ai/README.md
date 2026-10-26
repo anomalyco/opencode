@@ -53,7 +53,7 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 ### Tool loop
 
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
-tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `stopWhen` is checked
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
 them:
 
@@ -77,7 +77,7 @@ const events = ai.llm.loop({
   model,
   prompt: "Summarize package.json.",
   tools: { read_file },
-  stopWhen: ({ steps }) => steps.length >= 8,
+  until: ({ steps }) => steps.length >= 8,
 })
 for await (const event of events) {
   if (event.type === "text-delta") process.stdout.write(event.text)
