@@ -469,6 +469,50 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("skips API entries and modes it can't read and keeps the model", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          models: {
+            "acme-1": {
+              id: "acme-1",
+              type: "chat",
+              name: "Acme One",
+              release_date: "2026-01-01",
+              modalities: { input: ["text"], output: ["text"] },
+              capabilities: { tools: { supported: true }, reasoning: { supported: false } },
+              api: {
+                future: { url: 42 },
+                "chat-completions": {
+                  base_url: "https://api.acme.test/v1",
+                  sdk: { opencodeai: "@opencode/ai/providers/openai-compatible" },
+                },
+              },
+              experimental: {
+                modes: { future: { cost: "free" }, fast: { body: { service_tier: "priority" } } },
+              },
+            },
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(acme?.info).toMatchObject({
+        package: "@opencode/ai/providers/openai-compatible",
+        settings: { baseURL: "https://api.acme.test/v1" },
+      })
+      expect(acme?.models.map((model) => model.id)).toEqual([Model.ID.make("acme-1"), Model.ID.make("acme-1-fast")])
+    }),
+  )
+
   it.live("reads a models.dev v1 catalog by converting it to v2", () =>
     Effect.gen(function* () {
       const cache = makeCache()

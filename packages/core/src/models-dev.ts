@@ -1,4 +1,4 @@
-import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
+import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField } from "@opencode/schema/model-compatibility"
@@ -65,6 +65,29 @@ const SourceCost = Schema.Struct({
 })
 type SourceCost = typeof SourceCost.Type
 
+// API entries and modes are lists models.dev keeps adding to, so each is decoded on its own and an
+// entry this version doesn't understand is skipped instead of failing the model.
+const SourceApi = Schema.Struct({
+  base_url: Schema.optional(Schema.String),
+  sdk: Schema.optional(
+    Schema.Struct({ aisdk: Schema.optional(Schema.String), opencodeai: Schema.optional(Schema.String) }),
+  ),
+  compatibility: Schema.optional(
+    Schema.Struct({
+      reasoning_field: Schema.optional(Schema.String),
+      max_tokens_field: Schema.optional(Schema.String),
+    }),
+  ),
+})
+
+const SourceMode = Schema.Struct({
+  service_tier: Schema.optional(Schema.String),
+  cost: Schema.optional(SourceCost),
+  body: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+type SourceMode = typeof SourceMode.Type
+
 const SourceModel = Schema.Struct({
   id: Schema.String,
   type: Schema.String,
@@ -87,35 +110,9 @@ const SourceModel = Schema.Struct({
   ),
   cost: Schema.optional(SourceCost),
   // Ordered: the first API is the model's default.
-  api: Schema.Record(
-    Schema.String,
-    Schema.Struct({
-      base_url: Schema.String,
-      sdk: Schema.optional(
-        Schema.Struct({ aisdk: Schema.optional(Schema.String), opencodeai: Schema.optional(Schema.String) }),
-      ),
-      compatibility: Schema.optional(
-        Schema.Struct({
-          reasoning_field: Schema.optional(Schema.String),
-          max_tokens_field: Schema.optional(Schema.String),
-        }),
-      ),
-    }),
-  ),
+  api: Schema.Record(Schema.String, Schema.Unknown),
   experimental: Schema.optional(
-    Schema.Struct({
-      modes: Schema.optional(
-        Schema.Record(
-          Schema.String,
-          Schema.Struct({
-            service_tier: Schema.optional(Schema.String),
-            cost: Schema.optional(SourceCost),
-            body: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-            headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-          }),
-        ),
-      ),
-    }),
+    Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
   ),
 })
 type SourceModel = typeof SourceModel.Type
@@ -131,7 +128,9 @@ const SourceProvider = Schema.Struct({
 const TYPES: readonly string[] = ["chat", "decision", "image"]
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
-const decodeModel = Schema.decodeUnknownOption(SourceModel)
+const decodeModel = Schema.decodeUnknownResult(SourceModel)
+const decodeApi = Schema.decodeUnknownOption(SourceApi)
+const decodeMode = Schema.decodeUnknownOption(SourceMode)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
 const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
@@ -163,13 +162,16 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-function normalize(catalog: Record<string, unknown>): readonly Snapshot[] {
-  return Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
+const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>) {
+  const failed: { readonly model: string; readonly issue: unknown }[] = []
+  const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
     if (!item) return []
     const providerID = Provider.ID.make(item.id)
-    const sources = Object.values(item.models).flatMap((value) => {
-      const model = Option.getOrUndefined(decodeModel(value))
+    const sources = Object.entries(item.models).flatMap(([key, value]) => {
+      const decoded = decodeModel(value)
+      if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
+      const model = Result.isSuccess(decoded) ? decoded.success : undefined
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
       const target = model && TYPES.includes(model.type) && route(providerID, model)
       return model && target ? [{ model, route: target }] : []
@@ -198,7 +200,7 @@ function normalize(catalog: Record<string, unknown>): readonly Snapshot[] {
       )
       return [
         { ...base, variants },
-        ...Object.entries(source.model.experimental?.modes ?? {}).map(([mode, options]) =>
+        ...entries(source.model.experimental?.modes, decodeMode).map(([mode, options]) =>
           modelInfo(providerID, { packageName, baseURL }, Model.ID.make(`${source.model.id}-${mode}`), source, {
             name: `${source.model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`,
             cost: modeCost(source.model, baseCost, mode, options),
@@ -210,13 +212,28 @@ function normalize(catalog: Record<string, unknown>): readonly Snapshot[] {
     })
     return [{ info, models, environment: [...item.env] }]
   })
+  if (failed.length > 0)
+    yield* Effect.logWarning("Skipped models.dev models that failed to parse", {
+      count: failed.length,
+      models: failed.slice(0, 10).map((item) => item.model),
+      issue: String(failed[0]?.issue),
+    })
+  return snapshots as readonly Snapshot[]
+})
+
+function entries<A>(record: Record<string, unknown> | undefined, decode: (input: unknown) => Option.Option<A>) {
+  return Object.entries(record ?? {}).flatMap(([key, value]) =>
+    Option.match(decode(value), { onNone: () => [], onSome: (entry) => [[key, entry] as const] }),
+  )
 }
 
 function route(providerID: Provider.ID, model: SourceModel): Route | undefined {
-  // A chat model uses its first API. Other types (image, decision…) only run through opencode's own
-  // packages, so they use their first API that has one, and are skipped without one.
-  const apis = Object.entries(model.api)
-  const [protocol, api] = (model.type === "chat" ? apis[0] : apis.find(([, entry]) => entry.sdk?.opencodeai)) ?? []
+  // A chat model uses its first API with a package. Other types (image, decision…) only run through
+  // opencode's own packages, so they use their first API that has one, and are skipped without one.
+  const [protocol, api] =
+    entries(model.api, decodeApi).find(([, entry]) =>
+      model.type === "chat" ? entry.sdk?.opencodeai || entry.sdk?.aisdk : entry.sdk?.opencodeai,
+    ) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
   const packageName =
@@ -313,12 +330,7 @@ function cacheWrite(cache: typeof CachePrices.Type | undefined) {
 
 // A mode without its own cost takes the base prices scaled by its service tier's
 // multiplier (the mode name by default). The base context tiers are kept unscaled.
-function modeCost(
-  model: SourceModel,
-  base: Model.Info["cost"],
-  name: string,
-  mode: NonNullable<NonNullable<SourceModel["experimental"]>["modes"]>[string],
-): Model.Info["cost"] {
+function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
   const [baseDefault, ...baseTiers] = base
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
   const tier = mode.service_tier ?? name
@@ -457,7 +469,7 @@ const defaultSource = "https://models.opencode.ai"
 // The experimental v2 API, limited to the model types opencode keeps.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
 
-export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map(normalize))
+export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.flatMap(normalize))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
@@ -593,9 +605,9 @@ export const layer = (options?: Options) =>
 
       const populate = Effect.gen(function* () {
         const fromFile = yield* loadFromFile
-        if (fromFile) return normalize(fromFile)
+        if (fromFile) return yield* normalize(fromFile)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return normalize(cached.catalog)
+        if (cached) return yield* normalize(cached.catalog)
         const bundled = yield* loadSnapshot
         if (bundled) return bundled
         if (!fetch) return []
@@ -606,7 +618,7 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return normalize(catalog)
+        return yield* normalize(catalog)
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
       const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
