@@ -532,12 +532,29 @@ const lowerToolMessages = Effect.fnUntraced(function* (
       continue
     }
     const content: ReadonlyArray<Tool.Content> = part.result.value
-    const text = content.filter((item) => item.type === "text").map((item) => item.text)
+    const text: string[] = []
+    for (const item of content) {
+      if (item.type === "text") {
+        text.push(item.text)
+        continue
+      }
+      const media = ProviderShared.toolFileMedia(item)
+      // Tool files persist in history, so explain unsupported types instead of failing every later request.
+      if (
+        media.media.kind !== "image" &&
+        media.media.kind !== "video" &&
+        media.media.mediaType.toLowerCase() !== "application/pdf"
+      ) {
+        text.push(
+          `[File omitted: ${item.name ?? "unnamed file"} (${item.mime}). OpenAI Chat does not support this file type.]`,
+        )
+        continue
+      }
+      attachments.push(yield* lowerMedia(media))
+    }
     messages.push(
       toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
     )
-    const files = content.filter((item) => item.type === "file")
-    attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
   }
   return { messages, attachments }
 })
