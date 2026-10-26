@@ -338,12 +338,16 @@ export function Session(props: {
     if (client.connection.status() !== "connected") return
     setSynced(false)
     const sessionID = route.sessionID
+    // A reconnect drops the family read this run started and reruns the effect, which reads it again.
+    let superseded = false
+    onCleanup(() => (superseded = true))
     void (async () => {
       await Promise.all([
         data.session.sync(sessionID, { children: true }),
         data.session.permission.sync(sessionID).catch(() => undefined),
         data.session.form.sync(sessionID).catch(() => undefined),
       ])
+      if (superseded) return
       const info = data.session.get(sessionID)
       if (!info) {
         toast.show({

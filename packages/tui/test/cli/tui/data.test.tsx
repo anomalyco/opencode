@@ -3184,23 +3184,37 @@ function sessionInfo(id: string, parentID: string | undefined, cost = 0) {
   }
 }
 
-// Mounts a DataProvider whose `/api/session/:id` responses are driven by the
+// Mounts a DataProvider whose `/api/session/:id` and family responses are driven by the
 // given parent map (sessionID -> parentID). Roots omit the entry. Reused across
 // the family-index tests below.
 async function mountData(parents: Record<string, string>, costs: Record<string, number> = {}) {
+  // A live event stream keeps the connection up, so a reconnect cannot invalidate the family reads under test.
   const calls = createFetch((url) => {
-    if (url.pathname === "/api/session") {
-      const parentID = url.searchParams.get("parentID")
+    const family = url.pathname.match(/^\/api\/session\/([^/]+)\/family$/)
+    if (family) {
+      const rootID = (function up(id: string): string {
+        return parents[id] ? up(parents[id]) : id
+      })(family[1])
+      const members = (function down(id: string): string[] {
+        return [
+          id,
+          ...Object.keys(parents)
+            .filter((child) => parents[child] === id)
+            .flatMap(down),
+        ]
+      })(rootID)
       return json({
-        data: Object.entries(parents)
-          .filter(([, parent]) => parent === parentID)
-          .map(([id, parent]) => sessionInfo(id, parent, costs[id])),
-        cursor: {},
+        data: {
+          rootID,
+          sessions: members.map((id) => sessionInfo(id, parents[id], costs[id])),
+          permissions: [],
+          forms: [],
+        },
       })
     }
     const match = url.pathname.match(/^\/api\/session\/([^/]+)$/)
     if (match && match[1] !== "active") return json({ data: sessionInfo(match[1], parents[match[1]], costs[match[1]]) })
-  })
+  }, createEventStream())
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -3226,15 +3240,14 @@ async function mountData(parents: Record<string, string>, costs: Record<string, 
   return { data, app }
 }
 
-test("syncs direct child session info with a navigated root", async () => {
+test("syncs every descendant's session info with a navigated member", async () => {
   const { data, app } = await mountData({ child: "root", sibling: "root", grandchild: "child" })
   try {
-    await data.session.sync("root", { children: true })
+    await data.session.sync("child", { children: true })
     expect(data.session.get("root")?.id).toBe("root")
-    expect(data.session.get("child")?.parentID).toBe("root")
     expect(data.session.get("sibling")?.parentID).toBe("root")
-    expect(data.session.get("grandchild")).toBeUndefined()
-    expect(data.session.family("root")).toEqual(["root", "child", "sibling"])
+    expect(data.session.get("grandchild")?.parentID).toBe("child")
+    expect(data.session.family("grandchild")).toEqual(["root", "child", "grandchild", "sibling"])
   } finally {
     app.renderer.destroy()
   }

@@ -347,6 +347,13 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.get("sessionFamily", "/api/session/:sessionID/family", {
+      params: SessionParams,
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
     HttpApiEndpoint.delete("sessionRemove", "/api/session/:sessionID", {
       params: SessionParams,
       success: NoContent,

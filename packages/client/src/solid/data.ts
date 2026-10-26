@@ -29,7 +29,6 @@ import type {
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionInfo,
-  SessionListInput,
   SessionInboxInfo,
   SessionInboxCompaction,
   ShellInfo,
@@ -208,12 +207,14 @@ function createSync() {
   // that window are already covered, since the reload has not read anything yet.
   type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
   const state = new Map<string, true | Pending>()
-  const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
+  // `load` may ask whether its run was invalidated, so a stale response does not mark other keys complete.
+  type Load = (stale: () => boolean) => Promise<void>
+  const start = (key: string, load: Load, wait?: Promise<void>) => {
     const entry: Pending = { promise: Promise.resolve(), invalidated: false, started: !wait }
     state.set(key, entry)
     const run = () => {
       entry.started = true
-      return load()
+      return load(() => entry.invalidated)
     }
     entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
       .then(() => {
@@ -225,7 +226,7 @@ function createSync() {
     return entry.promise
   }
   return {
-    run(key: string, load: () => Promise<void>) {
+    run(key: string, load: Load) {
       const active = state.get(key)
       if (active === true) return Promise.resolve()
       if (!active) return start(key, load)
@@ -238,10 +239,6 @@ function createSync() {
     },
     has(key: string) {
       return state.has(key)
-    },
-    pending(key: string) {
-      const active = state.get(key)
-      return active !== undefined && active !== true
     },
     invalidate(key?: string) {
       if (key) {
@@ -258,7 +255,6 @@ function createSync() {
   }
 }
 
-const CHILD_PAGE = 200
 const DELETED_SESSION_LIMIT = 512
 
 export function createData(config: CreateDataInput) {
@@ -323,6 +319,47 @@ export function createData(config: CreateDataInput) {
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+  // One journal per Session, family, or pending-request read in flight. Reads and events arrive in either order, and an
+  // event recorded during a read is newer than the read, so the read applies its response and then replays the events
+  // for the Sessions it returned. Folds must therefore be safe to apply again.
+  type Journal = { sessionID: string; apply: () => void; created?: boolean }[]
+  const journals = new Set<Journal>()
+
+  function observe(sessionID: string, apply: () => void, created?: boolean) {
+    journals.forEach((journal) => journal.push({ sessionID, apply, created }))
+    apply()
+  }
+
+  async function observeRead<Value>(
+    load: () => Promise<Value>,
+    commit: (value: Value, journal: Journal) => (sessionID: string) => boolean,
+    stale?: () => boolean,
+  ) {
+    const journal: Journal = []
+    journals.add(journal)
+    try {
+      const value = await load()
+      if (stale?.()) return
+      batch(() => {
+        const covers = commit(value, journal)
+        journal.forEach((entry) => {
+          if (covers(entry.sessionID)) entry.apply()
+        })
+      })
+    } finally {
+      journals.delete(journal)
+    }
+  }
+
+  // `created` mirrors the projector's `time_updated = event.created` for events that touch the Session.
+  function patchSession(sessionID: string, patch: Partial<SessionInfo>, created?: number) {
+    observe(sessionID, () => {
+      if (!store.session.info[sessionID]) return
+      setStore("session", "info", sessionID, patch)
+      if (created !== undefined)
+        setStore("session", "info", sessionID, "time", "updated", (updated) => Math.max(updated, created))
+    })
+  }
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -564,16 +601,6 @@ export function createData(config: CreateDataInput) {
     return created
   }
 
-  // Every direct subagent, not only the server's default first page, so a root's family cost
-  // counts all of them. Pages stay newest first, the order the family index has always used.
-  async function listChildren(input: SessionListInput): Promise<SessionInfo[]> {
-    const page = await api().session.list(input)
-
-    if (page.data.length < CHILD_PAGE || !page.cursor.next) return page.data
-
-    return [...page.data, ...(await listChildren({ cursor: page.cursor.next, limit: CHILD_PAGE }))]
-  }
-
   // Walk parentID upward through loaded session info to the family root. When a
   // parent's info is missing, that missing ID is the furthest-known ancestor and
   // is returned so orphan subtrees group under it until the parent arrives. A
@@ -667,7 +694,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function evictMissing(error: unknown): never {
-    if (isSessionNotFoundError(error)) markDeleted(error.sessionID)
+    if (isSessionNotFoundError(error)) observe(error.sessionID, () => markDeleted(error.sessionID))
     throw error
   }
 
@@ -721,9 +748,12 @@ export function createData(config: CreateDataInput) {
               setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
               // Sessions created before this connection (while disconnected, or before the client started)
               // never delivered `session.created`; without their info a running child never joins its root's family.
-              snapshot.forEach((status, id) => {
-                if (status === "running" && !store.session.info[id]) refresh(() => result.session.sync(id))
-              })
+              // Any member's ID reads the same family, so a Session that started during hydration names its own.
+              new Set(
+                [...snapshot].flatMap(([id, status]) =>
+                  status === "running" && !store.session.info[id] ? [active[id]?.rootID ?? id] : [],
+                ),
+              ).forEach((rootID) => refresh(() => result.session.sync(rootID, { children: true })))
             })
             .catch(() => {
               if (activeUpdates === updates) activeUpdates = undefined
@@ -745,8 +775,16 @@ export function createData(config: CreateDataInput) {
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
       case "session.created":
-        clearDeleted(event.data.sessionID)
         sessionOutbox.delete(event.data.sessionID)
+        // A family read that lands before this Session loads keeps it once it has loaded and joins the family.
+        observe(
+          event.data.sessionID,
+          () => {
+            clearDeleted(event.data.sessionID)
+            registerSession(event.data.sessionID)
+          },
+          true,
+        )
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
         // Band-aid: a newly created session starts empty, so live events can be its source of truth.
@@ -757,19 +795,14 @@ export function createData(config: CreateDataInput) {
         sync.complete(`session.message:${event.data.sessionID}`)
         return
       case "session.deleted":
-        markDeleted(event.data.sessionID)
+        observe(event.data.sessionID, () => markDeleted(event.data.sessionID))
         return
       case "session.usage.updated":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, {
-            cost: event.data.cost,
-            tokens: event.data.tokens,
-          })
+        patchSession(event.data.sessionID, { cost: event.data.cost, tokens: event.data.tokens })
         return
       case "session.agent.selected": {
         const previous = store.session.info[event.data.sessionID]?.agent
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
+        patchSession(event.data.sessionID, { agent: event.data.agent }, event.created)
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
           type: "agent-switched",
@@ -781,8 +814,7 @@ export function createData(config: CreateDataInput) {
       }
       case "session.model.selected": {
         const previous = event.data.previous ?? store.session.info[event.data.sessionID]?.model
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "model", event.data.model)
+        patchSession(event.data.sessionID, { model: event.data.model }, event.created)
         if (!store.session.message[event.data.sessionID]) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
@@ -804,22 +836,11 @@ export function createData(config: CreateDataInput) {
         )
         return
       }
-      case "session.renamed": {
-        // Preserve the live title when it races the session's initial read.
-        refresh(() => {
-          const family = sync.pending(`session.family:${event.data.sessionID}`)
-            ? result.session.sync(event.data.sessionID, { children: true })
-            : Promise.resolve()
-          return Promise.all([result.session.sync(event.data.sessionID), family]).then(() => {
-            if (store.session.info[event.data.sessionID])
-              setStore("session", "info", event.data.sessionID, "title", event.data.title)
-          })
-        })
+      case "session.renamed":
+        patchSession(event.data.sessionID, { title: event.data.title }, event.created)
         return
-      }
       case "session.permissions":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
+        patchSession(event.data.sessionID, { permissions: event.data.permissions }, event.created)
         return
       case "session.metadata.updated":
         // The event carries the whole record, so keys it drops must go too.
@@ -827,24 +848,33 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "metadata", reconcile(event.data.metadata))
         return
       case "session.archived":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "time", "archived", event.created)
-        return
       case "session.unarchived":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "time", "archived", undefined)
+        patchSession(event.data.sessionID, {}, event.created)
+        observe(event.data.sessionID, () => {
+          if (store.session.info[event.data.sessionID])
+            setStore(
+              "session",
+              "info",
+              event.data.sessionID,
+              "time",
+              "archived",
+              event.type === "session.archived" ? event.created : undefined,
+            )
+        })
         return
       case "session.moved": {
         const current = store.session.info[event.data.sessionID]
-        if (current) {
-          const previous = {
-            location: { ...current.location },
-            projectID: current.projectID,
-            subpath: current.subpath,
-          }
-          setStore("session", "info", event.data.sessionID, "location", event.data.location)
-          setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
-          setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
+        const previous = current && {
+          location: { ...current.location },
+          projectID: current.projectID,
+          subpath: current.subpath,
+        }
+        patchSession(
+          event.data.sessionID,
+          { location: event.data.location, projectID: event.data.projectID, subpath: event.data.subpath },
+          event.created,
+        )
+        if (previous) {
           message.insert(event.data.sessionID, {
             id: SessionMessage.ID.fromEvent(event.id),
             type: "location-switched",
@@ -904,6 +934,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.enqueued": {
+        patchSession(event.data.sessionID, {}, event.created)
         outbox.delete(event.data.inboxID)
         const item = {
           id: event.data.inboxID,
@@ -970,6 +1001,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.started":
+        patchSession(event.data.sessionID, {}, event.created)
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
           const existing = position === undefined ? undefined : draft[position]
@@ -1010,6 +1042,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.ended": {
+        patchSession(event.data.sessionID, {}, event.created)
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.completed = event.created
           assistant.finish = event.data.finish
@@ -1022,6 +1055,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.step.failed":
+        patchSession(event.data.sessionID, {}, event.created)
         // A budget refusal means the cached usage limits are out of date, which is what the refusal sends people to.
         if (
           event.location &&
@@ -1148,11 +1182,19 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.execution.started":
-        setSessionActive(event.data.sessionID, "running")
-        // Revalidate so `time.busy` follows the projected execution start.
-        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
-        result.session.invalidate(event.data.sessionID)
-        refresh(() => result.session.sync(event.data.sessionID))
+        observe(event.data.sessionID, () => {
+          setSessionActive(event.data.sessionID, "running")
+          const busy = store.session.info[event.data.sessionID]?.time.busy
+          if (store.session.info[event.data.sessionID])
+            setStore(
+              "session",
+              "info",
+              event.data.sessionID,
+              "time",
+              "busy",
+              Math.max(busy ?? event.created, event.created),
+            )
+        })
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
@@ -1168,23 +1210,41 @@ export function createData(config: CreateDataInput) {
         return
       case "session.execution.succeeded":
       case "session.execution.failed":
-      case "session.execution.interrupted":
-        setSessionActive(event.data.sessionID, "idle")
+      case "session.execution.interrupted": {
+        const shutdown = event.type === "session.execution.interrupted" && event.data.reason === "shutdown"
+        const outcome =
+          event.type === "session.execution.succeeded"
+            ? "succeeded"
+            : event.type === "session.execution.failed"
+              ? "failed"
+              : "interrupted"
+        observe(event.data.sessionID, () => {
+          setSessionActive(event.data.sessionID, "idle")
+          const idle = store.session.info[event.data.sessionID]?.time.idle
+          if (shutdown || !store.session.info[event.data.sessionID]) return
+          // Idempotent, because reads replay it. It differs from the projector's `+1` bump only when two terminals
+          // share a millisecond.
+          if (event.created >= (idle ?? -Infinity))
+            setStore("session", "info", event.data.sessionID, "outcome", outcome)
+          setStore(
+            "session",
+            "info",
+            event.data.sessionID,
+            "time",
+            "idle",
+            Math.max(idle ?? event.created, event.created),
+          )
+        })
         message.update(event.data.sessionID, (draft) => {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
         })
-        if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        if (shutdown) return
         // Mirror the projected idle marker so turn boundaries match before the next message read.
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
           type: "idle",
-          outcome:
-            event.type === "session.execution.succeeded"
-              ? "succeeded"
-              : event.type === "session.execution.failed"
-                ? "failed"
-                : "interrupted",
+          outcome,
           ...(event.type === "session.execution.failed" ? { error: event.data.error } : {}),
           time: { created: event.created },
         })
@@ -1201,28 +1261,30 @@ export function createData(config: CreateDataInput) {
           sync.invalidate(`session.message:${event.data.sessionID}`)
           refresh(() => result.session.message.sync(event.data.sessionID))
         }
-        // An event can overtake the first read; queue a revalidation when that read is still active.
-        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
-        result.session.invalidate(event.data.sessionID)
-        refresh(() => result.session.sync(event.data.sessionID))
         return
+      }
       case "session.viewed":
-        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
-        result.session.invalidate(event.data.sessionID)
-        refresh(() => result.session.sync(event.data.sessionID))
+        observe(event.data.sessionID, () => {
+          const viewed = store.session.info[event.data.sessionID]?.time.viewed
+          if (store.session.info[event.data.sessionID])
+            setStore(
+              "session",
+              "info",
+              event.data.sessionID,
+              "time",
+              "viewed",
+              Math.max(event.data.idle, viewed ?? event.data.idle),
+            )
+        })
         return
       case "session.revert.staged":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "revert", event.data.revert)
+        patchSession(event.data.sessionID, { revert: event.data.revert }, event.created)
         return
       case "session.revert.cleared":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "revert", undefined)
+        patchSession(event.data.sessionID, { revert: undefined }, event.created)
         return
       case "session.revert.committed":
-        if (store.session.info[event.data.sessionID]) {
-          setStore("session", "info", event.data.sessionID, "revert", undefined)
-        }
+        patchSession(event.data.sessionID, { revert: undefined }, event.created)
         // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
         setStore(
           "session",
@@ -1298,18 +1360,20 @@ export function createData(config: CreateDataInput) {
         if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "permission.asked":
-        if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
-        setStore("session", "permission", event.data.sessionID, [
-          ...(store.session.permission[event.data.sessionID] ?? []),
-          event.data,
-        ])
+        observe(event.data.sessionID, () => {
+          if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
+          setStore("session", "permission", event.data.sessionID, [
+            ...(store.session.permission[event.data.sessionID] ?? []),
+            event.data,
+          ])
+        })
         return
       case "permission.replied":
-        removePermission(event.data.sessionID, event.data.requestID)
+        observe(event.data.sessionID, () => removePermission(event.data.sessionID, event.data.requestID))
         return
       case "form.replied":
       case "form.cancelled":
-        removeForm(event.data.sessionID, event.data.id, event.location)
+        observe(event.data.sessionID, () => removeForm(event.data.sessionID, event.data.id, event.location))
         return
     }
 
@@ -1369,13 +1433,17 @@ export function createData(config: CreateDataInput) {
         // it, and a read served before the location's VCS provider loaded has neither.
         refreshLocation("vcs", result.location.vcs, location)
         break
-      case "form.created":
-        if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
-        setStore("session", "form", event.data.form.sessionID, [
-          ...(store.session.form[event.data.form.sessionID] ?? []),
-          event.data.form.sessionID === "global" ? { ...event.data.form, location } : event.data.form,
-        ])
+      case "form.created": {
+        const form = event.data.form
+        observe(form.sessionID, () => {
+          if (store.session.form[form.sessionID]?.some((item) => item.id === form.id)) return
+          setStore("session", "form", form.sessionID, [
+            ...(store.session.form[form.sessionID] ?? []),
+            form.sessionID === "global" ? { ...form, location } : form,
+          ])
+        })
         break
+      }
       case "shell.created":
         setStore("location", locationKey(location), (data) => ({
           shell: {
@@ -1507,7 +1575,7 @@ export function createData(config: CreateDataInput) {
         return Boolean(store.session.missing[sessionID])
       },
       forget(sessionID: string) {
-        markDeleted(sessionID)
+        observe(sessionID, () => markDeleted(sessionID))
       },
       creating(sessionID: string) {
         return creating.has(sessionID)
@@ -1783,28 +1851,75 @@ export function createData(config: CreateDataInput) {
         })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
-        return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
-          const started = deletionEpoch
-          const [info, children] = await Promise.all([
-            api().session.get({ sessionID }).catch(evictMissing),
-            options?.children ? listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }) : [],
-          ])
-          const sessions = [info, ...children].filter((session) => (deletedAt.get(session.id) ?? 0) <= started)
-          batch(() => {
-            setStore(
-              "session",
-              "info",
-              produce((draft) => {
-                for (const session of sessions) draft[session.id] = session
-              }),
-            )
-            for (const session of sessions) {
-              clearDeleted(session.id)
-              sync.complete(`session:${session.id}`)
-              registerSession(session.id)
-            }
-          })
-        })
+        if (!options?.children)
+          return sync.run(`session:${sessionID}`, () =>
+            observeRead(
+              () => api().session.get({ sessionID }).catch(evictMissing),
+              (info) => {
+                clearDeleted(info.id)
+                setStore("session", "info", info.id, reconcile(info))
+                registerSession(info.id)
+                return (id) => id === info.id
+              },
+            ),
+          )
+        // The family's membership is unknown until the read lands, so events for every Session are recorded.
+        return sync.run(`session.family:${sessionID}`, (stale) =>
+          observeRead(
+            () => api().session.family({ sessionID }).catch(evictMissing),
+            (family, journal) => {
+              const ids = new Set(family.sessions.map((session) => session.id))
+              // Members the server no longer lists were deleted while this client could not hear it. Sessions created
+              // during the read rejoin when their creation replays, and unacknowledged local creations stay.
+              const created = new Set(journal.flatMap((entry) => (entry.created ? [entry.sessionID] : [])))
+              const gone = [family.rootID, ...ids]
+                .flatMap((id) => store.session.family[id] ?? [])
+                .filter((id) => !ids.has(id) && !created.has(id) && !sessionOutbox.has(id))
+              gone.forEach((id) => markDeleted(id))
+              setStore(
+                "session",
+                "info",
+                produce((draft) => {
+                  for (const session of family.sessions) draft[session.id] = session
+                }),
+              )
+              const local = [...sessionOutbox].filter(
+                (id) => !ids.has(id) && store.session.info[id] && resolveRoot(id) === family.rootID,
+              )
+              setStore(
+                "session",
+                "family",
+                produce((draft) => {
+                  for (const id of ids) if (id !== family.rootID) delete draft[id]
+                  draft[family.rootID] = [...ids, ...local]
+                }),
+              )
+              for (const session of family.sessions) {
+                clearDeleted(session.id)
+                setStore("session", "active", session.id, session.status)
+                setStore(
+                  "session",
+                  "permission",
+                  session.id,
+                  family.permissions.filter((request) => request.sessionID === session.id),
+                )
+                setStore(
+                  "session",
+                  "form",
+                  session.id,
+                  family.forms.filter((form) => form.sessionID === session.id),
+                )
+                sync.complete(`session:${session.id}`)
+                sync.complete(`session.family:${session.id}`)
+                sync.complete(`session.permission:${session.id}`)
+                sync.complete(`session.form:${session.id}:`)
+              }
+              return (id) => resolveRoot(id) === family.rootID
+            },
+            // A read invalidated in flight is superseded by a newer one, and its older snapshot would undo that read.
+            stale,
+          ),
+        )
       },
       invalidate(sessionID: string) {
         sync.invalidate(`session:${sessionID}`)
@@ -1934,12 +2049,15 @@ export function createData(config: CreateDataInput) {
           )
         },
         sync(sessionID: string) {
-          return sync.run(`session.permission:${sessionID}`, async () => {
-            const started = deletionEpoch
-            const list = await api().permission.list({ sessionID }).catch(evictMissing)
-            if ((deletedAt.get(sessionID) ?? 0) > started) return
-            setStore("session", "permission", sessionID, list)
-          })
+          return sync.run(`session.permission:${sessionID}`, () =>
+            observeRead(
+              () => api().permission.list({ sessionID }).catch(evictMissing),
+              (requests) => {
+                setStore("session", "permission", sessionID, requests)
+                return (id) => id === sessionID
+              },
+            ),
+          )
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.permission:${sessionID}`)
@@ -1985,10 +2103,13 @@ export function createData(config: CreateDataInput) {
               ])
               return
             }
-            const started = deletionEpoch
-            const list = await api().session.form.list({ sessionID }).catch(evictMissing)
-            if ((deletedAt.get(sessionID) ?? 0) > started) return
-            setStore("session", "form", sessionID, list)
+            await observeRead(
+              () => api().session.form.list({ sessionID }).catch(evictMissing),
+              (forms) => {
+                setStore("session", "form", sessionID, forms)
+                return (id) => id === sessionID
+              },
+            )
           })
         },
         invalidate(sessionID: string, ref?: LocationRef) {

@@ -658,6 +658,30 @@ function mockHandlers(
       new MockUnsupported({ message: `The mock server does not ${operation}; configure ${handler} for this scenario` }),
     )
 
+  // Like the server, a Session waiting on the user counts as running unless its status says otherwise.
+  const running = () => {
+    const status = resolve(config.sessionStatus ?? {})
+    return new Set([
+      ...Object.entries(status).flatMap(([id, value]) => (value.type === "idle" ? [] : [id])),
+      ...Object.entries(config.sessionPermissions ?? {}).flatMap(([id, list]) =>
+        currentPermissions(list).length > 0 && status[id]?.type !== "idle" ? [id] : [],
+      ),
+      ...resolve(config.forms ?? []).flatMap((form) =>
+        Predicate.isObject(form) && Predicate.isString(form.sessionID) && status[form.sessionID]?.type !== "idle"
+          ? [form.sessionID]
+          : [],
+      ),
+    ])
+  }
+  const familyRoot = (sessionID: string, seen = new Set<string>()): string => {
+    const parentID = config.sessions.find((item) => item.id === sessionID)?.parentID
+    if (!Predicate.isString(parentID) || seen.has(parentID)) return sessionID
+    seen.add(sessionID)
+    return familyRoot(parentID, seen)
+  }
+  const descendants = (sessionID: string): MockSession[] =>
+    config.sessions.filter((item) => item.parentID === sessionID).flatMap((child) => [child, ...descendants(child.id)])
+
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
       .handleRaw("event", () => {
@@ -1140,27 +1164,39 @@ function mockHandlers(
                   message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC`,
                 }),
               ),
-        sessionActive: () => {
-          const status = resolve(config.sessionStatus ?? {})
-
-          return Effect.succeed({
+        sessionActive: () =>
+          Effect.succeed({
             data: Object.fromEntries(
-              [
-                ...Object.entries(status).flatMap(([id, value]) => (value.type === "idle" ? [] : [id])),
-                ...Object.entries(config.sessionPermissions ?? {}).flatMap(([id, list]) =>
-                  currentPermissions(list).length > 0 && status[id]?.type !== "idle" ? [id] : [],
-                ),
-                ...resolve(config.forms ?? []).flatMap((form) =>
-                  Predicate.isObject(form) &&
-                  Predicate.isString(form.sessionID) &&
-                  status[form.sessionID]?.type !== "idle"
-                    ? [form.sessionID]
-                    : [],
-                ),
-              ].map((id) => [id, { type: "running" as const }]),
+              [...running()].map((id) => [id, { type: "running" as const, rootID: familyRoot(id) }]),
             ),
-          })
-        },
+          }),
+        sessionFamily: (ctx) =>
+          Effect.suspend(() => {
+            const rootID = familyRoot(ctx.params.sessionID)
+            const root = config.sessions.find((item) => item.id === rootID)
+            if (!root) return Effect.fail(new MockNotFound({ message: "Session not found" }))
+            const members = [root, ...descendants(rootID)]
+            const ids = new Set(members.map((session) => session.id))
+            const active = running()
+
+            return Effect.succeed({
+              data: {
+                rootID,
+                sessions: members.map((session) => ({
+                  ...currentSession(session, config.directory),
+                  status: active.has(session.id) ? "running" : "idle",
+                })),
+                permissions: members.flatMap((session) =>
+                  currentPermissions(config.sessionPermissions?.[session.id] ?? []).filter(
+                    (permission) => permission.sessionID === session.id,
+                  ),
+                ),
+                forms: resolve(config.forms ?? []).filter(
+                  (form) => Predicate.isObject(form) && Predicate.isString(form.sessionID) && ids.has(form.sessionID),
+                ),
+              },
+            })
+          }),
         sessionGet: (ctx) =>
           Effect.suspend(() => {
             config.onSession?.(ctx.params.sessionID)
