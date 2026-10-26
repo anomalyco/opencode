@@ -62,6 +62,8 @@ type InstanceContext = SetupContext<Definition> & Context
 type Instance = {
   definition: Definition
   context: InstanceContext
+  /** The declared window stores by name, open once `prepare` runs. */
+  stores: Readonly<Stores>
   dispose: () => void
   /** Opens the declared stores. Settles once the global stores have loaded. */
   prepare(): Promise<readonly void[]>
@@ -720,6 +722,7 @@ function createHost(input: HostInput) {
     return {
       definition,
       context: typed,
+      stores,
       prepare() {
         const storage = typed.storage
 
@@ -893,6 +896,8 @@ function createHost(input: HostInput) {
     links,
     definitions: () => input.definitions.map(latest),
     context: (id: string): Context | undefined => instances.get(id)?.context,
+    /** An extension's declared window stores by name, for a host tool that reads one, such as the review tour. */
+    stores: (id: string): Readonly<Stores> | undefined => instances.get(id)?.stores,
     fail,
     /** Starts loading every active extension's declared session stores for a session that mounts. */
     preload(session: SessionRef) {

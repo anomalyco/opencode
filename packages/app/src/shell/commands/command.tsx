@@ -358,7 +358,7 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
-function isEditableTarget(target: EventTarget | null) {
+export function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
 
   if (target.isContentEditable) return true

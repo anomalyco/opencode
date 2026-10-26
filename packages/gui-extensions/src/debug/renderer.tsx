@@ -56,6 +56,14 @@ const setup: Setup<typeof Debug> = (ctx) => {
     })
   }
 
+  // Shows the Knobs panel with the bar, or hides the panel and leaves the bar.
+  const toggleKnobs = () => {
+    bar.update((draft) => {
+      draft.motion = !(draft.visible && draft.motion)
+      draft.visible = true
+    })
+  }
+
   ctx.add(
     Command,
     (): Command => ({
@@ -102,6 +110,18 @@ const setup: Setup<typeof Debug> = (ctx) => {
             actions: [{ label: ctx.t("heap.reveal"), onClick: () => void desktop.reveal(result.directory) }],
           })
         },
+      }),
+    )
+
+  if (Motion)
+    ctx.add(
+      Command,
+      (): Command => ({
+        id: "knobs",
+        title: ctx.t("command.knobs"),
+        group: ctx.t("command.category.view"),
+        keywords: "motion tune tuning experiments",
+        run: toggleKnobs,
       }),
     )
 

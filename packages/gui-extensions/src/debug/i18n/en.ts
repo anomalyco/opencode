@@ -1,5 +1,6 @@
 export default {
   "command.toggle": "Toggle debug bar",
+  "command.knobs": "Toggle Knobs",
   "close.label": "Hide debug bar",
   "close.tip": "Hide debug bar. Bring it back from the command palette: Toggle debug bar.",
   "command.heap": "Capture heap snapshots",

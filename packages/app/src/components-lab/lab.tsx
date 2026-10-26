@@ -130,6 +130,17 @@ export default function ComponentsLab() {
 
   const rows = createMemo(() => folder(entries(), []))
 
+  // A story named by its file name (`?story=review-tour`, as tours and links write it) opens that file.
+  createEffect(() => {
+    const story = params.story
+
+    if (!story || entries().some((entry) => entry.file === story)) return
+
+    const match = entries().find((entry) => fileName(entry.file) === story)
+
+    if (match) setParams({ story: match.file }, { replace: true })
+  })
+
   const search = () => {
     if (palette?.isOpen) return palette.close()
 

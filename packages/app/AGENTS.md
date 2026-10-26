@@ -2,6 +2,7 @@
 
 - Prioritise, in this order: stability, simplicity, performance.
 - Before changing session or timeline code, record a production benchmark baseline and compare it after the change.
+- Keep `src/review-tour` on purpose: the review tour is how Kit reviews features in context. Cleanup and simplification passes must not delete it.
 
 ## Debugging
 

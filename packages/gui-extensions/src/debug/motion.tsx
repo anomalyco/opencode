@@ -260,6 +260,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
     <Portal>
       <div
         ref={container}
+        data-component="debug-knobs"
         class="pointer-events-auto fixed bottom-10 right-3 z-50 flex h-[min(600px,calc(100vh-6rem))] flex-col overflow-hidden rounded-[10px] border border-v2-border-border-muted bg-v2-background-bg-base text-v2-text-text-base shadow-[var(--v2-elevation-floating)]"
         style={{ width: `${width()}px` }}
         onKeyDown={escape}
