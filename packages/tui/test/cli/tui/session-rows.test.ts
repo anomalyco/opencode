@@ -275,6 +275,26 @@ test("closes turn usage on the idle marker so steered steps share one footer", (
   ])
 })
 
+test("renders an exhausted output-limit marker after the turn", () => {
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user", text: "Question", time: { created: 0 } },
+    { ...assistant("assistant", []), finish: "length" },
+    {
+      type: "idle",
+      id: "idle",
+      outcome: "failed",
+      error: { type: "output-limit", message: "Response remained truncated" },
+      time: { created: 2 },
+    },
+  ]
+
+  expect(reduceSessionRows(messages)).toEqual([
+    { type: "message", messageID: "user" },
+    { type: "assistant-footer", messageID: "assistant" },
+    { type: "message", messageID: "idle" },
+  ])
+})
+
 test("measures a marker-era turn from its first prompt across steers", () => {
   const step = (id: string, created: number, streamed: number, completed: number, output: number) => ({
     ...assistant(id, []),
