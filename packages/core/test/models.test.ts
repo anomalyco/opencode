@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
+import { sql } from "drizzle-orm"
 import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { Database } from "@opencode/core/database/database"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -851,6 +853,31 @@ describe("ModelsDev Service", () => {
           expect(refreshed[0]?.location).toBeUndefined()
         }),
       )
+    }),
+  )
+
+  it.live("keeps the catalog available and rewrites a malformed cached row in the database", () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(initialState)
+      const context = yield* Layer.build(
+        Layer.fresh(
+          AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node, Database.node, KV.node]), [
+            ModelsDev.node.replace(ModelsDev.configured({ fetch: false })),
+            LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
+          ]),
+        ),
+      )
+      yield* Effect.gen(function* () {
+        const database = (yield* Database.Service).db
+        yield* database.run(
+          sql`insert into kv (key, value, time_created, time_updated) values (${cacheKey}, '{"digest":"\\&"}', 0, 0)`,
+        )
+        const svc = yield* ModelsDev.Service
+        expect((yield* svc.get()).length).toBeGreaterThan(0)
+        yield* svc.refresh(false)
+        const kv = yield* KV.Service
+        expect(yield* kv.get(cacheKey)).toMatchObject({ body: JSON.stringify(fixture) })
+      }).pipe(Effect.provide(context))
     }),
   )
 
