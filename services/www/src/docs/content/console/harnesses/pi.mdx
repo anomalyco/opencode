@@ -3,8 +3,8 @@ title: "Pi"
 description: "Use Console and Go models from the Pi coding agent."
 ---
 
-[Pi](https://pi.dev) includes OpenCode providers for pay-as-you-go and Go. It picks the right API for each model, so
-every Console model works.
+[Pi](https://pi.dev) includes OpenCode providers for pay-as-you-go and Go. It picks the right API for each paid or Go
+model. Free-tier chat models require OpenCode and return HTTP `403` from Pi.
 
 | Provider      | Plan          |
 | ------------- | ------------- |
@@ -13,8 +13,7 @@ every Console model works.
 
 ## Configure
 
-Both providers read the key from `OPENCODE_API_KEY`. Create it under **Keys** in the
-[Console](https://opencode.ai/console).
+Both providers read the key from `OPENCODE_API_KEY`. Create a [personal API key](/console/harnesses#get-an-api-key).
 
 ```bash
 export OPENCODE_API_KEY="oc_sk_..."

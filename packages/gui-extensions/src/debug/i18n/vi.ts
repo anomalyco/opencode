@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Bật/tắt thanh gỡ lỗi",
-  "status.toggle": "Chuyển đổi công cụ gỡ lỗi",
   ariaLabel: "Chẩn đoán hiệu suất phát triển",
   providerAriaLabel: "Chẩn đoán hiệu suất nhà cung cấp",
   na: "không có",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Thời gian từ khi gửi yêu cầu đến nhà cung cấp cho đến đầu ra đầu tiên của mô hình.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Thời gian từ khi gửi yêu cầu đến nhà cung cấp cho đến văn bản trả lời đầu tiên.",
+  "duration.label": "TIME",
+  "duration.tip": "Thời gian từ lời nhắc bắt đầu lượt gần nhất cho đến khi phản hồi hoàn tất.",
   "tps.label": "TPS",
-  "tps.tip": "Số token đầu ra mỗi giây sau đầu ra đầu tiên của mô hình.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Thời gian từ khi gửi yêu cầu đến nhà cung cấp cho đến khi luồng phản hồi kết thúc.",
+  "tps.tip":
+    "Số token đầu ra và suy luận mỗi giây trên các yêu cầu mô hình của lượt gần nhất, không tính thời gian công cụ.",
   "nav.label": "NAV",
   "nav.tip":
     "Lần chuyển tuyến hoàn tất gần nhất có truy cập trang phiên, được đo từ lúc bộ định tuyến bắt đầu đến khung hình đầu tiên sau khi ổn định.",

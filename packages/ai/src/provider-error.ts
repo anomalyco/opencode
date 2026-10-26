@@ -12,10 +12,14 @@ import {
   type HttpContext,
   type HttpRateLimitDetails,
 } from "./schema/index.js"
+import { Json } from "./utils/json.js"
+import { isRecord } from "./utils/record.js"
 
 const patterns = [
   /prompt is too long/i,
-  /input is too long for requested model/i,
+  /input is too long for (?:the )?(?:requested|selected) model/i,
+  // OpenCode Go
+  /too large for the model'?s configured input limit/i,
   // Cloudflare Workers AI reports this as HTTP 413.
   /exceeded this model context window limit/i,
   /exceeds the context window/i,
@@ -42,8 +46,8 @@ const patterns = [
   /context[_ ]length[_ ]exceeded/i,
   /context length is only \d+ tokens/i,
   /input length.*exceeds.*context length/i,
-  // Z.ai code 1261 arrives as `Prompt too long` or `Prompt 超长`.
-  /prompt (?:too long|超长)/i,
+  // Z.ai code 1261 arrives as `Prompt too long`, `Prompt exceeds max length` or `Prompt 超长`.
+  /prompt (?:too long|exceeds max length|超长)/i,
   /too large for model with \d+ maximum context length/i,
   /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
   /model_context_window_exceeded/i,
@@ -61,6 +65,8 @@ const exclusions = [
   /too many requests/i,
   // Cohere reports an output limit above the model maximum as "too many tokens"; compaction cannot fix it.
   /max[_ ]tokens must be less than/i,
+  // Bedrock phrases throttling as "Too many tokens[, per day], please wait..."; it is a 429 to retry, not overflow.
+  /too many tokens(?: per day)?, please wait/i,
 ]
 
 export const isContextOverflow = (message: string) =>
@@ -115,13 +121,14 @@ export const isRetryable = (error: AIError) => {
   }
 }
 
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const decodeJson = Schema.decodeUnknownOption(Json)
 // OpenCode Zen reports account caps as typed 429/402 errors that are not throttles.
 const QUOTA_CODES = new Set([
   "insufficient_quota",
   "usage_not_included",
   "billing_error",
   "gousagelimiterror",
+  "budgetlimiterror",
   "freeusagelimiterror",
   "creditlimitexceeded",
 ])
@@ -149,7 +156,8 @@ const INVALID_REQUEST_CODES = new Set([
 ])
 // Azure OpenAI reports `content_filter` with `innererror.code` ResponsibleAIPolicyViolation.
 // OpenRouter tags provider failures with a typed `error_type`; its Responses skin also
-// emits `image_content_policy_violation` as the native code.
+// emits `image_content_policy_violation` as the native code. Alibaba Model Studio reports
+// moderation rejections as `DataInspectionFailed`. OpenAI Images reports `moderation_blocked`.
 const CONTENT_POLICY_CODES = new Set([
   "content_filter",
   "content_moderation",
@@ -157,6 +165,8 @@ const CONTENT_POLICY_CODES = new Set([
   "content_policy_violation",
   "image_content_policy_violation",
   "refusal",
+  "datainspectionfailed",
+  "moderation_blocked",
 ])
 // OpenCode Zen replaces upstream codes outside its allow-list but keeps the original
 // as a `[code]` label at the start of the rewritten message.
@@ -171,9 +181,9 @@ const QUOTA_TEXT =
 // Policy rejections without a dedicated code, matched against the provider's own
 // explanation only. OpenAI reuses `invalid_prompt` for usage-policy rejections while
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
-// under `invalid_request_error`.
+// under `invalid_request_error`. The Vercel AI Gateway drops OpenAI's `moderation_blocked` code.
 const CONTENT_POLICY_TEXT =
-  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected as a result of our safety system|detected potentially unsafe or sensitive content/i
+  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected (?:as a result of our|by the) safety system|detected potentially unsafe or sensitive content/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
 
@@ -240,6 +250,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     ...providerCodes(body),
     ...providerCodes(input.message),
     ...(GATEWAY_CODE_LABEL.exec(input.message)?.slice(1) ?? []),
+    ...awsErrorType(input.http?.headers["x-amzn-errortype"]),
   ].map((code) => code.toLowerCase())
   // Scan the raw payload too so signals missing from the summary message
   // (e.g. overflow phrases nested in a JSON error body) still classify.
@@ -251,7 +262,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
       codes.includes("request_too_large") ||
-      isContextOverflow(text))
+      (!codes.includes("throttlingexception") && isContextOverflow(text)))
   )
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
   if (input.status === 413 || isPayloadTooLarge(text))
@@ -263,7 +274,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     codes.some((code) => QUOTA_CODES.has(code)) ||
     (input.status === 429 && QUOTA_TEXT.test(text))
   )
-    return new QuotaExceededError(details)
+    return new QuotaExceededError({ ...details, retryAfterMs: input.retryAfterMs })
   if (
     input.status === 401 ||
     input.status === 403 ||
@@ -315,6 +326,8 @@ function providerCodes(value: unknown) {
   const exception = isRecord(decoded.exception) ? decoded.exception : undefined
   return [
     decoded.code,
+    ...awsErrorType(decoded.__type),
+    ...awsErrorType(decoded.code),
     // Stability's `{ id, name, errors }` bodies carry the code in `name`.
     Array.isArray(decoded.errors) ? decoded.name : undefined,
     decoded.error_type,
@@ -334,6 +347,9 @@ function providerCodes(value: unknown) {
   ].filter((value): value is string => typeof value === "string")
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+// AWS restJson1 reports the modeled error in `X-Amzn-Errortype`, `__type` or `code`, possibly
+// namespaced (`ns#Name`) or suffixed (`Name:uri`). Keep the shape name only.
+// https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#operation-error-serialization
+function awsErrorType(value: unknown) {
+  return typeof value === "string" ? [value.replace(/:.*/s, "").replace(/^[^#]*#/, "")] : []
 }

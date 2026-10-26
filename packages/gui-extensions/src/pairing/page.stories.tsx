@@ -1,4 +1,4 @@
-import { PairingHost, pairingRemote } from "../../../storybook/.storybook/mocks/gui-extensions/pairing"
+import { PairingHost, pairingRemote } from "../../../stories/mocks/gui-extensions/pairing"
 import PairingPage from "./page"
 
 const story = (remote: { enabled: boolean; fails?: boolean }, main = true) => ({

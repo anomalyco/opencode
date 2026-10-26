@@ -32,6 +32,8 @@ function array<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
 
 const PTY = Schema.Struct({
   id: Schema.NonEmptyString,
+  // The id of the terminal's side panel tab, once a clone gave the terminal a new server id.
+  tab: optional(Schema.NonEmptyString),
   title: fallback(Schema.String, () => ""),
   titleNumber: fallback(Schema.Finite, () => 0),
   rows: optional(Schema.Finite),
@@ -44,6 +46,11 @@ const PTY = Schema.Struct({
 export type LocalPTY = typeof PTY.Type
 
 export const MAX_TERMINAL_SESSIONS = 20
+
+/** The id of a terminal's side panel tab: its first server id, which a clone after a server restart keeps. */
+export function terminalTab(pty: Pick<LocalPTY, "id" | "tab">) {
+  return pty.tab ?? pty.id
+}
 
 export function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)

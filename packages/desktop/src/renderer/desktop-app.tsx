@@ -10,7 +10,6 @@ import {
   ServerConnection,
   useCommand,
   useCurrentRoute,
-  useLanguage,
   useExtensionServers,
   useTabs,
   type LayoutRoute,
@@ -84,8 +83,6 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
   function ReadyApp() {
     const extensions = useExtensionServers()
-    const language = useLanguage()
-
     const ready = createMemo(() => !firstLaunch.loading && !sidecar.loading && !locale.loading && extensions.ready())
 
     const servers = createMemo(() => {
@@ -94,7 +91,6 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
       if (data) {
         list.push({
-          displayName: language.t("desktop.server.local"),
           type: "sidecar",
           variant: "base",
           http: sidecarHttp(data),

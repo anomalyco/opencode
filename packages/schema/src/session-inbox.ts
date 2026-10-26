@@ -3,7 +3,7 @@ export * as SessionInbox from "./session-inbox.js"
 import { Schema } from "effect"
 import { Location } from "./location.js"
 import { Project } from "./project.js"
-import { Prompt } from "./prompt.js"
+import { Attachment, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { SessionMessage } from "./session-message.js"
@@ -16,6 +16,13 @@ export const UserPayload = Schema.Struct({
   ...Prompt.fields,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }).annotate({ identifier: "Session.Inbox.UserPayload" })
+
+/** A {@link UserPayload} whose files may stay on the server, for clients that opt into `experimental-media-uri`. */
+export interface MediaUserPayload extends Schema.Schema.Type<typeof MediaUserPayload> {}
+export const MediaUserPayload = Schema.Struct({
+  ...UserPayload.fields,
+  files: Schema.Array(Attachment).pipe(optional),
+}).annotate({ identifier: "Session.Inbox.MediaUserPayload" })
 
 export interface SyntheticPayload extends Schema.Schema.Type<typeof SyntheticPayload> {}
 export const SyntheticPayload = Schema.Struct({
@@ -58,6 +65,12 @@ const Enqueued = {
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({ ...Enqueued, ...UserItem.fields }).annotate({ identifier: "Session.Inbox.User" })
 
+/** A {@link User} whose files may stay on the server, for clients that opt into `experimental-media-uri`. */
+export interface MediaUser extends Schema.Schema.Type<typeof MediaUser> {}
+export const MediaUser = Schema.Struct({ ...User.fields, payload: MediaUserPayload }).annotate({
+  identifier: "Session.Inbox.MediaUser",
+})
+
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({ ...Enqueued, ...SyntheticItem.fields }).annotate({
   identifier: "Session.Inbox.Synthetic",
@@ -76,3 +89,10 @@ export const Info = Schema.Union([User, Synthetic, Compaction, Move]).pipe(
   Schema.annotate({ identifier: "Session.Inbox.Info" }),
 )
 export type Info = typeof Info.Type
+
+/** {@link Info} with {@link MediaUser} for clients that opt into `experimental-media-uri`. */
+export const MediaInfo = Schema.Union([MediaUser, Synthetic, Compaction, Move]).pipe(
+  Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "Session.Inbox.MediaInfo" }),
+)
+export type MediaInfo = typeof MediaInfo.Type

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { GenerationOptions, LanguageModel, LLM } from "../../src/index.js"
+import { GenerationOptions, LanguageModel, LLM } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"

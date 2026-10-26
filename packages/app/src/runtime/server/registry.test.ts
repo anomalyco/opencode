@@ -1,20 +1,34 @@
 import { expect, test } from "bun:test"
-import { canRemoveServer, createServerProjects, resolveServerList, ServerConnection } from "./registry"
+import { canRemoveServer, createServerProjects, resolveServerList, ServerConnection, serverLabel } from "./registry"
 import { Schema } from "effect"
-import { serverState } from "./persistence"
+import { ServerState } from "./persistence"
 import { createStore } from "solid-js/store"
 import { ServerScope } from "./scope"
 import { Persistence } from "@/runtime/persistence/schema"
 
 function serverSchema() {
-  return Persistence.withInitial(serverState(), {
+  return Persistence.withInitial(ServerState, {
     list: [],
     hidden: {},
+    lastProjectID: {},
+    usedProjectIDs: {},
+    hostnames: {},
     projects: {},
-    lastProject: {},
-    recentlyClosed: {},
   })
 }
+
+test("the current server is named by its hostname, a custom name wins, and other servers show their address", () => {
+  const sidecar: ServerConnection.Sidecar = { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } }
+  const remote: ServerConnection.Http = { type: "http", http: { url: "https://apollo.example.test:4096/" } }
+  const current = { hostname: "hailmary", fallback: "This computer" }
+
+  expect(serverLabel(sidecar, current)).toBe("hailmary")
+  expect(serverLabel(sidecar, { fallback: "This computer" })).toBe("This computer")
+  expect(serverLabel(sidecar, { hostname: "", fallback: "This computer" })).toBe("This computer")
+  expect(serverLabel({ ...sidecar, displayName: "Studio" }, current)).toBe("Studio")
+  expect(serverLabel(remote)).toBe("apollo.example.test:4096")
+  expect(serverLabel({ ...remote, displayName: "apollo" })).toBe("apollo")
+})
 
 test("startup auth_token credentials override a persisted same-url server; without one the persisted password stays", () => {
   const url = "https://server.example.test"
@@ -73,8 +87,12 @@ test("keeps exact persisted server identities and prevents removing provided ser
   expect(canRemoveServer({ key, stored, provided: [{ type: "http", http: { url: key } }] })).toBe(false)
 })
 
-test("project actions update schema-derived state and follow dynamic server scopes", () => {
-  const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
+test("used and last projects follow dynamic server scopes, and migration consumes only its scope", () => {
+  const [store, setStore] = createStore(
+    Schema.decodeUnknownSync(serverSchema())({
+      projects: { local: [{ worktree: "/a" }], other: [{ worktree: "/b" }] },
+    }),
+  )
 
   const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
     server: ServerConnection.Key.make("https://remote.example"),
@@ -86,18 +104,18 @@ test("project actions update schema-derived state and follow dynamic server scop
     scope: () => ServerScope.fromServerKey(props.server, props.canonicalLocalServer),
   })
 
-  projects.open("/remote")
-  projects.collapse("/remote")
-  projects.touch("/remote")
-  expect(projects.list()).toEqual([{ worktree: "/remote", expanded: false }])
-  expect(projects.last()).toBe("/remote")
+  projects.touch("remote-project")
+  expect(projects.last()).toBe("remote-project")
+  expect(projects.used()).toEqual(["remote-project"])
+  expect(projects.legacy()).toBeUndefined()
   props.canonicalLocalServer = props.server
-  expect(projects.list()).toEqual([])
-  projects.open("/local")
-  projects.close("/local")
-  expect(projects.recentlyClosed()).toEqual(["/local"])
-  projects.open("/local")
-  expect(projects.recentlyClosed()).toEqual([])
-  expect(store.projects.local).toEqual([{ worktree: "/local", expanded: true }])
-  expect(store.projects[props.server]).toEqual([{ worktree: "/remote", expanded: false }])
+  expect(projects.last()).toBeUndefined()
+  expect(projects.legacy()).toEqual(["/a"])
+  projects.migrate(["a", "b"])
+  projects.touch("a")
+  projects.hide(["b"])
+  expect(projects.legacy()).toBeUndefined()
+  expect(store.projects).toEqual({ other: [{ worktree: "/b" }] })
+  expect(store.lastProjectID).toEqual({ local: "a", [props.server]: "remote-project" })
+  expect(store.usedProjectIDs).toEqual({ local: ["a"], [props.server]: ["remote-project"] })
 })

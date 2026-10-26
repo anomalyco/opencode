@@ -2,9 +2,7 @@ import { parseColor, RGBA, type ColorInput } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { oneCellFrame, type OneCellMotion } from "../ui/one-cell-motion"
-import { registerOpencodeSpinner } from "./register-spinner"
-
-registerOpencodeSpinner()
+import "./spinner-renderable"
 
 export function OneCellSpinner(props: {
   animation: OneCellMotion

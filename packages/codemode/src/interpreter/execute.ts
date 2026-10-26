@@ -40,16 +40,21 @@ export const executeProgram = <R>(
           const program = parseProgram(code)
           const pending = new Pending<R>(scope, builtins.Promise)
           const ctx = new Interpreter<R>({ tools, pending, builtins, logs, globals })
-          const result = (yield* toBoundary(ctx, yield* ctx.run(program))) ?? null
-          returned = { value: result, pending }
-          const warnings = yield* pending.interrupt()
-          return {
-            ok: true,
-            value: result,
-            ...(warnings.length > 0 ? { warnings } : {}),
-            ...logged(),
-            toolCalls: tools.calls,
-          } satisfies Result
+          // The main job holds the turn until leftover promise work is interrupted.
+          return yield* pending.turn.hold(
+            Effect.gen(function* () {
+              const result = (yield* toBoundary(ctx, yield* ctx.run(program))) ?? null
+              returned = { value: result, pending }
+              const warnings = yield* pending.interrupt()
+              return {
+                ok: true,
+                value: result,
+                ...(warnings.length > 0 ? { warnings } : {}),
+                ...logged(),
+                toolCalls: tools.calls,
+              } satisfies Result
+            }),
+          )
         }),
       (scope, exit) => Scope.close(scope, exit),
     )

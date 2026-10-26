@@ -61,7 +61,7 @@ const fromRequest = Effect.fn("FalVideo.fromRequest")(function* (request: Reques
         prompt: request.prompt,
         negative_prompt: request.negativePrompt,
         seed: request.seed,
-        aspect_ratio: request.aspectRatio,
+        aspect_ratio: request.aspect,
         resolution: request.resolution,
         generate_audio: request.audio,
         image_url: imageUrl,

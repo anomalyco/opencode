@@ -23,7 +23,13 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
-import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  BlobRefTable,
+  BlobTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
@@ -34,6 +40,10 @@ import { Snapshot } from "@opencode/core/snapshot"
 import { Skill } from "@opencode/core/skill"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { SessionStored } from "@opencode/core/session/stored"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -62,6 +72,13 @@ const execution = Layer.succeed(
     awaitIdle: () => Effect.void,
   }),
 )
+const mediaDirectory = "/media"
+const mediaBlob = Config.testLayer([
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
+  }),
+])
 const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
@@ -69,15 +86,18 @@ const locations = makeGlobalNode({
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       return yield* LayerMap.make(
-        (_ref: Location.Ref) =>
+        (ref: Location.Ref) =>
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
+            ref.directory === mediaDirectory ? mediaBlob : Layer.empty,
             LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
               replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
             }),
             Layer.mock(Image.Service, {
-              normalize: (_resource, content) =>
-                Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+              normalize: (resource, content) =>
+                content.mime === "image/heic"
+                  ? Effect.fail(new Image.DecodeError({ resource }))
+                  : Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
             }),
             Layer.mock(Snapshot.Service, {
               capture: () => Effect.undefined,
@@ -432,6 +452,47 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("stores media refs at admission when the session's config enables media_blob", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const mediaSessionID = Session.ID.make("ses_prompt_media")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: mediaSessionID,
+          project_id: Project.ID.global,
+          slug: "media",
+          directory: mediaDirectory,
+          title: "media",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const bytes = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+      const message = yield* (yield* Session.Service).prompt({
+        sessionID: mediaSessionID,
+        text: "Inspect this image",
+        files: [{ uri: `data:image/png;base64,${bytes}` }],
+        resume: false,
+      })
+
+      const row = yield* db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, message.id))
+        .get()
+        .pipe(Effect.orDie)
+      const [hash] = (yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).map((blob) => blob.hash)
+      expect(hash).toBeDefined()
+      expect(row?.payload).toMatchObject({ files: [{ uri: SessionStored.ref(hash!), mime: "image/png" }] })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([
+        { session_id: mediaSessionID, message_id: message.id, seq: expect.any(Number), hash },
+      ])
+    }),
+  )
+
   it.effect("normalizes large image content before validating persisted Base64", () =>
     Effect.gen(function* () {
       yield* setup
@@ -458,6 +519,23 @@ describe("Session.prompt", () => {
           source: { type: "inline" },
         },
       ])
+    }),
+  )
+
+  it.effect("passes images the resizer cannot decode through unchanged", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const data = Buffer.from("000000186674797068656963000000006d69663168656963", "hex").toString("base64")
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect this photo",
+        files: [{ uri: `data:image/heic;base64,${data}` }],
+        resume: false,
+      })
+
+      expect(message.payload.files).toEqual([{ data, mime: "image/heic", source: { type: "inline" } }])
     }),
   )
 

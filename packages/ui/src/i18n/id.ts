@@ -217,7 +217,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(tidak ada jawaban)",
   "ui.question.review.notAnswered": "(belum dijawab)",
   "ui.question.multiHint": "Pilih semua jawaban yang sesuai",
-  "ui.question.singleHint": "Pilih satu jawaban",
   "ui.question.custom.placeholder": "Ketik jawaban Anda…",
   "ui.tool.loadedFile": "Memuat {{path}}",
   "ui.tool.loadedSkill": "Memuat keahlian {{name}}",

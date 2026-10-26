@@ -1,8 +1,5 @@
 export default {
   "tree.all": "සියලුම ගොනු",
-  "tree.empty": "ගොනු නැත",
-  "tree.changes.one": "ගොනුව {{count}}ක් වෙනස් විය",
-  "tree.changes.other": "ගොනු {{count}}ක් වෙනස් විය",
   "tab.notFound": "ගොනුව හමු නොවීය: {{name}}",
   "mobile.title": "ගොනු",
   "mobile.openTabs": "විවෘත ගොනු",

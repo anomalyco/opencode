@@ -69,12 +69,8 @@ export const dict = {
 
   "home.what.title": "什么是 OpenCode？",
   "home.what.body": "OpenCode 是一个开源代理，帮助您在终端、IDE 或桌面端编写代码。",
-  "home.what.lsp.title": "支持 LSP",
-  "home.what.lsp.body": "为 LLM 自动加载合适的 LSP",
   "home.what.multiSession.title": "多会话",
   "home.what.multiSession.body": "在同一个项目中并行启动多个代理",
-  "home.what.shareLinks.title": "分享链接",
-  "home.what.shareLinks.body": "分享任意会话链接以供参考或调试",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "使用 GitHub 登录以使用您的 Copilot 账户",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -110,8 +106,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "您甚至可以连接您的",
   "home.faq.a3.p4.localLink": "本地模型",
   "home.faq.q4": "我可以使用现有的 AI 订阅吗？",
-  "home.faq.a4.p1":
-    "可以，OpenCode 支持所有主流提供商的订阅计划。您可以使用您的 Claude Pro/Max, ChatGPT Plus/Pro, 或 GitHub Copilot 订阅。",
+  "home.faq.a4.p1": "可以，您可以使用您的 ChatGPT Plus/Pro 或 GitHub Copilot 订阅。",
   "home.faq.q5": "OpenCode 只能在终端使用吗？",
   "home.faq.a5.beforeDesktop": "不再是了！OpenCode 现在也提供",
   "home.faq.a5.desktop": "桌面端应用",
@@ -156,7 +151,7 @@ export const dict = {
   "zen.faq.a4.p2.accountLink": "账户中设置每月支出限额",
   "zen.faq.a4.p3": "为覆盖成本，OpenCode 仅收取少量支付处理费，每充值 $20 收取 $1.23。",
   "zen.faq.q5": "数据和隐私如何？",
-  "zen.faq.a5.beforeExceptions": "所有 Zen 模型均托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
+  "zen.faq.a5.beforeExceptions": "所有 Zen 模型均托管在美国和欧盟。提供商遵循零留存政策，不使用您的数据进行模型训练，",
   "zen.faq.a5.exceptionsLink": "以下例外情况除外",
   "zen.faq.q6": "我可以设置支出限额吗？",
   "zen.faq.a6": "可以，您可以在账户中设置每月支出限额。",
@@ -188,12 +183,12 @@ export const dict = {
   "zen.how.step2.link": "按请求付费",
   "zen.how.step2.afterLink": "零加价",
   "zen.how.step3.title": "自动充值",
-  "zen.how.step3.body": "当您的余额低于 $5 时，我们将自动充值 $20",
+  "zen.how.step3.body": "按需开启自动充值，并设置余额阈值和充值金额",
   "zen.privacy.title": "您的隐私对我们很重要",
-  "zen.privacy.beforeExceptions": "所有 Zen 模型均托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
+  "zen.privacy.beforeExceptions": "所有 Zen 模型均托管在美国和欧盟。提供商遵循零留存政策，不使用您的数据进行模型训练，",
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
-  "go.promo.step5": "Step 5 Preview 现已上线 Go，限时 4 倍用量。",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro 现已上线 Go。",
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
@@ -270,7 +265,6 @@ export const dict = {
     "ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。",
   "go.faq.a5.museRetention": "以允许使用你的提示词和补全结果训练未来的 Meta 模型为交换，token 价格可获得大幅折扣。",
-  "go.faq.a5.geminiRetention": "你的提示词和模型输出可能会被用于训练未来的 Google 模型。",
   "go.faq.a5.learnMore": "了解更多",
   "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 10 月 31 日。",
   "go.faq.q6": "我可以充值余额吗？",
@@ -282,7 +276,7 @@ export const dict = {
 
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
-    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口内执行更高的请求配额：每 5 小时为月额度的 20%，每周为 50%，每月为 100%。具体额度可能因模型而异（实际请求次数因模型和使用情况而异）。",
+    "免费模型包含 Big Pickle 加上当时可用的促销模型。Go 提供精选模型阵容，并在滚动窗口内执行更高的请求配额：每 5 小时为月额度的 20%，每周为 50%，每月为 100%。具体额度可能因模型而异（实际请求次数因模型和使用情况而异）。",
   "go.faq.q10": "我可以退款吗？",
   "go.faq.a10":
     "如果扣款发生在过去 14 天内，并且您在该计费周期内尚未使用任何 Go 额度，您可能符合退款条件。请{{contact}}申请退款。",
@@ -348,6 +342,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "邮箱格式无效。",
   "enterprise.form.error.invalidInferenceSpend": "请选择有效的推理支出范围。",
   "enterprise.form.error.internalServer": "内部服务器错误。",
+  "enterprise.form.error.captcha": "验证码验证失败，请重试。",
   "enterprise.faq.title": "常见问题",
   "enterprise.faq.q1": "什么是 OpenCode 企业版？",
   "enterprise.faq.a1":
@@ -357,7 +352,7 @@ export const dict = {
     "只需从您的团队内部试用开始即可。OpenCode 默认不存储您的代码或上下文数据，使得入门非常容易。然后联系我们讨论定价和实施选项。",
   "enterprise.faq.q3": "企业版定价如何运作？",
   "enterprise.faq.a3":
-    "我们提供按席位计费的企业定价。如果您拥有自己的 LLM 网关，我们不收取 token 使用费。如需了解更多详情，请联系我们获取基于您组织需求的定制报价。",
+    "如果您拥有自己的 LLM 网关，我们不收取 token 使用费。如需了解更多详情，请联系我们获取基于您组织需求的定制报价。",
   "enterprise.faq.q4": "OpenCode 企业版安全吗？",
   "enterprise.faq.a4":
     "是的。OpenCode 不存储您的代码或上下文数据。所有处理均在本地进行，或通过直接 API 调用您的 AI 提供商。通过集中配置和 SSO 集成，您的数据始终保留在您组织的基础设施内。",

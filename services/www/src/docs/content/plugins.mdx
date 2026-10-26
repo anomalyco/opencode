@@ -14,8 +14,8 @@ Add published packages, versioned packages, scoped packages, or local plugin dir
     "opencode-acme-plugin@1.2.0",
     "@acme/opencode-plugin",
     "./plugins/local",
-    "../shared/plugin.ts",
-    "/absolute/path/plugin.ts",
+    "../shared/plugin",
+    "/absolute/path/plugin",
     "file:///home/me/plugins/local",
     {
       "package": "@acme/opencode-plugin",
@@ -28,8 +28,12 @@ Add published packages, versioned packages, scoped packages, or local plugin dir
 }
 ```
 
-Relative paths resolve from the config file containing the entry. Plugin arrays from applicable config files are applied
-from lowest to highest precedence instead of replacing one another.
+Relative paths resolve from the config file containing the entry.
+
+Configured local paths must be directories. OpenCode loads the directory's `server` or `index` module, such as
+`index.ts`. A path to a single file is skipped.
+
+Plugin arrays from applicable config files are applied from lowest to highest precedence instead of replacing one another.
 
 ```text
 ~/.config/opencode/opencode.jsonc
@@ -56,8 +60,8 @@ Global plugins use the same discovery layout under the OpenCode config directory
 ~/.config/opencode/plugins/
 ```
 
-A `plugins/` directory beside a project-root `opencode.json(c)` is not discovered automatically; configure its files
-explicitly or move it under `.opencode/`.
+A `plugins/` directory beside a project-root `opencode.json(c)` is not discovered automatically; configure its plugin
+directories explicitly or move it under `.opencode/`.
 
 ```jsonc title="opencode.jsonc"
 {

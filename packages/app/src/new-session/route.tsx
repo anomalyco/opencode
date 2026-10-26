@@ -11,7 +11,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
-import { IncompatibleServerPanel } from "@/session/incompatible-server-panel"
+import { ServerUnavailablePanel } from "@/session/server-unavailable-panel"
 import { ErrorPage } from "@/shell/errors/error"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 
@@ -57,7 +57,8 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
       fallback={
         <SessionRouteFrame padded>
           <SessionPanelFrame raised>
-            <IncompatibleServerPanel
+            <ServerUnavailablePanel
+              reason="incompatible"
               onClose={() => {
                 const index = tabs.store.findIndex((tab) => tab.type === "draft" && tab.draftID === props.draft.draftID)
 

@@ -4,33 +4,6 @@ function getNodeLength(node: Node): number {
   return (node.textContent ?? "").replace(/\u200B/g, "").length
 }
 
-export function getTextLength(node: Node): number {
-  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
-
-  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
-  let length = 0
-
-  for (const child of Array.from(node.childNodes)) {
-    length += getTextLength(child)
-  }
-
-  return length
-}
-
-export function getCursorPosition(parent: HTMLElement): number {
-  const selection = window.getSelection()
-
-  if (!selection || selection.rangeCount === 0) return 0
-  const range = selection.getRangeAt(0)
-
-  if (!parent.contains(range.startContainer)) return 0
-  const preCaretRange = range.cloneRange()
-  preCaretRange.selectNodeContents(parent)
-  preCaretRange.setEnd(range.startContainer, range.startOffset)
-
-  return getTextLength(preCaretRange.cloneContents())
-}
-
 export function setCursorPosition(parent: HTMLElement, position: number) {
   let remaining = position
   let node = parent.firstChild

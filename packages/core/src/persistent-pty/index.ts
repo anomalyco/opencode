@@ -337,7 +337,7 @@ const makeLayer = (options: Options = {}) =>
             },
           })
           .pipe(Effect.mapError(unavailable))
-        if (attachment.role === "controller") current.set(Session.ID.make(attachment.terminal.group_id), id)
+        if (attachment.role === "controller") current.set(attachment.terminal.group_id, id)
         return {
           info: toInfo(attachment.terminal),
           role: attachment.role,
@@ -400,7 +400,7 @@ function toInfo(value: WireTerminal): Info {
       pid: value.pid ?? 0,
       ...(status === "exited" ? { exitCode: value.lifecycle.exit_code ?? undefined } : {}),
     }),
-    sessionID: Session.ID.make(value.group_id),
+    sessionID: value.group_id,
     foregroundProcess: value.foreground_process,
     size: { cols: value.cols, rows: value.rows },
     output: { head: value.output_head, tail: value.output_tail },

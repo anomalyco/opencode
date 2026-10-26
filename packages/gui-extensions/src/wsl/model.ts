@@ -6,7 +6,7 @@ export type AddServerText = {
   params?: Record<string, string>
 }
 
-export type DistroStatusTone = "success" | "warning" | "muted"
+type DistroStatusTone = "success" | "warning" | "muted"
 
 export type DistroStatus = {
   label: AddServerText
@@ -29,7 +29,7 @@ export type AddableProbePlan = {
   distros: string[]
 }
 
-export type AutoProbePlan = { key: "runtime"; action: "probeRuntime" } | { key: "distros"; action: "refreshDistros" }
+type AutoProbePlan = { key: "runtime"; action: "probeRuntime" } | { key: "distros"; action: "refreshDistros" }
 
 export type AddServerProbePlan =
   | { kind: "auto"; key: string; plan: AutoProbePlan }
@@ -49,7 +49,7 @@ export function wslOpencodeAction(check?: WslOpencodeCheck) {
   if (check.matchesDesktop === false) return "onboarding.updateOpencode"
 }
 
-export function wslDistroReady(state: WslServersState | undefined, name: string) {
+function wslDistroReady(state: WslServersState | undefined, name: string) {
   const installed = state?.installed.find((item) => item.name === name)
   const probe = state?.distroProbes[name]
 
@@ -297,7 +297,7 @@ function addServerCatalogTarget(target: string | null, distros: WslOnlineDistro[
   return distros[0]?.name ?? null
 }
 
-export function addableProbePlan(input: {
+function addableProbePlan(input: {
   state: WslServersState | undefined
   view: WslAddServerView
   adding: boolean
@@ -335,7 +335,7 @@ export function addableProbePlan(input: {
   } satisfies AddableProbePlan
 }
 
-export function autoProbePlan(input: { state: WslServersState | undefined; busy: boolean }) {
+function autoProbePlan(input: { state: WslServersState | undefined; busy: boolean }) {
   if (!input.state || input.busy || input.state.pendingRestart) return
 
   if (!input.state.runtime) return { key: "runtime", action: "probeRuntime" } satisfies AutoProbePlan

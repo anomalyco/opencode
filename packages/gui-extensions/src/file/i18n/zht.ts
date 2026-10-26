@@ -1,8 +1,5 @@
 export default {
   "tree.all": "所有檔案",
-  "tree.empty": "沒有檔案",
-  "tree.changes.one": "{{count}} 個檔案已變更",
-  "tree.changes.other": "{{count}} 個檔案已變更",
   "tab.notFound": "找不到檔案：{{name}}",
   "mobile.title": "文件",
   "mobile.openTabs": "打開文件",

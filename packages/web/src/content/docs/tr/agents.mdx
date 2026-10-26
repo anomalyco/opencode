@@ -151,7 +151,7 @@ Agent'ları `opencode.json` yapılandırma dosyanızda yapılandırın:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -171,7 +171,7 @@ Agent'ları `opencode.json` yapılandırma dosyanızda yapılandırın:
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,7 +195,7 @@ Ayrıca agent'ları Markdown dosyalarını kullanarak da tanımlayabilirsiniz. B
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -366,7 +366,7 @@ Bir model belirtmezseniz, birincil agent'lar [küresel olarak yapılandırılmı
 }
 ```
 
-opencode yapılandırmanızdaki model kimliği `provider/model-id` biçimini kullanır. Örneğin, [OpenCode Zen](https://opencode.ai/v2/docs/console/) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
+opencode yapılandırmanızdaki model kimliği `provider/model-id` biçimini kullanır. Örneğin, [OpenCode Zen](https://opencode.ai/v2/docs/console/) kullanıyorsanız, GPT-6.1 Sol için `opencode/gpt-6.1-sol` kullanırsınız.
 
 ---
 
@@ -653,7 +653,7 @@ Agent yapılandırmanızdaki diğer seçenekler, model seçenekleri olarak **do�
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -671,19 +671,9 @@ Mevcut modellerin listesini görmek için `opencode models` komutunu çalıştı
 
 ## Agent Oluşturma
 
-Aşağıdaki komutu kullanarak yeni agent'lar oluşturabilirsiniz:
+Yeni bir agent oluşturmak için proje düzeyinde `.opencode/agents/` dizinine veya global olarak `~/.config/opencode/agents/` dizinine bir Markdown dosyası ekleyin. Dosya adı agent'ın adı olur; frontmatter ise açıklamasını, modunu, modelini ve izinlerini yapılandırır. Dosya biçimi için yukarıdaki [Markdown](#markdown) bölümüne bakın.
 
-```bash
-opencode agent create
-```
-
-Bu etkileşimli komut şunları sağlayacaktır:
-
-1. Agent'ı nereye kaydedeceğinizi sorar; küresel veya projeye özel.
-2. Agent'ın ne yapması gerektiğinin açıklamasını ister.
-3. Uygun bir sistem prompt'u ve tanımlayıcı oluşturur.
-4. Agent'ın hangi araçlara erişebileceğini seçmenize izin verir.
-5. Son olarak agent yapılandırmasıyla bir Markdown dosyası oluşturur.
+OpenCode'un yüklediği agent'ları listelemek için `opencode agent list` komutunu çalıştırın.
 
 ---
 

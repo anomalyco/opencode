@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ހުރިހާ ފައިލްއެކެވެ",
-  "tree.empty": "ފައިލްތަކެއް ނެތެވެ",
-  "tree.changes.one": "⁨{{count}}⁩ ފައިލް ބަދަލުވެއްޖެއެވެ",
-  "tree.changes.other": "⁨{{count}}⁩ ފައިލްތައް ބަދަލުވެއްޖެއެވެ",
   "tab.notFound": "ފައިލް ނުފެނޭ: ⁨{{name}}⁩",
   "mobile.title": "ފައިލްތައް",
   "mobile.openTabs": "ހުޅުވާލެވިފައިވާ ފައިލްތައް",

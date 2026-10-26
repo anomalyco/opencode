@@ -12,7 +12,7 @@ import { createIpcClients } from "@/runtime/extension/ipc"
 import { Icon } from "@opencode/ui/icon"
 import { errorDescriptionKey, errorStatus } from "./description"
 
-export type InitError = {
+type InitError = {
   name: unknown
   data: object
 }

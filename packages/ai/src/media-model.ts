@@ -2,7 +2,14 @@ import { Effect } from "effect"
 import { Endpoint } from "./route/endpoint.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID } from "./schema/index.js"
+import {
+  AIError,
+  HttpOptions,
+  InvalidRequestError,
+  ModelID,
+  ProviderID,
+  type ProviderOptions,
+} from "./schema/index.js"
 
 /**
  * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
@@ -27,7 +34,7 @@ export class MediaModel<Route, Options> {
 }
 
 export namespace MediaModel {
-  export type Options = Record<string, unknown>
+  export type Options = ProviderOptions
 
   export interface Input<Route> {
     readonly id: string | ModelID

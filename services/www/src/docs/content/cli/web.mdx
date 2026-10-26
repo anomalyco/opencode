@@ -38,9 +38,10 @@ platform:
 | Platform              | Default port |
 | --------------------- | ------------ |
 | macOS, Linux, and WSL | 49374        |
-| Windows               | 45278        |
+| Windows               | 28894        |
 
-Windows reserves ports from 49152 up. Print the current address with
+Windows reserves ports from 49152 up, and WSL mirrored networking reserves
+another block below that. Print the current address with
 `opencode service status`:
 
 ```bash

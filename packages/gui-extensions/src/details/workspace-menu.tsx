@@ -13,6 +13,8 @@ export function SessionWorkspaceMenu(props: {
   directory: string
   placement?: ComponentProps<typeof Menu>["placement"]
   class?: string
+  /** Renders as a submenu of an enclosing `Menu`. */
+  sub?: boolean
   children: JSX.Element
 }) {
   const ctx = useExtension()
@@ -93,6 +95,54 @@ export function SessionWorkspaceMenu(props: {
     }
   }
 
+  const items = () => (
+    <Menu.Group>
+      <Menu.GroupLabel>{ctx.t("move.menu")}</Menu.GroupLabel>
+      <Show when={comparablePath(props.directory) !== comparablePath(props.project.worktree)}>
+        <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
+          <Icon name="monitor" class="text-v2-icon-icon-muted" />
+          {ctx.t("workspace.local")}
+        </Menu.Item>
+      </Show>
+      <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
+        <Icon name="plus" class="text-v2-icon-icon-muted" />
+        {ctx.t("workspace.new")}
+      </Menu.Item>
+      <Show when={workspaces().length > 0}>
+        <Menu.Sub gutter={0} overlap overflowPadding={24}>
+          <Menu.SubTrigger class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted">
+            <Icon name="outline-worktree" class="text-v2-icon-icon-muted" />
+            {ctx.t("workspace.existing")}
+          </Menu.SubTrigger>
+          <Menu.Portal>
+            <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
+              <For each={workspaces()}>
+                {(workspace) => (
+                  <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
+                    <Icon name="outline-worktree" class="text-v2-icon-icon-muted" />
+                    <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
+                  </Menu.Item>
+                )}
+              </For>
+            </Menu.SubContent>
+          </Menu.Portal>
+        </Menu.Sub>
+      </Show>
+    </Menu.Group>
+  )
+
+  if (props.sub)
+    return (
+      <Menu.Sub gutter={4} overflowPadding={24} onOpenChange={onOpenChange}>
+        <Menu.SubTrigger class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted" disabled={blocked()}>
+          {props.children}
+        </Menu.SubTrigger>
+        <Menu.Portal>
+          <Menu.SubContent class="w-[200px]">{items()}</Menu.SubContent>
+        </Menu.Portal>
+      </Menu.Sub>
+    )
+
   return (
     <Menu
       placement={props.placement ?? "bottom-end"}
@@ -105,41 +155,7 @@ export function SessionWorkspaceMenu(props: {
         {props.children}
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content class="w-[200px]">
-          <Menu.Group>
-            <Menu.GroupLabel>{ctx.t("move.menu")}</Menu.GroupLabel>
-            <Show when={comparablePath(props.directory) !== comparablePath(props.project.worktree)}>
-              <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
-                <Icon name="monitor" />
-                {ctx.t("workspace.local")}
-              </Menu.Item>
-            </Show>
-            <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
-              <Icon name="plus" />
-              {ctx.t("workspace.new")}
-            </Menu.Item>
-            <Show when={workspaces().length > 0}>
-              <Menu.Sub gutter={0} overlap overflowPadding={24}>
-                <Menu.SubTrigger>
-                  <Icon name="outline-worktree" />
-                  {ctx.t("workspace.existing")}
-                </Menu.SubTrigger>
-                <Menu.Portal>
-                  <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
-                    <For each={workspaces()}>
-                      {(workspace) => (
-                        <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
-                          <Icon name="outline-worktree" />
-                          <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
-                        </Menu.Item>
-                      )}
-                    </For>
-                  </Menu.SubContent>
-                </Menu.Portal>
-              </Menu.Sub>
-            </Show>
-          </Menu.Group>
-        </Menu.Content>
+        <Menu.Content class="w-[200px]">{items()}</Menu.Content>
       </Menu.Portal>
     </Menu>
   )

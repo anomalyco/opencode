@@ -7,7 +7,7 @@ Create `opencode.jsonc` in your project to configure OpenCode. Add the schema fo
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
 }
 ```
 
@@ -21,7 +21,7 @@ OpenCode supports JSON and JSONC. Use JSONC when you want comments or trailing c
 {
   "$schema": "https://opencode.ai/config.json",
   // Use this model by default.
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
 }
 ```
 
@@ -142,7 +142,7 @@ does not retain a `#variant`; agent and command model references can select one.
 
 ```jsonc
 {
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
 }
 ```
 
@@ -377,7 +377,7 @@ automatic and manual requests with a provider or model policy:
     "openai": {
       "settings": { "compaction": { "type": "native" } },
       "models": {
-        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
       },
     },
   },
@@ -539,9 +539,9 @@ headers, and model variants.
   "providers": {
     "openai": {
       "models": {
-        "gpt-5.2-custom": {
-          "modelID": "gpt-5.2",
-          "name": "GPT-5.2 Custom",
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
           "limit": {
             "context": 200000,
             "output": 32000,
@@ -609,3 +609,73 @@ These are useful for:
 
 - Keeping sensitive data like API keys in separate files.
 - Sharing common configuration snippets across multiple config files.
+
+## Experimental
+
+<Callout type="warning">
+  Experimental settings may change, break, or be removed in any release without notice. Don't rely on them for stable
+  workflows.
+</Callout>
+
+All experimental settings live under the `experimental` key:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "portable_shell_scanner": true,
+    "background_compaction": true,
+    "location_idle_timeout": "4 hours",
+  },
+}
+```
+
+### Todos
+
+Set `todo` to `true` to give agents a `todowrite` tool for tracking multi-step work. Defaults to `false`.
+
+### Subagent depth
+
+`subagent_depth` sets how deeply subagents can start their own subagents. Defaults to `1`, so a subagent cannot
+start another subagent.
+
+### Portable shell scanner
+
+Set `portable_shell_scanner` to `true` to replace the default tree-sitter shell scanner used by permission checks.
+Defaults to `false`. See [Permissions](/permissions#scanner) for how it behaves.
+
+### Background compaction
+
+Set `background_compaction` to `true` to write the compaction summary in the background before it is needed, so
+automatic compaction doesn't pause the session. Defaults to `false`. See
+[Compaction](/compaction#background-compaction) for how it works.
+
+```jsonc
+{
+  "experimental": {
+    "background_compaction": true,
+  },
+}
+```
+
+### Location idle timeout
+
+`location_idle_timeout` controls how long a project location can go without session activity before OpenCode unloads
+its services. It takes a duration such as `"2 hours"` and defaults to `"60 minutes"`. Running sessions and background
+jobs keep a location loaded. Set it to `false` to never unload idle locations. Project config can override the global
+value.
+
+```jsonc
+{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}
+```
+
+### Deprecated policies
+
+`experimental.policies` is deprecated. Use top-level [`policies`](/policies) instead. The old key still works and
+merges into `policies`.

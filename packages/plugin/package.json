@@ -1,13 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin",
-  "version": "2.0.32",
+  "version": "2.1.4",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "pack": "bun run script/pack.ts"
   },
   "exports": {
     ".": "./src/promise/index.ts",
@@ -38,8 +40,8 @@
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
-    "@opentui/core": ">=0.5.17",
-    "@opentui/solid": ">=0.5.17",
+    "@opentui/core": "0.7.0",
+    "@opentui/solid": "0.7.0",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

@@ -48,16 +48,6 @@ OpenCode CLI 還提供以下指令。
 
 ---
 
-### agent
-
-管理 OpenCode 的代理。
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 將終端機連接到已透過 `serve` 或 `web` 指令啟動的 OpenCode 後端伺服器。
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分支工作階段（與 `--continue` 或 `--session` 一起使用）           |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本驗證密碼（預設使用 `OPENCODE_SERVER_PASSWORD`）                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本驗證使用者名稱（預設使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
-
----
-
-#### create
-
-使用自訂設定建立新的代理。
-
-```bash
-opencode agent create
-```
-
-此指令將引導您使用自訂系統提示詞和工具設定來建立新的代理。
-
----
-
-#### list
-
-列出所有可用的代理。
-
-```bash
-opencode agent list
-```
 
 ---
 

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/index.js"
+import { Image, Media } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -22,7 +22,7 @@ describe("Google Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat blue circle centered on a plain white background.",
-        aspectRatio: "1:1",
+        aspect: "1:1",
       })
 
       expect(response.images).toHaveLength(1)
@@ -43,7 +43,7 @@ describe("Google Images recorded", () => {
             "image/jpeg",
           ),
         ],
-        aspectRatio: "1:1",
+        aspect: "1:1",
       })
 
       expect(response.image.mediaType).toBe("image/jpeg")

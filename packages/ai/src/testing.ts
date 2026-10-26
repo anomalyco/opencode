@@ -1,4 +1,5 @@
 export * as TestLLM from "./testing.js"
+export { compileRequest } from "./route/client.js"
 
 import {
   LLMClient,
@@ -47,24 +48,11 @@ export interface TestInterface extends ClientInterface {
 
 export class Test extends Context.Service<Test, TestInterface>()("@opencode/ai/TestLLM/Test") {}
 
-/** @deprecated Use TestInterface through Test and testLayer. */
-export interface Interface {
-  readonly requests: LLMRequest[]
-  readonly push: (...responses: readonly Response[]) => Effect.Effect<void>
-  readonly always: (response: Response) => Effect.Effect<void>
-  readonly wait: (count: number) => Effect.Effect<void>
-  readonly gate: Effect.Effect<Gate, never, Scope.Scope>
-  readonly client: ClientInterface
-}
-
 export interface LayerOptions {
   readonly transformRequest?: (request: LLMRequest) => LLMRequest
   /** Used after the one-shot response queue is exhausted. Omit to defect on unexpected requests. */
   readonly fallback?: Response
 }
-
-/** @deprecated Use Test and testLayer for normal client methods and test controls. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/ai/TestLLM") {}
 
 export const complete = (
   options: {
@@ -173,7 +161,7 @@ const make = (options: LayerOptions) =>
         }),
       )
     }
-    const test = Test.of({
+    return Test.of({
       compact,
       stream,
       generate: (request) =>
@@ -216,44 +204,10 @@ const make = (options: LayerOptions) =>
           }
         }),
     })
-
-    return { test, requests }
   })
 
 /** Provides one shared implementation under the normal client and test-control tags. */
 export const testLayer = (options: LayerOptions = {}) =>
   Layer.effectContext(
-    Effect.map(make(options), (implementation) =>
-      Context.make(LLMClient.Service, implementation.test).pipe(Context.add(Test, implementation.test)),
-    ),
+    Effect.map(make(options), (test) => Context.make(LLMClient.Service, test).pipe(Context.add(Test, test))),
   )
-
-/** @deprecated Use testLayer; retained for published callers of the legacy control interface. */
-export const layer = (options: LayerOptions = {}) =>
-  Layer.effect(
-    Service,
-    Effect.map(make(options), (implementation) =>
-      Service.of({
-        requests: implementation.requests,
-        push: implementation.test.push,
-        always: implementation.test.always,
-        wait: implementation.test.wait,
-        gate: implementation.test.gate(),
-        client: implementation.test,
-      }),
-    ),
-  )
-
-/** @deprecated testLayer provides LLMClient.Service directly. */
-export const clientLayer = Layer.effect(
-  LLMClient.Service,
-  Effect.map(Service, (service) => service.client),
-)
-
-export const push = (...responses: readonly Response[]) => Service.use((service) => service.push(...responses))
-
-export const always = (response: Response) => Service.use((service) => service.always(response))
-
-export const wait = (count: number) => Service.use((service) => service.wait(count))
-
-export const gate = Service.use((service) => service.gate)

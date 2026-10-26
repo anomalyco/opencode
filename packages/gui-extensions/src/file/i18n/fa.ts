@@ -1,8 +1,5 @@
 export default {
   "tree.all": "همه فایل ها",
-  "tree.empty": "بدون فایل",
-  "tree.changes.one": "{{count}} فایل تغییر کرد",
-  "tree.changes.other": "{{count}} فایل تغییر کرد",
   "tab.notFound": "پرونده پیدا نشد: ⁨{{name}}⁩",
   "mobile.title": "فایل‌ها",
   "mobile.openTabs": "فایل‌های باز",

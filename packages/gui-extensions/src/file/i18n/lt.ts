@@ -1,10 +1,5 @@
 export default {
   "tree.all": "Visi failai",
-  "tree.empty": "Failų nėra",
-  "tree.changes.one": "Pakeistas failas: {{count}}",
-  "tree.changes.few": "Pakeisti {{count}} failai",
-  "tree.changes.many": "Pakeista {{count}} failų",
-  "tree.changes.other": "Pakeista {{count}} failų",
   "tab.notFound": "Failas nerastas: {{name}}",
   "mobile.title": "Failai",
   "mobile.openTabs": "Atidaryti failus",

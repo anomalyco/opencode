@@ -563,7 +563,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
-        "openai/gpt-4o": {},
+        "openai/gpt-6.1-sol": {},
         "anthropic/claude-sonnet-4": {}
       }
     }
@@ -746,8 +746,6 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
     /models
     ```
 
-````
-
 Trois modèles basés sur Claude sont disponibles :
 
 - **duo-chat-haiku-4-5** (Par défaut) - Réponses rapides pour des tâches rapides
@@ -769,10 +767,10 @@ Fichier `opencode.json`.
 
 ```json
 {
-"$schema": "https://opencode.ai/config.json",
-"small_model": "gitlab/duo-chat-haiku-4-5"
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
-````
+```
 
 :::
 

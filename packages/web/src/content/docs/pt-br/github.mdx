@@ -57,18 +57,18 @@ Ou você pode configurá-lo manualmente.
        permissions:
          id-token: write
        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+         - name: Checkout repository
+           uses: actions/checkout@v6
+           with:
+             fetch-depth: 1
+             persist-credentials: false
 
-          - name: Run OpenCode
+         - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
-             model: anthropic/claude-sonnet-4-20250514
+             model: anthropic/claude-sonnet-5-5
              # github_token: xxxx
    ```
 
@@ -137,15 +137,15 @@ jobs:
         with:
           persist-credentials: false
 
-       - name: Run OpenCode
-         uses: anomalyco/opencode/github@latest
-         env:
-           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-         with:
-           model: anthropic/claude-sonnet-4-20250514
-           prompt: |
-             Revise a base de código para quaisquer comentários TODO e crie um resumo.
-             Se encontrar problemas que valham a pena resolver, abra um issue para rastreá-los.
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          prompt: |
+            Revise a base de código para quaisquer comentários TODO e crie um resumo.
+            Se encontrar problemas que valham a pena resolver, abra um issue para rastreá-los.
 ```
 
 Para eventos agendados, a entrada `prompt` é **obrigatória** uma vez que não há comentário para extrair instruções. Fluxos de trabalho agendados são executados sem um contexto de usuário para verificação de permissões, então o fluxo de trabalho deve conceder `contents: write` e `pull-requests: write` se você espera que o opencode crie branches ou PRs.
@@ -175,18 +175,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-       - uses: anomalyco/opencode/github@latest
-         env:
-           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-         with:
-           model: anthropic/claude-sonnet-4-20250514
-           use_github_token: true
-           prompt: |
-             Revise este pull request:
-             - Verifique problemas de qualidade de código
-             - Procure por potenciais bugs
-             - Sugira melhorias
+      - uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          use_github_token: true
+          prompt: |
+            Revise este pull request:
+            - Verifique problemas de qualidade de código
+            - Procure por potenciais bugs
+            - Sugira melhorias
 ```
 
 Para eventos de `pull_request`, se nenhum `prompt` for fornecido, o opencode padrão será revisar o pull request.
@@ -231,17 +231,17 @@ jobs:
         with:
           persist-credentials: false
 
-       - uses: anomalyco/opencode/github@latest
-         if: steps.check.outputs.result == 'true'
-         env:
-           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-         with:
-           model: anthropic/claude-sonnet-4-20250514
-           prompt: |
-             Revise este issue. Se houver uma correção clara ou docs relevantes:
-             - Forneça links de documentação
-             - Adicione orientação sobre tratamento de erros para exemplos de código
-             Caso contrário, não comente.
+      - uses: anomalyco/opencode/github@latest
+        if: steps.check.outputs.result == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          prompt: |
+            Revise este issue. Se houver uma correção clara ou docs relevantes:
+            - Forneça links de documentação
+            - Adicione orientação sobre tratamento de erros para exemplos de código
+            Caso contrário, não comente.
 ```
 
 Para eventos de `issues`, a entrada `prompt` é **obrigatória** uma vez que não há comentário para extrair instruções.
@@ -255,7 +255,7 @@ Substitua o prompt padrão para personalizar o comportamento do opencode para se
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Revise este pull request:
       - Verifique problemas de qualidade de código

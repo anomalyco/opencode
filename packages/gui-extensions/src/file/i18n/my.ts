@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ဖိုင်အားလုံး",
-  "tree.empty": "ဖိုင်မရှိပါ။",
-  "tree.changes.one": "ဖိုင် {{count}} ဖိုင်ကို ပြောင်းထားသည်။",
-  "tree.changes.other": "ဖိုင် {{count}} ဖိုင်ကို ပြောင်းထားသည်။",
   "tab.notFound": "ဖိုင်ကို မတွေ့ပါ: {{name}}",
   "mobile.title": "ဖို",
   "mobile.openTabs": "ဖိုင်များကိုဖွင့်ပါ။",

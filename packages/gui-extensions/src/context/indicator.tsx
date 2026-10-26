@@ -99,7 +99,7 @@ export function SessionContextUsage(props: {
         strokeWidth={2}
         percentage={context()?.usage ?? 0}
         style={{
-          "--progress-circle-background": "var(--v2-background-bg-layer-04, var(--border-weak-base))",
+          "--progress-circle-background": "var(--v2-background-bg-layer-04)",
           "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
           "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
         }}

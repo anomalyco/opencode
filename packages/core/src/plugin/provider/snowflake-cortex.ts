@@ -172,13 +172,7 @@ export const SnowflakeCortexPlugin = define({
 
     const load = Effect.gen(function* () {
       const value = (yield* saved)?.value
-      account.value = normalizeAccount(
-        process.env.SNOWFLAKE_ACCOUNT ??
-          (value?.type === "key"
-            ? (value.configuration?.account ?? value.metadata?.account)
-            : value?.metadata?.account) ??
-          configured?.account,
-      )
+      account.value = normalizeAccount(process.env.SNOWFLAKE_ACCOUNT ?? value?.metadata?.account ?? configured?.account)
     })
     yield* load
     yield* ctx.provider.transform((providers) => {

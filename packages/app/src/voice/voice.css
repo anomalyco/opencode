@@ -1,0 +1,84 @@
+.voice-call-action {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: 4px;
+}
+/* Home is the bottom-right corner, above the composer; a drag offsets it with a transform. */
+.voice-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 168px;
+  z-index: 50;
+  width: min(340px, calc(100vw - 32px));
+  padding: 6px 6px 6px 12px;
+  border-radius: 10px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.voice-panel:active {
+  cursor: grabbing;
+}
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+.voice-title {
+  flex: 1;
+  min-width: 0;
+  margin-inline-start: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--v2-text-text-base);
+}
+.voice-level {
+  width: 32px;
+  height: 4px;
+  flex-shrink: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--v2-background-bg-layer-03);
+}
+.voice-level::-webkit-meter-bar {
+  border: 0;
+  background: var(--v2-background-bg-layer-03);
+}
+.voice-level::-webkit-meter-optimum-value {
+  background: var(--v2-icon-icon-accent);
+}
+.voice-status,
+.voice-caption {
+  margin-block: 4px 2px;
+  padding-inline-end: 6px;
+  overflow-wrap: anywhere;
+  color: var(--v2-text-text-base);
+}
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.voice-latest {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.voice-captions {
+  max-height: 160px;
+  overflow-y: auto;
+  cursor: auto;
+  touch-action: pan-y;
+}
+.voice-caption span {
+  color: var(--v2-text-text-faint);
+}

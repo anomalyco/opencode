@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/update",
-  "version": "2.0.32",
+  "version": "2.1.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,8 @@
     "dev": "wrangler dev",
     "db:migrate": "wrangler d1 migrations apply DB --remote",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "jose": "6.0.11",

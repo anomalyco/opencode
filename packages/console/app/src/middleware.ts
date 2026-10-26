@@ -1,10 +1,13 @@
 import { createMiddleware } from "@solidjs/start/middleware"
-import { Resource } from "@opencode/console-resource"
+import { appleAppSiteAssociation } from "~/lib/apple-app-site-association"
 import { LOCALE_HEADER, cookie, fromPathname, strip } from "~/lib/language"
 import { sanitizeServerActionRequest } from "~/lib/server-action"
 
 export default createMiddleware({
   async onRequest(event) {
+    const association = appleAppSiteAssociation(event.request)
+    if (association) return association
+
     event.request = sanitizeServerActionRequest(event.request)
 
     const url = new URL(event.request.url)
@@ -36,10 +39,10 @@ export default createMiddleware({
       return new Response(null, { status: 301, headers: { Location: locale ? `/${locale}/go` : "/go" } })
 
     // The legacy dashboard and its sign-in moved to the new Console.
-    if (/^\/(auth|workspace)(\/|$)/.test(url.pathname) && Resource.ConsoleMigration.consoleUrl)
+    if (/^\/(auth|workspace)(\/|$)/.test(url.pathname))
       return new Response(null, {
         status: 302,
-        headers: { Location: `${Resource.ConsoleMigration.consoleUrl}/login`, "Cache-Control": "no-store" },
+        headers: { Location: "https://opencode.ai/console/login", "Cache-Control": "no-store" },
       })
   },
 })
