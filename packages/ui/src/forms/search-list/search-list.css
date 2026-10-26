@@ -1,0 +1,175 @@
+[data-component="search-list"] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+
+  [data-slot="search-list-search"] {
+    flex-shrink: 0;
+    padding: 6px;
+
+    [data-component="text-input-v2"] {
+      width: 100%;
+      height: 36px;
+      padding-inline-end: 12px;
+      border-radius: 6px;
+      outline: 0;
+      background: color-mix(in srgb, var(--v2-background-bg-layer-02) 60%, transparent);
+      box-shadow: none;
+      transition:
+        background-color 120ms ease-in-out,
+        box-shadow 120ms ease-in-out;
+    }
+
+    [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+      background: var(--v2-background-bg-layer-02);
+      box-shadow: none;
+    }
+
+    [data-slot="text-input-v2-value"] {
+      gap: 8px;
+      border-radius: 6px;
+      background: transparent;
+    }
+
+    [data-slot="text-input-v2-leading-icon"] {
+      padding-inline-start: 12px;
+    }
+
+    [data-slot="text-input-v2-input"] {
+      border-radius: 6px;
+      background: transparent;
+    }
+  }
+
+  /* Arrow keys scroll the active row clear of the sticky header. Rows fade out past the bottom edge while more follow. */
+  [data-slot="search-list-scroll"] {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    --search-list-edge: linear-gradient(
+      to bottom,
+      #000 calc(100% - 24px),
+      rgb(0 0 0 / calc(1 - var(--search-list-fade-bottom, 0)))
+    );
+    scroll-padding-top: 28px;
+    -webkit-mask-image: var(--search-list-edge);
+    mask-image: var(--search-list-edge);
+  }
+
+  /* Rows fade out under the top section's header, or under the field when it has none. Headers stay above the fade. */
+  [data-slot="search-list-fade"] {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 0;
+    pointer-events: none;
+
+    &::before {
+      position: absolute;
+      inset: var(--search-list-fade-offset, 0px) 0 auto;
+      height: 24px;
+      background: linear-gradient(var(--v2-background-bg-base), transparent);
+      content: "";
+      opacity: var(--search-list-fade-top, 0);
+    }
+  }
+
+  [data-slot="search-list-results"] {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 6px 8px;
+  }
+
+  [data-slot="search-list-section"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+
+    /* Space inside the section, not between sections, so the next header meets this one and pushes it up. */
+    &:not(:last-child) {
+      padding-bottom: 16px;
+    }
+  }
+
+  /* The header bleeds to the list's edges so rows scroll under an opaque band, and its text stays on the rows' spine. */
+  [data-slot="search-list-header"] {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    margin-inline: -6px;
+    padding-inline: 18px;
+    background: var(--v2-background-bg-base);
+    color: var(--v2-text-text-muted);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    user-select: none;
+  }
+
+  [data-slot="search-list-row"] {
+    display: flex;
+    width: 100%;
+    height: 36px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--v2-text-text-base);
+    text-align: start;
+    cursor: default;
+    scroll-margin-block: 0 24px;
+
+    &[data-active] {
+      background: var(--v2-overlay-simple-overlay-hover);
+      outline: none;
+    }
+
+    &[data-size="compact"] {
+      height: 28px;
+    }
+  }
+
+  /* A row under the one above it keeps clear of the fade beneath the header; a section's first row sits right under it. */
+  [data-slot="search-list-row"] + [data-slot="search-list-row"] {
+    scroll-margin-top: 24px;
+  }
+
+  [data-slot="search-list-match"] {
+    background: transparent;
+    color: var(--v2-text-text-accent);
+  }
+
+  [data-slot="search-list-empty"] {
+    display: grid;
+    min-height: 120px;
+    place-items: center;
+    color: var(--v2-text-text-muted);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+}
+
+[data-color-scheme="dark"] [data-component="search-list"] [data-slot="search-list-row"][data-active] {
+  background: var(--v2-alpha-light-10);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="search-list"] {
+    [data-slot="search-list-search"] [data-component="text-input-v2"] {
+      transition: none;
+    }
+  }
+}

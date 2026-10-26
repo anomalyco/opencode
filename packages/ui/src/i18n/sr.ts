@@ -205,7 +205,6 @@ export const dict = {
   "ui.question.answer.none": "(без одговора)",
   "ui.question.review.notAnswered": "(није одговорено)",
   "ui.question.multiHint": "Изаберите све одговоре који се примењују",
-  "ui.question.singleHint": "Изаберите један одговор",
   "ui.question.custom.placeholder": "Унесите свој одговор…",
   "ui.messagePart.context.match.one": "({{count}} подударање)",
   "ui.messagePart.context.match.other": "({{count}} подударања)",

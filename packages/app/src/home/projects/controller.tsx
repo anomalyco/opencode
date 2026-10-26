@@ -6,7 +6,7 @@ import { type LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
-import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
+import { errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -65,7 +65,7 @@ export function createHomeProjectsController(home: HomeController) {
       server: conn,
       title: language.t("command.project.open"),
       multiple: true,
-      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
+      onSelect: (result) => void home.project.add(conn, homeProjectDirectories(result)),
     })
   }
 
@@ -79,6 +79,7 @@ export function createHomeProjectsController(home: HomeController) {
     server: {
       list: home.server.list,
       health: home.server.health,
+      label: home.server.label,
       projects: home.project.forServer,
       collapsed: (conn: ServerConnection.Any) => state().collapsed[ServerConnection.key(conn)] ?? false,
       toggleCollapsed: (conn: ServerConnection.Any) => {
@@ -98,8 +99,6 @@ export function createHomeProjectsController(home: HomeController) {
     },
     project: {
       list: home.project.list,
-      recentlyClosed: home.project.recentlyClosed,
-      homedir: home.project.homedir,
       select: (conn: ServerConnection.Any, directory: string) => {
         if (authenticate(conn, (next) => home.project.select(next, directory))) return
         home.project.select(conn, directory)
@@ -163,19 +162,7 @@ export function createHomeProjectsController(home: HomeController) {
         if (home.server.health(conn)?.healthy === false) return
         choose(conn)
       },
-      close: (conn: ServerConnection.Any, directory: string) => {
-        const next = closeHomeProject(
-          home.selection.value(),
-          ServerConnection.key(conn),
-          home.server.context(conn).projects,
-          directory,
-        )
-
-        if (next) home.selection.set(next)
-      },
-      move: (conn: ServerConnection.Any, worktree: string, index: number) => {
-        home.server.context(conn).projects.move(worktree, index)
-      },
+      hide: (conn: ServerConnection.Any, project: LocalProject) => home.server.context(conn).projects.hide(project),
       canReveal: revealProject.available,
       reveal: revealProject.reveal,
     },

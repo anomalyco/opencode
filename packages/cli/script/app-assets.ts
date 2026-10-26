@@ -20,16 +20,20 @@ export async function buildAppArchive(channel: string, options?: { skipBuild?: b
         .map(async (key) => {
           const body = Buffer.from(await Bun.file(path.join(root, "dist", key)).arrayBuffer())
           // Independent entries let the server materialize only assets the browser requests.
-          return [key, await compress(body)] as const
+          return [key, await compress(body, channel)] as const
         }),
     ),
   )
 }
 
 // The assets compress once per release, so they take brotli's best quality: about 11% smaller than quality 6 for the
-// web UI. Each runs on the thread pool, which keeps the build to about a minute.
-function compress(body: Buffer) {
+// web UI. Each runs on the thread pool, which keeps the build to about a minute. Beta builds on every push and only
+// bundles the CLI into the desktop app, so it keeps quality 6, which takes a few seconds.
+function compress(body: Buffer, channel: string) {
   return promisify(brotliCompress)(body, {
-    params: { [constants.BROTLI_PARAM_QUALITY]: 11, [constants.BROTLI_PARAM_SIZE_HINT]: body.length },
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: channel === "beta" ? 6 : 11,
+      [constants.BROTLI_PARAM_SIZE_HINT]: body.length,
+    },
   })
 }

@@ -30,7 +30,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ (inputs.bump || inputs.version) && 'release' || 'build' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Beta ships only the newest commit to the team. A cancelled beta run can leave unreferenced files in R2, but only
+  # publish-desktop records a release, in one request.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref_name == 'beta' }}
 
 permissions:
   contents: read
@@ -96,10 +98,11 @@ jobs:
 
   # ---- Build: repository code; no environment, secrets or id-token --------------------------------------------
 
-  build-cli:
+  # Fetches the models.dev catalog once per run, so every CLI bundles the same copy.
+  models-catalog:
     needs: [plan, tag]
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
+    timeout-minutes: 10
     env: *env
     steps:
       - &checkout
@@ -110,15 +113,44 @@ jobs:
           persist-credentials: false
       - name: Set up Bun
         uses: ./.github/actions/setup-bun
+      - name: Fetch
+        run: bun packages/core/script/update-models-snapshot.ts .cache/models-catalog/api.json
+      - name: Upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: models-catalog
+          path: .cache/models-catalog/api.json
+          if-no-files-found: error
+
+  build-cli:
+    needs: [plan, tag, models-catalog]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    env: *env
+    steps:
+      - *checkout
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
         with:
           bun-version: 1.4.4
+      - &download-models-catalog
+        name: Download models catalog
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: models-catalog
+          path: .cache/models-catalog
       - name: Build
         working-directory: packages/cli
         run: bun run build && rm -rf dist/.bun
         env:
           BUN_COMPILE_RELEASE: bun-v1.4.4
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
           OPENCODE_RELEASE_NOTES: ${{ needs.plan.outputs.channel == 'latest' && inputs.release_notes || '' }}
           GH_TOKEN: ${{ github.token }} # read-only; raises the rate limit for Bun release downloads
+      - name: Verify bundled models catalog
+        run: bun packages/cli/script/catalog-smoke.ts packages/cli/dist/cli-linux-x64/bin/opencode
+        env:
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
       - name: Upload
         uses: ./.github/release/upload
         with:
@@ -126,7 +158,7 @@ jobs:
           path: packages/cli/dist
 
   build-node:
-    needs: [plan, tag]
+    needs: [plan, tag, models-catalog]
     if: needs.plan.outputs.node == 'true'
     strategy:
       fail-fast: false
@@ -147,15 +179,24 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "26.4.0"
+      - *download-models-catalog
       - name: Build
         working-directory: packages/cli
         run: bun run build:node
         env:
           OPENCODE_TARGET: ${{ matrix.target }}
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
       - name: Test
         if: matrix.target != 'windows-arm64'
         working-directory: packages/cli
         run: bun run script/service-smoke.ts --node
+      - name: Verify bundled models catalog
+        if: matrix.target != 'windows-arm64'
+        run: bun packages/cli/script/catalog-smoke.ts "packages/cli/dist/node/cli-node-$OPENCODE_TARGET/bin/opencode2-node$EXE"
+        env:
+          OPENCODE_TARGET: ${{ matrix.target }}
+          EXE: ${{ startsWith(matrix.target, 'windows') && '.exe' || '' }}
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
       - name: Upload
         uses: ./.github/release/upload
         with:
@@ -224,17 +265,26 @@ jobs:
           path: dist/docker
 
   # macOS and Windows pack an unsigned app; Linux packs the final AppImage, deb and rpm.
+  # Beta packages macOS x64 on Apple Silicon and Windows arm64 on Blacksmith for speed. electron-builder's afterPack
+  # rejects a bundle whose CLI or node-pty does not match the target CPU.
   build-desktop:
     needs: [plan, tag, build-cli]
     if: needs.plan.outputs.desktop == 'true'
+    permissions:
+      contents: read
+      pull-requests: read # beta builds read who made each change and what it does for "What's new in beta"
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { target: darwin-x64, host: macos-26-intel, install: --os=darwin --cpu=x64 }
+          - target: darwin-x64
+            host: ${{ github.ref_name == 'beta' && 'macos-26' || 'macos-26-intel' }}
+            install: ${{ github.ref_name == 'beta' && '--os=darwin --cpu=*' || '--os=darwin --cpu=x64' }}
           - { target: darwin-arm64, host: macos-26, install: --os=darwin --cpu=arm64 }
           # github-hosted: blacksmith lacks the ARM64 MSVC cross-compilation toolchain
-          - { target: windows-arm64, host: windows-2025, install: --cpu=* }
+          - target: windows-arm64
+            host: ${{ github.ref_name == 'beta' && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
+            install: --cpu=*
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
           - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
           - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
@@ -250,6 +300,18 @@ jobs:
       - name: Set up rpm
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm
+      # The beta build embeds the subjects of its newest commits for "What's new in beta"
+      # (packages/desktop/script/beta-notes.ts). Commits without file contents are enough.
+      - name: Fetch beta history
+        if: needs.plan.outputs.channel == 'beta'
+        run: git fetch --no-tags --filter=blob:none --depth=300 origin "$SHA"
+        env:
+          SHA: ${{ needs.tag.outputs.sha }}
+      # Beta trades larger packages for faster packaging. fpm sets XZ_OPT for the deb and rpm level, but xz still
+      # reads XZ_DEFAULTS, so it uses every CPU.
+      - name: Beta packaging settings
+        if: needs.plan.outputs.channel == 'beta' && runner.os == 'Linux'
+        run: echo "XZ_DEFAULTS=-T0" >> "$GITHUB_ENV"
       - name: Build
         working-directory: packages/desktop
         run: bun run build
@@ -259,6 +321,7 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ needs.plan.outputs.channel == 'beta' && 'beta' || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.plan.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }} # read-only; beta notes read pull request authors and descriptions
       - name: Pack
         working-directory: packages/desktop
         timeout-minutes: 60
@@ -280,7 +343,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: windows-arm64, host: windows-2025, install: --cpu=* }
+          - target: windows-arm64
+            host: ${{ github.ref_name == 'beta' && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
+            install: --cpu=*
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
     runs-on: ${{ matrix.host }}
     env: *env

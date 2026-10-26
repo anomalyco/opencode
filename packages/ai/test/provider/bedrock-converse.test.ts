@@ -2325,9 +2325,9 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("maps ttlSeconds >= 3600 to cachePoint ttl: '1h'", () =>
+  it.effect("sends the hint ttl on cachePoint", () =>
     Effect.gen(function* () {
-      const cache = new CacheHint({ type: "ephemeral", ttlSeconds: 3600 })
+      const cache = new CacheHint({ type: "ephemeral", ttl: "1h" })
       const prepared = yield* compileRequest(
         LLM.request({
           model,

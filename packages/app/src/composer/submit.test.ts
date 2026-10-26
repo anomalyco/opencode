@@ -11,6 +11,7 @@ import type {
 } from "./adapter"
 import { createMemoryComposerState, type Prompt } from "./state"
 import { createComposerSubmit } from "./submit"
+import { createSteerBackground } from "@/session/requests/steer-background"
 import type { ComposerStateTarget } from "./submission-state"
 
 // SAFETY: submission reads only the selected model's id, name, and provider id.
@@ -22,8 +23,10 @@ const selectedModel = {
 
 const selection = {
   ready: Object.assign(() => true, { promise: undefined }),
+  key: () => ({ providerID: "provider-1", modelID: "model-1" }),
   current: () => selectedModel,
   recent: () => [selectedModel],
+  favorite: { list: () => [], toggle() {} },
   list: () => [selectedModel],
   cycle() {},
   set() {},
@@ -114,9 +117,11 @@ function session(input: {
   command?: ComposerSession["api"]["command"]
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
+  background?: ComposerSession["background"]
 }): ComposerSession {
   return {
     id: "session-1",
+    background: input.background,
     directory: "C:/repo",
     handoff: input.handoff ?? { set() {}, clear() {} },
     current: input.current ?? (() => undefined),
@@ -208,10 +213,10 @@ describe("Composer submission", () => {
       current: { agent: "plan", model: { id: "old", providerID: "old" } },
       calls: ["admit", "switch-agent", "switch-model", "send"],
     },
-    // The model still commits: cached session state may lag behind an earlier switch.
+    // An unchanged selection sends without a model request to wait on.
     {
       current: { agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } },
-      calls: ["admit", "switch-model", "send"],
+      calls: ["admit", "send"],
     },
     // A prompt commits a staged revert, which would delete the model switch made after its boundary. The revert
     // settles before admission, whose row it would also delete.
@@ -500,6 +505,159 @@ describe("Composer submission", () => {
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
     expect(attempts).toHaveLength(2)
     expect(new Set(attempts).size).toBe(1)
+  })
+
+  describe("steering while foreground work runs", () => {
+    // A long shell command blocks the run; moving it resolves only the move, never the admission.
+    // `unstarted` moves before the shell's job starts, so the server finds nothing to move and the call still blocks.
+    function running(
+      input: {
+        fail?: boolean
+        failOnce?: boolean
+        unstarted?: boolean
+        blocking?: { partID: string }[]
+        prompt?: () => Promise<void>
+      } = {},
+    ) {
+      const calls: string[] = []
+      const failures: string[] = []
+      const state = createMemoryComposerState({ prompt: "use Beta instead" }).capture()
+      const blocking = { parts: input.blocking ?? [{ partID: "prt_shell" }] }
+
+      const claim = createSteerBackground({
+        sessionID: () => "session-1",
+        blocking: () => blocking.parts,
+        move: async () => {
+          calls.push("background")
+
+          if (input.fail) throw new Error("server unavailable")
+
+          if (input.failOnce) {
+            input.failOnce = false
+            throw new Error("server unavailable")
+          }
+
+          if (input.unstarted) {
+            input.unstarted = false
+
+            return
+          }
+
+          blocking.parts = []
+        },
+      })
+
+      const target = session({ calls, prompt: input.prompt, background: () => claim("session-1") })
+      const adapter = { ...active(state, target), working: () => true }
+      const notify = { missingSelection() {}, unqueueable() {}, failed: () => void failures.push("failed") }
+
+      const submit = async (delivery: ComposerDelivery = "steer", working = true) => {
+        state.set([{ type: "text", content: "use Beta instead", start: 0, end: 16 }])
+        await submitInput(
+          { ...adapter, working: () => working },
+          notify,
+          "normal",
+          () => [],
+          [],
+          undefined,
+          delivery,
+        ).submit(new Event("submit"))
+        // The send settles after submit returns; let it and the move that follows it finish.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      return { calls, failures, submit, blocking }
+    }
+
+    test("moves the work to the background once the steer is admitted, and only once", async () => {
+      const run = running()
+
+      await run.submit()
+      expect(run.calls).toEqual(["admit", "switch-agent", "switch-model", "send", "background"])
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
+
+    test("a steer moves work that its previous steer's move missed", async () => {
+      const run = running({ unstarted: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer sent while the previous one is admitted moves the work when the previous move fails", async () => {
+      const admitted = Promise.withResolvers<void>()
+      const attempts = { count: 0 }
+
+      const run = running({
+        failOnce: true,
+        prompt: async () => {
+          attempts.count++
+
+          if (attempts.count === 1) await admitted.promise
+        },
+      })
+
+      await run.submit()
+      await run.submit()
+      admitted.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("moves a shell that starts while the steer is admitted", async () => {
+      const run = running({
+        blocking: [],
+        prompt: async () => {
+          run.blocking.parts = [{ partID: "prt_shell" }]
+        },
+      })
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("leaves the work alone for a queued prompt or an idle session", async () => {
+      const run = running()
+
+      await run.submit("queue")
+      await run.submit("steer", false)
+      expect(run.calls).not.toContain("background")
+    })
+
+    test("still sends the steer when the move fails, and a later steer tries again", async () => {
+      const run = running({ fail: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.failures).toEqual([])
+      expect(run.calls.filter((call) => call === "send")).toHaveLength(2)
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer that fails to send leaves the work for the next one", async () => {
+      const attempts = { count: 0 }
+
+      const run = running({
+        prompt: async () => {
+          attempts.count++
+
+          // The first submission's admission and its single retry both fail.
+          if (attempts.count <= 2) throw new Error("network unavailable")
+        },
+      })
+
+      await run.submit()
+      expect(run.failures).toEqual(["failed"])
+      expect(run.calls).not.toContain("background")
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
   })
 
   test("hands off image-only first prompts and admits them before cleanup is ready", async () => {

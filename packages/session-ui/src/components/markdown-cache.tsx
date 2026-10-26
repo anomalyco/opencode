@@ -1,11 +1,13 @@
+import { abort } from "@opencode/util/abort"
 import { checksum } from "@opencode/util/encode"
 import { parseSmallMarkdown } from "@opencode/ui/context/marked-base"
 import DOMPurify from "dompurify"
-import { MarkdownWorkerDisposedError, parseMarkdown } from "./markdown-worker"
+import { markdownWorkerDisposed, parseMarkdown } from "./markdown-worker"
 import { localImagePath, localLinkPath } from "./markdown-image"
 
 export type MarkdownCacheEntry = {
   raw: string
+  src?: string
   hash: string
   html: string
 }
@@ -94,7 +96,7 @@ export function touchCachedMarkdown(key: string, value: MarkdownCacheEntry) {
 }
 
 export async function preloadMarkdown(text: string, cacheKey: string, signal?: AbortSignal) {
-  if (signal?.aborted) throw new MarkdownWorkerDisposedError()
+  if (signal?.aborted) throw markdownWorkerDisposed
   const block = { raw: text, src: text }
   const key = `${cacheKey}:0:full`
 
@@ -105,7 +107,7 @@ export async function preloadMarkdown(text: string, cacheKey: string, signal?: A
 export function getReadyMarkdown(block: { raw: string; src: string }, key?: string) {
   const cached = key ? getCachedMarkdown(key) : undefined
 
-  if (key && cached?.raw === block.raw) {
+  if (key && cached && (cached.src ?? cached.raw) === block.src) {
     pending.delete(key)
     touchCachedMarkdown(key, cached)
 
@@ -118,8 +120,8 @@ export function getReadyMarkdown(block: { raw: string; src: string }, key?: stri
     const html = parseSmallMarkdown(block.src)
 
     if (html === undefined) return
-    const hash = checksum(block.raw)
-    const result = { raw: block.raw, hash: hash ?? "", html: sanitizeMarkdown(html) }
+    const hash = checksum(block.src)
+    const result = { raw: block.raw, src: block.src, hash: hash ?? "", html: sanitizeMarkdown(html) }
 
     if (key && hash) {
       pending.delete(key)
@@ -134,10 +136,10 @@ export function getReadyMarkdown(block: { raw: string; src: string }, key?: stri
 }
 
 export async function renderCachedMarkdown(block: { raw: string; src: string }, key?: string, signal?: AbortSignal) {
-  if (signal?.aborted) throw new MarkdownWorkerDisposedError()
+  if (signal?.aborted) throw markdownWorkerDisposed
   const cached = key ? getCachedMarkdown(key) : undefined
 
-  if (key && cached?.raw === block.raw) {
+  if (key && cached && (cached.src ?? cached.raw) === block.src) {
     pending.delete(key)
     touchCachedMarkdown(key, cached)
 
@@ -145,27 +147,27 @@ export async function renderCachedMarkdown(block: { raw: string; src: string }, 
   }
 
   const current = key ? pending.get(key) : undefined
-  const job = current?.raw === block.raw ? current : startMarkdown(block, key)
+  const job = current?.raw === block.src ? current : startMarkdown(block, key)
   const consumer = Symbol()
   job.consumers.add(consumer)
 
   return new Promise<MarkdownCacheEntry>((resolve, reject) => {
     const release = () => {
-      signal?.removeEventListener("abort", abort)
+      signal?.removeEventListener("abort", cancel)
 
       // A disposed consumer must not cancel another consumer's shared parse.
       if (!job.consumers.delete(consumer) || job.consumers.size > 0) return
-      job.controller.abort()
+      abort(job.controller)
 
       if (key && pending.get(key) === job) pending.delete(key)
     }
 
-    const abort = () => {
+    const cancel = () => {
       release()
-      reject(new MarkdownWorkerDisposedError())
+      reject(markdownWorkerDisposed)
     }
 
-    signal?.addEventListener("abort", abort, { once: true })
+    signal?.addEventListener("abort", cancel, { once: true })
     void job.promise.then(resolve, reject).finally(release)
   })
 }
@@ -175,9 +177,9 @@ function startMarkdown(block: { raw: string; src: string }, key?: string) {
 
   const promise = parseMarkdown(block.src, controller.signal)
     .then((html) => {
-      if (controller.signal.aborted) throw new MarkdownWorkerDisposedError()
-      const hash = checksum(block.raw)
-      const result = { raw: block.raw, hash: hash ?? "", html: sanitizeMarkdown(html) }
+      if (controller.signal.aborted) throw markdownWorkerDisposed
+      const hash = checksum(block.src)
+      const result = { raw: block.raw, src: block.src, hash: hash ?? "", html: sanitizeMarkdown(html) }
 
       if (key && hash && pending.get(key)?.promise === promise) touchCachedMarkdown(key, result)
 
@@ -187,7 +189,7 @@ function startMarkdown(block: { raw: string; src: string }, key?: string) {
       if (key && pending.get(key)?.promise === promise) pending.delete(key)
     })
 
-  const job = { raw: block.raw, promise, controller, consumers: new Set<symbol>() }
+  const job = { raw: block.src, promise, controller, consumers: new Set<symbol>() }
 
   if (key) pending.set(key, job)
 

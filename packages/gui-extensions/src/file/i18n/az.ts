@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Bütün fayllar",
-  "tree.empty": "Fayl yoxdur",
-  "tree.changes.one": "{{count}} fayl dəyişdi",
-  "tree.changes.other": "{{count}} fayl dəyişdi",
   "tab.notFound": "Fayl tapılmadı: {{name}}",
   "mobile.title": "Fayllar",
   "mobile.openTabs": "Açıq fayllar",

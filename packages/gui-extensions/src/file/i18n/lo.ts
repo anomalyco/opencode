@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ໄຟລ໌ທັງໝົດ",
-  "tree.empty": "ບໍ່ມີໄຟລ໌",
-  "tree.changes.one": "ປ່ຽນໄຟລ໌ {{count}} ແລ້ວ",
-  "tree.changes.other": "ປ່ຽນ {{count}} ໄຟລ໌",
   "tab.notFound": "ບໍ່ພົບໄຟລ໌: {{name}}",
   "mobile.title": "ໄຟລ໌",
   "mobile.openTabs": "ເປີດໄຟລ໌",

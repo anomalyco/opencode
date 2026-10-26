@@ -8,7 +8,6 @@ import { globalStoreTarget } from "@/runtime/extension/stores"
 import { migrateKeybinds } from "@/settings/keybinds/migration"
 import context from "../../gui-extensions/src/context/index"
 import contextSetup from "../../gui-extensions/src/context/renderer"
-import details from "../../gui-extensions/src/details/index"
 import review from "../../gui-extensions/src/review/index"
 import updater from "../../gui-extensions/src/updater/index"
 
@@ -23,22 +22,6 @@ const web: Platform = {
 
 // Every key and id a built-in stored under an older name, and the home it reaches. Each row fails without its mapping.
 test.each([
-  {
-    name: "namespace extension.summary.* → extension.details.*",
-    home: () =>
-      imported("details", "prefs", details.stores.prefs, "opencode.global.dat:extension.details.prefs", [
-        ["opencode.global.dat:extension.summary.prefs", { projectExpanded: false, serverExpanded: false }],
-      ]),
-    expected: { projectExpanded: false, serverExpanded: false },
-  },
-  {
-    name: "settings sessionSummary, from before extensions → extension.details.prefs",
-    home: () =>
-      imported("details", "prefs", details.stores.prefs, "opencode.global.dat:extension.details.prefs", [
-        ["settings.v3", { sessionSummary: { projectExpanded: false, serverExpanded: true } }],
-      ]),
-    expected: { projectExpanded: false, serverExpanded: true },
-  },
   {
     // An older home without the field holds no value, so the import reads on to the next one.
     name: "layout review.diffStyle, from the unprefixed layout when the newer one lacks it → extension.review.diff",

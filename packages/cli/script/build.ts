@@ -13,6 +13,7 @@ import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
 import { NativeArch } from "../../../script/native-arch"
+import { bundledModelsSnapshot, modelsSnapshotPlugin } from "../../core/script/models-snapshot"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode"
@@ -33,6 +34,7 @@ const skipWebUi = process.argv.includes("--skip-web-ui")
 const solidPlugin = createSolidTransformPlugin()
 const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
 const releaseAssets = new Map<string, Promise<Map<string, string>>>()
+const modelsSnapshot = modelsSnapshotPlugin(await bundledModelsSnapshot())
 
 const allTargets: {
   os: string
@@ -155,7 +157,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const executablePath = await compileExecutable(item)
   console.log(`building ${name}`)
   const result = await Bun.build({
-    entrypoints: ["./src/index.ts"],
+    entrypoints: ["./src/index.ts", "./src/photon-worker.ts"],
     tsconfig: "./tsconfig.json",
     plugins: [
       appAssetsPlugin,
@@ -164,6 +166,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       opencodePtyPlugin,
       pluginRuntimePlugin,
       simulationGraphPlugin,
+      modelsSnapshot,
     ],
     external: ["node-gyp"],
     format: "esm",
@@ -268,6 +271,7 @@ function compileReleaseAssets(release: string) {
   const existing = releaseAssets.get(release)
   if (existing) return existing
   const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+  // Beta builds each CLI in its own job; authenticated requests avoid the per-IP limit on shared runners.
   const pending = fetch(`https://api.github.com/repos/oven-sh/bun/releases/tags/${release}?cache=${Date.now()}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Բոլոր ֆայլերը",
-  "tree.empty": "Ֆայլեր չկան",
-  "tree.changes.one": "{{count}} ֆայլ փոխվել է",
-  "tree.changes.other": "{{count}} ֆայլեր փոխվել են",
   "tab.notFound": "Ֆայլը չի գտնվել՝ {{name}}",
   "mobile.title": "Ֆայլեր",
   "mobile.openTabs": "Բաց ֆայլեր",

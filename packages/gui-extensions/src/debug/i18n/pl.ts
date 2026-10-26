@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Przełącz pasek debugowania",
-  "status.toggle": "Przełącz narzędzia debugowania",
   ariaLabel: "Diagnostyka wydajności w środowisku deweloperskim",
   providerAriaLabel: "Diagnostyka wydajności dostawcy",
   na: "n.d.",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Czas od wysłania żądania do dostawcy do pierwszego wyniku modelu.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Czas od wysłania żądania do dostawcy do pierwszego tekstu odpowiedzi.",
+  "duration.label": "TIME",
+  "duration.tip": "Czas od polecenia, które rozpoczęło ostatnią turę, do zakończenia odpowiedzi.",
   "tps.label": "TPS",
-  "tps.tip": "Liczba tokenów wyjściowych na sekundę po pierwszym wyniku modelu.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Czas od wysłania żądania do dostawcy do zakończenia strumienia odpowiedzi.",
+  "tps.tip":
+    "Tokeny wyjściowe i rozumowania na sekundę we wszystkich żądaniach do modelu w ostatniej turze, bez czasu narzędzi.",
   "nav.label": "NAV",
   "nav.tip":
     "Ostatnie zakończone przejście między trasami obejmujące stronę sesji, mierzone od uruchomienia routera do pierwszego odrysowania po ustabilizowaniu widoku.",

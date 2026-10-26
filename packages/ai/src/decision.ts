@@ -155,10 +155,11 @@ export interface DecisionModelRoute<Options extends DecisionOptions = DecisionOp
 export class DecisionModelCompatibility extends Schema.Class<DecisionModelCompatibility>("Decision.ModelCompatibility")(
   {
     /**
-     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.image_input`:
-     * `assets` (TypeSafe's assets map), `images` (top-level lists) or `state` (items inside a state list).
+     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.media_input`, named after
+     * where the media goes in the body: `assets` (TypeSafe's assets map, referenced from the state), `state` (items
+     * inside a state list) or `root` (one top-level list per kind: `images`, `audio`, `videos`).
      */
-    imageInput: Schema.optional(Schema.Literals(["assets", "images", "state"])),
+    mediaInput: Schema.optional(Schema.Literals(["assets", "state", "root"])),
   },
 ) {}
 

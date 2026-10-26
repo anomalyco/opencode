@@ -23,61 +23,7 @@ const request = LLM.request({
   model: LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
   prompt: "Say hello",
 })
-const legacy = testEffect(TestLLM.layer())
 const it = testEffect(TestLLM.testLayer())
-
-describe("TestLLM legacy client", () => {
-  legacy.effect("does not observe requests or consume responses until execution", () =>
-    Effect.gen(function* () {
-      const llm = yield* TestLLM.Service
-      yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("second", "second"))
-
-      llm.client.stream(request)
-      llm.client.generate(request)
-      expect(llm.requests).toEqual([])
-
-      expect((yield* llm.client.generate(request)).text).toBe("first")
-      expect((yield* llm.client.generate(request)).text).toBe("second")
-      expect(llm.requests).toEqual([request, request])
-    }),
-  )
-
-  legacy.effect("assigns and records a fresh response for each execution", () =>
-    Effect.gen(function* () {
-      const llm = yield* TestLLM.Service
-      yield* llm.push(
-        TestLLM.text("first", "first"),
-        TestLLM.text("second", "second"),
-        TestLLM.text("third", "third"),
-        TestLLM.text("fourth", "fourth"),
-      )
-      const stream = llm.client.stream(request)
-      const generate = llm.client.generate(request)
-
-      expect(yield* Stream.runCollect(stream)).toEqual(TestLLM.text("first", "first"))
-      expect(yield* Stream.runCollect(stream)).toEqual(TestLLM.text("second", "second"))
-      expect((yield* generate).text).toBe("third")
-      expect((yield* generate).text).toBe("fourth")
-      expect(llm.requests).toEqual([request, request, request, request])
-    }),
-  )
-
-  legacy.effect("keeps module-level controls and clientLayer on the same backing state", () =>
-    Effect.gen(function* () {
-      const llm = yield* TestLLM.Service
-      const requests = llm.requests
-      yield* TestLLM.push(TestLLM.text("queued", "queued"))
-      yield* TestLLM.always(TestLLM.text("fallback", "fallback"))
-      expect((yield* LLMClient.generate(request).pipe(Effect.provide(TestLLM.clientLayer))).text).toBe("queued")
-      yield* TestLLM.wait(1)
-      expect(requests).toEqual([request])
-      requests.length = 0
-      expect((yield* llm.client.generate(request)).text).toBe("fallback")
-      expect(llm.requests).toBe(requests)
-      expect(requests).toEqual([request])
-    }),
-  )
-})
 
 describe("TestLLM first-class client", () => {
   it.effect("returns scripted checkpoints only for trigger compaction", () =>

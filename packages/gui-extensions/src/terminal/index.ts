@@ -1,6 +1,9 @@
 import { Extension } from "../sdk"
 import en from "./i18n/en"
 
+/** Published as `terminal.toggle`; the desktop menu names it. */
+export const terminalToggleCommand = { id: "toggle", bind: "ctrl+`" }
+
 export default Extension.define({
   id: "terminal",
   i18n: {

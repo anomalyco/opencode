@@ -1,4 +1,5 @@
 import type { ProviderPackage } from "../provider-package.js"
+import { CloudflareRunExtraction } from "../experimental/cloudflare-run-extraction.js"
 import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
 import { CloudflareWorkersAIImages } from "../protocols/cloudflare-workers-ai-images.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
@@ -68,6 +69,7 @@ export const configure = (input: LanguageModelOptions) => {
   const auth = AuthOptions.bearer(input, authEnvVars)
   const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })
   // The Run API base is derived per call so a chat-only configuration without an account still constructs.
+  const runDeployment = () => MediaRoute.deployment({ ...input, baseURL: runBaseURL(input) }, auth)
   const decision = (modelID: string | ModelID) =>
     CloudflareRunDecisions.route
       .with({
@@ -82,11 +84,10 @@ export const configure = (input: LanguageModelOptions) => {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
     decision,
-    image: (modelID: string | ModelID) =>
-      CloudflareWorkersAIImages.model({
-        ...MediaRoute.deployment({ ...input, baseURL: runBaseURL(input) }, auth),
-        id: modelID,
-      }),
+    image: (modelID: string | ModelID) => CloudflareWorkersAIImages.model({ ...runDeployment(), id: modelID }),
+    experimental: {
+      extraction: (modelID: string | ModelID) => CloudflareRunExtraction.model({ ...runDeployment(), id: modelID }),
+    },
     configure,
   }
 }

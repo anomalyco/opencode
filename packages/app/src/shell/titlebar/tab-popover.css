@@ -121,7 +121,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="session-tab-popover"],
   [data-component="session-tab-popover"][data-closed] {
     animation: none;

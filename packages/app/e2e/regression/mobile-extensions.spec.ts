@@ -27,7 +27,7 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
   const navigation = page.getByRole("tablist", { name: "Session view", exact: true })
   await openFiles(page)
   const files = page.locator('[data-slot="session-mobile-files"]')
-  await files.getByRole("button", { name: "first.ts", exact: true }).click()
+  await files.getByRole("treeitem", { name: "first.ts", exact: true }).click()
   await expect(files.getByText("contents:first.ts", { exact: true })).toBeVisible()
   await files.locator('[data-column-number="1"]').click()
   const editor = files.locator('[data-component="line-comment-v2"][data-variant="editor"]')

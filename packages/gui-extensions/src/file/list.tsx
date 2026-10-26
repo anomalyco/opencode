@@ -1,13 +1,24 @@
+import { createFileTreeIconResolver, getBuiltInSpriteSheet } from "@pierre/trees"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { FileIcon } from "@opencode/ui/file-icon"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
 import { createKeyed, useExtension, type MountedSession, type SessionScreen } from "../sdk"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
-import { normalizeFileTreeV2Path } from "./tree-model"
-import { kindChange, kindLabel, sameRows, syncFileTreeV2Width, virtualScrollElement } from "./tree-v2"
+import { FILE_TREE_ROW_HEIGHT, kindChange, normalizeFileTreeV2Path } from "./tree-model"
+
+const kindLabel = (kind: ChangeKind) => {
+  if (kind === "add") return "A"
+
+  if (kind === "del") return "D"
+
+  return "M"
+}
+
+function virtualScrollElement(root: HTMLElement | undefined) {
+  return root?.isConnected ? root.closest<HTMLDivElement>("[data-scrollable]") : null
+}
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.
@@ -38,10 +49,8 @@ export function applyFileListKeyDown(
   event.preventDefault()
 }
 
-// Flat variant of FileTreeV2 for filtered results: reuses its data-component and
-// row data-slots on purpose so file-tree-v2.css styles both. data-highlighted has
-// no CSS of its own — it folds into data-selected below and only exists as the
-// scrollIntoView query hook.
+// Flat list for filtered search results: reuses data-component and row data-slots
+// so file-tree.css styles its rows and sticky change badges.
 export default function SessionFileList(props: {
   session: MountedSession
   screen: SessionScreen
@@ -64,6 +73,8 @@ export default function SessionFileList(props: {
   const normalized = createMemo(() => props.files.map(normalizeFileTreeV2Path))
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [focused, setFocused] = createSignal<string>()
+  const iconResolver = createFileTreeIconResolver("complete")
+  const spriteSheet = getBuiltInSpriteSheet("complete") ?? ""
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -71,7 +82,7 @@ export default function SessionFileList(props: {
     },
     getScrollElement: () => virtualScrollElement(root()),
     initialRect: { width: 0, height: 600 },
-    estimateSize: () => 28,
+    estimateSize: () => FILE_TREE_ROW_HEIGHT,
     gap: 2,
     overscan: 10,
     get getItemKey() {
@@ -113,63 +124,53 @@ export default function SessionFileList(props: {
 
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
-  // New results measure from the pane's width again; rows wider than the pane widen the list.
-  createKeyed(
-    () => {
-      const files = normalized()
-      const element = root()
-
-      return element && { element, files }
-    },
-    (current) => {
-      current.element.style.removeProperty("width")
-      syncFileTreeV2Width(current.element)
-    },
-  )
-
-  // Measures again when other rows render, not when the same rows only move while scrolling.
-  createKeyed(
-    () => ({ keys: virtualRowKeys(), element: root() }),
-    (current) => syncFileTreeV2Width(current.element),
-    { equals: sameRows },
-  )
+  const resolveContextPath = (event: MouseEvent) => {
+    for (const target of event.composedPath()) {
+      if (
+        target instanceof HTMLElement &&
+        target.dataset.slot === "file-tree-v2-row" &&
+        target.dataset.path
+      ) {
+        return resolveOpenInAppPath(props.screen.file.root, target.dataset.path)
+      }
+    }
+  }
 
   return (
-    <div
-      ref={setRoot}
-      id={props.id}
-      role={props.role}
-      data-component="file-tree-v2"
-      data-total-rows={props.files.length}
-      style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
-    >
-      <For each={virtualRowKeys()}>
-        {(key) => {
-          const path = String(key)
-          const value = normalizeFileTreeV2Path(path)
-          const selected = () => (highlighted() ? highlighted() === value : active() === value)
-          const highlightedRow = () => highlighted() === value
-          const kind = () => props.kinds?.get(value)
-          const directory = () => (value.includes("/") ? getDirectory(value) : undefined)
-          const filename = () => getFilename(value)
+    <OpenInAppContextMenuV2 state={openIn} resolvePath={resolveContextPath}>
+      <div
+        ref={setRoot}
+        id={props.id}
+        role={props.role}
+        data-component="file-tree-v2"
+        data-total-rows={props.files.length}
+        style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
+      >
+        <div aria-hidden="true" class="hidden" innerHTML={spriteSheet} />
+        <For each={virtualRowKeys()}>
+          {(key) => {
+            const path = String(key)
+            const value = normalizeFileTreeV2Path(path)
+            const icon = () => iconResolver.resolveIcon("file-tree-icon-file", value)
+            const selected = () => (highlighted() ? highlighted() === value : active() === value)
+            const highlightedRow = () => highlighted() === value
+            const kind = () => props.kinds?.get(value)
+            const directory = () => (value.includes("/") ? getDirectory(value) : undefined)
+            const filename = () => getFilename(value)
 
-          return (
-            <Show when={virtualItemByKey().get(key)}>
-              {(item) => (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "0",
-                    "inset-inline-start": "0",
-                    width: "100%",
-                    "min-width": "max-content",
-                    height: `${item().size}px`,
-                    transform: `translateY(${item().start}px)`,
-                  }}
-                >
-                  <OpenInAppContextMenuV2
-                    state={openIn}
-                    path={() => resolveOpenInAppPath(props.screen.file.root, path)}
+            return (
+              <Show when={virtualItemByKey().get(key)}>
+                {(item) => (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "0",
+                      "inset-inline-start": "0",
+                      width: "100%",
+                      "min-width": "max-content",
+                      height: `${item().size}px`,
+                      transform: `translateY(${item().start}px)`,
+                    }}
                   >
                     <button
                       type="button"
@@ -186,10 +187,17 @@ export default function SessionFileList(props: {
                       onClick={() => props.onFileClick(path)}
                       onDblClick={() => props.onFileDoubleClick?.(path)}
                     >
-                      <span class="filetree-iconpair size-4">
-                        <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
-                        <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--mono" mono />
-                      </span>
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 16 16"
+                        width="16"
+                        height="16"
+                        data-icon-name={icon().remappedFrom ?? icon().name}
+                        data-icon-token={icon().token}
+                        class="size-4 shrink-0"
+                      >
+                        <use href={`#${icon().name}`} />
+                      </svg>
                       <span data-slot="file-tree-v2-label" class="flex flex-1 shrink-0 items-center whitespace-nowrap">
                         <Show when={directory()}>
                           {(value) => <span class="text-12-medium text-text-muted shrink-0">{value()}</span>}
@@ -204,13 +212,13 @@ export default function SessionFileList(props: {
                         )}
                       </Show>
                     </button>
-                  </OpenInAppContextMenuV2>
-                </div>
-              )}
-            </Show>
-          )
-        }}
-      </For>
-    </div>
+                  </div>
+                )}
+              </Show>
+            )
+          }}
+        </For>
+      </div>
+    </OpenInAppContextMenuV2>
   )
 }

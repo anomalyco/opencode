@@ -4,13 +4,16 @@ import {
   NO_PROVIDER,
   REMOTE_SERVER,
   SERVER,
+  draftHref,
   expectPath,
   holdRoute,
+  pageMessagesFrom,
   project,
   seed,
   session,
   sessionHref,
 } from "../utils/app"
+import { openFileLauncher, reviewTabs } from "../utils/side-panel"
 import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
@@ -23,6 +26,107 @@ const b = { id: "ses_tab_b", title: "Tab B session" }
 const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
+
+test("recently closed shows ten sessions and searches older closures in close order", async ({ page }) => {
+  const sessions = Array.from({ length: 100 }, (_, index) => ({
+    id: `ses_closed_${index}`,
+    title: `Closed session ${index}`,
+  }))
+
+  await mockWorkspace(page, {
+    name: "ClosedTabs",
+    sessions,
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(1).map((session, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: session.id },
+          index,
+          info: { title: session.title, directory: "C:/OpenCode/ClosedTabs", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText("Closed session 0")
+  const trigger = page.getByRole("button", { name: "New session", exact: true })
+  await trigger.click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const items = menu.getByRole("menuitem")
+  const search = menu.getByRole("searchbox", { name: "Search recently closed" })
+  await expect(search).toBeFocused()
+  await expect(items).toHaveText(Array.from({ length: 10 }, (_, index) => `CClosed session ${99 - index}`))
+  await search.pressSequentially("SESSION 2")
+  await expect(search).toHaveValue("SESSION 2")
+  await expect(items).toHaveText(Array.from({ length: 10 }, (_, index) => `CClosed session ${29 - index}`))
+  await search.fill("not found")
+  await expect(menu.getByRole("status")).toHaveText("No matches")
+  await expect(items).toHaveCount(0)
+  await menu.getByRole("button", { name: "Clear", exact: true }).click()
+  await expect(search).toHaveValue("")
+  await expect(search).toBeFocused()
+  await expect(items).toHaveCount(10)
+  await search.fill("session 1")
+  await expect(items).toHaveText(Array.from({ length: 10 }, (_, index) => `CClosed session ${19 - index}`))
+  await search.press("ArrowDown")
+  await expect(menu.getByRole("menuitem", { name: "C Closed session 19", exact: true })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expectPath(page, sessionHref("ses_closed_19"))
+  await expect(menu).toBeHidden()
+  await trigger.click({ button: "right" })
+  await expect(search).toHaveValue("")
+  await expect(items).toHaveCount(10)
+  await search.press("Escape")
+  await expect(menu).toBeHidden()
+})
+
+test("recently closed fills remaining slots in Home order without open or duplicate sessions", async ({ page }) => {
+  const sessions = Array.from({ length: 12 }, (_, index) => ({
+    id: `ses_other_${index}`,
+    title: `Other session ${index}`,
+    time: { created: 1700000000000, updated: 1700000000000 + (12 - index) * 1000 },
+  }))
+
+  await mockWorkspace(page, {
+    name: "OtherTabs",
+    sessions: [
+      ...sessions,
+      { id: "ses_other_archived", title: "Archived session", time: { created: Date.now(), archived: Date.now() } },
+      { id: "ses_other_child", title: "Child session", parentID: sessions[0]!.id },
+    ],
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id, sessions[2]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(10).map((session, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: session.id },
+          index,
+          info: { title: session.title, directory: "C:/OpenCode/OtherTabs", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText(["Other session 0", "Other session 2"])
+  const trigger = page.getByRole("button", { name: "New session", exact: true })
+  await trigger.click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const items = menu.getByRole("menuitem")
+  await expect(items).toHaveText([11, 10, 1, 3, 4, 5, 6, 7, 8, 9].map((index) => `OOther session ${index}`))
+  await expect(menu.getByRole("group", { name: "Recently closed", exact: true }).getByRole("menuitem")).toHaveText([
+    "OOther session 11",
+    "OOther session 10",
+  ])
+  await expect(menu.getByRole("group", { name: "Recent sessions", exact: true }).getByRole("menuitem")).toHaveCount(8)
+  await menu.getByRole("menuitem", { name: "O Other session 1", exact: true }).click()
+  await expectPath(page, sessionHref("ses_other_1"))
+  await expect(menu).toBeHidden()
+  await trigger.click({ button: "right" })
+  await expect(items).toHaveText([11, 10, 3, 4, 5, 6, 7, 8, 9].map((index) => `OOther session ${index}`))
+  await menu.getByRole("searchbox", { name: "Search recently closed" }).fill("session 9")
+  await expect(items).toHaveText(["OOther session 9"])
+})
 
 test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse down", async ({ page }) => {
   const workspace = await mockWorkspace(page, {
@@ -72,7 +176,8 @@ test("inactive session attention dots share the close control without marking th
   await page.goto(sessionHref(a.id))
   const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
-  const dot = tabB.locator('[data-slot="tab-unread-dot"]')
+  const dot = tabB.locator('[data-mark="attention"]')
+  const status = tabB.locator('[data-slot="tab-status"]')
   const close = tabB.getByRole("button", { name: "Close tab", exact: true })
   await expect(tabA.locator('[data-slot="tab-title"]')).toHaveText(a.title)
   await expect(tabB.locator('[data-slot="tab-title"]')).toHaveText(b.title)
@@ -96,21 +201,21 @@ test("inactive session attention dots share the close control without marking th
     .toBeLessThan(1)
 
   await tabB.hover()
-  await expect(dot).toBeHidden()
+  await expect(status).toHaveCSS("opacity", "0")
   await expect(close).toHaveCSS("opacity", "1")
   await page.mouse.move(0, 0)
   await tabB.locator("[data-titlebar-tab-link]").focus()
   await page.keyboard.press("Tab")
   await expect(close).toBeFocused()
-  await expect(dot).toBeHidden()
+  await expect(status).toHaveCSS("opacity", "0")
   await expect(close).toHaveCSS("opacity", "1")
   await close.blur()
-  await expect(dot).toBeVisible()
+  await expect(status).toHaveCSS("opacity", "1")
 
   await tabB.locator("[data-titlebar-tab-link]").click()
   await expectPath(page, sessionHref(b.id))
   await expect(tabB).toHaveAttribute("data-active", "true")
-  await expect(dot).toHaveCount(0)
+  await expect(dot).toBeHidden()
   await tabA.locator("[data-titlebar-tab-link]").click()
   await expectPath(page, sessionHref(a.id))
   await page.mouse.move(0, 0)
@@ -121,31 +226,86 @@ test("inactive session attention dots share the close control without marking th
   await expectPath(page, sessionHref(a.id))
 })
 
-test("a tab does not reopen its title editor while a rename is saving", async ({ page }) => {
+test("the browser title names the open session and resets after leaving it", async ({ page }) => {
   await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
   await page.goto(sessionHref(a.id))
-  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
-  const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
-  await expect(title).toHaveText(a.title)
-  const save = await holdRoute(page, (url) => url.pathname === `/api/session/${a.id}`, { method: "PATCH" })
+  await expect(page).toHaveTitle(`${a.title} · OpenCode`)
 
-  await title.dblclick()
-  await expect(editor).toBeFocused()
-  await editor.fill("Renamed tab")
-  await editor.press("Enter")
-  expect((await save.arrived).postDataJSON()).toEqual({ title: "Renamed tab" })
-  await expect(editor).toHaveCount(0)
-  await title.dblclick()
-  await expect(editor).toHaveCount(0)
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  await tabB.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(page).toHaveTitle(`${b.title} · OpenCode`)
 
-  // The context menu's Rename item is enabled again once the save settles.
-  save.release()
-  await title.click({ button: "right" })
-  await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeEnabled()
-  await page.keyboard.press("Escape")
-  await title.dblclick()
-  await expect(editor).toBeFocused()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(page).toHaveTitle("OpenCode")
 })
+
+for (const tabLayout of ["horizontal", "vertical"] as const) {
+  test(`a ${tabLayout} tab can be renamed again while its previous rename is still saving`, async ({ page }) => {
+    await mockWorkspace(page, { name: "Tabs", sessions: [a, b], seed: { settings: { appearance: { tabLayout } } } })
+    await page.goto(sessionHref(a.id))
+    const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+    const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
+    await expect(title).toHaveText(a.title)
+    const save = await holdRoute(page, (url) => url.pathname === `/api/session/${a.id}`, { method: "PATCH" })
+
+    await title.dblclick()
+    await expect(editor).toBeFocused()
+    await editor.fill("First name")
+    await editor.press("Enter")
+    expect((await save.arrived).postDataJSON()).toEqual({ title: "First name" })
+    await expect(editor).toHaveCount(0)
+
+    await title.dblclick()
+    await expect(editor).toBeFocused()
+    await editor.fill("Second name")
+    await editor.press("Enter")
+    await expect(title).toHaveText("Second name")
+
+    await title.click({ button: "right" })
+    await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+    await expect(editor).toBeFocused()
+    await editor.fill("Third name")
+    await editor.press("Enter")
+    await expect(title).toHaveText("Third name")
+
+    save.release()
+    await expect
+      .poll(() => save.requests.map((request) => request.postDataJSON()))
+      .toEqual([{ title: "First name" }, { title: "Second name" }, { title: "Third name" }])
+    await expect(title).toHaveText("Third name")
+  })
+}
+
+for (const tabLayout of ["horizontal", "vertical"] as const) {
+  test(`a ${tabLayout} tab deletes its session after confirmation`, async ({ page }) => {
+    await mockWorkspace(page, { name: "Tabs", sessions: [a, b], seed: { settings: { appearance: { tabLayout } } } })
+    await page.goto(sessionHref(a.id))
+    const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+
+    const remove = page.waitForRequest(
+      (request) => request.method() === "DELETE" && request.url().endsWith(`/api/session/${a.id}`),
+    )
+
+    await expect(title).toHaveText(a.title)
+
+    await title.click({ button: "right" })
+    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(title).toHaveText(a.title)
+
+    await title.click({ button: "right" })
+    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await dialog.getByRole("button", { name: "Delete session", exact: true }).click()
+    await remove
+    await expect(title).toHaveCount(0)
+    await expectPath(page, sessionHref(b.id))
+  })
+}
 
 test("keyboard navigation follows the visible tab order and skips unresolved tabs", async ({ page }) => {
   await mockWorkspace(page, { name: "Tabs", sessions: [a, c], seed: { tabs: [a.id, "ses_tab_unresolved", c.id] } })
@@ -175,7 +335,7 @@ test("option arrows move to the previous or next tab, and with shift to the next
   await page.goto(sessionHref(a.id))
   await page.mouse.move(0, 0)
   await expect(
-    page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"]) [data-slot="tab-unread-dot"]`),
+    page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"]) [data-mark="attention"]`),
   ).toBeVisible()
 
   await page.keyboard.press("Alt+ArrowDown")
@@ -187,6 +347,49 @@ test("option arrows move to the previous or next tab, and with shift to the next
   await page.keyboard.press("Shift+Alt+ArrowDown")
   await expectPath(page, sessionHref(c.id))
 })
+
+for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
+  test(`switching session tabs restores the caret and pastes into the destination draft (${navigation})`, async ({
+    page,
+    context,
+  }) => {
+    const tabLayout = navigation === "vertical" ? "vertical" : "horizontal"
+
+    const strip = page.locator(
+      tabLayout === "vertical" ? '[data-slot="vertical-tabs-sidebar"]' : '[data-slot="titlebar-tabs"]',
+    )
+
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await openSession(page, {
+      name: "TabFocus",
+      sessions: [a, b],
+      seed: { settings: { appearance: { tabLayout } } },
+    })
+    const editor = page.locator('[data-component="composer-editor"]')
+    const tabB = strip.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
+    await editor.fill("Draft A")
+
+    await (navigation === "keyboard" ? page.keyboard.press("Control+Alt+ArrowRight") : tabB.click())
+    await expectPath(page, sessionHref(b.id))
+    await expect(editor).toBeFocused()
+    await page.evaluate(() => navigator.clipboard.writeText("Draft B"))
+    await page.keyboard.press("ControlOrMeta+V")
+    await expect(editor).toHaveText("Draft B")
+
+    await page.keyboard.press("Control+Alt+ArrowLeft")
+    await expectPath(page, sessionHref(a.id))
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("Draft A")
+    await page.evaluate(() => navigator.clipboard.writeText(" appended"))
+    await page.keyboard.press("ControlOrMeta+V")
+    await expect(editor).toHaveText("Draft A appended")
+
+    await tabB.click()
+    await expectPath(page, sessionHref(b.id))
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("Draft B")
+  })
+}
 
 for (const row of [
   { tabLayout: "horizontal", width: 360, hasTouch: false, direction: "ltr" },
@@ -215,7 +418,8 @@ for (const row of [
       })
       await page.goto(sessionHref(a.id))
       await page.locator("html").evaluate((element, direction) => element.setAttribute("dir", direction), row.direction)
-      await page.getByRole("button", { name: "Tabs", exact: true }).click()
+      // The session location bar also names the "Tabs" project, so scope to the titlebar.
+      await page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Tabs", exact: true }).click()
 
       const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
       const tabA = drawer.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
@@ -223,13 +427,13 @@ for (const row of [
       await expect(tabA).toHaveAttribute("data-active", "true")
       await expect(tabA.locator('[data-slot="tab-close"]')).toBeVisible()
       await expect(tabB.locator('[data-slot="tab-close"]')).toBeVisible()
-      await expect(tabB.locator('[data-slot="tab-unread-dot"]')).toBeVisible()
-      await expect(tabB.locator('[data-slot="tab-unread-slot"]')).toHaveCSS("width", "20px")
-      await expect(tabB.locator('[data-slot="tab-unread-slot"]')).toHaveCSS("height", "20px")
+      await expect(tabB.locator('[data-mark="attention"]')).toBeVisible()
+      await expect(tabB.locator('[data-slot="tab-status"]')).toHaveCSS("width", "20px")
+      await expect(tabB.locator('[data-slot="tab-status"]')).toHaveCSS("height", "20px")
       await expect
         .poll(() =>
           tabB.evaluate((element) => {
-            const dot = element.querySelector('[data-slot="tab-unread-slot"]')!.getBoundingClientRect()
+            const dot = element.querySelector('[data-slot="tab-status"]')!.getBoundingClientRect()
             const close = element.querySelector('[data-slot="tab-close"]')!.getBoundingClientRect()
 
             return dot.right <= close.left || dot.left >= close.right
@@ -318,15 +522,25 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
   const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
   await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
-  await expect(sidebar).toHaveCSS("width", "260px")
+  await expect(sidebar).toHaveCSS("width", "276px")
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+
+  const actions = await Promise.all(
+    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
+      const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
+
+      if (!box) throw new Error(`${action} is not rendered`)
+
+      return box
+    }),
+  )
+
+  const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
+  expect(gaps).toEqual([4, 4])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
-  for (const [offset, width] of [
-    [-80, "180px"],
-    [-200, "140px"],
-  ] as const) {
+  const resize = async (offset: number, width: string) => {
     const box = await handle.boundingBox()
 
     if (!box) throw new Error("vertical tab resize handle has no bounding box")
@@ -337,6 +551,9 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
     await expect(sidebar).toHaveCSS("width", width)
   }
 
+  await resize(-80, "196px")
+  await resize(-40, "156px")
+
   for (const name of ["Home", "New session"]) {
     const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
     await expect(label).toBeVisible()
@@ -344,6 +561,14 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
       .poll(() => label.evaluate((element) => element.scrollWidth - element.clientWidth), { message: name })
       .toBeLessThanOrEqual(1)
   }
+
+  await resize(-200, "136px")
+  const homeLabel = sidebar.getByRole("button", { name: "Home", exact: true }).getByText("Home", { exact: true })
+  await expect
+    .poll(() => homeLabel.evaluate((element) => element.scrollWidth - element.clientWidth))
+    .toBeLessThanOrEqual(1)
+  await resize(800, "640px")
+  await resize(-380, "260px")
 
   const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
   await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
@@ -361,6 +586,37 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await tabB.click()
   await expectPath(page, sessionHref(b.id))
 })
+
+for (const [screen, href] of [
+  ["home", "/"],
+  ["new session", draftHref("draft_collapsed_sidebar")],
+  ["settings", "/settings"],
+  ["session", sessionHref(a.id)],
+] as const) {
+  test(`collapsed vertical tabs sidebar reopens from the ${screen} screen`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [a],
+      seed: {
+        settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } },
+        tabs: [a.id, { draft: "draft_collapsed_sidebar", directory: "C:/OpenCode/Tabs" }],
+      },
+    })
+    await page.goto(href)
+
+    const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+    await expect(sidebar).toHaveAttribute("data-state", "closed")
+    await page
+      .locator('[data-slot="collapsed-sidebar-toggle"]')
+      .getByRole("button", { name: "Toggle sidebar", exact: true })
+      .click()
+    await expect(sidebar).toHaveAttribute("data-state", "open")
+    await expect(sidebar.getByRole("button", { name: "Toggle sidebar", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    )
+  })
+}
 
 test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
@@ -534,9 +790,9 @@ test("a remote tab stays busy while a child session runs", async ({ page }) => {
 
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionB.id, REMOTE_SERVER)}"])`)
   const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionA.id)}"])`)
-  await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+  await expect(tabB.locator('[data-component="activity-ring"]')).toBeVisible()
   await expect(tabA.locator("[data-titlebar-tab-title]")).toHaveText(sessionA.title)
-  await expect(tabA.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
+  await expect(tabA.locator('[data-component="activity-ring"]')).toBeHidden()
 })
 
 test("inactive tabs stay busy while work waits in their inbox, and pulse on a new prompt, as in the TUI", async ({
@@ -567,11 +823,11 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   })
 
   const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
-  const progress = '[data-component="session-progress-indicator-v2"]'
+  const progress = '[data-component="activity-ring"]'
 
   await expect(tab(b.id).locator(progress)).toBeVisible()
   await expect(tab(c.id).locator("[data-titlebar-tab-title]")).toHaveText(c.title)
-  await expect(tab(c.id).locator(progress)).toHaveCount(0)
+  await expect(tab(c.id).locator(progress)).toBeHidden()
   await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
   // The pulse lasts one animation, so record that it appeared rather than racing its removal.
   await tab(c.id).evaluate((element) => {
@@ -604,6 +860,57 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
 })
 
+test("switching between busy sessions keeps the busy indicators and the activity capsule at rest", async ({ page }) => {
+  const children = [
+    { id: "ses_tab_a_child", title: "Map the orchard", parentID: a.id },
+    { id: "ses_tab_b_child", title: "Chart the harbor", parentID: b.id },
+  ]
+
+  await mockWorkspace(page, {
+    name: "TabActivity",
+    sessions: [a, b, ...children],
+    sessionStatus: Object.fromEntries(children.map((child) => [child.id, { type: "running" as const }])),
+    seed: { settings: { appearance: { tabLayout: "vertical" } }, tabs: [a.id, b.id] },
+  })
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const indicators = sidebar.locator('[data-component="activity-ring"]')
+  const capsule = page.locator('[data-slot="session-activity-chip"]')
+  await expect(indicators).toHaveCount(2)
+  await expect(capsule).toHaveText("1 subagent")
+  await expect(capsule).toHaveCSS("opacity", "1")
+
+  // Record any capsule animation or any moment without a capsule, and mark the indicators to compare them later. The
+  // capsule's spinner always runs its own phase-synced loop, so only an animation of the capsule itself counts.
+  await page.evaluate(() => {
+    const record = document.documentElement
+    document.addEventListener("animationstart", (event) => {
+      if (event.target instanceof Element && event.target.matches('[data-slot="session-activity-chip"]'))
+        record.setAttribute("data-test-capsule-animated", "")
+    })
+    new MutationObserver(() => {
+      if (!document.querySelector('[data-slot="session-activity-chip"]'))
+        record.setAttribute("data-test-capsule-missing", "")
+    }).observe(document.body, { childList: true, subtree: true })
+    document
+      .querySelectorAll('[data-slot="vertical-tabs-sidebar"] [data-component="activity-ring"]')
+      .forEach((element) => element.setAttribute("data-test-before-switch", ""))
+  })
+
+  await sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()
+  await expectSessionTitle(page, b.title)
+  await expect(page.locator('[data-component="session-activity-chips"]')).toHaveCount(1)
+  await expect(capsule).toHaveText("1 subagent")
+  await capsule.click()
+  await expect(page.locator('[data-slot="session-activity-panel"]')).toContainText(children[1]!.title)
+
+  await expect(indicators.and(page.locator("[data-test-before-switch]"))).toHaveCount(2)
+  await expect(page.locator("html")).not.toHaveAttribute("data-test-capsule-missing")
+  await expect(page.locator("html")).not.toHaveAttribute("data-test-capsule-animated")
+})
+
 test("selecting a tab with waiting work waits for its transcript instead of showing only the inbox", async ({
   page,
 }) => {
@@ -627,7 +934,7 @@ test("selecting a tab with waiting work waits for its transcript instead of show
   })
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
   // The inactive tab read its inbox, which materializes the pending steer as a transcript row.
-  await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+  await expect(tabB.locator('[data-component="activity-ring"]')).toBeVisible()
 
   const transcript = await holdRoute(page, (url) => url.pathname === `/api/session/${b.id}/message`)
   await page.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()
@@ -663,6 +970,7 @@ test("inactive tabs load attention and inbox, but read the transcript only on se
   })
   const state = { text: "Original fixture answer" }
   await mockStressTimeline(page, {
+    sessionStatus: { [fixture.childID]: { type: "running" } },
     pageMessages: (id) => ({
       items: [
         { id: `msg_${id}_user`, type: "user", text: "Review the renderer change", time: { created: 1 } },
@@ -678,18 +986,17 @@ test("inactive tabs load attention and inbox, but read the transcript only on se
     }),
   })
   await seed(page, {
-    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
-    lastProject: { local: fixture.directory },
     tabs: [fixture.sourceID, fixture.targetID, fixture.childID],
   })
 
-  const attention = Promise.all(
-    [fixture.targetID, fixture.childID].flatMap((id) =>
-      ["permission", "form", "inbox"].map((kind) =>
-        page.waitForResponse((response) => new URL(response.url()).pathname === `/api/session/${id}/${kind}`),
+  const attention = Promise.all([
+    ...["permission", "form", "inbox"].map((kind) =>
+      page.waitForResponse(
+        (response) => new URL(response.url()).pathname === `/api/session/${fixture.childID}/${kind}`,
       ),
     ),
-  )
+    page.waitForResponse((response) => new URL(response.url()).pathname === `/api/session/${fixture.targetID}/inbox`),
+  ])
 
   await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -697,6 +1004,8 @@ test("inactive tabs load attention and inbox, but read the transcript only on se
     state.text,
   )
   await attention
+  expect(reads.filter((path) => path === `/api/session/${fixture.targetID}/permission`)).toEqual([])
+  expect(reads.filter((path) => path === `/api/session/${fixture.targetID}/form`)).toEqual([])
 
   const child = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(fixture.childID)}"])`)
   await child.getByRole("button", { name: "Close tab", exact: true }).click()
@@ -751,7 +1060,6 @@ test("five loaded workspace tabs stay rendered and reactive through repeated swi
 
   // Each worktree session resolves to its own location in the shared project (the mock echoes the requested one).
   await seed(page, {
-    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
     tabs: sessions.map((item) => item.id),
   })
   await page.goto(sessionHref(sessions[0]!.id))
@@ -808,8 +1116,8 @@ test("each session tab shows its own file tab after a switch to a session in ano
   }
 
   const open = async (file: string) => {
-    await panel.getByRole("button", { name: "Open file" }).click()
-    await panel.getByRole("button", { name: file, exact: true }).click()
+    await openFileLauncher(panel)
+    await panel.getByRole("treeitem", { name: file, exact: true }).click()
     await shows(file)
   }
 
@@ -842,7 +1150,10 @@ test("tab shortcuts cycle side-panel tabs when the side panel is focused with mu
     sessions: [alpha, beta],
     fileList: (path) => (path ? [] : ["README.md"].map((file) => fileNode(directory, file))),
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
-    seed: { panes: { [alpha.id]: { review: true }, [beta.id]: { review: true } } },
+    seed: {
+      panes: { [alpha.id]: { review: true }, [beta.id]: { review: true } },
+      storage: reviewTabs(directory, alpha.id),
+    },
   })
 
   const panel = page.locator("#review-panel")
@@ -850,8 +1161,8 @@ test("tab shortcuts cycle side-panel tabs when the side panel is focused with mu
   const fileTab = panel.getByRole("tab", { name: "README.md", exact: true })
   const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
 
-  await panel.getByRole("button", { name: "Open file" }).click()
-  await panel.getByRole("button", { name: "README.md", exact: true }).click()
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md", exact: true }).click()
   await expect(fileTab).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
 
@@ -894,6 +1205,26 @@ test("tab shortcuts cycle side-panel tabs when the side panel is focused with mu
   await reviewTab.click()
   await page.keyboard.press("Control+Tab")
   await expectPath(page, sessionHref(beta.id))
+})
+
+test("⌘W past the side panel's last tab keeps the session tab", async ({ page }) => {
+  const sessions = await emptySidePanel(page)
+  await page.keyboard.press("ControlOrMeta+w")
+
+  // From the composer ⌘W closes the session tab, so only a swallowed press above leaves Beta to land on.
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘W closes the session tab again once the window loses focus after the side panel empties", async ({ page }) => {
+  const sessions = await emptySidePanel(page)
+  // ⌘Tab away and back sends no click or key the page sees.
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")))
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
 })
 
 // Windows has no native menu bar: the titlebar menu owns Paste, which only the desktop edit action can perform.
@@ -941,4 +1272,80 @@ async function twoServers(
     servers: [REMOTE_SERVER],
     tabs: [input.a[0]!.id, { session: input.b[0]!.id, server: REMOTE_SERVER }],
   })
+}
+
+test("loads a tab's transcript while the pointer rests on it, and not when it passes over", async ({ page }) => {
+  const requested: string[] = []
+  page.on("request", (request) => {
+    const id = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)\/message$/)?.[1]
+
+    if (id && request.method() === "GET") requested.push(id)
+  })
+
+  await mockWorkspace(page, {
+    name: "HoverPrefetch",
+    sessions: [a, b, c],
+    pageMessages: pageMessagesFrom(
+      Object.fromEntries(
+        [a, b, c].map((item): [string, SessionMessageInfo[]] => [
+          item.id,
+          [{ id: `msg_${item.id}`, type: "user", time: { created: 1700000000000 }, text: item.title }],
+        ]),
+      ),
+    ),
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+  const tab = (id: string) => page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref(id, SERVER)}"]`)
+  const message = (id: string) => page.locator(`[data-timeline-virtual-content] [data-message-id="msg_${id}"]`)
+  await expect(message(a.id)).toBeVisible()
+
+  // Raw moves keep the pass well under the dwell, which hover() actionability checks can exceed on slow runners.
+  const [passed, rest] = await Promise.all([tab(c.id).boundingBox(), tab(a.id).boundingBox()])
+
+  await page.mouse.move(passed!.x + passed!.width / 2, passed!.y + passed!.height / 2)
+  await page.mouse.move(rest!.x + rest!.width / 2, rest!.y + rest!.height / 2)
+  await tab(b.id).hover()
+  await expect.poll(() => requested.includes(b.id)).toBe(true)
+  // A dwell started by the pass would have fired before the one on the rested tab.
+  expect(requested).not.toContain(c.id)
+
+  await tab(b.id).click()
+  await expect(message(b.id)).toBeVisible()
+  expect(requested.filter((id) => id === b.id)).toHaveLength(1)
+})
+
+// Closes Alpha's side tabs with ⌘W until the side panel empties and collapses, as an overshooting hand would.
+async function emptySidePanel(page: Page) {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/SideCloseOvershoot"
+  const alpha = { id: "ses_side_close_alpha", title: "Side close alpha" }
+  const beta = { id: "ses_side_close_beta", title: "Side close beta" }
+  await openSession(page, {
+    name: "SideCloseOvershoot",
+    sessions: [alpha, beta],
+    fileList: (path) => (path ? [] : ["README.md"].map((file) => fileNode(directory, file))),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { [alpha.id]: { review: true }, [beta.id]: { review: true } },
+      storage: reviewTabs(directory, alpha.id),
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const reviewTab = panel.getByRole("tab", { name: "Review", exact: true })
+  const fileTab = panel.getByRole("tab", { name: "README.md", exact: true })
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md", exact: true }).click()
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+  await panel.getByText("contents:README.md", { exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(fileTab).toHaveCount(0)
+  await expect(reviewTab).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(panel).toHaveAttribute("aria-hidden", "true")
+
+  return { beta, alphaTab: page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`) }
 }

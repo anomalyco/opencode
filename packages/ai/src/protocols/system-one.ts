@@ -19,8 +19,8 @@ export const DEFAULT_PATH = "/systemone"
 
 export const DEFAULT_BASE_URL = "https://api.typesafe.ai/v1"
 
-/** `messages` is Baseten's own placement (parts in a user message inside `state.messages`), set by its provider. */
-type ImageInput = NonNullable<DecisionModelCompatibility["imageInput"]> | "messages"
+/** `state.messages` is Baseten's own placement (parts in a user message inside `state.messages`), set by its provider. */
+type MediaInput = NonNullable<DecisionModelCompatibility["mediaInput"]> | "state.messages"
 
 const Probability = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))
 const Answer = Schema.Union([
@@ -58,13 +58,13 @@ export type Response = Schema.Schema.Type<typeof Response>
 const ID = "system-one"
 const NAME = "System One"
 
-/** The System One body without `model`; media goes where the model's `imageInput` says, else `fallback`. */
+/** The System One body without `model`; media goes where the model's `mediaInput` says, else `fallback`. */
 export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
   request: DecisionRequestFor,
-  fallback: ImageInput,
+  fallback: MediaInput,
 ) {
   const questions = yield* encodeQuestions(request.questions)
-  const placed = yield* placeMedia(request, request.model.compatibility?.imageInput ?? fallback)
+  const placed = yield* placeMedia(request, request.model.compatibility?.mediaInput ?? fallback)
   return { ...mergeJsonRecords(request.providerOptions, request.http?.body), ...placed, questions }
 })
 
@@ -103,7 +103,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     ] as const)
   }).pipe(Effect.map(Object.fromEntries))
 
-const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, imageInput: ImageInput) {
+const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, mediaInput: MediaInput) {
   const parts = request.input
   const unsupported = (asset: Media.Asset, accepted: string) =>
     new AIError({
@@ -116,9 +116,9 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, ima
     })
   const media = parts.flatMap((part) => (part.type === "media" ? [part.media] : []))
   if (media.length === 0) return { state: state(parts.map(plain)) }
-  if (imageInput === "state") return { state: yield* Effect.forEach(parts, (part) => stateItem(part, unsupported)) }
+  if (mediaInput === "state") return { state: yield* Effect.forEach(parts, (part) => stateItem(part, unsupported)) }
   // Chat-style content in one user message: text and JSON as text parts, media as in `state`.
-  if (imageInput === "messages")
+  if (mediaInput === "state.messages")
     return {
       state: {
         messages: [
@@ -133,7 +133,7 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, ima
         ],
       },
     }
-  if (imageInput === "images") {
+  if (mediaInput === "root") {
     const lists = { image: "images", audio: "audio", video: "videos" } as const
     const unplaced = media.find((asset) => !Object.hasOwn(lists, asset.kind))
     if (unplaced !== undefined) return yield* unsupported(unplaced, "images, audio and video")

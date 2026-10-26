@@ -1,10 +1,20 @@
-import { Extension } from "../sdk"
-import { HeapSnapshots } from "./contract"
+import { Schema } from "effect"
+import { Extension, Store } from "../sdk"
+import { HeapSnapshots, MemoryDiagnostics } from "./contract"
 import en from "./i18n/en"
 
 export default Extension.define({
   id: "debug",
-  provides: { heap: HeapSnapshots },
+  stores: {
+    // Whether the bar, and the Motion panel under it, are open; kept across reloads, restarts and updates.
+    bar: Store.global(Schema.Struct({ visible: Schema.Boolean, motion: Schema.Boolean }), {
+      visible: false,
+      motion: false,
+    }),
+    // Whether the debug bar turned memory diagnostics on. Read only in debug builds.
+    memory: Store.main(Schema.Boolean, false),
+  },
+  provides: { heap: HeapSnapshots, memory: MemoryDiagnostics },
   i18n: {
     en,
     am: () => import("./i18n/am"),

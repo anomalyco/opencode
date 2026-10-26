@@ -5,9 +5,9 @@ import { artifactMime } from "@opencode/util/artifact"
 import { bytesToBase64 } from "@opencode/util/base64"
 import { checksum } from "@opencode/util/encode"
 import { showToast } from "@opencode/ui/toast"
-import { createQuery, useQueryClient } from "@tanstack/solid-query"
+import { createQuery, useQueries, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
-import { createMemo, on, onCleanup, type Accessor } from "solid-js"
+import { createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createKeyed,
@@ -19,10 +19,14 @@ import {
 } from "../sdk"
 import type Review from "./index"
 import {
+  expandReviewFolders,
   filterRenderableDiff,
+  isReviewFolder,
+  normalizePath,
   reviewDiffDirectory,
   reviewDiffKinds,
   reviewDiffNeedsLoad,
+  reviewFolderDirectory,
   reviewRootDirectory,
 } from "./kinds"
 
@@ -168,6 +172,7 @@ export function createReviewModel(input: {
               .server.client.vcs.diff({
                 location: { directory: directory() },
                 mode: value === "git" ? "working" : value,
+                untracked: "folders",
               })
               .then((result) => result.data),
     }
@@ -231,7 +236,70 @@ export function createReviewModel(input: {
     if (view().server.connected && view().project?.vcs) void diffQuery.refetch()
   })
 
-  const diffs = (): FileDiffInfo[] => (diffQuery.isFetched ? (diffQuery.data ?? []) : [])
+  const rows = (): FileDiffInfo[] => (diffQuery.isFetched ? (diffQuery.data ?? []) : [])
+
+  // Git lists an untracked folder as one row. Once the change tree opens it, the folder lists its entries one level
+  // deep; they stay loaded while it is closed again, until the changes' source changes.
+  const [openFolders, setOpenFolders] = createSignal<readonly string[]>([])
+
+  createKeyed(
+    () => [...vcsKey(), mode()].join("\0"),
+    () => setOpenFolders([]),
+  )
+
+  const folderQueries = useQueries(() => ({
+    queries: openFolders().map((folder) => ({
+      queryKey: [...vcsKey(), mode(), "folder", folder] as const,
+      enabled: view().server.connected && mode() !== "turn",
+      queryFn: () =>
+        view()
+          .server.client.vcs.diff({
+            location: {
+              directory: reviewFolderDirectory(reviewRootDirectory(view().project?.worktree ?? directory()), folder),
+            },
+            mode: mode() === "branch" ? "branch" : "working",
+            untracked: "folders",
+          })
+          .then((result) => result.data),
+    })),
+  }))
+
+  const diffs = createMemo(() =>
+    expandReviewFolders(
+      rows(),
+      new Map(openFolders().map((folder, index) => [folder, folderQueries[index]?.data ?? []] as const)),
+    ),
+  )
+
+  // An opened folder's entry count, and whether its listing stopped before showing or checking every entry.
+  const folderLabels = createMemo(
+    () =>
+      new Map(
+        openFolders().flatMap((folder, index) => {
+          const entries = folderQueries[index]?.data
+
+          if (!entries) return []
+          const shown = entries.filter((entry) => !entry.more).length
+          const label = entries.some((entry) => entry.more) ? ctx.t("folder.more", { count: shown }) : `${shown}`
+
+          return [[normalizePath(folder), label] as const]
+        }),
+      ),
+  )
+
+  // The tree's expanded state belongs to the session screen's file model.
+  createKeyed(
+    () => {
+      const next = diffs()
+        .map((diff) => diff.file)
+        .filter((file) => isReviewFolder(file) && !openFolders().includes(file))
+        .filter((file) => screen.file.tree.state(normalizePath(file))?.expanded)
+
+      return next.length > 0 && next
+    },
+    (next) => setOpenFolders((list) => [...list, ...next]),
+  )
+
   const renderable = createMemo(() => diffs().filter(filterRenderableDiff))
   const kinds = createMemo(() => reviewDiffKinds(renderable()))
 
@@ -241,10 +309,11 @@ export function createReviewModel(input: {
 
     if (selected && list.some((diff) => diff.file === selected)) return selected
 
-    return list[0]?.file
+    return list.find((diff) => !isReviewFolder(diff.file))?.file
   }
 
-  const count = () => diffs().length
+  // What `git status` lists: an untracked folder counts once, opened or not.
+  const count = () => rows().length
   const hasChanges = () => count() > 0
 
   const ready = () => {
@@ -363,6 +432,7 @@ export function createReviewModel(input: {
                 location: { directory: scope },
                 mode: value === "git" ? "working" : value,
                 context,
+                untracked: "folders",
               })
               .then((result) => result.data),
         })
@@ -596,6 +666,7 @@ export function createReviewModel(input: {
     details: (): FileDiffInfo[] | undefined => (detailsQuery.isFetched ? (detailsQuery.data ?? []) : undefined),
     diffVersion: () => diffQuery.dataUpdatedAt,
     diffs,
+    folderLabels,
     renderable,
     kinds,
     focusFile,

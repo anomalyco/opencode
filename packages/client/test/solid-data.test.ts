@@ -66,12 +66,19 @@ test("counts every subagent page in a root session's cost", async () => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
       requests.push(`${url.pathname}?${url.searchParams}`)
 
-      if (url.pathname === "/api/session/ses_root") return Response.json({ data: { ...session(0), id: "ses_root", cost: 0.5 } })
+      if (url.pathname === "/api/session/ses_root")
+        return Response.json({ data: { ...session(0), id: "ses_root", cost: 0.5 } })
 
       if (url.searchParams.get("cursor") === "page_2")
-        return Response.json({ data: Array.from({ length: 50 }, (_, index) => child(200 + index)), cursor: { next: "page_3" } })
+        return Response.json({
+          data: Array.from({ length: 50 }, (_, index) => child(200 + index)),
+          cursor: { next: "page_3" },
+        })
 
-      return Response.json({ data: Array.from({ length: 200 }, (_, index) => child(index)), cursor: { next: "page_2" } })
+      return Response.json({
+        data: Array.from({ length: 200 }, (_, index) => child(index)),
+        cursor: { next: "page_2" },
+      })
     },
   })
   const setup = createRoot((dispose) => ({
@@ -226,6 +233,97 @@ test("reconciles a stale running tool when execution settles", async () => {
     expect(requests).toBe(2)
     expect(setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]).toMatchObject({
       state: { status: "completed" },
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("omits inline tool-result file payloads from read and live tool results when asked", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const tool = (id: string, state: object) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state,
+  })
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1 },
+            content: [
+              tool("call_read", {
+                status: "completed",
+                input: {},
+                content: [
+                  { type: "text", text: "Took a screenshot" },
+                  { type: "file", uri: screenshot, mime: "image/png", name: "page.png" },
+                  { type: "file", uri: "file:///project/notes.md", mime: "text/markdown" },
+                ],
+              }),
+              tool("call_live", { status: "running", input: {}, metadata: {} }),
+            ],
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: true,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const success: OpenCodeEvent = {
+      id: "evt_success",
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 2 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_assistant",
+        id: "call_live",
+        executed: true,
+        content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: success.type, details: success }))
+
+    expect(setup.data.session.message.get("ses_refresh", "msg_assistant")).toMatchObject({
+      content: [
+        {
+          state: {
+            content: [
+              { type: "text", text: "Took a screenshot" },
+              { type: "file", uri: "data:image/png;base64,", mime: "image/png", name: "page.png" },
+              { type: "file", uri: "file:///project/notes.md", mime: "text/markdown" },
+            ],
+          },
+        },
+        {
+          state: { status: "completed", content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] },
+        },
+      ],
     })
   } finally {
     setup.dispose()
@@ -694,6 +792,108 @@ for (const resource of ["provider", "model"] as const) {
     }
   })
 }
+
+test("ignores catalog updates for unloaded locations while refreshing loaded locations", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: Array<[string, string | null]> = []
+  const current = { version: "v1" }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      requests.push([url.pathname, directory])
+      const location = { directory, project: { id: directory, directory, canonical: directory } }
+      if (url.pathname === "/api/vcs")
+        return Response.json({ location, data: { branch: { current: "main", default: "main" } } })
+      if (url.pathname === "/api/provider")
+        return Response.json({
+          location,
+          data: [{ id: "company", name: current.version, activation: "enabled", package: "aisdk:@ai-sdk/openai" }],
+        })
+      if (url.pathname === "/api/model") return Response.json({ location, data: [modelInfo(current.version)] })
+      if (url.pathname === "/api/command")
+        return Response.json({
+          location,
+          data: [{ name: current.version, source: "command", template: "run", hints: [] }],
+        })
+      if (url.pathname === "/api/agent")
+        return Response.json({
+          location,
+          data: [
+            {
+              id: current.version,
+              name: current.version,
+              mode: "primary",
+              hidden: false,
+              request: { headers: {}, body: {} },
+              permissions: [],
+            },
+          ],
+        })
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const emit = (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details }))
+  const loaded = { directory: "/project" }
+  const vcsOnly = { directory: "/vcs-only" }
+  const unloaded = { directory: "/unloaded" }
+
+  try {
+    await Promise.all([
+      setup.data.location.provider.sync(loaded),
+      setup.data.location.model.sync(loaded),
+      setup.data.location.command.sync(loaded),
+      setup.data.location.agent.sync(loaded),
+      setup.data.location.vcs.sync(vcsOnly),
+    ])
+    requests.length = 0
+    current.version = "v2"
+
+    for (const location of [vcsOnly, unloaded]) {
+      for (const type of ["provider.updated", "model.updated", "command.updated", "agent.updated"] as const) {
+        emit({ id: `evt_${type}_${location.directory}`, created: 1, type, location, data: {} })
+      }
+    }
+    await Bun.sleep(20)
+    expect(requests).toEqual([])
+
+    for (const type of ["provider.updated", "model.updated", "command.updated", "agent.updated"] as const) {
+      emit({ id: `evt_${type}_loaded`, created: 2, type, location: loaded, data: {} })
+    }
+    await wait(
+      () =>
+        setup.data.location.provider.list(loaded)?.[0]?.name === "v2" &&
+        setup.data.location.model.list(loaded)?.[0]?.name === "v2" &&
+        setup.data.location.command.list(loaded)?.[0]?.name === "v2" &&
+        setup.data.location.agent.list(loaded)?.[0]?.id === "v2",
+    )
+    expect(requests).toEqual([
+      ["/api/provider", "/project"],
+      ["/api/model", "/project"],
+      ["/api/command", "/project"],
+      ["/api/agent", "/project"],
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
 
 test("revalidates model discovery when an update overtakes an in-flight model list", async () => {
   const started = Promise.withResolvers<void>()
@@ -1186,6 +1386,21 @@ test.each([
   }
 })
 
+test("adds running sessions created while disconnected to their family", async () => {
+  const root = { ...session(0), id: "ses_root" }
+  const child = { ...session(0), id: "ses_child", parentID: "ses_root" }
+  const setup = activityFixture(() => Response.json({ data: { ses_child: { type: "running" } } }), [child])
+
+  try {
+    setup.data.session.remember(root)
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.family("ses_root").includes("ses_child"))
+    expect(setup.data.session.status("ses_child")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("ignores activity snapshots from an older connection", async () => {
   const reads: ReturnType<typeof Promise.withResolvers<Response>>[] = []
   const setup = activityFixture(() => {
@@ -1257,7 +1472,7 @@ function modelInfo(name: string): ModelInfo {
   }
 }
 
-function activityFixture(read: () => Response | Promise<Response>) {
+function activityFixture(read: () => Response | Promise<Response>, sessions: SessionInfo[] = []) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
@@ -1265,6 +1480,8 @@ function activityFixture(read: () => Response | Promise<Response>) {
       const request = input instanceof Request ? input : new Request(input, init)
       const path = new URL(request.url).pathname
       if (path === "/api/session/active") return read()
+      const known = sessions.find((item) => path === `/api/session/${item.id}`)
+      if (known) return Response.json({ data: known })
       if (path === "/api/project") return Response.json([])
       if (path === "/api/location") return Response.json({ directory: "/project" })
       return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })

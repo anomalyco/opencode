@@ -308,6 +308,7 @@
 .settings-notices-scroll {
   min-height: 0;
   flex: 1;
+  overflow-y: auto;
 }
 
 .settings-notices {
@@ -530,6 +531,113 @@
   font-weight: 640;
   line-height: var(--line-height-base);
   color: var(--v2-text-text-base);
+}
+
+/* As tall as the title's line box, so header actions center on the title rather than on the title and description. */
+.settings-tab-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  height: var(--line-height-base);
+}
+
+.settings-tab-header-actions:not(:has(*)) {
+  display: none;
+}
+
+.settings-server-switcher[data-component="button-v2"] {
+  max-width: 240px;
+  gap: 6px;
+  padding-inline: 6px;
+}
+
+.settings-server-switcher-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-switcher-label {
+  flex-shrink: 0;
+  color: var(--v2-text-text-muted);
+  font-weight: 440;
+}
+
+.settings-server-switcher-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-switcher-chevron {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-switcher-menu[data-component="menu-v2-content"] {
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+/* One grid for every row: a 16px status or icon column, the name, then the selection check. */
+.settings-server-switcher-menu [data-component="menu-v2-item"] {
+  padding-inline-start: 8px;
+}
+
+.settings-server-switcher-option {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-switcher-status {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-server-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.settings-server-unavailable-icon {
+  margin-bottom: 4px;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-unavailable-title {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+}
+
+.settings-server-unavailable-description {
+  max-width: 360px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-server-unavailable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .settings-tab-body {
@@ -796,6 +904,11 @@
     flex-wrap: wrap;
   }
 
+  /* Wrapped below the description, the actions no longer share the title's line. */
+  .settings-tab-header-actions {
+    height: auto;
+  }
+
   .settings-tab-header-row [data-component="select-v2-root"] {
     width: 100%;
   }
@@ -943,7 +1056,7 @@
   opacity: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-provider-console-chevron {
     transition: none;
   }
@@ -1459,7 +1572,7 @@
   padding-block: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-models-group-chevron svg,
   .provider-model-group-chevron {
     transition: none;
@@ -1709,7 +1822,7 @@
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-workspaces-row-motion {
     transition: none;
   }
@@ -2014,6 +2127,7 @@
 
 .settings-extension-row {
   display: flex;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -2023,6 +2137,40 @@
 
 .settings-extension-row:last-child {
   border-bottom: 0;
+}
+
+.settings-extension-trailing {
+  display: flex;
+  min-width: 60px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+}
+
+.settings-mcp-row .settings-extension-trailing {
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.settings-mcp-row {
+  gap: 16px;
+}
+
+/* The MCP status dot takes the icon's 16px slot, so names line up with the plugin and skill rows. */
+.settings-mcp-status {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+}
+
+.settings-mcp-row[data-status="disabled"] .settings-extension-name {
+  color: var(--v2-text-text-muted);
 }
 
 .settings-extension-lead {

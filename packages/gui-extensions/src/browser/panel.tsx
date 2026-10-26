@@ -1,6 +1,6 @@
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
+import { Icon, newIcons } from "@opencode/ui/icon"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
@@ -158,6 +158,7 @@ export default function SessionBrowserPane(props: {
     return tab ? props.model.embed(props.session, tab.id) : undefined
   }
 
+  let root: HTMLElement | undefined
   let box: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
@@ -387,11 +388,30 @@ export default function SessionBrowserPane(props: {
       close: () => {
         const tab = state()
 
-        if (tab) props.model.closeTab(props.session, tab.id)
+        if (tab) props.model.close(props.session, tab.id)
       },
       inspectable,
       inspect: toggleInspect,
       focusAddress,
+      // Dispatched inside the pane, so keybinds scoped to it, such as closing the browser tab, apply.
+      press: (event) => {
+        if (!visible()) return
+        root?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: event.key,
+            code: event.code,
+            ctrlKey: event.ctrl,
+            metaKey: event.meta,
+            shiftKey: event.shift,
+            altKey: event.alt,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          }),
+        )
+      },
+      // A focusin inside the pane, so the app's focus tracking sees the page's focus as the side panel's.
+      focused: () => root?.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true })),
     }),
   )
 
@@ -427,17 +447,6 @@ export default function SessionBrowserPane(props: {
             element: event.element,
             draft: "",
           })
-        }),
-      ),
-  )
-
-  // The page's address shortcut moves focus to this field when the page is the one on screen.
-  createKeyed(
-    () => props.session.key,
-    (sessionKey) =>
-      onCleanup(
-        props.model.onAddress({ key: sessionKey }, (tabID) => {
-          if (tabID === state()?.id && visible()) focusAddress()
         }),
       ),
   )
@@ -524,7 +533,13 @@ export default function SessionBrowserPane(props: {
   )
 
   return (
-    <aside id="browser-panel" class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col">
+    <aside
+      ref={root}
+      id="browser-panel"
+      // A click on the pane's own surface, like its loading or error view, keeps focus here, so its shortcuts apply.
+      tabIndex={-1}
+      class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col outline-none"
+    >
       <div
         data-component="browser-bar"
         class="h-11 shrink-0 flex items-center gap-2 px-3 border-b-[0.5px] border-v2-border-border-muted"
@@ -751,7 +766,7 @@ export default function SessionBrowserPane(props: {
                     disabled={!reachable()}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={() => system.openExternal(address())}
-                    icon={<Icon name="outline-arrow-up-right" />}
+                    icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
                   />
                 </Tooltip>
               </div>
@@ -779,16 +794,7 @@ export default function SessionBrowserPane(props: {
           </Popover.Portal>
         </Popover>
         <div class="flex shrink-0 items-center gap-1">
-          <Tooltip
-            placement="top"
-            value={
-              <div class="flex flex-col gap-1">
-                {tip(extension.t("inspect"), keybinds.keybind("browser.inspect"))}
-                {/* The page claims Chromium's picker chord itself; the app leaves it to the terminal. */}
-                {tip(extension.t("inspect.pageShortcut"), keybinds.keys("mod+shift+c"))}
-              </div>
-            }
-          >
+          <Tooltip placement="top" value={tip(extension.t("inspect"), keybinds.keybind("browser.inspect"))}>
             {/* The ghost variant sets the button color, so the active accent needs precedence over it. */}
             <IconButton
               variant="ghost-muted"
@@ -815,29 +821,25 @@ export default function SessionBrowserPane(props: {
               />
             </Tooltip>
             <Menu.Portal>
-              <Menu.Content class="min-w-56">
+              <Menu.Content class="w-[172px]">
                 {/* Zooming closes the menu: the page stays a still while the menu covers it, so a zoom would show
                     only once it closed. The address field shows any zoom but 100% afterwards. */}
                 <Menu.Group>
                   <Menu.Item
                     disabled={!address()}
                     onSelect={() => zoomPage("in")}
-                    shortcut={<Keybind keys={[...keybinds.keys("mod+plus")]} variant="neutral" />}
+                    shortcut={<Keybind keys={keybinds.keys("mod+plus").map(fullWidth)} variant="neutral" />}
                   >
                     {extension.t("zoom.in")}
                   </Menu.Item>
                   <Menu.Item
                     disabled={!address()}
                     onSelect={() => zoomPage("out")}
-                    shortcut={<Keybind keys={[...keybinds.keys("mod+-")]} variant="neutral" />}
+                    shortcut={<Keybind keys={keybinds.keys("mod+-").map(fullWidth)} variant="neutral" />}
                   >
                     {extension.t("zoom.out")}
                   </Menu.Item>
-                  <Menu.Item
-                    disabled={!zoomed()}
-                    onSelect={() => zoomPage("reset")}
-                    badge={extension.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
-                  >
+                  <Menu.Item disabled={!zoomed()} onSelect={() => zoomPage("reset")}>
                     {extension.t("zoom.reset")}
                   </Menu.Item>
                 </Menu.Group>
@@ -846,7 +848,7 @@ export default function SessionBrowserPane(props: {
                   {extension.t("link.copy")}
                 </Menu.Item>
                 <Menu.Item disabled={!reachable()} onSelect={() => system.openExternal(address())}>
-                  {extension.t("external.open")}
+                  {extension.t("external.menu")}
                 </Menu.Item>
                 <Menu.Separator />
                 <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
@@ -870,38 +872,41 @@ export default function SessionBrowserPane(props: {
         id={embed()}
         visible={shown()}
         frozen={commenting() || noting()}
+        // A navigation, in-page or not, or a reload starting is another page.
+        page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
         radius={10}
         class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center"
       >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
-          {/* As designed: the heading 80px from the top, the recent list centered above a 160px bottom inset. The
-              minimum height keeps a full list clear of the heading in a short pane, which then scrolls. */}
           <div dir="auto" class="size-full overflow-y-auto">
-            <div class="relative flex min-h-[max(100%,732px)] items-center justify-center px-6 pb-40">
-              <div class="absolute inset-x-6 top-20 mx-auto flex max-w-[360px] flex-col items-center gap-4 text-center">
-                <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
+            <Show
+              when={recent().length > 0}
+              fallback={
+                <div class="mx-auto flex max-w-[360px] flex-col items-center gap-4 px-6 pt-20 text-center">
+                  <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
+                  <div class="flex flex-col gap-2">
+                    <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                      {extension.t("home.title")}
+                    </div>
+                    <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                      {extension.t("home.description")}
+                    </div>
+                  </div>
+                </div>
+              }
+            >
+              {/* The pages the browser showed last; the side panel's new tab view offers the other tabs. One visit is
+                  enough to list; the list stops at a handful. */}
+              <div class="mx-auto flex w-full max-w-[608px] flex-col gap-4 px-6 pt-12 pb-10">
+                <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                  {extension.t("home.recent")}
+                </div>
                 <div class="flex flex-col gap-2">
-                  <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                    {extension.t("home.title")}
-                  </div>
-                  <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                    {extension.t("home.description")}
-                  </div>
+                  <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
                 </div>
               </div>
-              {/* One visit is enough to list; the list stops at a handful. */}
-              <Show when={recent().length > 0}>
-                <div class="flex w-full max-w-[685px] flex-col gap-4">
-                  <div class="px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                    {extension.t("home.recent")}
-                  </div>
-                  <div class="flex flex-col gap-2">
-                    <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
-                  </div>
-                </div>
-              </Show>
-            </div>
+            </Show>
           </div>
         </Show>
         <Show when={failed() && !suspended()}>
@@ -1119,11 +1124,20 @@ function SiteInformation(props: {
   const extension = useExtension()
 
   // `load` counts openings and clears, so a count for an earlier one never replaces a later one.
-  const [state, setState] = createStore<{ open: boolean; cookies?: number; clearing: boolean; load: number }>({
+  const [state, setState] = createStore<{
+    open: boolean
+    pointer: boolean
+    cookies?: number
+    clearing: boolean
+    load: number
+  }>({
     open: false,
+    pointer: false,
     clearing: false,
     load: 0,
   })
+
+  let trigger: HTMLButtonElement | undefined
 
   const kind = () => {
     const value = connection(props.url)
@@ -1164,6 +1178,7 @@ function SiteInformation(props: {
       open={state.open}
       placement="bottom-start"
       gutter={8}
+      shift={-10}
       modal={false}
       onOpenChange={(open) => {
         setState("open", open)
@@ -1173,8 +1188,11 @@ function SiteInformation(props: {
     >
       <Tooltip placement="top" value={extension.t("site.info")}>
         <Popover.Trigger
+          ref={trigger}
           as={IconButton}
           type="button"
+          onPointerDown={() => setState("pointer", true)}
+          onKeyDown={() => setState("pointer", false)}
           variant="ghost-muted"
           size="small"
           aria-label={extension.t("site.info")}
@@ -1190,21 +1208,26 @@ function SiteInformation(props: {
 
             if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus()
           }}
+          // Focus returns to the trigger on close, which Chromium rings after Escape; a pointer opening keeps it unringed.
+          onCloseAutoFocus={(event: Event) => {
+            if (!state.pointer) return
+            event.preventDefault()
+            const active = document.activeElement
+
+            // An outside press already moved focus where it belongs.
+            if (active && active !== document.body && !active.closest('[data-component="browser-site"]')) return
+            trigger?.focus({ preventScroll: true, focusVisible: false })
+          }}
         >
-          <div class="flex items-center justify-between gap-2">
+          <div data-slot="browser-site-row">
+            <span data-slot="browser-site-icon">
+              <Icon name="outline-globe" />
+            </span>
             <Popover.Title data-slot="browser-site-host" dir="ltr">
               {addressParts(props.url).host || props.url}
             </Popover.Title>
-            {/* A plain button: Kobalte's close button carries the open popover's data-expanded, which icon buttons
-                draw as pressed. */}
-            <IconButton
-              variant="ghost-muted"
-              size="small"
-              aria-label={extension.t("common.close")}
-              icon={<Icon name="outline-xmark" />}
-              onClick={() => setState("open", false)}
-            />
           </div>
+          <div data-slot="browser-site-separator" aria-hidden="true" />
           <Show when={kind()}>
             {(value) => (
               <SiteRow
@@ -1249,12 +1272,23 @@ function SiteInformation(props: {
   )
 }
 
+// The zoom shortcuts draw their plus and minus at the width of a letter key.
+function fullWidth(key: string) {
+  if (key === "+") return "＋"
+
+  if (key === "-") return "－"
+
+  return key
+}
+
 function SiteRow(props: { icon: IconName; title: string; detail?: string; children?: JSX.Element }) {
   return (
     <div data-slot="browser-site-row">
-      <Icon name={props.icon} class="shrink-0" />
+      <span data-slot="browser-site-icon">
+        <Icon name={props.icon} />
+      </span>
       <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="text-v2-text-text-base">{props.title}</span>
+        <span>{props.title}</span>
         <Show when={props.detail}>{(detail) => <span data-slot="browser-site-detail">{detail()}</span>}</Show>
       </div>
       {props.children}

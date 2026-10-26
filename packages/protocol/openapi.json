@@ -359,6 +359,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Retrieve currently registered agents.",
@@ -5045,6 +5055,22 @@
             "required": false,
             "style": "deepObject",
             "explode": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Model.Type"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Model type to list. Defaults to chat, the only type offered for sessions."
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -5113,7 +5139,7 @@
             }
           }
         },
-        "description": "Retrieve the current snapshot of available models ordered by release date. The snapshot may precede initial plugin settlement.",
+        "description": "Retrieve the current snapshot of available models of one type, chat by default, ordered by release date. The snapshot may precede initial plugin settlement.",
         "summary": "List models"
       }
     },
@@ -9564,6 +9590,209 @@
         }
       }
     },
+    "/api/experimental/fs/watch": {
+      "post": {
+        "tags": ["filesystem"],
+        "operationId": "experimental.fs.watch",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FileNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Watch one file relative to the requested location for 24 hours, publishing filesystem.changed on that location when it changes. Watching an already watched file resets its expiry. Paths follow read confinement. Experimental: may change without compatibility guarantees.",
+        "summary": "Watch file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "A file path relative to the requested location."
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["filesystem"],
+        "operationId": "experimental.fs.unwatch",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop watching one file relative to the requested location. Experimental: may change without compatibility guarantees.",
+        "summary": "Unwatch file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "A file path relative to the requested location."
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/command": {
       "get": {
         "tags": ["command"],
@@ -9886,7 +10115,242 @@
       "get": {
         "tags": ["event"],
         "operationId": "event.subscribe",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "types",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "location.shutdown",
+                            "models-dev.refreshed",
+                            "credential.updated",
+                            "credential.switched",
+                            "integration.updated",
+                            "provider.updated",
+                            "model.updated",
+                            "agent.updated",
+                            "session.created",
+                            "session.agent.selected",
+                            "session.model.selected",
+                            "session.moved",
+                            "session.renamed",
+                            "session.metadata.updated",
+                            "session.permissions",
+                            "session.viewed",
+                            "session.archived",
+                            "session.unarchived",
+                            "session.usage.updated",
+                            "session.deleted",
+                            "session.forked",
+                            "session.inbox.delivered",
+                            "session.inbox.enqueued",
+                            "session.inbox.cancelled",
+                            "session.inbox.delivery.changed",
+                            "session.execution.started",
+                            "session.execution.succeeded",
+                            "session.execution.failed",
+                            "session.execution.interrupted",
+                            "session.instructions.updated",
+                            "session.synthetic",
+                            "session.skill.activated",
+                            "session.shell.started",
+                            "session.shell.ended",
+                            "session.step.started",
+                            "session.step.streamed",
+                            "session.step.ended",
+                            "session.step.failed",
+                            "session.text.started",
+                            "session.text.delta",
+                            "session.text.ended",
+                            "session.reasoning.started",
+                            "session.reasoning.delta",
+                            "session.reasoning.ended",
+                            "session.tool.input.started",
+                            "session.tool.input.delta",
+                            "session.tool.input.ended",
+                            "session.tool.called",
+                            "session.tool.progress",
+                            "session.tool.success",
+                            "session.tool.failed",
+                            "session.retry.scheduled",
+                            "session.compaction.started",
+                            "session.compaction.delta",
+                            "session.compaction.ended",
+                            "session.compaction.failed",
+                            "session.revert.staged",
+                            "session.revert.cleared",
+                            "session.revert.committed",
+                            "filesystem.changed",
+                            "reference.updated",
+                            "permission.asked",
+                            "permission.replied",
+                            "plugin.updated",
+                            "project.updated",
+                            "worktree.updated",
+                            "worktree.resolved",
+                            "command.updated",
+                            "config.updated",
+                            "skill.updated",
+                            "pty.created",
+                            "pty.updated",
+                            "pty.exited",
+                            "pty.deleted",
+                            "persistent-pty.added",
+                            "persistent-pty.removed",
+                            "shell.created",
+                            "shell.exited",
+                            "shell.deleted",
+                            "form.created",
+                            "form.replied",
+                            "form.cancelled",
+                            "websearch.updated",
+                            "session.status",
+                            "session.idle",
+                            "tui.prompt.append",
+                            "tui.command.execute",
+                            "tui.toast.show",
+                            "tui.session.select",
+                            "installation.updated",
+                            "installation.update-available",
+                            "vcs.branch.updated",
+                            "mcp.status.changed",
+                            "mcp.resources.changed"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^rpc\\.[\\s\\S]*?$"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "location.shutdown",
+                              "models-dev.refreshed",
+                              "credential.updated",
+                              "credential.switched",
+                              "integration.updated",
+                              "provider.updated",
+                              "model.updated",
+                              "agent.updated",
+                              "session.created",
+                              "session.agent.selected",
+                              "session.model.selected",
+                              "session.moved",
+                              "session.renamed",
+                              "session.metadata.updated",
+                              "session.permissions",
+                              "session.viewed",
+                              "session.archived",
+                              "session.unarchived",
+                              "session.usage.updated",
+                              "session.deleted",
+                              "session.forked",
+                              "session.inbox.delivered",
+                              "session.inbox.enqueued",
+                              "session.inbox.cancelled",
+                              "session.inbox.delivery.changed",
+                              "session.execution.started",
+                              "session.execution.succeeded",
+                              "session.execution.failed",
+                              "session.execution.interrupted",
+                              "session.instructions.updated",
+                              "session.synthetic",
+                              "session.skill.activated",
+                              "session.shell.started",
+                              "session.shell.ended",
+                              "session.step.started",
+                              "session.step.streamed",
+                              "session.step.ended",
+                              "session.step.failed",
+                              "session.text.started",
+                              "session.text.delta",
+                              "session.text.ended",
+                              "session.reasoning.started",
+                              "session.reasoning.delta",
+                              "session.reasoning.ended",
+                              "session.tool.input.started",
+                              "session.tool.input.delta",
+                              "session.tool.input.ended",
+                              "session.tool.called",
+                              "session.tool.progress",
+                              "session.tool.success",
+                              "session.tool.failed",
+                              "session.retry.scheduled",
+                              "session.compaction.started",
+                              "session.compaction.delta",
+                              "session.compaction.ended",
+                              "session.compaction.failed",
+                              "session.revert.staged",
+                              "session.revert.cleared",
+                              "session.revert.committed",
+                              "filesystem.changed",
+                              "reference.updated",
+                              "permission.asked",
+                              "permission.replied",
+                              "plugin.updated",
+                              "project.updated",
+                              "worktree.updated",
+                              "worktree.resolved",
+                              "command.updated",
+                              "config.updated",
+                              "skill.updated",
+                              "pty.created",
+                              "pty.updated",
+                              "pty.exited",
+                              "pty.deleted",
+                              "persistent-pty.added",
+                              "persistent-pty.removed",
+                              "shell.created",
+                              "shell.exited",
+                              "shell.deleted",
+                              "form.created",
+                              "form.replied",
+                              "form.cancelled",
+                              "websearch.updated",
+                              "session.status",
+                              "session.idle",
+                              "tui.prompt.append",
+                              "tui.command.execute",
+                              "tui.toast.show",
+                              "tui.session.select",
+                              "installation.updated",
+                              "installation.update-available",
+                              "vcs.branch.updated",
+                              "mcp.status.changed",
+                              "mcp.resources.changed"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^rpc\\.[\\s\\S]*?$"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -11654,6 +12118,68 @@
         "x-websocket": true
       }
     },
+    "/api/experimental/media/{hash}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.media.get",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/MediaHash"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
+        "summary": "Read media blob"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -13161,6 +13687,14 @@
                   "type": "null"
                 }
               ]
+            },
+            "required": false
+          },
+          {
+            "name": "untracked",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Vcs.Untracked"
             },
             "required": false
           }
@@ -14973,6 +15507,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
+          },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
           }
@@ -15156,6 +15693,9 @@
           },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
           },
           "transport": {
             "$ref": "#/components/schemas/Provider.Transport"
@@ -15555,6 +16095,10 @@
           "status": {
             "type": "string",
             "enum": ["added", "deleted", "modified"]
+          },
+          "more": {
+            "type": "boolean",
+            "enum": [true]
           }
         },
         "required": ["file", "patch", "additions", "deletions", "status"],
@@ -17367,6 +17911,10 @@
         "required": ["_tag", "server", "message"],
         "additionalProperties": false
       },
+      "MediaHash": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
       "MessageNotFoundErrorEncoded": {
         "type": "object",
         "properties": {
@@ -17507,6 +18055,9 @@
           "canonical": {
             "$ref": "#/components/schemas/Provider.ID"
           },
+          "type": {
+            "$ref": "#/components/schemas/Model.Type"
+          },
           "family": {
             "type": "string"
           },
@@ -17632,6 +18183,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
+          },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
           }
@@ -17640,6 +18194,17 @@
           {
             "type": "object",
             "additionalProperties": {}
+          }
+        ]
+      },
+      "Model.Type": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["chat", "decision", "image"]
+          },
+          {
+            "type": "string"
           }
         ]
       },
@@ -18515,6 +19080,19 @@
         "required": ["id"],
         "additionalProperties": false
       },
+      "Provider.Cache": {
+        "type": "object",
+        "properties": {
+          "ttl": {
+            "$ref": "#/components/schemas/Provider.CacheTTL"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Provider.CacheTTL": {
+        "type": "string",
+        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?(?:ms|s|m|h|d)$"
+      },
       "Provider.Compaction": {
         "anyOf": [
           {
@@ -18676,6 +19254,9 @@
           },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
           },
           "transport": {
             "$ref": "#/components/schemas/Provider.Transport"
@@ -18924,6 +19505,16 @@
           "pid": {
             "type": "integer",
             "minimum": 0
+          },
+          "hostname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "urls": {
             "type": "array",
@@ -21137,6 +21728,10 @@
       "Vcs.Mode": {
         "type": "string",
         "enum": ["working", "branch", "committed"]
+      },
+      "Vcs.Untracked": {
+        "type": "string",
+        "enum": ["files", "folders"]
       },
       "VcsInitNotSupportedErrorEncoded": {
         "type": "object",

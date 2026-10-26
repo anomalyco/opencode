@@ -33,21 +33,6 @@
     -8px 0;
 }
 
-[data-slot="artifact-stage"][data-expanded] {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  width: 100vw;
-  height: 100vh;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background-color: color-mix(in oklch, black 88%, transparent);
-  backdrop-filter: blur(8px);
-}
-
 [data-slot="artifact-media"] {
   display: block;
   border-radius: 4px;

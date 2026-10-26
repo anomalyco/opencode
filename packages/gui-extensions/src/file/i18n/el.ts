@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Όλα τα αρχεία",
-  "tree.empty": "Δεν υπάρχουν αρχεία",
-  "tree.changes.one": "{{count}} αρχείο άλλαξε",
-  "tree.changes.other": "{{count}} αρχεία άλλαξαν",
   "tab.notFound": "Το αρχείο δεν βρέθηκε: {{name}}",
   "mobile.title": "Αρχεία",
   "mobile.openTabs": "Άνοιγμα αρχείων",

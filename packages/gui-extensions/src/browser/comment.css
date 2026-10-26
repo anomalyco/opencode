@@ -28,7 +28,7 @@
   transform-origin: top left;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="browser-comment"],
   [data-component="browser-comment"] [data-slot="browser-comment-editor"] {
     animation: none;

@@ -1,15 +1,13 @@
 import { batch, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createKeyed, useExtension } from "../sdk"
-import {
-  applyProviderMetricEvent,
-  isProviderMetricEvent,
-  projectedProviderMetrics,
-  type ProviderMetrics,
-  type ProviderMetricState,
-} from "./metrics"
+import { motionGlobals, motionTuning } from "@opencode/ui/motion-tuning"
+import { duration } from "@opencode/util/duration"
+import { SessionTurn } from "@opencode/util/session-turn"
 
 type Mem = Performance & {
   memory?: {
@@ -70,14 +68,6 @@ const mb = (n?: number) => {
   const v = n / 1024 / 1024
 
   return `${v >= 1024 ? v.toFixed(0) : v.toFixed(1)}MB`
-}
-
-const duration = (n?: number) => {
-  if (n === undefined || Number.isNaN(n)) return
-
-  if (n < 1_000) return `${Math.round(n)}ms`
-
-  return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}s`
 }
 
 const bad = (n: number | undefined, limit: number, low = false) => {
@@ -160,7 +150,7 @@ function ToggleCell(props: {
       aria-label={`${props.label}: ${props.value}`}
       aria-pressed={props.active}
       classList={{
-        "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus": true,
+        "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-v2-border-border-focus": true,
         "min-h-[20px] w-fit justify-start rounded px-1.5 py-0.5 text-left": !!props.inline,
         "min-h-[42px] w-full flex-col justify-center rounded-[8px] px-0.5 py-1 text-center": !props.inline,
         "bg-surface-raised-base text-text-strong": props.active,
@@ -191,7 +181,13 @@ function ToggleCell(props: {
   )
 }
 
-export default function DebugBar(props: { diagnostics?: boolean; inline?: boolean }) {
+export default function DebugBar(props: {
+  diagnostics?: boolean
+  inline?: boolean
+  memory?: { on: boolean; env: boolean; toggle: () => void }
+  motion?: { open: boolean; toggle: () => void }
+  onClose?: () => void
+}) {
   const ctx = useExtension()
   const router = ctx.router
   const locale = ctx.locale
@@ -233,38 +229,37 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
     { equals: (a, b) => a?.data === b?.data && a?.id === b?.id },
   )
 
-  // History comes from the already-loaded message projection; live requests refine it in place.
-  const projected = createMemo(() => {
+  // The numbers on the TUI's latest assistant footer, which follows a step that ended the turn, failed, or is retrying.
+  const turn = createMemo(() => {
     const current = target()
 
     if (!current) return
 
-    return projectedProviderMetrics(current.data.session.message.list(current.id))
-  })
+    const messages = current.data.session.message.list(current.id)
 
-  // Missed events during an outage are never replayed, so live metrics hold only for the target and the outage count
-  // they were measured under: after a disconnect the refreshed projection wins until the next live request.
-  const outages = createMemo((count: number = 0) => (target()?.server.connected ? count : count + 1))
-  const [live, setLive] = createSignal<{ target: object; outages: number; metrics: ProviderMetrics }>()
-
-  const metrics = () => {
-    const current = live()
-
-    return current && current.target === target() && current.outages === outages() ? current.metrics : projected()
-  }
-
-  createKeyed(target, (current) => {
-    const accumulator: ProviderMetricState = {}
-
-    onCleanup(
-      current.data.listen(({ details }) => {
-        if (!isProviderMetricEvent(details) || details.data.sessionID !== current.id) return
-        applyProviderMetricEvent(accumulator, details)
-
-        if (accumulator.latest) setLive({ target: current, outages: outages(), metrics: accumulator.latest })
-      }),
+    const index = messages.findLastIndex(
+      (item) =>
+        item.type === "assistant" &&
+        Boolean(item.retry || item.error || (item.finish && !["tool-calls", "unknown"].includes(item.finish))),
     )
+
+    if (index === -1) return
+
+    const options = { index, legacy: SessionTurn.legacy(messages) }
+    // The TUI hides a zero duration, which means the step has not completed.
+    const elapsed = SessionTurn.duration(messages, messages[index], options)
+
+    return {
+      duration: elapsed ? duration(elapsed) : undefined,
+      tps: SessionTurn.tokensPerSecond(messages, messages[index], options),
+    }
   })
+
+  // The Motion workspace's global speed, kept in view while tuning.
+  const [globals, setGlobals] = createSignal({ speed: motionGlobals.speed.value, slow: motionGlobals.slow.value })
+  onCleanup(
+    motionTuning.subscribe(() => setGlobals({ speed: motionGlobals.speed.value, slow: motionGlobals.slow.value })),
+  )
 
   const na = () => ctx.t("na").toUpperCase()
   const heap = () => (state.heap.limit ? (state.heap.used ?? 0) / state.heap.limit : undefined)
@@ -588,7 +583,7 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
       classList={{
         "pointer-events-auto hidden overflow-hidden text-text-strong md:block": true,
         "mt-[-6px] w-full shrink-0 px-3 py-1": !!props.inline,
-        "fixed bottom-3 right-3 z-50 w-[308px] max-w-[calc(100vw-1.5rem)] rounded-xl border border-border-base bg-surface-raised-stronger-non-alpha p-0.5 shadow-[var(--shadow-lg-border-base)] sm:bottom-4 sm:right-4 sm:w-[324px]":
+        "fixed bottom-3 right-3 z-50 w-[308px] max-w-[calc(100vw-1.5rem)] rounded-xl border border-v2-border-border-base bg-surface-raised-stronger-non-alpha p-0.5 shadow-[var(--shadow-lg-border-base)] sm:bottom-4 sm:right-4 sm:w-[324px]":
           !props.inline,
       }}
     >
@@ -602,32 +597,29 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
           grid: !props.inline,
         }}
       >
+        <Show when={props.onClose}>
+          <Tooltip appearance="compact" value={ctx.t("close.tip")} placement="top">
+            <IconButton
+              size="small"
+              variant="ghost-muted"
+              icon={<Icon name="close" />}
+              aria-label={ctx.t("close.label")}
+              onClick={() => props.onClose?.()}
+            />
+          </Tooltip>
+        </Show>
+        <Cell
+          label={ctx.t("duration.label")}
+          tip={ctx.t("duration.tip")}
+          value={turn()?.duration ?? na()}
+          dim={turn()?.duration === undefined}
+          inline={props.inline}
+        />
         <Cell
           label={ctx.t("tps.label")}
           tip={ctx.t("tps.tip")}
-          value={fixed(metrics()?.tps, 1) ?? na()}
-          dim={metrics()?.tps === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={ctx.t("ttft.label")}
-          tip={ctx.t("ttft.tip")}
-          value={duration(metrics()?.ttft) ?? na()}
-          dim={metrics()?.ttft === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={ctx.t("ttfa.label")}
-          tip={ctx.t("ttfa.tip")}
-          value={duration(metrics()?.ttfa) ?? na()}
-          dim={metrics()?.ttfa === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={ctx.t("e2e.label")}
-          tip={ctx.t("e2e.tip")}
-          value={duration(metrics()?.e2e) ?? na()}
-          dim={metrics()?.e2e === undefined}
+          value={fixed(turn()?.tps, 1) ?? na()}
+          dim={turn()?.tps === undefined}
           inline={props.inline}
         />
         <Show when={props.diagnostics}>
@@ -730,7 +722,71 @@ export default function DebugBar(props: { diagnostics?: boolean; inline?: boolea
             />
           </Show>
         </Show>
+        <Show when={props.memory}>
+          {(memory) => (
+            <ToggleCell
+              active={memory().on}
+              inline={props.inline}
+              label={ctx.t("memory.label")}
+              tip={ctx.t(memory().env ? "memory.tipEnv" : "memory.tip")}
+              value={ctx.t(memory().env ? "memory.env" : memory().on ? "focus.on" : "focus.off")}
+              onClick={() => memory().toggle()}
+            />
+          )}
+        </Show>
+        <Show when={props.motion}>
+          <div class="ms-auto flex items-center gap-[9px]">
+            {/* The lab's route exists only on the dev server and in Beta. */}
+            {(import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta") && (
+              <Tooltip appearance="compact" value={ctx.t("components.tip")} placement="top">
+                <a
+                  href="/components"
+                  classList={{
+                    "flex min-h-[20px] w-fit items-center rounded px-1.5 py-0.5 font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-v2-border-border-focus": true,
+                    "bg-surface-raised-base text-text-strong": router.path().startsWith("/components"),
+                  }}
+                >
+                  <span
+                    dir="ltr"
+                    class="-translate-y-px text-[10px] leading-none font-black tracking-[0.04em] opacity-70"
+                  >
+                    {ctx.t("components.label")}
+                  </span>
+                </a>
+              </Tooltip>
+            )}
+            <ToggleCell
+              active={globals().speed !== 1}
+              inline={props.inline}
+              label={ctx.t("speed.label")}
+              tip={ctx.t("speed.tip")}
+              value={`${globals().speed.toFixed(2)}×`}
+              onClick={() => motionTuning.set(motionGlobals.speed, nextSpeed(globals().speed))}
+            />
+            <ToggleCell
+              active={globals().slow}
+              inline={props.inline}
+              label={ctx.t("slow.label")}
+              tip={ctx.t("slow.tip")}
+              value={ctx.t(globals().slow ? "focus.on" : "focus.off")}
+              onClick={() => motionTuning.set(motionGlobals.slow, !globals().slow)}
+            />
+            <ToggleCell
+              active={!!props.motion?.open}
+              inline={props.inline}
+              label={ctx.t("motion.label")}
+              tip={ctx.t("motion.tip")}
+              value={ctx.t(props.motion?.open ? "focus.on" : "focus.off")}
+              onClick={() => props.motion?.toggle()}
+            />
+          </div>
+        </Show>
       </div>
     </aside>
   )
+}
+
+// The bar's speed cell steps through the common slow-downs, then back to full speed.
+function nextSpeed(speed: number) {
+  return [0.5, 0.25, 1].find((step) => step < speed) ?? 1
 }

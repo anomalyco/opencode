@@ -31,7 +31,7 @@
   [data-slot="diff-hunk-separator-content"] {
     position: sticky;
     background-color: var(--surface-diff-hidden-base);
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     width: var(--diffs-column-content-width);
     left: var(--diffs-column-number-width);
     padding-left: 8px;

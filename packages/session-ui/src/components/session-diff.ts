@@ -27,7 +27,7 @@ export type ViewDiff = {
 
 const diffCacheLimit = 16
 
-const patchFileDiffCache = new Map<string, FileDiffMetadata>()
+const fileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
   // Untyped persisted payloads may carry `patch: null`; those render from their contents.
@@ -54,26 +54,35 @@ export function text(diff: ViewDiff, side: "deletions" | "additions") {
 
 function fileDiffFromPatch(file: string, patch: string) {
   const key = `${file}\0${patch}`
-  const hit = patchFileDiffCache.get(key)
+
+  return cachedFileDiff(`patch\0${key}`, () => {
+    const complete = completePatch(patch)
+
+    const value = complete
+      ? fileDiffFromCompletePatch(file, complete)
+      : (partialFileDiff(file, patch) ?? emptyFileDiff(file))
+
+    // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
+    value.cacheKey = highlightKey(key)
+
+    return value
+  })
+}
+
+function cachedFileDiff(key: string, parse: () => FileDiffMetadata) {
+  const hit = fileDiffCache.get(key)
 
   if (hit) {
-    patchFileDiffCache.delete(key)
-    patchFileDiffCache.set(key, hit)
+    fileDiffCache.delete(key)
+    fileDiffCache.set(key, hit)
 
     return hit
   }
 
-  const complete = completePatch(patch)
+  const value = parse()
+  fileDiffCache.set(key, value)
 
-  const value = complete
-    ? fileDiffFromCompletePatch(file, complete)
-    : (partialFileDiff(file, patch) ?? emptyFileDiff(file))
-
-  // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
-  value.cacheKey = highlightKey(key)
-  patchFileDiffCache.set(key, value)
-
-  while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
+  while (fileDiffCache.size > diffCacheLimit) fileDiffCache.delete(fileDiffCache.keys().next().value!)
 
   return value
 }
@@ -271,10 +280,14 @@ function partialFileDiff(file: string, patch: string) {
 
 function fileDiffFromContent(file: string, before: string, after: string) {
   if (!before && !after) return emptyFileDiff(file)
-  const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
-  value.cacheKey = highlightKey(`${file}\0${before}\0${after}`)
+  const key = `${file}\0${before}\0${after}`
 
-  return value
+  return cachedFileDiff(`content\0${key}`, () => {
+    const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+    value.cacheKey = highlightKey(key)
+
+    return value
+  })
 }
 
 // Pierre reuses and dedups worker highlighting only for diffs that carry a cacheKey, and it treats diffs with equal
