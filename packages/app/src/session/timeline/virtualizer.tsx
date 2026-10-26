@@ -501,7 +501,9 @@ export function createTimelineVirtualizer(input: Input) {
       ),
     )
 
-    if (Math.abs(offset - root.scrollTop) > 1) virtualizer.scrollToOffset(offset)
+    // Hand over every pin, even one the scroll already reaches: TanStack lands exactly on its last target once the
+    // scroll is within a pixel of it, which would undo a compensation for a row above that resized since.
+    virtualizer.scrollToOffset(offset)
   }
 
   function releaseAnchor() {

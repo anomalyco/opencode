@@ -143,7 +143,8 @@ export function createSessionBackground(input: {
           ],
     )
 
-    return [...pending, ...running]
+    // Work that blocks the run comes before work already in the background.
+    return [...pending, ...running.filter((task) => task.partID), ...running.filter((task) => !task.partID)]
   })
 
   // Background work: running subagents whose call no longer blocks the run, and the session's live shells outside

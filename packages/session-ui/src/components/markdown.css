@@ -448,7 +448,6 @@
     padding: 8px 12px;
     color: var(--v2-text-text-faint);
     font-weight: 500;
-    user-select: none;
   }
 
   td {
