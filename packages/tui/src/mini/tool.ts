@@ -12,10 +12,9 @@
 //
 // Tools not in TOOL_RULES get fallback formatting.
 import os from "os"
-import path from "path"
 import stripAnsi from "strip-ansi"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { LANGUAGE_EXTENSIONS } from "../util/filetype"
+import { filetype } from "../util/filetype"
 import { Locale } from "../util/locale"
 import {
   canonicalToolName,
@@ -1384,11 +1383,5 @@ export function toolFiletype(input?: string): string | undefined {
     return undefined
   }
 
-  const ext = path.extname(input)
-  const lang = LANGUAGE_EXTENSIONS[ext]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(lang)) {
-    return "typescript"
-  }
-
-  return lang
+  return filetype(input)
 }

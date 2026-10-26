@@ -30,6 +30,42 @@ test("validates mini replay and work spinner settings", () => {
   expect(() => decodeInfo({ mini: { work_spinner: "unknown" } })).toThrow()
 })
 
+test("validates tree-sitter languages", () => {
+  const elm = {
+    extensions: [".elm"],
+    wasm: "./elm/tree-sitter-elm.wasm",
+    highlights: ["./elm/highlights.scm"],
+  } as const
+  expect(decodeInfo({ languages: { elm } })).toEqual({ languages: { elm } })
+  expect(decodeInfo({ languages: { elm: { ...elm, injections: ["https://example.com/injections.scm"] } } })).toEqual({
+    languages: { elm: { ...elm, injections: ["https://example.com/injections.scm"] } },
+  })
+  expect(
+    decodeInfo({
+      languages: {
+        elm: {
+          ...elm,
+          aliases: ["elm-lang"],
+          injectionMapping: { nodeTypes: { script_element: "javascript" }, infoStringMap: { elm: "elm" } },
+        },
+      },
+    }),
+  ).toEqual({
+    languages: {
+      elm: {
+        ...elm,
+        aliases: ["elm-lang"],
+        injectionMapping: { nodeTypes: { script_element: "javascript" }, infoStringMap: { elm: "elm" } },
+      },
+    },
+  })
+  expect(() => decodeInfo({ languages: { elm: { ...elm, wasm: "" } } })).toThrow()
+  expect(() => decodeInfo({ languages: { elm: { ...elm, highlights: [] } } })).toThrow()
+  expect(() => decodeInfo({ languages: { elm: { ...elm, extensions: ["elm"] } } })).toThrow()
+  expect(() => decodeInfo({ languages: { elm: { ...elm, extensions: [".html.erb"] } } })).toThrow()
+  expect(() => decodeInfo({ languages: { elm: { ...elm, aliases: [""] } } })).toThrow()
+})
+
 test("validates the session tabs setting", () => {
   const decode = Schema.decodeUnknownSync(Info)
 
