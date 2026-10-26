@@ -278,9 +278,11 @@ const layer = Layer.effect(
         if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
-        const location = parent?.location ?? input.location
-        if (location === undefined)
+        const inherited = parent?.location ?? input.location
+        if (inherited === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
+        // Keep the stored location on the same canonical form the location services are keyed by.
+        const location = LocationServiceMap.canonical(inherited)
         const project = yield* projects.resolve(location.directory)
         const projected = yield* bus
           .publish(

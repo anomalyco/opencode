@@ -35,10 +35,11 @@ export const reload = Effect.fn("LocationServiceMap.reload")(function* () {
   yield* Effect.logInfo("location services reloaded", { count: refs.length })
 })
 
-/** Normalize equivalent placements before they become resource-cache keys. */
+/** Normalize equivalent placements before they become resource-cache keys; a `..` segment must
+ *  not make config discovery walk directories that are not ancestors of the real placement. */
 export function canonical(ref: Location.Ref) {
   return Location.Ref.make({
-    directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
+    directory: AbsolutePath.make(path.normalize(ref.directory)),
     workspaceID: ref.workspaceID,
   })
 }
