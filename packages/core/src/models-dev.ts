@@ -538,7 +538,8 @@ export const layer = (options?: Options) =>
             updatedAt: cached.value.updatedAt,
             digest: cached.value.digest,
           }
-        if (value === undefined) return
+        // Metadata without a readable catalog (e.g. a malformed row) would let refresh() skip the rewrite forever.
+        if (value === undefined) return yield* kv.remove(metaKey)
         yield* kv.remove(key)
         yield* kv.remove(metaKey)
       })

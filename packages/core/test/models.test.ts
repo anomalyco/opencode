@@ -854,6 +854,25 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("refresh rewrites the catalog when only its metadata survived", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      // An unreadable catalog row reads as missing while its metadata, written separately, still matches upstream.
+      cache.values.set(metaKey, { updatedAt: Date.now() - 10 * 60 * 1000, digest: bodyDigest(JSON.stringify(fixture)) })
+      const state = yield* Ref.make(initialState)
+      yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          expect((yield* svc.get()).length).toBeGreaterThan(0)
+          yield* svc.refresh(false)
+        }),
+      )
+      expect(cache.values.get(cacheKey)).toMatchObject({ body: JSON.stringify(fixture) })
+    }),
+  )
+
   it.live("refresh(false) stays quiet when the fetched body matches the cached digest", () =>
     Effect.gen(function* () {
       const cache = makeCache()
