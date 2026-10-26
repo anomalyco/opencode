@@ -5847,6 +5847,10 @@ export type ExperimentalPersistentPtyConnectTokenInput = {
 
 export type ExperimentalPersistentPtyConnectTokenOutput = { data: PtyTicketConnectToken }["data"]
 
+export type ExperimentalMediaGetInput = { readonly hash: { readonly hash: string }["hash"] }
+
+export type ExperimentalMediaGetOutput = globalThis.Uint8Array
+
 export type ShellListInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
 }

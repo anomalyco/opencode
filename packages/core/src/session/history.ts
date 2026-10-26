@@ -19,6 +19,7 @@ type DatabaseService = Database.Interface["db"]
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
+const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
 
 /**
  * Which completed compactions bound a history read. Local summaries always do. Native
@@ -113,6 +114,27 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
 ) {
   return yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), decodeMessageRow, { concurrency: 1 })
+})
+
+/** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */
+export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
+) {
+  const kept = yield* SessionBlob.keepRefs(db, rows)
+  return yield* Effect.forEach(
+    kept.rows,
+    (row) =>
+      decodeMedia(rowInput(row)).pipe(
+        Effect.mapError(decodeError(row)),
+        Effect.map((message) =>
+          message.type === "user" && message.files
+            ? { ...message, files: SessionBlob.describe(message.files, kept.meta) }
+            : message,
+        ),
+      ),
+    { concurrency: 1 },
+  )
 })
 
 const messageEntries = Effect.fnUntraced(function* (

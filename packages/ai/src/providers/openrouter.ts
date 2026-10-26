@@ -203,7 +203,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
     http: input.http,
   })
   const decision = (modelID: string | ModelID) =>
-    decisionRoute.model<OpenRouterDecisionOptions>({ id: modelID, compatibility: { imageInput: "state" } })
+    decisionRoute.model<OpenRouterDecisionOptions>({ id: modelID, compatibility: { mediaInput: "state" } })
   return {
     id,
     model: (modelID: string | ModelID) =>

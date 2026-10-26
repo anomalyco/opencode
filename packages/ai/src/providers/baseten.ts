@@ -47,7 +47,7 @@ const decisionProtocol = DecisionRoute.protocol({
   id: "baseten-system-one",
   body: {
     from: (request) =>
-      SystemOne.encodeBody(request, "messages").pipe(Effect.map((body) => ({ ...body, model: request.model.id }))),
+      SystemOne.encodeBody(request, "state.messages").pipe(Effect.map((body) => ({ ...body, model: request.model.id }))),
   },
 })
 

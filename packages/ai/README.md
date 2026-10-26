@@ -222,6 +222,38 @@ CloudflareAIGateway.configure({ accountId }).decision("typesafe/jev")
 OpenAI and Vercel AI Gateway use OpenAI's `/v1/decisions` API. TypeSafe, OpenCode, OpenRouter, Baseten and
 DigitalOcean use System One (`/systemone`), and Cloudflare sends the System One body through `/ai/run`.
 
+### Extraction (experimental)
+
+Extraction models read typed values out of text instead of answering questions with probabilities. A field of type
+`text`, `number`, `date`, `time`, `datetime`, `duration`, `list`, `estimate` or `forecast` gets an answer typed to
+match; other types are sent and answered as-is. Only Cloudflare's Clairic serves it today, so it lives under
+`@opencode/ai/experimental`.
+
+```ts
+import { ai } from "@opencode/ai"
+import { Extraction } from "@opencode/ai/experimental"
+import { CloudflareWorkersAI } from "@opencode/ai/providers"
+
+const response = await ai.run(
+  Extraction.generate({
+    model: CloudflareWorkersAI.configure({ accountId }).experimental.extraction("@cf/cloudflare/clairic"),
+    input: "Invoice INV-2291, issued 2026-09-02, net 30. Total $1,080.00. Contact: Dana Ruiz, Priya Shah.",
+    fields: {
+      invoiceNumber: { type: "text" },
+      dueDate: { type: "date", instructions: "Issue date plus the net payment days" },
+      total: { type: "number", decimals: 2, unit: "USD" },
+      contacts: { type: "list", items: "text" },
+    },
+  }),
+)
+response.answers.total.value // 1080, or null when the input does not say
+```
+
+Value answers carry `guess`, `nullProbability` and `confidence`; text answers carry a `span` into `input`. Estimates and
+forecasts return `median`, `p10` and `p90`. Field options other than `type`, `instructions` and `nullThreshold` go to
+Clairic as written. Effect users provide `RequestExecutor.fetchLayer` (or `AIClient.layer`). Images are not supported
+yet.
+
 ## Alibaba Cloud Model Studio
 
 `Alibaba` provides standard Model Studio inference. Configure a region explicitly, then select
