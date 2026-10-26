@@ -4,6 +4,8 @@ export const FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY = "firstLaunchOnboardingComple
 
 export const PINCH_ZOOM_ENABLED_KEY = "pinchZoomEnabled"
 
+export const ZOOM_LEVEL_KEY = "zoomLevel"
+
 export const BACKGROUND_COLOR_KEY = "backgroundColor"
 
 export const WINDOW_IDS_KEY = "windowIds"
