@@ -29,7 +29,12 @@ import { ErrorSummary } from "../util/error-summary.js"
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
 // Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
-const refreshes = new Map<string, ReturnType<FetchLike>>()
+type PendingRefresh = {
+  controller: AbortController
+  pending: ReturnType<FetchLike>
+  waiting: number
+}
+const refreshes = new Map<string, PendingRefresh>()
 
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
   if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
@@ -40,18 +45,49 @@ const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
 // overload is picked by annotation and clone() is pinned to the type it was called on. A tool call
 // can stay silent for minutes, so Bun's idle deadline is off; the MCP execution timeout still applies.
 const base: FetchLike = noTimeoutFetch
-const share = (pending: ReturnType<FetchLike>) => pending.then((response) => response.clone() as typeof response)
+const share = (current: PendingRefresh, signal: RequestInit["signal"]) =>
+  new Promise<Response>((resolve, reject) => {
+    current.waiting++
+    const cleanup = () => signal?.removeEventListener("abort", onAbort)
+    const onAbort = () => {
+      current.waiting--
+      if (current.waiting === 0) current.controller.abort(signal?.reason)
+      cleanup()
+      reject(signal?.reason)
+    }
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
+    current.pending.then(
+      (response) => {
+        cleanup()
+        resolve(response.clone() as typeof response)
+      },
+      (error) => {
+        cleanup()
+        reject(error)
+      },
+    )
+  })
 
 const send: FetchLike = (url, init) => {
   const key = refreshKey(url, init)
   if (key === undefined) return base(url, init)
-  const current = refreshes.get(key)
-  if (current) return share(current)
-  const pending = base(url, init).finally(() => {
-    if (refreshes.get(key) === pending) refreshes.delete(key)
+  const existing = refreshes.get(key)
+  if (existing) return share(existing, init?.signal)
+  const controller = new AbortController()
+  const current: PendingRefresh = {
+    controller,
+    waiting: 0,
+    pending: base(url, { ...init, signal: controller.signal }),
+  }
+  current.pending = current.pending.finally(() => {
+    if (refreshes.get(key) === current) refreshes.delete(key)
   })
-  refreshes.set(key, pending)
-  return share(pending)
+  refreshes.set(key, current)
+  return share(current, init?.signal)
 }
 
 export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>

@@ -341,6 +341,66 @@ describe("MCP OAuth", () => {
     ])
   })
 
+  test("keeps a shared refresh running when only the follower aborts", async () => {
+    let requests = 0
+    const pending = Promise.withResolvers<void>()
+    const server = Bun.serve({
+      port: 0,
+      async fetch() {
+        requests++
+        await pending.promise
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "next" })
+      },
+    })
+    const fetchFn = await Effect.runPromise(McpOAuth.loggedFetch({ server: "test" }))
+    const input = (signal?: AbortSignal) => ({
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "refresh_token", client_id: "client", refresh_token: "refresh" }),
+      ...(signal ? { signal } : {}),
+    })
+    const first = fetchFn(server.url, input())
+    const controller = new AbortController()
+    const second = fetchFn(server.url, input(controller.signal))
+
+    controller.abort()
+    pending.resolve()
+    const results = await Promise.allSettled([first, second]).finally(() => server.stop(true))
+
+    expect(requests).toBe(1)
+    expect(results[0].status).toBe("fulfilled")
+    expect(results[1].status).toBe("rejected")
+  })
+
+  test("keeps a shared refresh running for the follower when the leader aborts", async () => {
+    let requests = 0
+    const pending = Promise.withResolvers<void>()
+    const server = Bun.serve({
+      port: 0,
+      async fetch() {
+        requests++
+        await pending.promise
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "next" })
+      },
+    })
+    const fetchFn = await Effect.runPromise(McpOAuth.loggedFetch({ server: "test" }))
+    const input = (signal?: AbortSignal) => ({
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "refresh_token", client_id: "client", refresh_token: "refresh" }),
+      ...(signal ? { signal } : {}),
+    })
+    const controller = new AbortController()
+    const first = fetchFn(server.url, input(controller.signal))
+    const second = fetchFn(server.url, input())
+
+    controller.abort()
+    pending.resolve()
+    const results = await Promise.allSettled([first, second]).finally(() => server.stop(true))
+
+    expect(requests).toBe(1)
+    expect(results[0].status).toBe("rejected")
+    expect(results[1].status).toBe("fulfilled")
+  })
+
   test("generates a loopback redirect URL when none is configured", async () => {
     expect(await authorize()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
   })
