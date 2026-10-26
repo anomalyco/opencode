@@ -28,7 +28,6 @@ export function SubagentBar(props: {
     ...(props.status ? (["status", "elapsed"] as const) : []),
     ...(props.agent ? (["agent"] as const) : []),
     ...(props.model ? (["model"] as const) : []),
-    ...(props.model?.variant && props.model.variant !== "default" ? (["variant"] as const) : []),
   ]
 
   createEffect(() => {
@@ -89,11 +88,17 @@ export function SubagentBar(props: {
                         <span class="sr-only">{" / "}</span>
                       </Show>
                       <span class="truncate">{model().name}</span>
+                      {/* Like the message metadata: the variant follows the name, dimmer, with no separator. */}
+                      <Show when={model().variant !== "default" && model().variant}>
+                        {(variant) => (
+                          <>
+                            <span class="sr-only">{" "}</span>
+                            <span class="ms-1 shrink-0 capitalize opacity-[0.66]">{variant()}</span>
+                          </>
+                        )}
+                      </Show>
                     </span>
                   )}
-                </Match>
-                <Match when={part === "variant" && props.model?.variant}>
-                  {(variant) => <span class="shrink-0 capitalize">{variant()}</span>}
                 </Match>
               </Switch>
             </>
