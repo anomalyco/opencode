@@ -1,17 +1,18 @@
 import { showToast, toaster } from "@opencode/ui/toast"
-import { createSignal, lazy, Show, Suspense } from "solid-js"
+import { lazy, Show, Suspense } from "solid-js"
 import { createKeyed, Command, Slot, TitlebarItem, type Setup } from "../sdk"
 import type Debug from "./index"
 
 const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
   const channel = ctx.build.channel
-  // Window-local; every window starts with the bar hidden.
-  const [visible, setVisible] = createSignal(false)
+  const bar = ctx.stores.bar
+  const visible = () => bar.value.visible
 
-  const toggle = () => {
-    setVisible((value) => !value)
-  }
+  const toggle = () =>
+    bar.update((draft) => {
+      draft.visible = !draft.visible
+    })
 
   ctx.add(
     Command,

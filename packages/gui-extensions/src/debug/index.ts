@@ -1,10 +1,17 @@
-import { Extension } from "../sdk"
+import { Schema } from "effect"
+import { Extension, Store } from "../sdk"
 import { HeapSnapshots } from "./contract"
 import en from "./i18n/en"
+
+const Bar = Schema.Struct({ visible: Schema.Boolean })
 
 export default Extension.define({
   id: "debug",
   provides: { heap: HeapSnapshots },
+  stores: {
+    // Whether the debug bar shows; kept across restarts so it stays open once toggled on.
+    bar: Store.global(Bar, { visible: false }),
+  },
   i18n: {
     en,
     am: () => import("./i18n/am"),
