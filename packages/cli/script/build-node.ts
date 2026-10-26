@@ -15,6 +15,7 @@ import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
 import { NativeArch } from "../../../script/native-arch"
+import { bundledModelsSnapshot } from "../../core/script/models-snapshot"
 
 const NODE_VERSION = "26.4.0"
 const dir = path.resolve(import.meta.dirname, "..")
@@ -62,6 +63,7 @@ if (targets.length === 0) {
 if (!bundleOnly && targets.some((target) => target.platform === "darwin" && target.arch === "x64")) {
   throw new Error("Node 26.4 SEA does not support macOS x64")
 }
+const modelsSnapshot = await bundledModelsSnapshot()
 const appArchive = archivePath ? await Bun.file(archivePath).bytes() : await buildAppArchive(Script.channel)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
@@ -97,6 +99,7 @@ for (const target of targets) {
     version: Script.version,
     channel: Script.channel,
     highlights,
+    modelsSnapshot,
     assetHash,
     target,
   }
