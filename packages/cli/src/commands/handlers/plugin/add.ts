@@ -74,8 +74,15 @@ export async function writePluginConfig(configPath: string, spec: string) {
 }
 
 function configured(plugins: readonly unknown[] | undefined, spec: string) {
-  return plugins?.some(
-    (entry) =>
-      entry === spec || (typeof entry === "object" && entry !== null && "package" in entry && entry.package === spec),
+  const targets = plugins?.map((entry) =>
+    typeof entry === "object" && entry !== null && "package" in entry ? entry.package : entry,
   )
+  if (targets?.includes(spec)) return true
+  const name = Npm.registryName(spec)
+  const target = name && targets?.find((target) => typeof target === "string" && Npm.registryName(target) === name)
+  if (target)
+    throw new Error(
+      `Plugin "${target}" is already configured. Run "opencode plugin remove ${target}" before adding "${spec}".`,
+    )
+  return false
 }
