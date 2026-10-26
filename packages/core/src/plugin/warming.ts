@@ -29,12 +29,12 @@ export const Plugin = define({
     const scope = yield* Scope.Scope
     const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
     // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
+    // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
       .subscribe({
         types: [
-          "session.step.started",
           "session.step.streamed",
           "session.step.failed",
           "session.execution.succeeded",
@@ -45,10 +45,6 @@ export const Plugin = define({
       .pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
-            if (event.type === "session.step.started") {
-              requesting.add(event.data.sessionID)
-              return
-            }
             requesting.delete(event.data.sessionID)
             // Count the next interval from the end of the response, not from when a long request started.
             const current = sessions.get(event.data.sessionID)
@@ -133,7 +129,9 @@ export const Plugin = define({
           Effect.forkIn(scope),
         )
       })
-    yield* ctx.session.hook("context", hook)
+    yield* ctx.session.hook("context", (event) =>
+      Effect.sync(() => requesting.add(event.sessionID)).pipe(Effect.andThen(hook(event))),
+    )
     yield* ctx.session.hook("compaction", hook)
     yield* ctx.session.hook("generate", hook)
   }),
