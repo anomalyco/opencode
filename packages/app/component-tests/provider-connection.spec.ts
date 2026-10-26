@@ -47,3 +47,29 @@ story("sends hidden defaults with a dynamic setup answer", async ({ mount, page 
     JSON.stringify([{ server: "https://example.com", scope: "gateway", name: "OpenCode" }]),
   )
 })
+
+story(
+  "claims a setup step before awaiting submission so repeated actions cannot submit it twice",
+  async ({ mount, page }) => {
+    await mount("ui-line-comment--editor")
+    await page.evaluate(async (fixture) => {
+      const module = await import(fixture)
+      module.mountConnection("duplicate")
+    }, fixture)
+    const connection = page.getByTestId("provider-connection")
+    await connection.getByRole("button", { name: "Start", exact: true }).click()
+    await expect(connection.getByTestId("step")).toHaveText("step_1")
+    await connection.getByRole("button", { name: "Submit", exact: true }).evaluate((button: HTMLButtonElement) => {
+      button.click()
+      button.click()
+    })
+    await expect(connection.getByTestId("state")).toHaveText("waiting")
+    await expect(connection.getByTestId("step")).toBeEmpty()
+    await connection.getByRole("button", { name: "Release submission", exact: true }).click()
+    await expect(connection.getByTestId("step")).toHaveText("step_2")
+    await expect(connection.getByTestId("state")).toHaveText("form")
+    await expect(connection.getByTestId("submissions")).toHaveText(
+      JSON.stringify([{ server: "https://example.com", scope: "gateway", name: "OpenCode" }]),
+    )
+  },
+)

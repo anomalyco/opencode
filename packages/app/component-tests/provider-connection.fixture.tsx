@@ -5,7 +5,7 @@ import { LanguageProvider } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { createProviderConnectionController } from "../src/providers/connect/controller"
 
-export type Scenario = "expired" | "missing" | "next" | "complete" | "hidden"
+export type Scenario = "expired" | "missing" | "next" | "complete" | "hidden" | "duplicate"
 
 export function mountConnection(scenario: Scenario) {
   const host = document.createElement("div")
@@ -16,6 +16,7 @@ export function mountConnection(scenario: Scenario) {
     submissions: [],
   })
   let submitted = false
+  const completion = Promise.withResolvers<void>()
   const prompt = (id: string): IntegrationPrompt => ({
     id,
     title: id,
@@ -61,12 +62,14 @@ export function mountConnection(scenario: Scenario) {
           if (!submitted) return { data: { status: "pending", prompt: prompt("step_1") } }
           if (scenario === "missing") throw { _tag: "IntegrationAttemptNotFoundError" }
           if (scenario === "expired") return { data: { status: "expired" } }
-          if (scenario === "next") return { data: { status: "pending", prompt: prompt("step_2") } }
+          if (scenario === "next" || scenario === "duplicate")
+            return { data: { status: "pending", prompt: prompt("step_2") } }
           return { data: { status: "complete", next: { title: "Manage budget", url: "https://example.com/budget" } } }
         },
         complete: async (input: { answer: FormAnswer }) => {
           setRecord("submissions", (submissions) => [...submissions, input.answer])
           submitted = true
+          if (scenario === "duplicate") return completion.promise
           if (scenario !== "hidden") throw new Error("Response lost")
         },
       },
@@ -86,6 +89,7 @@ export function mountConnection(scenario: Scenario) {
           Start
         </button>
         <button onClick={() => void controller.auth.completePrompt({ name: "OpenCode" })}>Submit</button>
+        <button onClick={() => completion.resolve()}>Release submission</button>
         <button onClick={() => void controller.auth.retry()}>Retry</button>
         <output data-testid="state">{controller.auth.state()}</output>
         <output data-testid="step">{controller.prompt()?.id}</output>

@@ -589,6 +589,7 @@ export function createProviderConnectionController(options: {
     const authorization = store.authorization
     const prompt = store.prompt
     if (!authorization || !prompt) return
+    setStore({ prompt: undefined, state: "waiting" })
     const generation = polling.generation
     const result = await serverSDK.api.integration.oauth
       .complete({
@@ -602,11 +603,10 @@ export function createProviderConnectionController(options: {
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
-      setStore({ prompt: undefined, statusFailed: true })
+      setStore("statusFailed", true)
       dispatch({ type: "auth.error", error: formatServerError(result.error, language.t) })
       return
     }
-    setStore({ prompt: undefined, state: "waiting" })
     void poll(authorization, generation)
   }
 
