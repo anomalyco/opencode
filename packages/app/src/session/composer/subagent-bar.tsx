@@ -3,7 +3,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
 import { Slash } from "@opencode/ui/slash"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { createEffect, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { formatKeybind } from "@/shell/commands/command"
 import { formatElapsed } from "./activity-chips"
@@ -23,6 +23,14 @@ export function SubagentBar(props: {
   const language = useLanguage()
   const [now, setNow] = createSignal(Date.now())
 
+  // Only what is known shows, with one separator between neighbours.
+  const parts = () => [
+    ...(props.status ? (["status", "elapsed"] as const) : []),
+    ...(props.agent ? (["agent"] as const) : []),
+    ...(props.model ? (["model"] as const) : []),
+    ...(props.model?.variant && props.model.variant !== "default" ? (["variant"] as const) : []),
+  ]
+
   createEffect(() => {
     if (props.status !== "running") return
 
@@ -37,59 +45,60 @@ export function SubagentBar(props: {
       data-component="subagent-bar"
       class="relative flex h-8 w-full min-w-0 items-center gap-2 bg-v2-background-bg-base ps-3 pe-1.5 text-[12px] font-[440] leading-4 tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-faint before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-[linear-gradient(to_top,var(--v2-background-bg-base),transparent)]"
     >
-      <span class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-faint">
-        <Switch>
-          <Match when={props.status === "running"}>
-            <SessionProgressIndicatorV2 />
-          </Match>
-          <Match when={props.status === "succeeded"}>
-            <Icon name="check" size="small" />
-          </Match>
-          <Match when={props.status === "failed"}>
-            <Icon name="circle-xmark" size="small" />
-          </Match>
-          <Match when={props.status === "interrupted"}>
-            <Icon name="outline-xmark" size="small" />
-          </Match>
-        </Switch>
-      </span>
+      <Show when={props.status}>
+        <span class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-faint">
+          <Switch>
+            <Match when={props.status === "running"}>
+              <SessionProgressIndicatorV2 />
+            </Match>
+            <Match when={props.status === "succeeded"}>
+              <Icon name="check" size="small" />
+            </Match>
+            <Match when={props.status === "failed"}>
+              <Icon name="circle-xmark" size="small" />
+            </Match>
+            <Match when={props.status === "interrupted"}>
+              <Icon name="outline-xmark" size="small" />
+            </Match>
+          </Switch>
+        </span>
+      </Show>
       <div class="flex min-w-0 flex-1 items-center gap-1.5">
-        <Show when={props.status}>
-          {(status) => (
+        <For each={parts()}>
+          {(part, index) => (
             <>
-              <span class="shrink-0">{language.t(`session.child.status.${status()}`)}</span>
-              <span aria-hidden="true">·</span>
-              <span class="shrink-0">{formatElapsed((props.ended ?? now()) - props.started, language.t)}</span>
-            </>
-          )}
-        </Show>
-        <Show when={props.agent}>
-          {(agent) => (
-            <>
-              <span aria-hidden="true">·</span>
-              <span class="shrink-0 capitalize">{agent()}</span>
-            </>
-          )}
-        </Show>
-        <Show when={props.model}>
-          {(model) => (
-            <>
-              <span aria-hidden="true">·</span>
-              <span data-slot="subagent-model" class="flex min-w-0">
-                <Show when={model().provider}>
-                  <span class="shrink-0">{model().provider}</span>
-                  <Slash gap={4} />
-                  <span class="sr-only">{" / "}</span>
-                </Show>
-                <span class="truncate">{model().name}</span>
-              </span>
-              <Show when={model().variant !== "default" && model().variant}>
+              <Show when={index() > 0}>
                 <span aria-hidden="true">·</span>
-                <span class="shrink-0 capitalize">{model().variant}</span>
               </Show>
+              <Switch>
+                <Match when={part === "status" && props.status}>
+                  {(status) => <span class="shrink-0">{language.t(`session.child.status.${status()}`)}</span>}
+                </Match>
+                <Match when={part === "elapsed"}>
+                  <span class="shrink-0">{formatElapsed((props.ended ?? now()) - props.started, language.t)}</span>
+                </Match>
+                <Match when={part === "agent" && props.agent}>
+                  {(agent) => <span class="shrink-0 capitalize">{agent()}</span>}
+                </Match>
+                <Match when={part === "model" && props.model}>
+                  {(model) => (
+                    <span data-slot="subagent-model" class="flex min-w-0">
+                      <Show when={model().provider}>
+                        <span class="shrink-0">{model().provider}</span>
+                        <Slash gap={4} />
+                        <span class="sr-only">{" / "}</span>
+                      </Show>
+                      <span class="truncate">{model().name}</span>
+                    </span>
+                  )}
+                </Match>
+                <Match when={part === "variant" && props.model?.variant}>
+                  {(variant) => <span class="shrink-0 capitalize">{variant()}</span>}
+                </Match>
+              </Switch>
             </>
           )}
-        </Show>
+        </For>
       </div>
       <Button type="button" variant="ghost-faint" size="small" class="shrink-0 gap-1.5 px-1.5" onClick={props.onBack}>
         {language.t("session.child.backToParent")}

@@ -15,3 +15,13 @@ story("a subagent session shows its model where the composer would be", async ({
   await bar.getByRole("button", { name: /main session/i }).click()
   await expect(page.getByText("Opened the parent Session locally")).toBeVisible()
 })
+
+story("a subagent with no recorded outcome starts its line at the agent", async ({ mount, page }) => {
+  await mount("app-current-session-surface--child-session-no-outcome")
+
+  const bar = page.locator('[data-component="subagent-bar"]')
+  await expect(bar.locator('[data-slot="subagent-model"]')).toBeVisible()
+  // No empty status icon box, and no separator before the first item.
+  await expect(bar.locator(":scope > span")).toHaveCount(0)
+  await expect(bar).toHaveText(/^surveyor·Anthropic/)
+})
