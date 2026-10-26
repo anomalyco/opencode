@@ -1336,7 +1336,8 @@ export function Prompt(props: PromptProps) {
       )
     } else {
       move.startSubmit()
-      if (!(await attempt("Failed to prepare session", prepareAgent))) return true
+      // The agent selection rides the admitted prompt: switching eagerly here would
+      // reconfigure a turn that is still running. Promotion applies it at the boundary.
       // Revert must settle before optimistic admission: its committed echo
       // splices every local row at or after the boundary, which would include
       // a freshly admitted prompt.
@@ -1368,6 +1369,7 @@ export function Prompt(props: PromptProps) {
           text: inputText,
           files: promptFilesForServer(entry.files, terminalEnvironment.localServer === true),
           agents: entry.agents,
+          agent: agent.id,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
           gate: newSession?.gate,

@@ -1046,6 +1046,7 @@ export type SessionInboxUserPayload = {
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
+  agent?: AgentID
   metadata?: { [x: string]: JsonValue }
 }
 
@@ -1065,6 +1066,7 @@ export type SessionInboxUserPayload1 = {
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
+  agent?: AgentID
   metadata?: { [x: string]: any }
 }
 
@@ -2530,7 +2532,7 @@ export type CredentialEntry = {
   value: CredentialValue
 }
 
-export type FormFields1 = [FormField1, ...Array<FormField1>]
+export type FormFields2 = [FormField1, ...Array<FormField1>]
 
 export type ScheduleInfo = {
   id: ScheduleID
@@ -2622,7 +2624,7 @@ export type SessionMessageAssistantContentEncoded =
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
-export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
+export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
@@ -3276,6 +3278,7 @@ export type SessionPromptInput = {
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
       }>
     | undefined
+  readonly agent?: string | null | undefined
   readonly metadata?: { readonly [x: string]: JsonValue } | undefined
   readonly delivery?: ("steer" | "queue") | null | undefined
   readonly resume?: boolean | null | undefined

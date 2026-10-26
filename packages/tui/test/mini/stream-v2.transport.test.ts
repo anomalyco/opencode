@@ -1193,12 +1193,11 @@ describe("V2 mini transport", () => {
       },
       delivery,
     )
-    expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "review" }, expect.anything())
     expect(client.session.switchModel).toHaveBeenCalledWith(
       { sessionID: "ses_1", model: { providerID: "test", id: "next", variant: "high" } },
       expect.anything(),
     )
-    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery }), expect.anything())
+    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ agent: "review", delivery }), expect.anything())
     expect(pending()).toEqual([["msg_next", delivery]])
     expect(ui.commits.some((commit) => commit.messageID === "msg_next")).toBe(false)
     events.push({

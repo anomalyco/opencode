@@ -27,7 +27,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
-import { SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -544,21 +544,42 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
     (row) => {
       if (row.type !== "move" && row.type !== "user" && row.type !== "synthetic")
         return Effect.die(new LifecycleConflict({ id: row.id }))
-      return bus
-        .publish(SessionEvent.InboxDelivered, {
-          sessionID,
-          inboxID: row.id,
-        })
-        .pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof LifecycleConflict
-              ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
-                  Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
-                  Effect.orDie,
-                )
-              : Effect.die(defect),
-          ),
-        )
+      return Effect.gen(function* () {
+        // Promotion is a turn boundary, the only safe point to apply a prompt's agent
+        // selection: the projector persists it before the message becomes visible.
+        if (row.type === "user") {
+          const payload = decodeUser(row.payload)
+          if (payload.agent) {
+            const session = yield* db
+              .select({ agent: SessionTable.agent })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, sessionID))
+              .get()
+              .pipe(Effect.orDie)
+            if (session && session.agent !== payload.agent)
+              yield* bus.publish(SessionEvent.AgentSelected, {
+                sessionID,
+                agent: payload.agent,
+                previous: session.agent ?? undefined,
+              })
+          }
+        }
+        return yield* bus
+          .publish(SessionEvent.InboxDelivered, {
+            sessionID,
+            inboxID: row.id,
+          })
+          .pipe(
+            Effect.catchDefect((defect) =>
+              defect instanceof LifecycleConflict
+                ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
+                    Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
+                    Effect.orDie,
+                  )
+                : Effect.die(defect),
+            ),
+          )
+      })
     },
     { discard: true },
   )

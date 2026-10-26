@@ -297,6 +297,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 text: ctx.payload.text,
                 files: ctx.payload.files,
                 agents: ctx.payload.agents,
+                agent: ctx.payload.agent,
                 skills: ctx.payload.skills,
                 metadata: ctx.payload.metadata,
                 delivery: ctx.payload.delivery,
