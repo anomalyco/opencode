@@ -657,6 +657,7 @@
         "@opencode/schema": "workspace:*",
         "@opencode/simulation": "workspace:*",
         "@opencode/util": "workspace:*",
+        "@romanilyin/canonicalpath": "2026.10.10-4",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -2419,6 +2420,8 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.62.4", "", { "os": "win32", "cpu": "x64" }, "sha512-qPzHqdj9rfUD+w79dtE07zi/kFwKyCJqplp5K5ygeLTp7jLpAoc16OAH39HSmRC9UpozaecsleI8uAdEj6v2yw=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.62.4", "", { "os": "win32", "cpu": "x64" }, "sha512-zD6NdeWEByGE9QF9vCrlJ5YQB4oq9q91kPZS37Jwj5hOkvR1lTBSpsKhKDw4IJtbQ35LsTS1HD9DZYGKIshU1Q=="],
+
+    "@romanilyin/canonicalpath": ["@romanilyin/canonicalpath@2026.10.10-4", "", {}, "sha512-hbjr5IW4pa8apAGSWN7omvS0olrxv0KDBUG2atvpaSRYkGcotuqLCAcrWrp/UUbvBYo30LtroqGdOb7EajQoWg=="],
 
     "@sentry/browser": ["@sentry/browser@10.71.0", "", { "dependencies": { "@sentry/browser-utils": "10.71.0", "@sentry/conventions": "^0.16.0", "@sentry/core": "10.71.0", "@sentry/feedback": "10.71.0", "@sentry/replay": "10.71.0", "@sentry/replay-canvas": "10.71.0" } }, "sha512-fTE9tUDoggJSFv8cQ+h1UA9onovOoUNJWu8Var1MXmUVuVG/W3WqzJFVyKArZMj95lizZkq8aiS63SURvrBsFQ=="],
 

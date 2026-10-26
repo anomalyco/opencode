@@ -29,7 +29,9 @@ export const formLocationLayer = Layer.effect(
           // the session row lookup because some MCP elicitations cannot currently be attributed to
           // a real session. Keep this undocumented and remove once elicitations carry session ownership.
           const request = yield* HttpServerRequest.HttpServerRequest
-          return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), locationErrors)
+          const ref = requestRef(request)
+          if (ref instanceof InvalidRequestError) return yield* ref
+          return yield* effect.pipe(Effect.provide(locations.get(ref)), locationErrors)
         }
 
         const session = yield* sessionInfo(sessions, route.params.sessionID)

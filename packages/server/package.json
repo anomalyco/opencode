@@ -34,6 +34,7 @@
     "@opencode/schema": "workspace:*",
     "@opencode/simulation": "workspace:*",
     "@opencode/util": "workspace:*",
+    "@romanilyin/canonicalpath": "2026.10.10-4",
     "effect": "catalog:"
   },
   "devDependencies": {
