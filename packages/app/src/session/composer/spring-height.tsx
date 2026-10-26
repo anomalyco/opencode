@@ -267,6 +267,13 @@ export function ComposerMorph<T extends { key: string }>(props: {
     ),
   )
 
+  // A face that turns instant mid-flight lands at once.
+  createEffect(() => {
+    const list = untrack(faces)
+
+    if (stop && list.some((item) => props.instant?.(item.value()))) settle(list)
+  })
+
   onCleanup(observeReducedMotion(() => prefersReducedMotion() && stop && settle(untrack(faces))))
   onCleanup(() => stop?.())
 
@@ -357,6 +364,16 @@ export function Grow<T>(props: {
   let el: HTMLDivElement | undefined
   let entering = !!props.when && !!props.appear
 
+  const closed = () => {
+    setPresent(false)
+    props.onClosed?.()
+  }
+
+  // Turning instant mid-grow finishes the grow where it was going.
+  createEffect(() => {
+    if (props.instant && el) growing.get(el)?.end?.()
+  })
+
   createEffect(
     on(
       () => [!!props.when, present()] as const,
@@ -370,18 +387,22 @@ export function Grow<T>(props: {
         if (!el || (!entering && (!prev || prev[0] === when))) return
         entering = false
 
-        if (props.instant && !growing.has(el)) {
+        if (props.instant) {
+          const current = growing.get(el)
+
+          if (current) {
+            current.open = when
+            current.done = closed
+
+            return current.end?.()
+          }
+
           if (when) return
 
-          setPresent(false)
-
-          return props.onClosed?.()
+          return closed()
         }
 
-        grow(el, when, props.fade, props.card, props.close?.(), () => {
-          setPresent(false)
-          props.onClosed?.()
-        })
+        grow(el, when, props.fade, props.card, props.close?.(), closed)
       },
     ),
   )
@@ -409,7 +430,9 @@ export function Grow<T>(props: {
   )
 }
 
-const growing = new WeakMap<HTMLElement, { spring: Spring; presence: Spring; open: boolean; done?: () => void }>()
+type Growth = { spring: Spring; presence: Spring; open: boolean; done?: () => void; end?: () => void }
+
+const growing = new WeakMap<HTMLElement, Growth>()
 
 function grow(
   el: HTMLElement,
@@ -436,7 +459,7 @@ function grow(
   const prevMb =
     (!mb && el.previousElementSibling ? parseFloat(getComputedStyle(el.previousElementSibling).marginBottom) : 0) || 0
 
-  const state = {
+  const state: Growth = {
     spring: Spring.fromDuration(
       open ? 0 : el.getBoundingClientRect().height,
       reduced ? fade : open ? morph() : (close ?? morph()),
@@ -475,7 +498,8 @@ function grow(
   })
 
   if (child) observer.observe(child)
-  frameLoop.add((dt) => {
+
+  const stop = frameLoop.add((dt) => {
     if (!el.isConnected) {
       observer.disconnect()
       growing.delete(el)
@@ -527,6 +551,13 @@ function grow(
 
     return true
   })
+
+  state.end = () => {
+    stop()
+    observer.disconnect()
+    growing.delete(el)
+    finish(el, state.open, state.done)
+  }
 }
 
 function finish(el: HTMLElement, open: boolean, done?: () => void) {
