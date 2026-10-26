@@ -14,7 +14,6 @@ export function SortableTerminalTab(props: {
   terminal: LocalPTY
   workspace: TerminalWorkspace
   index: number
-  onClose?: () => void
 }): JSX.Element {
   const extension = useExtension()
 
@@ -40,14 +39,7 @@ export function SortableTerminalTab(props: {
   const label = () =>
     terminalTabLabel({ title: props.terminal.title, titleNumber: props.terminal.titleNumber, t: extension.t })
 
-  const close = () => {
-    const count = props.workspace.all().length
-    void props.workspace.close(props.terminal.id)
-
-    if (count === 1) {
-      props.onClose?.()
-    }
-  }
+  const close = () => void props.workspace.close(props.terminal.id)
 
   const focus = () => {
     if (store.editing) return

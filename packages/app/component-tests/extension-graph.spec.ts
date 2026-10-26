@@ -1,5 +1,5 @@
 import type { Definition } from "@opencode/gui-extensions/sdk"
-import { expect, sourceURL, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 

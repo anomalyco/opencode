@@ -4,8 +4,6 @@ import type { Changes } from "../review/contract"
 import type { LineRange, Live, MountedSession, OpenOptions } from "../sdk"
 import type { OpenApp } from "./apps"
 
-export type TreeTab = "changes" | "all"
-
 /** An open-in-app request in flight: the app it opens, or undefined while none is. */
 export interface OpenRequest {
   app(): OpenApp | undefined
@@ -16,12 +14,6 @@ export interface OpenRequest {
 export interface FileShared {
   readonly changes: Accessor<Live<Changes>>
   readonly browser: Accessor<Live<Browser>>
-  readonly tree: {
-    tab(): TreeTab
-    setTab(tab: TreeTab): void
-    /** The directory whose root listing the tree last refreshed. */
-    directory?: string
-  }
   /** The file browser's filter input and per-session filter state. */
   readonly filter: {
     element?: HTMLInputElement

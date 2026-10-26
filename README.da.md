@@ -80,18 +80,7 @@ brew install --cask opencode-desktop
 
 #### Installationsmappe
 
-Installationsscriptet bruger følgende prioriteringsrækkefølge for installationsstien:
-
-1. `$OPENCODE_INSTALL_DIR` - Tilpasset installationsmappe
-2. `$XDG_BIN_DIR` - Sti der følger XDG Base Directory Specification
-3. `$HOME/bin` - Standard bruger-bin-mappe (hvis den findes eller kan oprettes)
-4. `$HOME/.opencode/bin` - Standard fallback
-
-```bash
-# Eksempler
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/v2/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/v2/install | bash
-```
+Installationsscriptet installerer OpenCode i `$HOME/.opencode/bin`.
 
 ### Agents
 
@@ -106,11 +95,11 @@ OpenCode har to indbyggede agents, som du kan skifte mellem med `Tab`-tasten.
 Derudover findes der en **general**-subagent til komplekse søgninger og flertrinsopgaver.
 Den bruges internt og kan kaldes via `@general` i beskeder.
 
-Læs mere om [agents](https://opencode.ai/docs/agents).
+Læs mere om [agents](https://opencode.ai/v2/docs/agents).
 
 ### Dokumentation
 
-For mere info om konfiguration af OpenCode, [**se vores docs**](https://opencode.ai/docs).
+For mere info om konfiguration af OpenCode, [**se vores docs**](https://opencode.ai/v2/docs).
 
 ### Bidrag
 

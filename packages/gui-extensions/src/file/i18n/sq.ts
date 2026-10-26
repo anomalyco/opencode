@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Të gjithë skedarët",
-  "tree.empty": "Nuk ka skedarë",
-  "tree.changes.one": "{{count}} skedar u ndryshua",
-  "tree.changes.other": "{{count}} skedarë u ndryshuan",
   "tab.notFound": "Skedari nuk u gjet: {{name}}",
   "mobile.title": "Skedarët",
   "mobile.openTabs": "Hap skedarët",

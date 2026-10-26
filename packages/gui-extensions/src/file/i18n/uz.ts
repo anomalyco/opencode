@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Barcha fayllar",
-  "tree.empty": "Fayl yo'q",
-  "tree.changes.one": "{{count}} ta fayl o‘zgardi",
-  "tree.changes.other": "{{count}} ta fayl o‘zgardi",
   "tab.notFound": "Fayl topilmadi: {{name}}",
   "mobile.title": "Fayllar",
   "mobile.openTabs": "Ochiq fayllar",

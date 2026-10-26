@@ -4,7 +4,7 @@ import type { Schema } from "effect"
 import type { JSX } from "solid-js"
 import type { Store } from "solid-js/store"
 import type { Cleanup, OS, Persisted, StoreFrom } from "./core"
-import type { IconName, Link } from "./registries"
+import type { IconName, Link, SessionPanelMenuItem } from "./registries"
 
 /**
  * A server the app lists. One ref per id that follows the live connection: read `client`, `data` and `url` from it
@@ -106,6 +106,8 @@ export type FileContent = {
   mimeType?: string
   /** On-disk size when the bytes themselves are not retained. */
   size?: number
+  /** A URL the server streams the file from with range requests, set instead of `bytes` for images, audio and video. */
+  url?: string
 }
 
 /** A range of lines in a file, or in one side of its diff. */
@@ -191,7 +193,7 @@ export interface Files {
    */
   missing(path: string): boolean
   /**
-   * Loads the file's content, once unless forced.
+   * Loads the file's content, once unless forced, and asks the server to watch a workspace file for changes.
    *
    * @param path - A workspace path.
    * @param options - Load options.
@@ -205,6 +207,12 @@ export interface Files {
       readonly silent?: boolean
     },
   ): Promise<void>
+  /**
+   * Stops the server watch `sync` started, for a file whose tab closed.
+   *
+   * @param path - A workspace path.
+   */
+  unwatch(path: string): void
   /**
    * Whether a file exists, checked by listing its directory without reading the file.
    *
@@ -493,16 +501,57 @@ export interface ComposerNote {
   }
 }
 
+/**
+ * Text the user quoted from something the extension shows, such as terminal output, with an optional comment. It
+ * renders like a quote from the session timeline, under the source's icon and label. The model reads "The user quoted
+ * the following from <subject>:" and the text, each line prefixed with `> `, then the comment when there is one.
+ */
+export interface ComposerQuote {
+  /** The part kind. */
+  type: "quote"
+  /** The id that `Composer.update`, `detach` and `focus` take. */
+  commentID: string
+  /** The quoted text, as plain text. */
+  text: string
+  /** The user's comment on the quote. Omit it to let the user add one from the chip. */
+  comment?: string
+  /** Where the text came from. It stays with the draft and the sent message. */
+  source: {
+    /** Chip text while the quote has no comment, e.g. `Terminal`. */
+    readonly label: string
+    /** Chip icon. */
+    readonly icon: IconName
+    /** Where the text came from, for the model, e.g. `the terminal`. Not localized. */
+    readonly subject: string
+  }
+}
+
 /** The session screen's composer: the parts attached to the routed session's next prompt. */
 export interface Composer {
   /**
-   * Attaches a file or a note to the next prompt.
+   * Attaches a file, a note or a quote to the next prompt. Focus stays where it is; call `focus` to move it.
    *
    * @param part - The part to attach.
    */
-  attach(part: ComposerFile | ComposerNote): void
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
   /**
-   * Changes an attached part. Files and notes alike; a note takes only `comment`.
+   * Whether the composer takes quotes now. False in a subagent's session, which has no composer, and while the
+   * composer runs shell commands. Reactive.
+   *
+   * @example
+   * if (screen.composer.quotable()) screen.composer.attach(quote)
+   */
+  quotable(): boolean
+  /**
+   * Moves focus to the prompt, at its cursor. With the `commentID` of an attached quote, opens that quote's comment
+   * editor instead. While the composer is not shown, such as on a narrow screen showing a panel, the prompt keeps
+   * its focus and the comment editor opens once the composer shows.
+   *
+   * @param commentID - The attached quote whose comment editor to open. Omit it to focus the prompt.
+   */
+  focus(commentID?: string): void
+  /**
+   * Changes an attached part. Files, notes and quotes alike; a note or a quote takes only `comment`.
    *
    * @param id - The part's `commentID`.
    * @param patch - The fields to change.
@@ -621,10 +670,10 @@ export interface Sessions {
 
 /**
  * Where a panel key stands in a session.
- * - `closed`: not in the strip (a dock: not open).
- * - `open`: in the strip, not selected.
- * - `active`: selected, with the side region closed.
- * - `visible`: selected and on screen (a dock: open).
+ * - `closed`: not in the strip.
+ * - `open`: in the strip, not the tab its pane shows.
+ * - `active`: the tab its pane shows, with the pane hidden (the side region closed, or the bottom pane hidden).
+ * - `visible`: the tab its pane shows, on screen.
  */
 export type PanelState = "closed" | "open" | "active" | "visible"
 
@@ -636,11 +685,11 @@ export interface OpenOptions {
    * - `preview`: select it as the new preview tab.
    * - `append`: add it at the end without selecting it, changing neither the region nor the preview tab.
    * - `select`: add it at the end and select it, keeping the preview tab. Like `background`, it keeps the
-   *   narrow-screen view and the dock, and opens the side region.
+   *   narrow-screen view, and opens the side region.
    */
   readonly tab?: "open" | "preview" | "append" | "select"
   /**
-   * On narrow screens, keep the current view and the dock, and open the side region so the tab shows when the window
+   * On narrow screens, keep the current view, and open the side region so the tab shows when the window
    * is wide. Pass it when the user stays where they are (a palette pick, a composer chip) or the agent opened the tab.
    * Defaults to false.
    */
@@ -648,9 +697,9 @@ export interface OpenOptions {
 }
 
 /**
- * The session layout: side panel tabs, the dock, scroll offsets, and the settings and project dialogs. Panel keys are
+ * The session layout: side panel tabs, scroll offsets, and the settings and project dialogs. Panel keys are
  * `${extension}:${tab id}`. Nothing throws before the app interface mounts: `ready()` is false, reads return what an
- * empty layout holds (each says its default), and writes (`open`, `close`, `toggle`, `side.toggle`, `scroll.set`,
+ * empty layout holds (each says its default), and writes (`open`, `close`, `toggle`, `hide`, `side.toggle`, `scroll.set`,
  * `settings`, `project`) wait and apply in call order once it mounts.
  */
 export interface Layout {
@@ -659,10 +708,9 @@ export interface Layout {
   /** Stored layout (tabs, scroll) has loaded; false before the app interface mounts. Reactive. */
   ready(): boolean
   /**
-   * Opens a panel tab. Works for sessions that are not mounted. A key of a `dock` panel opens the dock. On narrow
-   * screens, an `open` or `preview` selects the panel's mobile view and closes the dock; opening a tab its panel does
-   * not list, or a `transient` tab, stores nothing. A transient tab is never selected on narrow screens, but a stored
-   * one stays the preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is
+   * Opens a panel tab. Works for sessions that are not mounted. On narrow screens, an `open` or `preview` selects the
+   * panel's mobile view; opening a tab its panel does not list, or a `transient` tab, stores nothing. A transient tab
+   * is never selected on narrow screens, but a stored one stays the preview slot. Writes (`open`, `close`, `toggle`, `scroll.set`) made while `session.location` is
    * unknown wait until it is known, and apply in order.
    *
    * @param key - `${extension}:${tab id}`.
@@ -671,7 +719,7 @@ export interface Layout {
    */
   open(key: string, session: SessionRef, options?: OpenOptions): void
   /**
-   * Removes a tab from the strip (closes the dock for a dock key) and calls its panel's `close`.
+   * Removes a tab from the strip and calls its panel's `close`.
    *
    * @param key - `${extension}:${tab id}`.
    * @param session - The session whose strip changes.
@@ -684,6 +732,15 @@ export interface Layout {
    * @param session - The session whose strip changes.
    */
   toggle(key: string, session: SessionRef): void
+  /**
+   * Hides the pane that shows a visible tab without closing the tab: the side region for a tab in the side panes, the
+   * bottom pane for a tab the user moved there. Does nothing unless `state` is "visible". Opening the tab again shows
+   * its pane.
+   *
+   * @param key - `${extension}:${tab id}`.
+   * @param session - The session whose pane hides.
+   */
+  hide(key: string, session: SessionRef): void
   /**
    * Where a key stands. "closed" while the session's location is unknown and before the app interface mounts.
    * Reactive.
@@ -713,6 +770,16 @@ export interface Layout {
      * @param session - Any session.
      */
     toggle(session: SessionRef): void
+    /**
+     * The + menu's items: every extension's `session.panel` `MenuItem`, in `order`. Use it to list them on a page of
+     * your own, such as a new tab page. Empty before the app interface mounts. Reactive.
+     *
+     * @example
+     * ```ts
+     * const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+     * ```
+     */
+    menu(): readonly SessionPanelMenuItem[]
   }
   /**
    * The inner sidebar preference every side panel shares, which `usePanel().sidebar` also reads inside a panel render.
@@ -721,21 +788,6 @@ export interface Layout {
   readonly sidebar: {
     /** The inner sidebar is open; true until a session screen shows the preference. Reactive. */
     opened(): boolean
-  }
-  /** The dock, where `dock` panels render. */
-  readonly dock: {
-    /**
-     * The dock is open; false before the app interface mounts. Reactive.
-     *
-     * @param session - Any session.
-     */
-    opened(session: SessionRef): boolean
-    /**
-     * Where the user placed the dock; `side`, the setting's default, before the app interface mounts. Reactive.
-     * - `side`: beside the timeline.
-     * - `bottom`: below the timeline.
-     */
-    placement(): "side" | "bottom"
   }
   /** Scroll offsets the host stores per session and key. */
   readonly scroll: {
@@ -787,6 +839,32 @@ export interface Layout {
    * @param title - The picker's title.
    */
   project(server: string, title: string): void
+  /**
+   * Opens a new draft session in a directory on a server with its prompt filled in, for the user to review and send.
+   * The draft opens in its own tab, as a new session from Home does.
+   *
+   * @param input - Where the draft runs and what it asks.
+   *
+   * @example
+   * ```ts
+   * ctx.layout.draft({ server: session.server.id, directory, prompt: ctx.t("setup.prompt") })
+   * ```
+   */
+  draft(input: {
+    /** The server's `ServerRef.id`. */
+    readonly server: string
+    /** The directory the new session runs in. */
+    readonly directory: string
+    /** The prompt the draft starts with. */
+    readonly prompt: string
+  }): void
+  /**
+   * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcp` dialog) or `session.export`.
+   * Does nothing when the command is unavailable or disabled.
+   *
+   * @param id - The app command's id.
+   */
+  command(id: string): void
 }
 
 /**
@@ -963,7 +1041,7 @@ export interface Appearance {
   /**
    * The CSS font family the user chose; the default mono font before the app interface mounts. Reactive.
    *
-   * @param kind - `mono`, the terminal and code font.
+   * @param kind - `mono`, the terminal font.
    */
   font(kind: "mono"): string
 }
@@ -1107,6 +1185,11 @@ export interface EmbedProps {
   readonly visible: boolean
   /** Paints a still of the embed in place of the live view, so DOM content can float above it. */
   readonly frozen?: boolean
+  /**
+   * What the embed shows, such as its URL. While a panel moves, the host paints a still of the embed in its place; a
+   * still taken while this had another value is dropped rather than shown.
+   */
+  readonly page?: string
   /** Radius of the bottom corners in CSS pixels. */
   readonly radius?: number
   /** CSS color the rounded corners show; defaults to the app backdrop behind the panel. */

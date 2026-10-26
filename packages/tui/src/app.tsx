@@ -11,6 +11,7 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
+import { epilogue, type SessionEpilogue } from "./util/presentation"
 import { Selection } from "./util/selection"
 import {
   CliRenderEvents,
@@ -64,6 +65,7 @@ import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
+import { DialogUsage } from "./component/usage"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
@@ -107,6 +109,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
+import { ClientMcp } from "./context/client-mcp"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
@@ -153,6 +156,7 @@ const appBindingCommands = [
   "model.cycle_favorite_reverse",
   "agent.list",
   "mcp.list",
+  "usage.show",
   "agent.cycle",
   "agent.cycle.reverse",
   "variant.cycle",
@@ -212,9 +216,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
+  const headers = Service.headers(input.server.endpoint)
   const options = {
     baseUrl: input.server.endpoint.url,
-    headers: Service.headers(input.server.endpoint),
+    headers,
     fetch: noTimeoutFetch,
   }
   const api = OpenCode.make(options)
@@ -231,12 +236,16 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
           const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint), fetch: noTimeoutFetch }
-          return { api: OpenCode.make(next), url: endpoint.url }
+          return { api: OpenCode.make(next), url: endpoint.url, headers: next.headers }
         },
         restart: managed.restart,
       }
     : undefined
-  const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
+  const exit = {
+    session: undefined as SessionEpilogue | undefined,
+    updatedVersion: undefined as string | undefined,
+    reason: undefined as unknown,
+  }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const options = {
@@ -317,7 +326,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                   destroyRenderer(renderer)
                 }}
               >
-                <EpilogueProvider set={(value) => (exit.epilogue = value)}>
+                <EpilogueProvider
+                  value={{
+                    session: (value) => (exit.session = value),
+                    updatedVersion: (version) => (exit.updatedVersion = version),
+                  }}
+                >
                   <TuiAppProvider value={input.app}>
                     <ErrorBoundary
                       fallback={(error, reset) => (
@@ -387,7 +401,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 : undefined
                                             }
                                           >
-                                            <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
+                                            <ClientProvider
+                                              api={api}
+                                              url={input.server.endpoint.url}
+                                              headers={headers}
+                                              service={service}
+                                            >
                                               <PermissionProvider>
                                                 <DataProvider directory={directory}>
                                                   <LocationProvider>
@@ -398,6 +417,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                           source={createThemeSource(global.config)}
                                                         >
                                                           <ThemeErrorToast />
+                                                          <ClientMcp />
                                                           <LocalProvider>
                                                             <PromptStashProvider>
                                                               <DialogProvider>
@@ -457,13 +477,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }
       })
       yield* shutdown.await
-      return { epilogue: exit.epilogue, reason: exit.reason }
+      return { session: exit.session, updatedVersion: exit.updatedVersion, reason: exit.reason }
     }),
   )
   yield* Effect.sync(() => {
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
-    if (result.epilogue) process.stdout.write(result.epilogue + "\n")
+    const text = epilogue({ session: result.session, updatedVersion: result.updatedVersion })
+    if (text) process.stdout.write(text + "\n")
   })
 })
 
@@ -932,6 +953,15 @@ function App() {
         },
       },
       {
+        name: "usage.show",
+        title: "View usage",
+        category: "Agent",
+        slash: { name: "usage" },
+        run: () => {
+          dialog.replace(() => <DialogUsage />)
+        },
+      },
+      {
         name: "mcp.list",
         title: "MCP servers",
         category: "Agent",
@@ -1137,7 +1167,7 @@ function App() {
         name: "docs.open",
         title: "Open docs",
         run: () => {
-          openUrl("https://opencode.ai/docs").catch(() => {})
+          openUrl("https://opencode.ai/v2/docs").catch(() => {})
           dialog.clear()
         },
         category: "System",

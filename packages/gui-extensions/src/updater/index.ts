@@ -5,7 +5,7 @@ import en from "./i18n/en"
 
 const ReleaseNotes = Schema.Struct({ enabled: Schema.Boolean })
 
-const Seen = Schema.Struct({ version: Schema.optional(Schema.String) })
+const Seen = Schema.Struct({ version: Schema.optional(Schema.String), commit: Schema.optional(Schema.String) })
 
 export default Extension.define({
   id: "updater",
@@ -24,7 +24,8 @@ export default Extension.define({
         },
       },
     ),
-    // The version whose What's New was last shown or skipped; stored before under the app's own key.
+    // The version whose What's New was last shown or skipped, and on beta its commit; stored before under the app's
+    // own key.
     seen: Store.global(Seen, {}, "highlights.v1"),
     // The update main staged for the next start; stored before in the updater's settings file.
     ready: Store.main(Schema.NullOr(Schema.Struct({ version: Schema.String })), null, {

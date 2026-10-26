@@ -4,6 +4,7 @@
 @import "./theme.css" layer(theme);
 
 @import "./base.css" layer(base);
+@import "./scrollbar.css" layer(base);
 @import "katex/dist/katex.min.css" layer(base);
 
 @import "../data-display/accordion/accordion.css" layer(components);
@@ -26,6 +27,7 @@
 @import "../components/progress.css" layer(components);
 @import "../components/resize-handle.css" layer(components);
 @import "../components/spinner.css" layer(components);
+@import "../components/error-details.css" layer(components);
 @import "../components/scroll-view.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
 @import "../navigation/tabs/tabs.css" layer(components);

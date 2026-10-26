@@ -80,18 +80,7 @@ brew install --cask opencode-desktop
 
 #### 설치 디렉터리
 
-설치 스크립트는 설치 경로를 다음 우선순위로 결정합니다.
-
-1. `$OPENCODE_INSTALL_DIR` - 사용자 지정 설치 디렉터리
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification 준수 경로
-3. `$HOME/bin` - 표준 사용자 바이너리 디렉터리 (존재하거나 생성 가능할 경우)
-4. `$HOME/.opencode/bin` - 기본 폴백
-
-```bash
-# 예시
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/v2/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/v2/install | bash
-```
+설치 스크립트는 OpenCode를 `$HOME/.opencode/bin`에 설치합니다.
 
 ### Agents
 
@@ -106,11 +95,11 @@ OpenCode 에는 내장 에이전트 2개가 있으며 `Tab` 키로 전환할 수
 또한 복잡한 검색과 여러 단계 작업을 위한 **general** 서브 에이전트가 포함되어 있습니다.
 내부적으로 사용되며, 메시지에서 `@general` 로 호출할 수 있습니다.
 
-[agents](https://opencode.ai/docs/agents) 에 대해 더 알아보세요.
+[agents](https://opencode.ai/v2/docs/agents) 에 대해 더 알아보세요.
 
 ### 문서
 
-OpenCode 설정에 대한 자세한 내용은 [**문서**](https://opencode.ai/docs) 를 참고하세요.
+OpenCode 설정에 대한 자세한 내용은 [**문서**](https://opencode.ai/v2/docs) 를 참고하세요.
 
 ### 기여하기
 

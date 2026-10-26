@@ -125,6 +125,12 @@ export type BridgeMessage =
       readonly list: readonly Installed[]
     }
   | {
+      /** The window gained or lost focus; focus inside one of its embeds counts as the window's. */
+      readonly type: "focus"
+      /** The window is focused now. */
+      readonly focused: boolean
+    }
+  | {
       /** The native menu's extension items changed. */
       readonly type: "menubarItems"
       /** The new items. */

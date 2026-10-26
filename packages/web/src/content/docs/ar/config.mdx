@@ -16,7 +16,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
   "$schema": "https://opencode.ai/config.json",
   // إعدادات السمة
   "theme": "opencode",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
 }
 ```
@@ -34,7 +34,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 تُدمَج ملفات الإعدادات معًا ولا تُستبدَل. يتم جمع الإعدادات من مواقع الإعدادات التالية. تتجاوز الإعدادات اللاحقة الإعدادات السابقة فقط عند تعارض المفاتيح. أما الإعدادات غير المتعارضة فتبقى محفوظة من جميع الملفات.
 
-على سبيل المثال، إذا كان الإعداد العام يضبط `theme: "opencode"` و`autoupdate: true`، وكان إعداد المشروع يضبط `model: "anthropic/claude-sonnet-4-5"`، فستتضمن الإعدادات النهائية الخيارات الثلاثة جميعها.
+على سبيل المثال، إذا كان الإعداد العام يضبط `theme: "opencode"` و`autoupdate: true`، وكان إعداد المشروع يضبط `model: "anthropic/claude-sonnet-5-5"`، فستتضمن الإعدادات النهائية الخيارات الثلاثة جميعها.
 
 ---
 
@@ -216,7 +216,7 @@ opencode run "Hello world"
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": false,
-    "shell": false
+    "bash": false
   }
 }
 ```
@@ -233,8 +233,8 @@ opencode run "Hello world"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -323,7 +323,7 @@ opencode run "Hello world"
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // تعطيل أدوات تعديل الملفات لوكيل المراجعة فقط
@@ -368,7 +368,7 @@ opencode run "Hello world"
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -443,14 +443,14 @@ opencode run "Hello world"
 
 افتراضيًا يسمح opencode **بجميع العمليات** دون الحاجة إلى موافقة صريحة. يمكنك تغيير ذلك عبر الخيار `permission`.
 
-على سبيل المثال، لضمان أن أداتي `edit` و`shell` تتطلبان موافقة المستخدم:
+على سبيل المثال، لضمان أن أداتي `edit` و`bash` تتطلبان موافقة المستخدم:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "ask",
-    "shell": "ask"
+    "bash": "ask"
   }
 }
 ```

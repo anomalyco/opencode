@@ -80,18 +80,7 @@ brew install --cask opencode-desktop
 
 #### Répertoire d'installation
 
-Le script d'installation respecte l'ordre de priorité suivant pour le chemin d'installation :
-
-1. `$OPENCODE_INSTALL_DIR` - Répertoire d'installation personnalisé
-2. `$XDG_BIN_DIR` - Chemin conforme à la spécification XDG Base Directory
-3. `$HOME/bin` - Répertoire binaire utilisateur standard (s'il existe ou peut être créé)
-4. `$HOME/.opencode/bin` - Repli par défaut
-
-```bash
-# Exemples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/v2/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/v2/install | bash
-```
+Le script d'installation installe OpenCode dans `$HOME/.opencode/bin`.
 
 ### Agents
 
@@ -106,11 +95,11 @@ OpenCode inclut deux agents intégrés que vous pouvez basculer avec la touche `
 Un sous-agent **general** est aussi inclus pour les recherches complexes et les tâches en plusieurs étapes.
 Il est utilisé en interne et peut être invoqué via `@general` dans les messages.
 
-En savoir plus sur les [agents](https://opencode.ai/docs/agents).
+En savoir plus sur les [agents](https://opencode.ai/v2/docs/agents).
 
 ### Documentation
 
-Pour plus d'informations sur la configuration d'OpenCode, [**consultez notre documentation**](https://opencode.ai/docs).
+Pour plus d'informations sur la configuration d'OpenCode, [**consultez notre documentation**](https://opencode.ai/v2/docs).
 
 ### Contribuer
 

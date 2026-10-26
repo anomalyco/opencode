@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Rodyti arba slėpti derinimo juostą",
-  "status.toggle": "Perjungti derinimo įrankius",
   ariaLabel: "Vystymosi veiklos diagnostika",
   providerAriaLabel: "Teikėjo našumo diagnostika",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Laikas nuo užklausos išsiuntimo teikėjui iki pirmosios modelio išvesties.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Laikas nuo užklausos išsiuntimo teikėjui iki pirmojo atsakymo teksto.",
+  "duration.label": "TIME",
+  "duration.tip": "Laikas nuo užklausos, pradėjusios paskutinį ėjimą, iki atsakymo pabaigos.",
   "tps.label": "TPS",
-  "tps.tip": "Išvesties žetonai per sekundę po pirmosios modelio išvesties.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Laikas nuo užklausos išsiuntimo teikėjui iki atsakymo srauto pabaigos.",
+  "tps.tip":
+    "Išvesties ir samprotavimo žetonai per sekundę per paskutinio ėjimo modelio užklausas, neįskaitant įrankių laiko.",
   "nav.label": "NAV",
   "nav.tip":
     "Paskutinis baigtas maršruto perėjimas, liečiant seanso puslapį, matuojant nuo maršrutizatoriaus pradžios iki pirmojo dažymo po to, kai jis nusistovi.",

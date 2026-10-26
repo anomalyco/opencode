@@ -98,10 +98,18 @@ export const Plugin = define({
       const match = Effect.fn("ConfigInstructionPlugin.match")(function* (source: string) {
         const expanded = source.startsWith("~/") ? path.join(global.home, source.slice(2)) : source
         const options = { absolute: true, include: "file", dot: true } as const
-        if (path.isAbsolute(expanded))
+        if (path.isAbsolute(expanded)) {
+          // Keep literal directories working as before. When no literal parent exists, treat
+          // the whole source as a glob (`~/notes/**/*.md`) with `/` separators.
+          const directory = path.dirname(expanded)
+          const hasLiteralParent = yield* fs.isDir(directory)
           return yield* fs
-            .scan(path.basename(expanded), { ...options, cwd: path.dirname(expanded) })
+            .scan(hasLiteralParent ? path.basename(expanded) : expanded.replaceAll(path.sep, "/"), {
+              ...options,
+              ...(hasLiteralParent ? { cwd: directory } : {}),
+            })
             .pipe(Effect.orElseSucceed(() => [] as string[]))
+        }
         if (project) return yield* fs.globUp(expanded, start, root)
         if (!discovery.global) return []
         return yield* fs

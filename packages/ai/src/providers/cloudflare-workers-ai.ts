@@ -1,8 +1,12 @@
 import type { ProviderPackage } from "../provider-package.js"
+import { CloudflareRunExtraction } from "../experimental/cloudflare-run-extraction.js"
+import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
+import { CloudflareWorkersAIImages } from "../protocols/cloudflare-workers-ai-images.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
+import { MediaRoute } from "../route/media.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
@@ -26,6 +30,8 @@ export type Settings = ProviderPackage.Settings &
     readonly apiKey?: string
   }
 
+export type { CloudflareWorkersAIImageOptions } from "../protocols/cloudflare-workers-ai-images.js"
+
 export const baseURL = (input: WorkersAIURL) => {
   if (input.baseURL) return input.baseURL
   if (!input.accountId)
@@ -34,6 +40,17 @@ export const baseURL = (input: WorkersAIURL) => {
       message: "CloudflareWorkersAI.configure requires accountId unless baseURL is supplied",
     })
   return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(input.accountId)}/ai/v1`
+}
+
+/** The Run API (`/ai/run`) next to the OpenAI-compatible `/ai/v1` base. */
+export const runBaseURL = (input: WorkersAIURL) => {
+  const url = Endpoint.trimBaseUrl(baseURL(input))
+  if (!url.endsWith("/ai/v1"))
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "CloudflareWorkersAI needs accountId or a baseURL ending in /ai/v1 to derive the Run API base",
+    })
+  return `${url.slice(0, -"/v1".length)}/run`
 }
 
 export const route = Route.make({
@@ -49,14 +66,28 @@ export const routes = [route]
 
 export const configure = (input: LanguageModelOptions) => {
   const { accountId: _accountId, apiKey: _apiKey, auth: _auth, baseURL: _baseURL, ...defaults } = input
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: baseURL(input) },
-    auth: AuthOptions.bearer(input, authEnvVars),
-  })
+  const auth = AuthOptions.bearer(input, authEnvVars)
+  const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })
+  // The Run API base is derived per call so a chat-only configuration without an account still constructs.
+  const runDeployment = () => MediaRoute.deployment({ ...input, baseURL: runBaseURL(input) }, auth)
+  const decision = (modelID: string | ModelID) =>
+    CloudflareRunDecisions.route
+      .with({
+        provider: id,
+        endpoint: { baseURL: runBaseURL(input) },
+        auth: auth,
+        headers: input.headers,
+        http: input.http,
+      })
+      .model({ id: modelID })
   return {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
+    decision,
+    image: (modelID: string | ModelID) => CloudflareWorkersAIImages.model({ ...runDeployment(), id: modelID }),
+    experimental: {
+      extraction: (modelID: string | ModelID) => CloudflareRunExtraction.model({ ...runDeployment(), id: modelID }),
+    },
     configure,
   }
 }

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Alla filer",
-  "tree.empty": "Inga filer",
-  "tree.changes.one": "{{count}} fil ändrad",
-  "tree.changes.other": "{{count}} filer ändrade",
   "tab.notFound": "Filen hittades inte: {{name}}",
   "mobile.title": "Filer",
   "mobile.openTabs": "Öppna filer",

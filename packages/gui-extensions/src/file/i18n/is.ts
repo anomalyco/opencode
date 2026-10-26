@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Allar skrár",
-  "tree.empty": "Engar skrár",
-  "tree.changes.one": "{{count}} skrá breytt",
-  "tree.changes.other": "{{count}} skrám breytt",
   "tab.notFound": "Skrá fannst ekki: {{name}}",
   "mobile.title": "Skrár",
   "mobile.openTabs": "Opna skrár",

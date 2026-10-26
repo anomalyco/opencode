@@ -223,6 +223,7 @@ export function fromPromise(plugin: Plugin) {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
           Promise.all([import("@opencode/protocol/client"), import("@opencode/protocol/groups/event")]),
         )
+        const encodeOpenCodeEvent = Schema.encodeUnknownEffect(OpenCodeEvent)
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
         const CredentialEndpoints = ClientApi.groups["server.credential"].endpoints
@@ -331,8 +332,8 @@ export function fromPromise(plugin: Plugin) {
             subscribe: (options) =>
               streams(
                 host.event.subscribe().pipe(
-                  Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
-                  Stream.map((event) => event as unknown as PromiseEvent),
+                  Stream.mapEffect((event) => encodeOpenCodeEvent(event)),
+                  Stream.map((event) => event as PromiseEvent),
                 ),
                 options,
               ),
@@ -609,6 +610,22 @@ export function fromPromise(plugin: Plugin) {
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            instructions: {
+              entry: {
+                list: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.list"],
+                  host.session.instructions.entry.list,
+                ),
+                put: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.put"],
+                  host.session.instructions.entry.put,
+                ),
+                remove: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.remove"],
+                  host.session.instructions.entry.remove,
+                ),
+              },
+            },
           },
           shell: {
             hook: (name, callback) =>

@@ -1,4 +1,4 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema, SchemaGetter, Stream } from "effect"
 import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -79,8 +79,16 @@ const transcriptFields = {
   usage: Schema.optional(Usage),
 }
 
-/** OpenAI may add stream event types; frames outside `EVENT_TYPES` are ignored. */
-const EventType = Schema.Struct({ type: Schema.String })
+const EVENT_TYPES = new Set(["transcript.text.delta", "transcript.text.segment", "transcript.text.done", "error"])
+/** OpenAI may add stream event types; frames outside `EVENT_TYPES` are ignored, while a malformed known type still fails decoding. */
+const UnknownEvent = Schema.Struct({
+  type: Schema.String.check(Schema.makeFilter((type) => !EVENT_TYPES.has(type))),
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ type: Schema.Literal("unknown"), rawType: Schema.String }), {
+    decode: SchemaGetter.transform((event) => ({ type: "unknown" as const, rawType: event.type })),
+    encode: SchemaGetter.forbidden(() => "Unknown OpenAI Transcription stream events are decode-only"),
+  }),
+)
 const Event = Schema.Union([
   Schema.Struct({ type: Schema.Literal("transcript.text.delta"), delta: Schema.String }),
   Schema.Struct({ type: Schema.Literal("transcript.text.segment"), ...Segment.fields }),
@@ -90,12 +98,11 @@ const Event = Schema.Union([
     message: Schema.optional(Schema.String),
     error: Schema.optional(Schema.Struct({ message: Schema.optional(Schema.String) })),
   }),
+  UnknownEvent,
 ])
-const EVENT_TYPES = new Set(["transcript.text.delta", "transcript.text.segment", "transcript.text.done", "error"])
 const Transcript = Schema.Struct(transcriptFields)
 type Transcript = Schema.Schema.Type<typeof Transcript>
 
-const decodeEventType = route.decodeFrame(EventType)
 const decodeEvent = route.decodeFrame(Event)
 const decodeTranscript = route.decodeFrame(Transcript)
 
@@ -211,8 +218,8 @@ const segment = (value: Schema.Schema.Type<typeof Segment>): TranscriptionSegmen
 })
 
 const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
-  if (!EVENT_TYPES.has((yield* decodeEventType(frame)).type)) return [state, []] as const
   const event = yield* decodeEvent(frame)
+  if (event.type === "unknown") return [state, []] as const
   if (event.type === "error")
     return yield* new AIError({
       reason: classifyProviderFailure({

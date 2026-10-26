@@ -203,20 +203,27 @@ export const nativeLayer = Layer.succeed(
   Native.of({
     subscribe: (input) => {
       if (input.type === "file" || input.type === "entries") {
-        return Effect.sync(() => {
-          const directory = input.type === "file" ? path.dirname(input.target) : input.target
-          const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
-          const subscription = watch(directory, { recursive: false }, (_event, file) => {
+        const directory = input.type === "file" ? path.dirname(input.target) : input.target
+        const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
+        return Effect.try(() =>
+          watch(directory, { recursive: false }, (_event, file) => {
             if (file && !names.has(file)) return
             for (const name of file ? [file] : names) {
               input.publish({ path: path.join(directory, name), type: "update" })
             }
-          })
-          subscription.on("error", (error: unknown) =>
-            Effect.runFork(Effect.logError("watcher callback failed", { path: directory, error })),
-          )
-          return { unsubscribe: () => Promise.resolve(subscription.close()), backend: "node" }
-        })
+          }),
+        ).pipe(
+          Effect.map((subscription): Subscription => {
+            subscription.on("error", (error: unknown) =>
+              Effect.runFork(Effect.logError("watcher callback failed", { path: directory, error })),
+            )
+            return { unsubscribe: () => Promise.resolve(subscription.close()), backend: "node" }
+          }),
+          // A missing directory (ENOENT) ends subscriber streams instead of crashing the watch.
+          Effect.catch((error) =>
+            Effect.logError("failed to watch directory", { path: directory, error }).pipe(Effect.as(undefined)),
+          ),
+        )
       }
       return subscribeDirectory(watcher(), getBackend(), input.target, input.ignore, input.publish)
     },

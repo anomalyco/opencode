@@ -3,7 +3,7 @@ title: Outils personnalisés
 description: Créez des outils que le LLM peut appeler dans opencode.
 ---
 
-Les outils personnalisés sont des fonctions que vous créez et que le LLM peut appeler pendant les conversations. Ils fonctionnent avec les [outils intégrés](/docs/tools) de opencode comme `read`, `write` et `shell`.
+Les outils personnalisés sont des fonctions que vous créez et que le LLM peut appeler pendant les conversations. Ils fonctionnent avec les [outils intégrés](/docs/tools) de opencode comme `read`, `write` et `bash`.
 
 ---
 

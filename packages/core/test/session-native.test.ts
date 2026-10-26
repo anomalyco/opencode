@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { CompactionPart, LanguageModel, Message, ToolCallPart, Media } from "@opencode/ai"
+import { CompactionPart, LanguageModel, Message, ToolCallPart, Media } from "@opencode/ai/effect"
 import { OpenAIResponses } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"

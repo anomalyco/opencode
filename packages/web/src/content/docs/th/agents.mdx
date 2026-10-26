@@ -62,7 +62,7 @@ _Mode_: `primary`
 เครื่องมือต่อไปนี้จะถูกตั้งค่าเป็น `ask` (ต้องขออนุญาต):
 
 - `file edits`: การแก้ไขไฟล์, patch, และการเขียนไฟล์
-- `shell`: คำสั่ง shell ทั้งหมด
+- `bash`: คำสั่ง bash ทั้งหมด
 
 เอเจนต์นี้มีประโยชน์เมื่อต้องการให้ LLM ตรวจสอบโค้ด หรือสร้างแผนงานก่อนที่จะลงมือทำจริง
 
@@ -150,12 +150,12 @@ _Mode_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -164,13 +164,13 @@ _Mode_: `primary`
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -194,12 +194,12 @@ _Mode_: `primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 You are in code review mode. Focus on:
@@ -378,13 +378,13 @@ ID ของโมเดลใช้รูปแบบ `provider/model-id`
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -418,7 +418,7 @@ ID ของโมเดลใช้รูปแบบ `provider/model-id`
 
 ### Permissions (สิทธิ์)
 
-กำหนดสิทธิ์สำหรับเครื่องมือที่มีความละเอียดอ่อน เช่น `edit`, `shell` และ `webfetch`:
+กำหนดสิทธิ์สำหรับเครื่องมือที่มีความละเอียดอ่อน เช่น `edit`, `bash` และ `webfetch`:
 
 - `"ask"` — ต้องขออนุมัติจากผู้ใช้ก่อน
 - `"allow"` — อนุญาตให้ทำงานได้โดยไม่ต้องถาม
@@ -459,7 +459,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -470,7 +470,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-คุณสามารถกำหนดสิทธิ์สำหรับคำสั่ง shell เฉพาะได้:
+คุณสามารถกำหนดสิทธิ์สำหรับคำสั่ง bash เฉพาะได้:
 
 ```json title="opencode.json" {7}
 {
@@ -478,7 +478,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -496,7 +496,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -513,7 +513,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -645,7 +645,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -665,7 +665,7 @@ Only analyze code and suggest changes.
 
 สร้างเอเจนต์ใหม่โดยเพิ่มไฟล์ Markdown ไว้ใน `.opencode/agents/` สำหรับโปรเจ็กต์ หรือ `~/.config/opencode/agents/` สำหรับระดับผู้ใช้ (Global) ชื่อไฟล์จะกลายเป็นชื่อเอเจนต์ และ frontmatter ใช้กำหนดคำอธิบาย โหมด โมเดล และสิทธิ์ของเอเจนต์ ดูรูปแบบไฟล์ได้ที่ [Markdown](#markdown) ด้านบน
 
-รัน `opencode debug agents` เพื่อแสดงรายการเอเจนต์ที่ OpenCode โหลดไว้
+รัน `opencode agent list` เพื่อแสดงรายการเอเจนต์ที่ OpenCode โหลดไว้
 
 ---
 
@@ -696,7 +696,7 @@ Only analyze code and suggest changes.
 description: Writes and maintains project documentation
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.

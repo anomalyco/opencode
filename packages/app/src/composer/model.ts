@@ -2,7 +2,7 @@ import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
 import type { Links, MountedSession } from "@opencode/gui-extensions/sdk"
-import { createComponent, createEffect, createMemo, on } from "solid-js"
+import { createComponent, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
@@ -14,13 +14,20 @@ import { useExtensionHost } from "@/runtime/extension/host"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { useData, useServer } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
+import { readLocalImage } from "@/runtime/server/image"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode/schema/skill"
+import { Session } from "@opencode/schema/session"
+import { abort } from "@opencode/util/abort"
+import { parseSessionMention } from "@opencode/util/session-mention"
+import { createKnownServerSessions, createServerSessionEntries } from "@/shell/commands/palette"
+import { matchesSessionTitle } from "./session-match"
 import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter"
 import { isAttachment } from "./prompt-parts"
+import { isCommentItem } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
@@ -53,8 +60,16 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const command = useCommand()
   const language = useLanguage()
   const platform = usePlatform()
+  const serverSDK = useServerSDK()
   const prompt = adapter.state
   let editor: HTMLDivElement | undefined
+  // A path attachment's image is read through the server, which can see both local and uploaded paths.
+  const pathImages = new Map<string, Promise<string | undefined>>()
+  const pathImageReads = new AbortController()
+  onCleanup(() => {
+    abort(pathImageReads)
+    pathImages.forEach((url) => void url.then((value) => value && URL.revokeObjectURL(value)))
+  })
 
   const interaction = createComposerEditorState(prompt.mode.current())
   createEffect(
@@ -82,7 +97,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
 
-    return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+    return prompt.context.items().filter(isCommentItem).length
   })
 
   const blank = createMemo(() => {
@@ -146,9 +161,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         time: item.time,
       })),
     )
-    // History records file comments only; notes stay with the draft while it is browsed.
+    // History records file comments only; notes and quotes stay with the draft while it is browsed.
     prompt.context.replaceComments([
-      ...prompt.context.items().filter((item) => item.type === "note"),
+      ...prompt.context.items().filter((item) => item.type !== "file"),
       ...items.map((item) => ({
         type: "file" as const,
         path: item.path,
@@ -186,6 +201,31 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   )
 
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
+
+  let sessionSearch: string | undefined
+  const [sessionSearched, setSessionSearched] = createSignal<string>()
+
+  const sessions = createServerSessionEntries({
+    server: server.key,
+    known: createKnownServerSessions(server.ctx),
+    projects: server.ctx.projects.list,
+    load: async (search, signal) => {
+      const page = await serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal })
+      page.data.forEach(data.session.remember)
+
+      return page
+    },
+    get: async (sessionID, signal) => {
+      const session = await serverSDK.api.session.get({ sessionID }, { signal })
+      data.session.remember(session)
+
+      return session
+    },
+    untitled: () => language.t("command.session.new"),
+    category: () => language.t("command.category.session"),
+    recentCategory: () => language.t("palette.group.recentSessions"),
+    recentLimit: 50,
+  })
 
   const context = createMemo<ComposerSuggestion[]>(() => [
     ...references(),
@@ -316,22 +356,85 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     commands,
     context,
-    searchContextFiles: async (query) =>
-      (await files.searchFilesAndDirectories(query)).map((path) => ({
+    searchSessions: (query) => {
+      if (interaction[0].popover.type !== "context") {
+        // Closing aborts the search, so reopening on the same query must fetch again.
+        sessionSearch = undefined
+
+        return []
+      }
+
+      // The server narrows by the first word; the title match then needs the whole query.
+      const search = firstWord(query)
+
+      if (search !== sessionSearch) {
+        sessionSearch = search
+        void sessions.search(search).then(
+          () => sessionSearch === search && setSessionSearched(search),
+          () => sessionSearch === search && setSessionSearched(search),
+        )
+      }
+
+      return sessions
+        .items(search)
+        .filter((entry) => !query || matchesSessionTitle(entry.title, query))
+        .flatMap((entry): ComposerSuggestion[] => {
+          if (adapter.kind === "active-session" && entry.sessionID === adapter.session().id) return []
+          const mention = entry.sessionID && parseSessionMention(entry.sessionID)
+
+          if (!mention) return []
+
+          return [
+            {
+              id: `session:${mention.id}`,
+              kind: "session",
+              label: entry.title,
+              description: entry.description,
+              mention: {
+                type: "session",
+                id: Session.ID.make(mention.id),
+                content: `@${entry.title}`,
+                start: 0,
+                end: 0,
+              },
+            },
+          ]
+        })
+        .slice(0, query ? 8 : 5)
+    },
+    sessionsPending: (query) => sessionSearched() !== firstWord(query),
+    searchContextFiles: async (query, signal) =>
+      (await files.searchFilesAndDirectories(query, { signal })).map((path) => ({
         id: `file:${path}`,
         kind: "file",
         label: path,
         path,
         mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
       })),
+    onQuoteComment: (item, comment) => prompt.context.updateComment(item.commentID, { comment }),
+    quoteComment: prompt.quoteComment,
     onContextRemove(item) {
       if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
-    openAttachment: (attachment) => {
-      if (attachment.type !== "image") return
-      void resolveBlobUrl(attachment.blob).then((src) => {
-        if (src) dialog.show(() => createComponent(ImagePreview, { src, alt: attachment.filename }))
+    openAttachment(attachment, origin) {
+      void controller.previewAttachment(attachment).then((src) => {
+        if (src) dialog.show(() => createComponent(ImagePreview, { src, alt: attachment.filename, origin }))
       })
+    },
+    readImage(path) {
+      const existing = pathImages.get(path)
+
+      if (existing) return existing
+
+      const url = readLocalImage(serverSDK.api, sdk().directory, path, pathImageReads.signal)
+        .then((blob) => blob && URL.createObjectURL(blob))
+        .catch(() => undefined)
+
+      pathImages.set(path, url)
+      // A failed read retries the next time the attachment shows.
+      void url.then((value) => value || pathImages.delete(path))
+
+      return url
     },
     openContext(key) {
       const item = controller.contextItem(key)
@@ -345,7 +448,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         return
       }
 
-      if (item) openComment(item, links, extensions.current(), files, comments)
+      if (item?.type === "file") openComment(item, links, extensions.current(), files, comments)
     },
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
@@ -401,14 +504,26 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
           : undefined
       },
       variant: {
-        options: () => variants().map((value) => ({ id: value, label: value })),
-        current: () => adapter.controls().model.selection.variant.current() ?? "default",
-        onSelect: (value) => adapter.controls().model.selection.variant.set(value === "default" ? undefined : value),
+        options: () => {
+          const preview = adapter.controls().model.preview
+
+          return (preview ? ["default", ...preview.variants] : variants()).map((value) => ({ id: value, label: value }))
+        },
+        current: () =>
+          adapter.controls().model.preview?.variant ??
+          adapter.controls().model.selection.variant.current() ??
+          "default",
+        onSelect: (value) => {
+          if (adapter.controls().model.loading) return
+
+          adapter.controls().model.selection.variant.set(value === "default" ? undefined : value)
+        },
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
       submit: {
         available,
         stopping,
+        held: submission.held,
         working: adapter.working,
         queue: options?.queue,
         onSubmit: (submitOptions) => {
@@ -436,6 +551,15 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   Object.defineProperty(controller, "model", { get: () => adapter.controls().model })
 
   command.register("composer-editor", () => [
+    {
+      id: "prompt.history.search",
+      title: language.t("ui.promptInput.history.search"),
+      keybind: "mod+f",
+      hidden: true,
+      editable: true,
+      when: () => controller.state.popover.type === "history",
+      onSelect: () => void controller.dispatch({ type: "history.search" }),
+    },
     {
       id: "file.attach",
       title: language.t("prompt.action.attachFile"),
@@ -510,4 +634,8 @@ function openComment(
 
   if (item.commentOrigin === "review") return queueFocus()
   void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
+}
+
+function firstWord(query: string) {
+  return query.toLowerCase().split(" ")[0] ?? ""
 }

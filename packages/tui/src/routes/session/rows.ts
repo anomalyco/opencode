@@ -424,63 +424,6 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
-// `legacy` marks a session without idle markers, where a turn ends at the next prompt. Reactive
-// callers should pass it from a shared memo: the default scans every message, which subscribes
-// the footer to the whole history.
-export function turnDuration(
-  message: SessionMessageAssistant,
-  messages: SessionMessageInfo[],
-  position?: number,
-  legacy = legacyTurns(messages),
-) {
-  if (message.time.completed === undefined) return 0
-  const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const input = messages[inputIndex(messages, index === -1 ? messages.length : index, legacy)]
-  return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
-}
-
-export function turnTokensPerSecond(
-  message: SessionMessageAssistant,
-  messages: SessionMessageInfo[],
-  position?: number,
-  legacy = legacyTurns(messages),
-) {
-  const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const end = index === -1 ? messages.length : index + 1
-  const start = inputIndex(messages, end, legacy)
-  const steps = messages
-    .slice(start + 1, end)
-    .filter((item): item is SessionMessageAssistant => item.type === "assistant")
-  const durations = steps.flatMap((step) =>
-    step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
-  )
-  if (steps.length === 0 || durations.length !== steps.length) return
-  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
-  const duration = durations.reduce((total, value) => total + value, 0)
-  if (output <= 0 || duration <= 0) return
-  // Aggregate before dividing so each step is weighted by its provider-active duration.
-  return output / (duration / 1_000)
-}
-
-export function legacyTurns(messages: SessionMessageInfo[]) {
-  return !messages.some((message) => message.type === "idle")
-}
-
-function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean) {
-  // Reading a sliced prefix subscribes every footer to unrelated historical messages, so walk
-  // back only as far as the turn boundary: the nearest input in legacy sessions, otherwise the
-  // first input after the previous idle marker.
-  let input = -1
-  for (let index = end - 1; index >= 0; index--) {
-    const message = messages[index]
-    if (message.type === "idle") return input
-    if (message.type !== "user" && message.type !== "synthetic") continue
-    if (legacy) return index
-    input = index
-  }
-  return input
-}
-
 function hasTokenUsage(
   message: SessionMessageAssistant,
 ): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {

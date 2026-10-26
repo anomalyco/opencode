@@ -1,16 +1,31 @@
 import { createMemo, lazy, on, onCleanup, Suspense } from "solid-js"
-import { Command, createKeyed, onIdle, Panel, type Setup } from "../sdk"
+import {
+  Command,
+  createKeyed,
+  MenuItem,
+  onIdle,
+  Panel,
+  Style,
+  type MountedSession,
+  type PanelTab,
+  type Setup,
+} from "../sdk"
 import type Terminal from "./index"
+import { terminalToggleCommand } from "./index"
 import { createTerminalModel, type TerminalWorkspace } from "./model"
-
-const DOCK = "terminal:main"
+import { terminalTab, type LocalPTY } from "./state"
+import { terminalTabLabel } from "./title"
+import { TerminalTabLabel } from "./label"
+import quoteStyles from "./quote.css?inline"
 
 const setup: Setup<typeof Terminal> = (ctx) => {
   const sessions = ctx.sessions
   const layout = ctx.layout
   const model = createTerminalModel({ storage: ctx.storage, sessions })
+  const key = (id: string) => `${ctx.id}:${id}`
 
   onCleanup(model.dispose)
+  ctx.add(Style, quoteStyles)
   // The host withdraws the listener with the extension.
   ctx.workspaces.on("remove", model.remove)
 
@@ -39,15 +54,38 @@ const setup: Setup<typeof Terminal> = (ctx) => {
     return { session, terminal: model.load(session) }
   }
 
+  // Opens a terminal's tab in the session's side panel and focuses it.
+  const show = (session: MountedSession, terminal: TerminalWorkspace, pty: LocalPTY) => {
+    terminal.open(pty.id)
+    terminal.requestFocus(pty.id)
+    // A narrow screen shows the terminal view; a wide one adds the tab without replacing the preview tab.
+    layout.open(key(terminalTab(pty)), session, layout.narrow() ? undefined : { tab: "select" })
+  }
+
+  const create = (session: MountedSession, terminal: TerminalWorkspace) =>
+    void terminal.new().then((id) => {
+      const pty = id ? terminal.all().find((item) => item.id === id) : undefined
+
+      if (pty) show(session, terminal, pty)
+    })
+
+  // Closes the tab, which closes its terminal; the narrow-screen view lists terminals without storing their tabs.
+  const close = (session: MountedSession, terminal: TerminalWorkspace, pty: LocalPTY) => {
+    layout.close(key(terminalTab(pty)), session)
+
+    if (terminal.all().some((item) => item.id === pty.id)) void terminal.close(pty.id)
+  }
+
+  const active = (terminal: TerminalWorkspace) => terminal.all().find((pty) => pty.id === terminal.active())
+
   ctx.add(
     Command,
     (): Command => ({
-      id: "toggle",
+      ...terminalToggleCommand,
       title: ctx.t("command.toggle"),
       group: ctx.t("command.category.view"),
       section: "terminal",
       featured: true,
-      bind: "ctrl+`",
       slash: { name: "terminal", after: "open" },
       editable: true,
       enabled: routed(),
@@ -56,15 +94,19 @@ const setup: Setup<typeof Terminal> = (ctx) => {
 
         if (!target) return
 
-        if (layout.dock.opened(target.session)) {
+        const pty = active(target.terminal)
+
+        if (!pty) return create(target.session, target.terminal)
+
+        // A visible tab hides with its pane; a narrow screen has no strip, so there the command only shows it.
+        if (!layout.narrow() && layout.state(key(terminalTab(pty)), target.session) === "visible") {
           target.terminal.cancelFocus()
-          layout.close(DOCK, target.session)
+          layout.hide(key(terminalTab(pty)), target.session)
 
           return
         }
 
-        layout.open(DOCK, target.session)
-        target.terminal.requestFocus(target.terminal.active())
+        show(target.session, target.terminal, pty)
       },
     }),
   )
@@ -83,13 +125,7 @@ const setup: Setup<typeof Terminal> = (ctx) => {
       run() {
         const target = current()
 
-        if (!target) return
-
-        layout.open(DOCK, target.session)
-
-        if (target.terminal.all().length > 0) target.terminal.new()
-
-        if (target.terminal.all().length === 0) target.terminal.requestFocus()
+        if (target) create(target.session, target.terminal)
       },
     }),
   )
@@ -102,48 +138,99 @@ const setup: Setup<typeof Terminal> = (ctx) => {
       group: ctx.t("command.category"),
       section: "terminal",
       bind: "mod+w",
+      follows: "tab.close",
       hidden: true,
       scope: '[data-component="terminal"]',
       enabled: routed(),
       run() {
         const target = current()
+        const pty = target ? active(target.terminal) : undefined
 
-        if (!target) return
-
-        const id = target.terminal.active()
-
-        if (!id) return
-
-        const last = target.terminal.all().length === 1
-
-        void target.terminal.close(id)
-
-        if (last) layout.close(DOCK, target.session)
+        if (target && pty) close(target.session, target.terminal, pty)
       },
     }),
   )
 
-  const TerminalPanel = lazy(() => import("./panel"))
-
-  // Warms the panel chunk so the first dock open has no blank frame. ghostty-web still loads on the first terminal.
-  onCleanup(onIdle(() => void TerminalPanel.preload()))
-  // A dock stored open renders with its session at startup, so its chunk loads with the app, not when it idles.
-  createKeyed(
-    () => sessions.list().some((session) => layout.dock.opened(session)),
-    () => void TerminalPanel.preload(),
-  )
-
-  // Stable objects with live titles, so a locale change never remounts the dock's terminals.
-  const tab = {
-    id: "main",
+  ctx.add(MenuItem, {
+    menu: "session.panel",
+    id: "new",
     get title() {
       return ctx.t("tab.title")
     },
+    icon: "terminal",
+    keybind: "terminal.new",
+    order: 20,
+    run() {
+      const target = current()
+
+      if (target) create(target.session, target.terminal)
+    },
+  })
+
+  const TerminalPanel = lazy(() => import("./panel"))
+
+  // Warms the panel chunk so the first terminal tab has no blank frame. ghostty-web still loads on the first terminal.
+  onCleanup(onIdle(() => void TerminalPanel.preload()))
+  // A terminal tab stored in a strip renders with its session at startup, so its chunk loads with the app.
+  createKeyed(
+    () => sessions.list().some((session) => layout.stored(session).length > 0),
+    () => void TerminalPanel.preload(),
+  )
+
+  // Tab objects per session, workspace and terminal, reused so strip updates and session switches do not rebuild a
+  // trigger.
+  const tabs = new Map<string, Map<string, PanelTab>>()
+
+  // Drops the tab objects of sessions whose shell tab closed.
+  createKeyed(
+    () => [...sessions.list().map((session) => session.key), sessions.current()?.key].join("\u0000"),
+    () => {
+      const keep = new Set([...sessions.list().map((session) => session.key), sessions.current()?.key])
+      tabs.forEach((_cache, cacheKey) => {
+        if (!keep.has(cacheKey.slice(0, cacheKey.indexOf("\0")))) tabs.delete(cacheKey)
+      })
+    },
+  )
+
+  const tab = (workspace: Pick<MountedSession, "server" | "directory">, id: string): PanelTab => {
+    const terminal = () => model.load(workspace)
+    const pty = () => terminal().byTab(id)
+    const label = () => terminalTabLabel({ title: pty()?.title, titleNumber: pty()?.titleNumber, t: ctx.t })
+
+    return {
+      id,
+      get title() {
+        return label()
+      },
+      // Listed only to hold the restored selection until the workspace's stored terminals load.
+      get hidden() {
+        return !terminal().ready()
+      },
+      group: "terminal",
+      label: (state) => (
+        <TerminalTabLabel
+          label={label()}
+          title={pty()?.title ?? ""}
+          rename={(title) => {
+            const current = pty()
+
+            if (current) terminal().update({ id: current.id, title })
+          }}
+          close={() => {
+            const current = pty()
+
+            if (current) close(state.session, terminal(), current)
+          }}
+        />
+      ),
+    }
   }
 
   ctx.add(Panel, {
     id: "main",
-    region: "dock",
+    region: "side",
+    // A tab whose terminal exited, or was closed from another session of the workspace, leaves the strip.
+    transient: true,
     mobile: {
       get title() {
         return ctx.t("tab.title")
@@ -151,13 +238,68 @@ const setup: Setup<typeof Terminal> = (ctx) => {
       order: 30,
       kind: "menu",
       icon: "terminal",
+      cached: true,
     },
-    list: () => [tab],
+    // One tab per terminal of the session's workspace; the strip shows those opened in this session. Listing the rest
+    // keeps their shared render, and so their shells' screens, mounted while another session of the workspace is
+    // routed. Until the workspace's terminals load, the stored tabs stay listed but hidden so restore keeps them.
+    list: (input) => {
+      const terminal = model.load(input.session)
+      const ids = [...new Set([...input.open, ...terminal.all().map(terminalTab)])]
+
+      if (ids.length === 0) return []
+
+      const workspace = { server: input.session.server, directory: input.session.directory }
+      const cacheKey = `${input.session.key}\0${terminal.key}`
+      const cache = tabs.get(cacheKey) ?? new Map<string, PanelTab>()
+      tabs.set(cacheKey, cache)
+
+      return ids.flatMap((id) => {
+        if (terminal.ready() && !terminal.byTab(id)) {
+          cache.delete(id)
+
+          return []
+        }
+
+        const existing = cache.get(id)
+
+        if (existing) return [existing]
+
+        const created = tab(workspace, id)
+        cache.set(id, created)
+
+        return [created]
+      })
+    },
     render: (props) => (
       <Suspense>
-        <TerminalPanel model={model} session={props.session} onClose={() => layout.close(DOCK, props.session)} />
+        <TerminalPanel model={model} session={props.session} screen={props.screen} tab={() => props.tab.id} />
       </Suspense>
     ),
+    close: (input) => {
+      const terminal = model.load(input.session)
+      const pty = terminal.byTab(input.tab.id)
+
+      tabs.get(`${input.session.key}\0${terminal.key}`)?.delete(input.tab.id)
+
+      if (pty) void terminal.close(pty.id)
+    },
+    focus: (input) => {
+      const terminal = model.load(input.session)
+      const pty = terminal.byTab(input.tab.id)
+
+      if (!pty) return
+
+      terminal.open(pty.id)
+
+      if (!input.restored) terminal.requestFocus(pty.id)
+    },
+    enter: (input) => {
+      const terminal = model.load(input.session)
+      const pty = terminal.byTab(input.tab.id)
+
+      if (pty) terminal.requestFocus(pty.id)
+    },
   })
 }
 

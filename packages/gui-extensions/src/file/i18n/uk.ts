@@ -1,10 +1,5 @@
 export default {
   "tree.all": "Усі файли",
-  "tree.empty": "Немає файлів",
-  "tree.changes.one": "{{count}} файл змінено",
-  "tree.changes.few": "{{count}} файли змінено",
-  "tree.changes.many": "{{count}} файлів змінено",
-  "tree.changes.other": "{{count}} файла змінено",
   "tab.notFound": "Файл не знайдено: {{name}}",
   "mobile.title": "Файли",
   "mobile.openTabs": "Відкриті файли",

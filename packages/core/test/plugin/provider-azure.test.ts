@@ -644,6 +644,29 @@ describe("AzurePlugin resource name", () => {
     ),
   )
 
+  it.effect("leaves models unchanged and uncloned without a resource name", () =>
+    Effect.gen(function* () {
+      yield* setEnv(noResourceEnv)
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* seedCatalog
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.azure, (provider) => {
+          provider.activation = "enabled"
+        })
+      })
+      yield* addPlugin()
+
+      const before = yield* azureModels
+      expect(before.find((model) => model.id === "deepseek-v4-flash")?.settings?.baseURL).toBe(
+        "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/models",
+      )
+      yield* models.reload()
+      const after = yield* azureModels
+      expect(after.every((model, index) => model === before[index])).toBe(true)
+    }),
+  )
+
   it.effect("expands provider and model resource URLs", () =>
     Effect.gen(function* () {
       yield* setEnv({ AZURE_RESOURCE_NAME: "from-env", AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-env" })
@@ -657,6 +680,7 @@ describe("AzurePlugin resource name", () => {
             baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
           }
         })
+        editor.models.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
         editor.models.update(Provider.ID.azure, Model.ID.make("anthropic"), (model) => {
           model.package = "@opencode/ai/providers/anthropic"
           model.settings = {
@@ -675,6 +699,9 @@ describe("AzurePlugin resource name", () => {
         resourceName: "model-resource",
         baseURL: "https://model-resource.services.ai.azure.com/anthropic/v1",
       })
+      const mini = required(yield* models.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))
+      yield* models.reload()
+      expect(yield* models.get(Provider.ID.azure, Model.ID.make("gpt-5-mini"))).toBe(mini)
     }),
   )
 })

@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Afișează sau ascunde bara de depanare",
-  "status.toggle": "Comutați instrumentele de depanare",
   ariaLabel: "Diagnosticare performanță dezvoltare",
   providerAriaLabel: "Diagnosticarea performanței furnizorului",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Timpul de la trimiterea cererii către furnizor până la prima ieșire a modelului.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Timpul de la trimiterea cererii către furnizor până la primul text al răspunsului.",
+  "duration.label": "TIME",
+  "duration.tip": "Timpul de la solicitarea care a început ultima tură până la finalizarea răspunsului.",
   "tps.label": "TPS",
-  "tps.tip": "Tokenuri de ieșire pe secundă după prima ieșire a modelului.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Timpul de la trimiterea cererii către furnizor până la încheierea fluxului de răspuns.",
+  "tps.tip":
+    "Tokenuri de ieșire și de raționament pe secundă în cererile către model din ultima tură, fără timpul instrumentelor.",
   "nav.label": "NAV",
   "nav.tip":
     "Ultima tranziție de rută finalizată care implică o pagină de sesiune, măsurată de la pornirea routerului până la primul paint după stabilizare.",

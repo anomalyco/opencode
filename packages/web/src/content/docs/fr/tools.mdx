@@ -18,7 +18,7 @@ Utilisez le champ `permission` pour contrôler le comportement de l'outil. Vous 
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -53,7 +53,7 @@ Exécutez des commandes shell dans votre environnement de projet.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

@@ -110,9 +110,9 @@ context.data.session.permission.invalidate(sessionID)
 Forms can be listed, refreshed, replied to, or cancelled at a location.
 
 ```ts
-import type { FormCancelInput, FormReplyInput } from "@opencode/client"
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
 
-async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
   const location = context.location
   await context.data.session.form.sync(sessionID, location)
   const forms = context.data.session.form.list(sessionID, location) ?? []

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ឯកសារទាំងអស់។",
-  "tree.empty": "គ្មានឯកសារទេ។",
-  "tree.changes.one": "ឯកសារ {{count}} បានផ្លាស់ប្តូរ",
-  "tree.changes.other": "ឯកសារ {{count}} បានផ្លាស់ប្តូរ",
   "tab.notFound": "មិនឃើញឯកសារ: {{name}}",
   "mobile.title": "ឯកសារ",
   "mobile.openTabs": "បើកឯកសារ",

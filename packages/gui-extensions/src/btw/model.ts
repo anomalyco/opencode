@@ -29,12 +29,35 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
   const entry = (session: MountedSession, id: string) => saved(session).value?.chats.find((item) => item.id === id)
   const pending = (id: string) => requests.pending.includes(id)
 
+  const selection = (session: MountedSession) => {
+    const info = session.id ? session.server.data.session.get(session.id) : undefined
+    const messages = session.id ? session.server.data.session.message.list(session.id) : []
+
+    const lastAgent = messages.findLast(
+      (item) => item.type === "assistant" || item.type === "agent-switched",
+    )
+
+    const lastModel = messages.findLast(
+      (item) => item.type === "assistant" || item.type === "model-switched",
+    )
+
+    const agent = info?.agent ?? (lastAgent?.type === "assistant" || lastAgent?.type === "agent-switched" ? lastAgent.agent : undefined)
+    const model = info?.model ?? (lastModel?.type === "assistant" || lastModel?.type === "model-switched" ? lastModel.model : undefined)
+
+    return {
+      agent,
+      model: model ? { providerID: model.providerID, id: model.id, variant: model.variant } : undefined,
+    }
+  }
+
   // Takes the question rather than reading it back, because a new chat's write may still wait for the store to load.
   const generate = (session: MountedSession, id: string, question: string) => {
     if (pending(id)) return
 
     const store = saved(session)
     const controller = new AbortController()
+    const started = Date.now()
+    const current = selection(session)
     controllers.set(id, controller)
     setRequests("pending", (list) => [...list, id])
 
@@ -46,10 +69,18 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
         )
         .then((result) => {
           if (ctx.signal.aborted || controller.signal.aborted) return
+          const duration = Math.max(0, Date.now() - started)
+
           store.update((draft) => {
             const chat = draft.chats.find((item) => item.id === id)
 
-            if (chat) chat.answer = result.text.trim()
+            if (!chat) return
+            chat.answer = result.text.trim()
+            chat.duration = duration
+
+            if (current.agent) chat.agent = current.agent
+
+            if (current.model) chat.model = current.model
           })
         })
         // A missing answer is the retry state; no transient error flag is stored.
@@ -74,13 +105,21 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     if (!session?.id) return
 
     const id = crypto.randomUUID()
+    const created = Date.now()
+    const current = selection(session)
 
     // Desktop storage loads asynchronously. A write before load queues and lands in the same batch that marks the
     // store ready, and the panel keeps a tab hidden until then, so the chat and its tab need not wait. The session's
     // store lives while its tab stays open, so leaving the session first still records the chat.
     batch(() => {
       saved(session).update((draft) => {
-        draft.chats.push({ id, question })
+        draft.chats.push({
+          id,
+          question,
+          created,
+          agent: current.agent,
+          model: current.model,
+        })
       })
       ctx.layout.open(`${ctx.id}:${id}`, session, { tab: "select" })
     })
@@ -91,6 +130,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     ask,
     saved,
     pending,
+    entry,
     question: (session: MountedSession, id: string) => entry(session, id)?.question,
     answer: (session: MountedSession, id: string) => entry(session, id)?.answer,
     error: (session: MountedSession, id: string) => {

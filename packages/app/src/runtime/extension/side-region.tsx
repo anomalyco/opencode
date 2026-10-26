@@ -1,11 +1,18 @@
-import { For, Show, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  type Accessor,
+  type JSX,
+} from "solid-js"
+import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
-import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
-import { isSortable } from "@dnd-kit/solid/sortable"
-import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
-import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
-import { RestrictToElement } from "@dnd-kit/dom/modifiers"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Tabs } from "@opencode/ui/tabs"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -15,286 +22,156 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
 import {
-  MenuItem,
   type MountedSession,
   type SessionScreen,
   type PanelSidebar,
   type SessionPanelMenuItem,
 } from "@opencode/gui-extensions/sdk"
 import { useCommand } from "@/shell/commands/command"
+import { guardClosingFocus } from "@/shell/panel-motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
 import { useSessionLayout } from "@/session/session-layout"
 import type { Sizing } from "@/session/helpers"
-import { useExtensionHost } from "./host"
 import { PanelTrigger } from "./panel-trigger"
-import { RegionContent, type Region } from "./panels"
+import { createSessionPanelMenu } from "./panel-menu"
+import { RegionContent, type Region, type RegionPane } from "./panels"
 import { ExtensionSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
+import { closedTabsModifier, type ClosedSideTab } from "./closed-tabs"
+import { ClosedTabsSection, NewTabButton } from "./closed-tabs-view"
+import type { PaneDrag } from "./pane-drag"
 
-const FILE_TREE_WIDTH_MIN = 240
+const PANE_HEIGHT_MIN = 120
 
-/** The side region: the tab strip with its "+" menu, the selected panel, and the inner sidebar. */
+/** The side region: the side pane, the pane split below it, and the inner sidebar. */
 export function SideRegion(props: {
   view: MountedSession
   screen: SessionScreen
   region: Region
   sidebar: PanelSidebar
-  fileTree: boolean
   present?: boolean
   size: Sizing
-  stacked?: boolean
+  drag: PaneDrag
 }) {
   const layout = useLayout()
   const language = useLanguage()
-  const host = useExtensionHost()
-  const { tabs, view, params } = useSessionLayout()
+  const { view, params } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const tabsOpen = createMemo(() => isDesktop() && view().side.opened())
   const tabsVisible = createMemo(() => tabsOpen() || !!props.present)
-  const fileOpen = createMemo(() => isDesktop() && props.fileTree)
-  const open = createMemo(() => tabsOpen() || fileOpen())
-  const visible = createMemo(() => tabsVisible() || fileOpen())
-  const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
+  // Once shown, the contents stay mounted while the region is hidden, so reopening doesn't rebuild them mid-flight.
+  const contentMounted = createMemo<boolean>((mounted) => mounted || tabsVisible(), false)
+  const panelWidth = createMemo(() => (tabsVisible() ? "auto" : "0px"))
 
-  const panelWidth = createMemo(() => {
-    if (!visible()) return "0px"
-
-    if (tabsVisible()) return "auto"
-
-    return `${fileTreeWidth()}px`
-  })
-
-  const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
-
-  const menu = createMemo(() =>
-    host
-      .list(MenuItem)
-      .flatMap((item) => (item.menu === "session.panel" ? [item] : []))
-      .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  // Opening the side region with no tabs shows a new tab view, once per opening and session. Keyed by the session, not
+  // the item, whose object changes with every routed session.
+  const starting = createMemo(() =>
+    tabsOpen() && layout.ready() && props.region.empty() ? props.view.key : undefined,
   )
 
-  let root: HTMLElement | undefined
-  let tabList: HTMLDivElement | undefined
-  let selectionEvent: Event | undefined
+  createEffect(on(starting, (key) => key && props.region.openNewTab("side")))
 
-  createEffect(() => {
-    if (open()) return
-    const active = document.activeElement
+  // The split pane shows while it holds tabs; when the side pane has none, the split pane takes the whole height.
+  const panes = createMemo(() => {
+    const split = props.region.pane("split").keys().length > 0
 
-    if (!(active instanceof HTMLElement)) return
+    if (!split) return ["side"] as const
 
-    if (!root?.contains(active)) return
-    active.blur()
+    if (props.region.pane("side").keys().length === 0) return ["split"] as const
+
+    return ["side", "split"] as const
+  })
+
+  const [column, setColumn] = createStore({ height: 0 })
+  const [root, setRoot] = createSignal<HTMLElement>()
+  let stack: HTMLDivElement | undefined
+
+  createResizeObserver(
+    () => stack,
+    ({ height }) => setColumn({ height }),
+  )
+
+  const lowerHeight = createMemo(() => Math.round(column.height * (1 - view().split.ratio())))
+
+  guardClosingFocus({
+    root,
+    closing: () => !tabsOpen() && tabsVisible(),
+    target: () => document.querySelector<HTMLElement>('[data-slot="session-review-toggle"] button') ?? undefined,
   })
 
   return (
     <Show when={isDesktop() && !!params.id}>
       <aside
-        ref={root}
+        ref={setRoot}
         id="review-panel"
         tabIndex={-1}
         aria-label={language.t("session.panel.reviewAndFiles")}
-        aria-hidden={!open()}
-        inert={!open()}
-        class="relative min-w-0 flex overflow-hidden bg-v2-background-bg-base rounded-[10px] shadow-[var(--v2-elevation-raised)] outline-none"
-        classList={{
-          "h-full shrink-0": !props.stacked,
-          "h-full min-h-0": props.stacked,
-          "pointer-events-none": !open(),
-          "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active(),
-          "flex-1": tabsVisible(),
-        }}
+        aria-hidden={!tabsOpen()}
+        data-focused={props.region.focus.focused() || undefined}
+        class="relative h-full shrink-0 min-w-0 flex overflow-hidden bg-v2-background-bg-base rounded-[10px] shadow-[var(--v2-elevation-raised)] outline-none"
+        classList={{ "flex-1": tabsVisible() }}
         style={{ width: panelWidth() }}
       >
-        <Show when={visible()}>
+        {/* Takes the pointer while the panel closes. Inherited pointer-events or inert would restyle every element in
+            the panel when they flip; once closed, the screen skips the region with content-visibility instead. */}
+        <div class="absolute inset-0 z-50" classList={{ hidden: tabsOpen() || !tabsVisible() }} />
+        <Show when={contentMounted()}>
           <div
             data-slot="session-review-content"
-            class="h-full flex shrink-0"
-            style={{ width: "var(--session-side-content-width, 100%)" }}
+            class="h-full flex shrink-0 contain-strict"
+            style={{ width: "var(--panel-hold-width, var(--session-side-content-width, 100%))" }}
           >
-            <Show when={tabsVisible()}>
-              <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
-                <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
-                  <DragDropProvider
-                    sensors={[
-                      PointerSensor.configure({
-                        activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
-                        preventActivation: (event) =>
-                          event.target instanceof Element &&
-                          (!!event.target.closest('[data-slot="tabs-trigger-close-button"]') ||
-                            !!event.target.closest(".session-review-v2-open-in-app-slot")),
-                      }),
-                    ]}
-                    modifiers={[
-                      RestrictToHorizontalAxis,
-                      RestrictToElement.configure({ element: () => tabList ?? null }),
-                    ]}
-                    plugins={(defaults) => [
-                      ...defaults.filter((plugin) => plugin !== Accessibility),
-                      AutoScroller.configure({ acceleration: 8, threshold: { x: 0.05, y: 0 } }),
-                      Feedback.configure({ dropAnimation: null }),
-                    ]}
-                    onDragEnd={(event) => {
-                      const source = event.operation.source
-
-                      if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
-                      tabs().move(source.id.toString(), source.index)
+            <div
+              ref={stack}
+              class="relative min-w-0 h-full flex-1 flex flex-col overflow-hidden bg-v2-background-bg-base"
+            >
+              <For each={panes()}>
+                {(pane, index) => (
+                  <div
+                    data-slot="session-side-pane"
+                    data-pane={pane}
+                    class="relative min-h-0 min-w-0 bg-v2-background-bg-base"
+                    classList={{
+                      "flex-1": panes().length === 1 || index() === 0,
+                      "shrink-0 border-t border-v2-border-border-base": index() > 0,
                     }}
+                    style={index() > 0 ? { height: `${lowerHeight()}px` } : undefined}
                   >
-                    <Tabs
-                      value={props.region.active() ?? "empty"}
-                      onChange={(value) => {
-                        // Kobalte selects the first tab while triggers register, including while the
-                        // "+" menu's click is still dispatching. Persist input events on a tab only; the
-                        // region owns fallback selection.
-                        if (
-                          selectionEvent &&
-                          selectionEvent.eventPhase !== Event.NONE &&
-                          selectionEvent.target instanceof Element &&
-                          selectionEvent.target.closest('[role="tab"]')
-                        )
-                          props.region.select(value)
-                      }}
-                    >
-                      <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
-                        <Tabs.List
-                          ref={(el: HTMLDivElement) => {
-                            tabList = el
-                            createEventListener(
-                              el,
-                              ["pointerdown", "click", "keydown"],
-                              (event) => (selectionEvent = event),
-                              { capture: true },
-                            )
-                            onCleanup(createTabStripScroll({ el, lead: props.region.lead }))
+                    <Show when={index() > 0}>
+                      <div onPointerDown={() => props.size.start()}>
+                        <ResizeHandle
+                          direction="vertical"
+                          edge="start"
+                          size={lowerHeight()}
+                          min={PANE_HEIGHT_MIN}
+                          max={Math.max(PANE_HEIGHT_MIN, column.height - PANE_HEIGHT_MIN)}
+                          onResize={(height) => {
+                            props.size.touch()
+
+                            if (column.height > 0) view().split.resize(1 - height / column.height)
                           }}
-                        >
-                          <For each={props.region.keys()}>
-                            {(key) => (
-                              <Show when={props.region.entry(key)}>
-                                {(entry) => (
-                                  <PanelTrigger
-                                    value={key}
-                                    extension={entry().extension}
-                                    tab={entry().tab}
-                                    session={props.view}
-                                    index={tabs().all().indexOf(key)}
-                                    active={props.region.active() === key}
-                                    preview={tabs().preview() === key}
-                                    onClose={props.region.close}
-                                    onPromote={(value) => void tabs().open(value)}
-                                  />
-                                )}
-                              </Show>
-                            )}
-                          </For>
-                          <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
-                            <Show
-                              when={menu().length > 1}
-                              fallback={<Show when={menu()[0]}>{(item) => <AddButton item={item()} />}</Show>}
-                            >
-                              <AddMenu items={menu()} />
-                            </Show>
-                          </div>
-                        </Tabs.List>
-                        <div
-                          data-slot="session-side-panel-actions"
-                          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <ExtensionSlot
-                            at="session.panel.end"
-                            input={{
-                              get session() {
-                                return props.view
-                              },
-                              get screen() {
-                                return props.screen
-                              },
-                            }}
-                          />
-                          <Show when={tabsVisible()}>
-                            <div class="size-7 shrink-0" aria-hidden />
-                          </Show>
-                        </div>
+                        />
                       </div>
-
-                      <Show when={props.region.active() === undefined}>
-                        <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
-                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                            <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
-                              <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
-                                {language.t("session.files.selectToOpen")}
-                              </div>
-                            </div>
-                          </div>
-                        </Tabs.Content>
-                      </Show>
-                      <RegionContent
-                        region={props.region}
-                        view={props.view}
-                        screen={props.screen}
-                        frame={{
-                          shown: tabsOpen,
-                          present: tabsVisible,
-                          placement: () => "side",
-                          reserve: () => false,
-                          animate: () => !props.size.active(),
-                          sidebar: props.sidebar,
-                        }}
-                      />
-                    </Tabs>
-                  </DragDropProvider>
-                </div>
-              </div>
-            </Show>
-
-            <Show when={fileOpen()}>
-              <div
-                id="file-tree-panel"
-                class="relative min-w-0 h-full shrink-0 overflow-hidden"
-                classList={{
-                  "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-                    !props.size.active(),
-                }}
-                style={{ width: treeWidth() }}
-              >
-                <div
-                  class="h-full flex flex-col overflow-hidden group/filetree"
-                  classList={{ "border-l border-border-weaker-base": tabsOpen() }}
-                >
-                  <ExtensionSlot
-                    at="session.panel.sidebar"
-                    input={{
-                      get session() {
-                        return props.view
-                      },
-                      get screen() {
-                        return props.screen
-                      },
-                    }}
-                  />
-                </div>
-                <div onPointerDown={() => props.size.start()}>
-                  <ResizeHandle
-                    direction="horizontal"
-                    edge="start"
-                    size={fileTreeWidth()}
-                    min={FILE_TREE_WIDTH_MIN}
-                    max={480}
-                    onResize={(width) => {
-                      props.size.touch()
-                      layout.fileTree.resize(width)
-                    }}
-                  />
-                </div>
-              </div>
-            </Show>
+                    </Show>
+                    <PaneTabs
+                      pane={props.region.pane(pane)}
+                      region={props.region}
+                      view={props.view}
+                      screen={props.screen}
+                      sidebar={props.sidebar}
+                      shown={tabsOpen}
+                      present={tabsVisible}
+                      animate={() => !props.size.active()}
+                      placeholder={index() === 0}
+                      actions={index() === 0}
+                      drag={props.drag}
+                    />
+                  </div>
+                )}
+              </For>
+            </div>
           </div>
         </Show>
       </aside>
@@ -302,7 +179,251 @@ export function SideRegion(props: {
   )
 }
 
-function AddButton(props: { item: SessionPanelMenuItem }): JSX.Element {
+/** One pane: its tab strip with the "+" menu, the new tab view, and the tab it shows. */
+export function PaneTabs(props: {
+  pane: RegionPane
+  region: Region
+  view: MountedSession
+  screen: SessionScreen
+  sidebar: PanelSidebar
+  /** The pane is on screen. */
+  shown: Accessor<boolean>
+  /** The pane stays rendered, e.g. while it animates closed. */
+  present: Accessor<boolean>
+  animate: Accessor<boolean>
+  drag: PaneDrag
+  /** Shows the empty state while the pane selects nothing. */
+  placeholder?: boolean
+  /** Renders the extensions' strip actions and keeps room for the session's review toggle. */
+  actions?: boolean
+  /** Controls after the strip, e.g. the bottom pane's hide button. */
+  end?: JSX.Element
+}) {
+  const language = useLanguage()
+  const { tabs } = useSessionLayout()
+  const menu = createSessionPanelMenu()
+  const primary = createMemo(() => menu().find((item) => item.primary))
+  const launchers = createMemo(() => menu().filter((item) => !item.primary && !item.opened))
+
+  // The next tab this pane's "+" menu opens lands in this pane.
+  const target = () => tabs().target(props.pane.id)
+
+  const closed = {
+    get entries() {
+      return props.region.recent()
+    },
+    onReopen: (key: string) => {
+      target()
+      props.region.reopen(key)
+    },
+  }
+
+  const modifier = closedTabsModifier()
+
+  // Without a new tab item, "+" opens a host-owned new tab view listing the launchers, as ⌘T does inside the region.
+  const current = createMemo(() => props.region.shownNewTab(props.pane.id))
+  const add = () => props.region.openNewTab(props.pane.id)
+
+  let selectionEvent: Event | undefined
+
+  return (
+    <Tabs
+      data-pane-content={props.pane.id}
+      value={current()?.id ?? props.pane.active() ?? "empty"}
+      onChange={(value) => {
+        if (props.region.newTabs(props.pane.id).some((entry) => entry.id === value))
+          return props.region.selectNewTab(props.pane.id, value)
+
+        // Kobalte selects the first tab while triggers register, including while the "+" menu's click is still
+        // dispatching. Persist input events on a tab only; the region owns fallback selection.
+        if (
+          selectionEvent &&
+          selectionEvent.eventPhase !== Event.NONE &&
+          selectionEvent.target instanceof Element &&
+          selectionEvent.target.closest('[role="tab"]')
+        ) {
+          props.region.newTabs(props.pane.id).forEach((entry) => props.region.dismissNewTab(entry.id))
+          props.region.select(value)
+        }
+      }}
+    >
+      <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
+        <Tabs.List
+          data-pane-strip={props.pane.id}
+          ref={(el: HTMLDivElement) => {
+            createEventListener(el, ["pointerdown", "click", "keydown"], (event) => (selectionEvent = event), {
+              capture: true,
+            })
+            onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
+          }}
+        >
+          <For each={props.pane.keys()}>
+            {(key) => (
+              <Show when={props.region.entry(key)}>
+                {(entry) => (
+                  <PanelTrigger
+                    value={key}
+                    extension={entry().extension}
+                    tab={entry().tab}
+                    session={props.view}
+                    active={props.pane.active() === key}
+                    preview={tabs().preview() === key}
+                    dragging={props.drag.dragging() === key}
+                    onDragStart={(event) => props.drag.start(event, key, entry().tab.title)}
+                    onClose={props.region.close}
+                    onPromote={(value) => void tabs().open(value)}
+                  />
+                )}
+              </Show>
+            )}
+          </For>
+          <For each={props.region.newTabs(props.pane.id)}>
+            {(entry) => (
+              <Tabs.Trigger
+                value={entry.id}
+                class="group"
+                onMiddleClick={() => props.region.dismissNewTab(entry.id)}
+                closeButton={
+                  <IconButton
+                    size="small"
+                    variant="ghost-muted"
+                    onPointerDown={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      props.region.dismissNewTab(entry.id)
+                    }}
+                    icon={<Icon name="xmark-small" />}
+                    aria-label={language.t("common.closeTab")}
+                  />
+                }
+                hideCloseButton
+              >
+                {language.t("session.tab.new")}
+              </Tabs.Trigger>
+            )}
+          </For>
+          <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
+            <Show
+              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0] : undefined)}
+              fallback={
+                <Show
+                  when={launchers().length > 0}
+                  fallback={
+                    <Show when={menu().length > 1}>
+                      <AddMenu items={menu()} onChoose={target} />
+                    </Show>
+                  }
+                >
+                  <Show
+                    when={modifier}
+                    fallback={
+                      <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
+                        <IconButton
+                          icon={<Icon name="plus" />}
+                          variant="ghost-muted"
+                          size="large"
+                          onClick={add}
+                          aria-label={language.t("session.tab.add")}
+                        />
+                      </Tooltip>
+                    }
+                  >
+                    {(key) => (
+                      <NewTabButton
+                        modifier={key()}
+                        entries={closed.entries}
+                        onReopen={closed.onReopen}
+                        onNewTab={add}
+                      />
+                    )}
+                  </Show>
+                </Show>
+              }
+            >
+              {(item) => <AddButton item={item()} onChoose={target} />}
+            </Show>
+          </div>
+        </Tabs.List>
+        <div
+          data-slot="session-side-panel-actions"
+          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Show when={props.actions}>
+            <ExtensionSlot
+              at="session.panel.end"
+              input={{
+                get session() {
+                  return props.view
+                },
+                get screen() {
+                  return props.screen
+                },
+              }}
+            />
+          </Show>
+          {props.end}
+          <Show when={props.actions && props.present()}>
+            <div class="size-7 shrink-0" aria-hidden />
+          </Show>
+        </div>
+      </div>
+
+      <Show when={current()}>
+        {(entry) => (
+          <Tabs.Content value={entry().id} class="flex flex-col h-full overflow-hidden contain-strict">
+            <Launchers items={launchers()} onChoose={target} closed={closed} />
+          </Tabs.Content>
+        )}
+      </Show>
+      <Show when={props.placeholder && !current() && props.pane.active() === undefined}>
+        <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
+          {/* After + runs a primary item, its tab owns the empty pane until it arrives. */}
+          <Show when={!primary()}>
+            <Show
+              when={launchers().length > 0}
+              fallback={
+                <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                  <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
+                    <Mark class="w-14 opacity-10" />
+                    <div class="text-14-regular text-text-weak max-w-56">
+                      {language.t("session.files.selectToOpen")}
+                    </div>
+                  </div>
+                </div>
+              }
+            >
+              <Launchers items={launchers()} onChoose={target} closed={closed} />
+            </Show>
+          </Show>
+        </Tabs.Content>
+      </Show>
+      {/* Kept mounted under the new tab view, so terminals and editors keep their state. */}
+      <div class="contents" classList={{ hidden: !!current() }} inert={!!current() || undefined}>
+        <RegionContent
+          pane={props.pane}
+          view={props.view}
+          screen={props.screen}
+          frame={{
+            shown: () => props.shown() && !current(),
+            present: props.present,
+            placement: () => "side",
+            reserve: () => false,
+            animate: props.animate,
+            sidebar: props.sidebar,
+          }}
+        />
+      </div>
+    </Tabs>
+  )
+}
+
+function AddButton(props: { item: SessionPanelMenuItem; onChoose: () => void }): JSX.Element {
   const command = useCommand()
   const keybind = createMemo(() => (props.item.keybind ? command.keybindParts(props.item.keybind) : []))
 
@@ -323,16 +444,23 @@ function AddButton(props: { item: SessionPanelMenuItem }): JSX.Element {
         icon={<Icon name="plus" />}
         variant="ghost-muted"
         size="large"
-        onClick={() => props.item.run()}
+        onClick={() => {
+          props.onChoose()
+          props.item.run()
+        }}
         aria-label={props.item.title}
       />
     </Tooltip>
   )
 }
 
-function AddMenu(props: { items: readonly SessionPanelMenuItem[] }): JSX.Element {
+function AddMenu(props: { items: readonly SessionPanelMenuItem[]; onChoose: () => void }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
+  // A chosen item runs once the closing menu has returned focus to "+", and the tab strip has passed it on to the
+  // selected tab. Releasing that focus first lets the item move it where its tab needs it, e.g. into a new terminal,
+  // without the strip taking it back for the tab it remembers.
+  let chosen: SessionPanelMenuItem | undefined
 
   return (
     <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
@@ -348,7 +476,19 @@ function AddMenu(props: { items: readonly SessionPanelMenuItem[] }): JSX.Element
           onPointerDown={(event: PointerEvent) => event.preventDefault()}
         />
         <Menu.Portal>
-          <Menu.Content>
+          <Menu.Content
+            onCloseAutoFocus={() => {
+              const item = chosen
+
+              if (!item) return
+              chosen = undefined
+              setTimeout(() => {
+                if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+                props.onChoose()
+                item.run()
+              })
+            }}
+          >
             <For each={props.items}>
               {(item) => {
                 const keybind = createMemo(() => (item.keybind ? command.keybindParts(item.keybind) : []))
@@ -356,7 +496,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuItem[] }): JSX.Element
                 return (
                   <Menu.Item
                     class="!gap-6"
-                    onSelect={() => item.run()}
+                    onSelect={() => (chosen = item)}
                     shortcut={
                       <Show when={keybind().length > 0}>
                         <Keybind keys={keybind()} variant="neutral" />
@@ -375,5 +515,51 @@ function AddMenu(props: { items: readonly SessionPanelMenuItem[] }): JSX.Element
         </Menu.Portal>
       </Menu>
     </Tooltip>
+  )
+}
+
+/** The + menu items as rows, then the session's recently closed tabs, in the empty side region and the new tab view. */
+function Launchers(props: {
+  items: readonly SessionPanelMenuItem[]
+  onChoose: () => void
+  closed: { entries: readonly ClosedSideTab[]; onReopen: (key: string) => void }
+}): JSX.Element {
+  return (
+    <div class="flex-1 min-h-0 overflow-y-auto px-6">
+      <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
+        <For each={props.items}>{(item) => <LauncherRow item={item} onChoose={props.onChoose} />}</For>
+        <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+      </div>
+    </div>
+  )
+}
+
+function LauncherRow(props: { item: SessionPanelMenuItem; onChoose: () => void }): JSX.Element {
+  const command = useCommand()
+  const keybind = createMemo(() => (props.item.keybind ? command.keybindParts(props.item.keybind) : []))
+
+  return (
+    <button
+      type="button"
+      class="flex h-[41px] w-full items-center justify-between gap-4 rounded-[8px] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01 px-3.5 text-start hover:bg-v2-background-bg-layer-02"
+      // The new tab view stays until the tab the item opens selects itself, so nothing shows in between.
+      onClick={() => {
+        props.onChoose()
+        props.item.run()
+      }}
+    >
+      <span class="flex min-w-0 items-center gap-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
+        <Show when={props.item.icon}>
+          {(icon) => <Icon name={icon()} size="small" class="text-v2-icon-icon-muted" />}
+        </Show>
+        <span class="shrink-0 text-v2-text-text-base">{props.item.title}</span>
+        <Show when={props.item.description}>
+          {(description) => <span class="truncate text-v2-text-text-muted">{description()}</span>}
+        </Show>
+      </span>
+      <Show when={keybind().length > 0}>
+        <Keybind keys={keybind()} variant="neutral" />
+      </Show>
+    </button>
   )
 }

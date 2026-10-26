@@ -1,7 +1,8 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
-import { SERVER, holdRoute, project, provider, session, workspaceKey } from "../utils/app"
+import { SERVER, holdRoute, project, provider, session } from "../utils/app"
+import { browseFiles, openFileLauncher, openReviewLauncher, reviewTabs } from "../utils/side-panel"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
@@ -23,6 +24,8 @@ for (const view of ["desktop", "mobile"] as const) {
     else await page.getByRole("tablist", { name: "Session view" }).getByRole("tab", { name: "Changes" }).click()
 
     const panel = view === "desktop" ? page.locator("#review-panel") : page.locator('[data-component="session-review"]')
+
+    if (view === "desktop") await openReviewLauncher(panel)
     await expect(panel.getByText("Track, review, and undo changes in this project")).toBeVisible()
     await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
     const init = panel.getByRole("button", { name: "Create Git repository" })
@@ -44,7 +47,10 @@ test("Git initialization belongs to its session and refreshes after a session sw
       { id: "ses_init_a", title: "Initialize Alpha" },
       { id: "ses_init_b", title: "Initialize Beta" },
     ],
-    seed: { panes: { ses_init_a: { review: true }, ses_init_b: { review: true } } },
+    seed: {
+      panes: { ses_init_a: { review: true }, ses_init_b: { review: true } },
+      storage: reviewTabs("C:/OpenCode/ReviewInitSwitch", "ses_init_a", "ses_init_b"),
+    },
   })
 
   // The successful init finishes while another session is routed.
@@ -96,7 +102,10 @@ test("a rejected Git init releases its session's button without showing an error
       { id: "ses_init_failure_a", title: "Initialize Alpha" },
       { id: "ses_init_failure_b", title: "Initialize Beta" },
     ],
-    seed: { panes: { ses_init_failure_a: { review: true }, ses_init_failure_b: { review: true } } },
+    seed: {
+      panes: { ses_init_failure_a: { review: true }, ses_init_failure_b: { review: true } },
+      storage: reviewTabs("C:/OpenCode/ReviewInitFailure", "ses_init_failure_a", "ses_init_failure_b"),
+    },
   })
   const request = await holdRoute(page, (url) => url.pathname === "/api/vcs/init", { method: "POST" })
   const init = page.locator("#review-panel").getByRole("button", { name: "Create Git repository", exact: true })
@@ -115,7 +124,7 @@ test("a rejected Git init releases its session's button without showing an error
 })
 
 test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
-  const searches: { query: string; dirs?: string; limit?: number }[] = []
+  const searches: { query: string; dirs?: string; limit?: number; directory: string }[] = []
   const directory = "C:/OpenCode/ReviewOpenFile"
   const files = Array.from({ length: 80 }, (_, index) => `file-${String(index).padStart(2, "0")}.ts`)
 
@@ -138,7 +147,10 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
     },
     seed: {
       panes: { ses_reviewopenfile: { review: true } },
-      storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: false } },
+      storage: {
+        ...reviewTabs("C:/OpenCode/ReviewOpenFile", "ses_reviewopenfile"),
+        "opencode.global.dat:review-panel-v2": { sidebarOpened: false },
+      },
     },
   })
 
@@ -146,11 +158,12 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
   const sidebarToggle = panel.getByRole("button", { name: "Toggle file tree" })
   const contextButton = page.getByRole("button", { name: "Toggle session context" })
-  const openFile = panel.getByRole("button", { name: "Open file" })
   const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
   await contextButton.click()
   await expect(tab("Context")).toHaveAttribute("aria-selected", "true")
-  await openFile.click()
+  await openFileLauncher(panel)
+  const filter = panel.getByRole("combobox", { name: "Filter files" })
+  await expect(filter).toBeFocused()
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeDisabled()
   await expect(sidebar).toBeVisible()
@@ -158,13 +171,12 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("Context")).toHaveAttribute("aria-selected", "true")
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
   await expect(sidebar).toBeHidden()
-  await openFile.click()
-  const filter = panel.getByRole("combobox", { name: "Filter files" })
-  await expect(filter).toBeFocused()
+  // The strip's launcher tab returns to it.
+  await tab("Open file").click()
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("ReviewOpenFile", { exact: true })).toBeVisible()
 
-  await panel.getByRole("button", { name: "README.md" }).click()
+  await panel.getByRole("treeitem", { name: "README.md" }).click()
   await expect(tab("README.md")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
@@ -192,8 +204,9 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("README.md")).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
 
-  await openFile.click()
-  await expect(tab("README.md")).toHaveCount(0)
+  // A new launcher opens beside the preview rather than replacing it.
+  await browseFiles(page)
+  await expect(tab("README.md")).toHaveAttribute("aria-selected", "false")
   await expect(sidebar).toBeVisible()
   await filter.fill("nested")
   const result = panel.getByRole("option", { name: /nested\.ts/ })
@@ -203,9 +216,9 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:src/nested.ts", { exact: true })).toBeVisible()
-  expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200 })
+  expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200, directory })
 
-  await openFile.click()
+  await browseFiles(page)
   await expect(tab("nested.ts")).toHaveCount(1)
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeDisabled()
@@ -216,17 +229,32 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("Open file")).toHaveCount(0)
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
 
+  // The New tab view keeps offering Open file, so several launchers stay open; a pick replaces the selected one.
+  await openFileLauncher(panel)
+  await openFileLauncher(panel)
+  await expect(tab("Open file")).toHaveCount(2)
+  await panel.getByRole("treeitem", { name: "README.md" }).click()
+  await expect(tab("README.md")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("Open file")).toHaveCount(1)
+  await tab("Open file").click()
+  await page.keyboard.press("Control+w")
+  await expect(tab("Open file")).toHaveCount(0)
+  await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
+
   // The file browser beside file tabs keeps its DOM and scroll position across preview and pinned tab switches.
   await sidebarToggle.click()
   await filter.fill("")
   const root = panel.locator('[data-component="session-review-v2-sidebar-root"]')
-  const viewport = root.locator('[data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
-  await expect(root.getByRole("button", { name: "file-00.ts" })).toBeVisible()
+  const viewport = root.locator('[data-slot="session-review-v2-sidebar-tree"] [data-file-tree-virtualized-scroll]')
+  await expect(root.getByRole("treeitem", { name: "file-00.ts" })).toBeVisible()
   await viewport.hover()
   await page.mouse.wheel(0, 100_000)
   await expect
     .poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
     .toBeLessThanOrEqual(1)
+  // The tree ignores the pointer until a scroll settles. A click before then hits the scroller, and Playwright's retry
+  // scrolls the row into view itself, which moves the position this case guards.
+  await expect(viewport.locator("[data-file-tree-virtualized-list]")).not.toHaveAttribute("data-is-scrolling")
   const scrolled = await viewport.evaluate((element) => element.scrollTop)
   expect(scrolled).toBeGreaterThan(0)
   await root.evaluate((element) => void (element.dataset.e2eProbe = "original"))
@@ -236,13 +264,13 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(scrolled)
   }
 
-  await root.getByRole("button", { name: "file-79.ts" }).click()
+  await root.getByRole("treeitem", { name: "file-79.ts" }).click()
   await expect(tab("file-79.ts")).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:file-79.ts", { exact: true })).toBeVisible()
   await expectSidebarKept()
-  await root.getByRole("button", { name: "file-78.ts" }).dblclick()
+  await root.getByRole("treeitem", { name: "file-78.ts" }).dblclick()
   await expect(tab("file-78.ts")).toHaveAttribute("aria-selected", "true")
-  await root.getByRole("button", { name: "file-79.ts" }).click()
+  await root.getByRole("treeitem", { name: "file-79.ts" }).click()
   await expect(tab("file-79.ts")).toHaveAttribute("aria-selected", "true")
   await tab("file-78.ts").click()
   await expect(tab("file-78.ts")).toHaveAttribute("aria-selected", "true")
@@ -256,7 +284,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("file-79.ts")).toHaveCount(1)
   await contextButton.click()
   await expect(tab("Context")).toHaveCount(0)
-  await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
+  await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
 })
 
 for (const listed of [false, true]) {
@@ -269,23 +297,18 @@ for (const listed of [false, true]) {
       name: "BrowserRepo",
       sessions: [{ id: "ses_browserrepo", title: "BrowserRepo", directory }],
       fileList: (path) => (path ? [] : [fileNode(directory, "README.md")]),
-      seed: {
-        panes: { ses_browserrepo: { review: true } },
-        // The user also opened the subfolder as its own sidebar project and renamed it there.
-        ...(listed && {
-          projects: {
-            local: [
-              { worktree: root, expanded: true },
-              { worktree: directory, expanded: true },
-            ],
-          },
-          storage: { [workspaceKey(directory, "project")]: { value: { name: "Custom app" } } },
-        }),
-      },
+      // The server also lists the subfolder as its own project, renamed.
+      ...(listed && {
+        projects: [
+          project({ id: "proj_browserrepo", directory: root, name: "BrowserRepo" }),
+          project({ id: "proj_browserrepo_app", directory, name: "Custom app" }),
+        ],
+      }),
+      seed: { panes: { ses_browserrepo: { review: true } } },
     })
     const panel = page.locator("#review-panel")
-    await panel.getByRole("button", { name: "Open file" }).click()
-    await expect(panel.getByRole("button", { name: "README.md" })).toBeVisible()
+    await openFileLauncher(panel)
+    await expect(panel.getByRole("treeitem", { name: "README.md" })).toBeVisible()
     await expect(panel.locator('[data-slot="session-review-v2-sidebar-title"]')).toHaveText(
       listed ? "Custom app" : "app",
     )
@@ -321,7 +344,7 @@ test("context closes the side region only when its button opened it", async ({ p
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
 
-  // Reopening the region by hand makes it the user's, so closing Context leaves Review open.
+  // With another tab open, closing Context leaves the region open on it.
   await contextButton.click()
   await expect(context).toHaveAttribute("aria-selected", "true")
   await toggle.click()
@@ -329,6 +352,26 @@ test("context closes the side region only when its button opened it", async ({ p
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(context).toHaveAttribute("aria-selected", "true")
+  // "+" opens the New tab view over Context; picking a launcher replaces it with the tab it opens.
+  const newTab = panel.getByRole("tab", { name: "New tab", exact: true })
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: /^Review/ }).click()
+  await expect(newTab).toHaveCount(0)
+  await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
+  // Closing Review returns to Context, the tab the view opened over, without bringing the replaced view back.
+  await panel
+    .locator('div[data-value="review:changes"]')
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await expect(newTab).toHaveCount(0)
+  // "Recently closed" lists only files, so the closed Review is offered again by its launcher alone.
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(panel.getByRole("region", { name: "Recently closed", exact: true })).toHaveCount(0)
+  await panel.getByRole("button", { name: /^Review/ }).click()
+  await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
+  await context.click()
   await contextButton.click()
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
@@ -432,6 +475,12 @@ test("file tree expands Windows paths and scrolls long names in both directions"
         return [
           { ...fileNode(directory, "frontend/app.ts"), path: "frontend\\app.ts" },
           { ...fileNode(directory, longPath), path: `frontend\\${longFilename}` },
+          // Short rows below the long one, so it can scroll out of view.
+          ...Array.from({ length: 80 }, (_, index) => {
+            const name = `file-${String(index).padStart(2, "0")}.ts`
+
+            return { ...fileNode(directory, `frontend/${name}`), path: `frontend\\${name}` }
+          }),
         ]
       }
 
@@ -451,43 +500,82 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   })
 
   const panel = page.locator("#review-panel")
-  await panel.getByRole("button", { name: "Open file" }).click()
+  await openFileLauncher(panel)
   await expect(panel.getByRole("tab", { name: "Open file" })).toHaveAttribute("aria-selected", "true")
   const sidebar = panel.locator('[data-component="session-review-v2-sidebar-root"]')
-  const frontend = panel.locator('[data-slot="file-tree-v2-row"][data-path="frontend"]')
+  const frontend = panel.locator('[data-type="item"][data-item-path="frontend/"]')
   await expect(frontend.getByText("frontend", { exact: true })).toBeVisible()
   await expect(frontend).toHaveAttribute("aria-expanded", "false")
   await frontend.click()
   await expect(frontend).toHaveAttribute("aria-expanded", "true")
 
-  const viewport = sidebar.locator('[data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
-  const longRow = panel.getByRole("button", { name: longFilename })
-  const status = longRow.locator('[data-slot="file-tree-v2-change"]')
+  const viewport = sidebar.locator('[data-slot="session-review-v2-sidebar-viewport"]')
+  const longRow = panel.locator(`[data-type="item"][data-item-path="${longPath}"]`)
+  const content = longRow.locator('[data-item-section="content"]')
+  const status = longRow.locator('[data-item-section="git"]')
   await expect(longRow).toBeVisible()
-  await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
-  await expect(longRow.locator('[data-slot="file-tree-v2-label"]')).toHaveCSS("text-overflow", "clip")
+  await expect(content).toHaveAttribute("title", longFilename)
+  // The name is never clipped: the tree scrolls sideways and the change letter sticks to the pane's edge.
+  await expect
+    .poll(() => content.evaluate((element) => element.scrollWidth - element.clientWidth))
+    .toBeLessThanOrEqual(0)
+  await expect
+    .poll(() =>
+      longRow.evaluate((element) => {
+        const scroll = element.closest("[data-file-tree-virtualized-scroll]")!
+
+        return scroll.scrollWidth - scroll.clientWidth
+      }),
+    )
+    .toBeGreaterThan(0)
   await expect(status).toHaveText("A")
   await expect.poll(() => statusInset(status, "right")).toBeLessThanOrEqual(24)
-  await viewport.hover()
-  await page.mouse.wheel(1_000, 0)
-  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+  const treeScroll = panel.locator(".opencode-pierre-file-tree")
+
+  const scrollTree = (position: { left?: number; top?: number }) =>
+    treeScroll.evaluate((element, position) => {
+      const scroll = element.shadowRoot!.querySelector<HTMLElement>("[data-file-tree-virtualized-scroll]")!
+
+      if (position.left !== undefined) scroll.scrollLeft = position.left
+
+      if (position.top !== undefined) scroll.scrollTop = position.top
+
+      return { left: scroll.scrollLeft, overflow: scroll.scrollWidth - scroll.clientWidth }
+    }, position)
+
+  await scrollTree({ left: 1_000_000 })
   await expect.poll(() => statusInset(status, "right")).toBeLessThanOrEqual(24)
-  const thumb = sidebar.locator('.scroll-view__thumb[data-orientation="horizontal"]')
-  const scrolled = await viewport.evaluate((element) => element.scrollLeft)
-  await dragThumb(page, thumb, -40)
-  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(scrolled)
+  // The tree keeps the long row's width after it scrolls out of view, so the sideways position holds.
+  await scrollTree({ top: 1_000_000 })
+  await expect(longRow).toHaveCount(0)
+  await expect.poll(async () => (await scrollTree({})).overflow).toBeGreaterThan(0)
+  await expect.poll(async () => (await scrollTree({})).left).toBeGreaterThan(0)
+  await scrollTree({ left: 0, top: 0 })
+  await viewport.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await expect.poll(() => statusInset(status, "left")).toBeLessThanOrEqual(24)
+  await frontend.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(frontend).toHaveAttribute("aria-expanded", "false")
+  await page.keyboard.press("ArrowLeft")
+  await expect(frontend).toHaveAttribute("aria-expanded", "true")
+  await viewport.evaluate((element) => element.removeAttribute("dir"))
 
   const filter = panel.getByRole("combobox", { name: "Filter files" })
   await filter.fill(longFilename)
-  const filteredStatus = panel.getByRole("option", { name: longFilename }).locator('[data-slot="file-tree-v2-change"]')
+  const filteredOption = panel.getByRole("option", { name: longFilename })
+  await expect(filteredOption.locator('svg[data-icon-token="typescript"]')).toBeVisible()
+  const filteredStatus = filteredOption.locator('[data-slot="file-tree-v2-change"]')
   await expect(filteredStatus).toHaveText("A")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
+  await expect.poll(() => statusInset(filteredStatus, "right")).toBeLessThanOrEqual(24)
+  await viewport.hover()
+  await page.mouse.wheel(1_000, 0)
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+  await expect.poll(() => statusInset(filteredStatus, "right")).toBeLessThanOrEqual(24)
   await viewport.evaluate((element) => {
     element.setAttribute("dir", "rtl")
-    element.scrollLeft = 0
-    element.dispatchEvent(new Event("scroll"))
+    element.scrollLeft = -1_000_000
   })
-  await viewport.hover()
-  await dragThumb(page, thumb, -40)
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(0)
   await expect.poll(() => statusInset(filteredStatus, "left")).toBeLessThanOrEqual(24)
   await viewport.evaluate((element) => {
@@ -496,48 +584,15 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   })
 
   await filter.fill("")
-  await panel.locator('[data-slot="file-tree-v2-row"][data-path="frontend/app.ts"]').click()
+  await panel.locator('[data-type="item"][data-item-path="frontend/app.ts"]').click()
   await expect(panel.getByRole("tab", { name: "app.ts" })).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
 })
 
-test("a restored file tab keeps the file tree on Files Changed", async ({ page }) => {
-  const directory = "C:/OpenCode/TreeRestore"
-  await openSession(page, {
-    name: "TreeRestore",
-    vcsDiff: [fileDiff("src/changed.ts")],
-    fileList: (path) => (path ? [] : [fileNode(directory, "README.md")]),
-    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
-    seed: {
-      panes: { ses_treerestore: { review: true } },
-      settings: { general: { showFileTree: true } },
-      storage: { "opencode.global.dat:layout": { fileTree: { opened: true, width: 240, tab: "changes" } } },
-    },
-  })
-  const panel = page.locator("#review-panel")
-  const tree = page.locator("#file-tree-panel")
-  const treeTab = (name: string) => tree.getByRole("tab", { name, exact: true })
-  const readme = panel.getByRole("tab", { name: "README.md", exact: true })
-
-  await treeTab("All files").click()
-  await tree.getByRole("button", { name: "README.md" }).click()
-  await expect(readme).toHaveAttribute("aria-selected", "true")
-  await treeTab("Files Changed 1").click()
-  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
-
-  await page.reload()
-  await expect(readme).toHaveAttribute("aria-selected", "true")
-  await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
-  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
-
-  // Selecting a file tab after load still shows it among all files.
-  await panel.locator("#session-side-panel-review-tab").click()
-  await readme.click()
-  await expect(treeTab("All files")).toHaveAttribute("aria-selected", "true")
-})
-
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
-  const file = { content: "first draft" }
+  // Enough lines to scroll the code view, ending in the draft's name.
+  const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
+  const file = { content: draft("first draft") }
 
   const messages = [
     { id: "msg_prompt", type: "user", text: "Write the shopping list", time: { created: 1 } },
@@ -561,17 +616,44 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   const link = page.getByRole("link", { name: "shopping.txt", exact: true })
   const panel = page.locator("#review-panel")
   const tab = panel.getByRole("tab", { name: "shopping.txt" })
+  const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
+
+  // A long file mounts only the rows near the viewport, so its last line needs a scroll. A reopened tab may restore its
+  // earlier scroll position, so this starts from wherever the view is once its rows overflow.
+  const scrollToEnd = async () => {
+    await expect.poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+    await code.hover()
+    await page.mouse.wheel(0, 100_000)
+    await expect
+      .poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+      .toBeLessThanOrEqual(1)
+  }
+
   await link.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
+  // The first open starts at the top.
+  await expect(panel.getByText("item 1", { exact: true })).toBeVisible()
+  await scrollToEnd()
   await expect(panel.getByText("first draft", { exact: true })).toBeVisible()
 
-  file.content = "second draft"
+  // Rereading the open file updates it in place: the code view keeps its node and never jumps back to the top.
+  const scrolled = await code.evaluate((element) => element.scrollTop)
+  expect(scrolled).toBeGreaterThan(0)
+  await code.evaluate((element) => void (element.dataset.e2eProbe = "original"))
+  file.content = draft("second draft")
+  await link.click()
+  await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
+  expect(await code.evaluate((element) => element.dataset.e2eProbe)).toBe("original")
+  expect(await code.evaluate((element) => element.scrollTop)).toBe(scrolled)
+
+  file.content = draft("third draft")
   await tab.locator("..").getByRole("button", { name: "Close tab" }).click()
   await expect(tab).toHaveCount(0)
   await link.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
-  await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
-  await expect(panel.getByText("first draft", { exact: true })).toHaveCount(0)
+  await scrollToEnd()
+  await expect(panel.getByText("third draft", { exact: true })).toBeVisible()
+  await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
 
   // A restored file tab whose file was deleted shows its inline not-found state without a toast; clicking a broken link
   // when no tab is open for it shows the toast.
@@ -754,6 +836,7 @@ test("image files load into the review panel and keep it painted while loading",
     },
   })
   await page.getByRole("button", { name: "Toggle review" }).click()
+  await openReviewLauncher(page.locator("#review-panel"))
   await expect(page.locator('#review-panel [data-component="session-review-v2"]')).toBeVisible()
 
   // Records every painted frame from before the click until after the image read completes.
@@ -790,7 +873,7 @@ test("image files load into the review panel and keep it painted while loading",
     page.evaluate(() => (window as Window & { e2eImageProbe?: ImageProbe }).e2eImageProbe!.frames)
 
   const response = page.waitForResponse((item) => item.url().includes(`/api/fs/read/${image}`))
-  await page.getByRole("button", { name: /preview\.png/ }).click()
+  await page.getByRole("treeitem", { name: /preview\.png/ }).click()
   await read.promise
   const pending = await frames()
   await expect.poll(frames).toBeGreaterThan(pending)
@@ -814,7 +897,7 @@ test("image files load into the review panel and keep it painted while loading",
   ).toEqual([])
 })
 
-test("video files over 25 MB play in the viewer, expand into the theatre overlay, and collapse on Escape without remounting", async ({
+test("video files stream into the viewer behind a loading state, open into the preview, and come back on Escape without remounting", async ({
   page,
 }) => {
   const directory = "C:/OpenCode/ReviewVideo"
@@ -838,31 +921,52 @@ test("video files over 25 MB play in the viewer, expand into the theatre overlay
       panes: { ses_reviewvideo: { review: true } },
     },
   })
-  await page.route(`**/api/fs/read/${file}*`, (route) =>
-    route.fulfill({
-      status: 200,
-      headers: { "access-control-allow-origin": "*", "content-type": "application/octet-stream" },
-      body: mp4,
-    }),
-  )
+  // The app only checks the file with a HEAD; the video element streams it with range requests, held until released.
+  const ranged = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  await page.route(`**/api/fs/read/${file}*`, async (route) => {
+    const headers = { "access-control-allow-origin": "*", "accept-ranges": "bytes", "content-type": "video/mp4" }
+
+    if (route.request().method() === "HEAD")
+      return route.fulfill({ status: 200, headers: { ...headers, "content-length": String(mp4.length) } })
+
+    const range = /^bytes=(\d+)-(\d*)$/.exec((await route.request().headerValue("range")) ?? "")
+
+    if (!range) return route.fulfill({ status: 200, headers, body: mp4 })
+    ranged.resolve()
+    await release.promise
+    const start = Number(range[1])
+    const end = Math.min(range[2] ? Number(range[2]) : mp4.length - 1, start + 4_000_000, mp4.length - 1)
+
+    return route.fulfill({
+      status: 206,
+      headers: { ...headers, "content-range": `bytes ${start}-${end}/${mp4.length}` },
+      body: mp4.subarray(start, end + 1),
+    })
+  })
 
   const panel = page.locator("#review-panel")
-  await panel.getByRole("button", { name: "Open file" }).click()
-  await panel.getByRole("button", { name: file }).click()
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: file }).click()
   await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
 
   const toolbar = panel.locator('[data-slot="artifact-toolbar"]')
   const stage = panel.locator('[data-slot="artifact-stage"]')
   const video = stage.locator('video[data-slot="artifact-media"]')
   const fullscreen = stage.getByRole("button", { name: "Enter full screen", exact: true })
-  const exitFullscreen = stage.getByRole("button", { name: "Exit full screen", exact: true })
+  const preview = page.locator('[data-component="image-preview"]')
+  const loading = stage.getByRole("status", { name: "Loading", exact: true })
 
+  await ranged.promise
+  await expect(loading).toBeVisible()
+  expect(await video.getAttribute("src")).toMatch(new RegExp(`^${SERVER}/api/fs/read/${file}\\?`))
+  release.resolve()
+  await expect(loading).toHaveCount(0)
   await expect(video).toBeVisible()
   await expect(toolbar).toContainText("64 × 36")
   await expect(toolbar).toContainText("0:01")
   await expect(toolbar).toContainText("38.4 MB")
   await expect(panel.getByText(/Binary file/)).toHaveCount(0)
-  await expect(fullscreen).toHaveAttribute("aria-pressed", "false")
   const inlineBounds = (await stage.boundingBox())!
   expect(inlineBounds.width).toBeLessThan(1000)
 
@@ -870,26 +974,23 @@ test("video files over 25 MB play in the viewer, expand into the theatre overlay
     element.dataset.e2eProbe = "retained"
   })
 
+  // The preview borrows the same element, so playback never restarts.
   await fullscreen.click()
-  await expect(exitFullscreen).toHaveAttribute("aria-pressed", "true")
-  await expect(stage).toHaveAttribute("data-expanded", "")
-  expect(await stage.evaluate((element) => element.matches(":popover-open"))).toBe(true)
+  await expect(preview).toHaveAttribute("data-stage", "rest")
+  await expect(preview.locator('video[data-e2e-probe="retained"]')).toBeVisible()
+  await expect(video).toHaveCount(0)
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
-  expect(await video.evaluate((element) => element.dataset.e2eProbe)).toBe("retained")
-  await expect.poll(() => stage.boundingBox()).toEqual({ x: 0, y: 0, width: 1440, height: 900 })
 
   await page.keyboard.press("Escape")
-  await expect(fullscreen).toHaveAttribute("aria-pressed", "false")
-  await expect(stage).not.toHaveAttribute("data-expanded")
-  expect(await stage.evaluate((element) => element.matches(":popover-open"))).toBe(false)
-  expect(await video.evaluate((element) => element.dataset.e2eProbe)).toBe("retained")
+  await expect(preview).toHaveCount(0)
+  await expect(video).toHaveAttribute("data-e2e-probe", "retained")
   await expect.poll(() => stage.boundingBox()).toEqual(inlineBounds)
 
   await video.dblclick()
-  await expect(exitFullscreen).toHaveAttribute("aria-pressed", "true")
+  await expect(preview).toHaveAttribute("data-stage", "rest")
   await page.mouse.click(8, 8)
-  await expect(fullscreen).toHaveAttribute("aria-pressed", "false")
-  expect(await video.evaluate((element) => element.dataset.e2eProbe)).toBe("retained")
+  await expect(preview).toHaveCount(0)
+  await expect(video).toHaveAttribute("data-e2e-probe", "retained")
 
   // Chromium's controls also answer a double click with native fullscreen, which covers the backdrop. Opting out with
   // controlslist="nofullscreen" would end their click-to-play as well.
@@ -934,25 +1035,27 @@ test("restores review state and the side-panel tab per session", async ({ page }
 
   // Each session selects a file other than the first, which the review would show without a stored selection.
   await toggle.click()
-  await page.getByRole("button", { name: "gamma.ts" }).click()
+  await openReviewLauncher(panel)
+  await page.getByRole("treeitem", { name: "gamma.ts" }).click()
   await selectedFile("gamma.ts")
-  await panel.getByRole("button", { name: "Open file" }).click()
-  await panel.getByRole("button", { name: "README.md" }).click()
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md" }).click()
   await selectedTab("README.md")
 
   await switchSession("Beta review state")
   await toggle.click()
+  await openReviewLauncher(panel)
   await expect(review).toHaveAttribute("aria-selected", "true")
   await page.getByRole("button", { name: "Git changes" }).click()
   await page.getByRole("option", { name: "Branch changes" }).click()
-  await page.getByRole("button", { name: "beta.ts" }).click()
+  await page.getByRole("treeitem", { name: "beta.ts" }).click()
   await selectedFile("beta.ts")
   await page.getByRole("button", { name: "Toggle session context" }).click()
   await selectedTab("Context")
 
   await switchSession("Gamma review state")
   await toggle.click()
-  await panel.getByRole("button", { name: "Open file" }).click()
+  await openFileLauncher(panel)
   await selectedTab("Open file")
 
   await switchSession("Alpha review state")
@@ -993,6 +1096,8 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await toggle.click()
   await selectedTab("README.md")
 
+  // Opening moves focus into the side panel once its motion lands; from there Close Tab closes the side tab.
+  await expect(panel).toBeFocused()
   await page.keyboard.press("Control+w")
   await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(0)
   await expect(review).toHaveAttribute("aria-selected", "true")
@@ -1011,6 +1116,7 @@ test("shows and restores last turn changes from the session diff", async ({ page
   )
   const panel = page.locator("#review-panel")
   await page.getByRole("button", { name: "Toggle review" }).click()
+  await openReviewLauncher(panel)
   await page.getByRole("button", { name: "Git changes" }).click()
   await page.getByRole("option", { name: "Last turn changes" }).click()
   await expect(page.getByRole("button", { name: "Last turn changes" })).toBeVisible()
@@ -1053,6 +1159,7 @@ test("keeps the review state a session stored before extensions", async ({ page 
       .getByRole("button", { name: file, exact: true })
 
   await page.getByRole("button", { name: "Toggle review" }).click()
+  await openReviewLauncher(page.locator("#review-panel"))
   await expect(mode("Branch changes")).toBeVisible()
   await expect(page.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("beta.ts")
   // The narrow review lists every file and expands the ones left open.
@@ -1107,6 +1214,7 @@ test("desktop review waits for the session's stored mode before it loads changes
   await page.goto(desktop())
   await expectSessionTitle(page, title)
   await toggle.click()
+  await openReviewLauncher(page.locator("#review-panel"))
   await mode("Git changes").click()
   await page.getByRole("option", { name: "Branch changes" }).click()
   await expect(file).toHaveText("beta.ts")
@@ -1147,6 +1255,7 @@ test("a chosen mode the session stops offering shows as Git, and comes back when
   const file = page.locator('[data-slot="session-review-v2-file-name"]')
 
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(page.locator("#review-panel"))
   await mode("Git changes").click()
   await page.getByRole("option", { name: "Branch changes" }).click()
   await expect(file).toHaveText("beta.ts")
@@ -1168,6 +1277,7 @@ test("names a single change source and keeps the review header rows at 48px", as
   await openSession(page, { name: "ReviewHeader", project: { vcs: "hg" }, vcsDiff: [fileDiff("src/alpha.ts")] })
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
   const panel = page.locator("#review-panel")
+  await openReviewLauncher(panel)
   const toggle = panel.getByRole("button", { name: "Toggle file tree" })
   const header = panel.locator('[data-slot="session-review-v2-sidebar-header"]')
   const toolbar = panel.locator('[data-slot="session-review-v2-toolbar"]')
@@ -1187,6 +1297,59 @@ test("names a single change source and keeps the review header rows at 48px", as
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(header).toHaveCSS("height", "48px")
   await expect(toolbar).toHaveCSS("height", "48px")
+
+  // Closing the last tab closes the side region; it reopens on a New tab view listing its launchers.
+  const region = page.getByRole("button", { name: "Toggle review", exact: true })
+  await panel.locator("#session-side-panel-review-tab").hover()
+  await panel.getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(region).toHaveAttribute("aria-expanded", "false")
+  await region.click()
+  await expect(panel.getByRole("tab")).toHaveCount(1)
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  // "+" adds another New tab beside it instead of replacing it.
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveCount(2)
+  // Only its launchers: "Recently closed" lists files, not the closed Review.
+  await expect(panel.getByRole("button", { name: /^Review/ })).toBeVisible()
+  await expect(panel.getByRole("region", { name: "Recently closed", exact: true })).toHaveCount(0)
+})
+
+test("Review from a new tab keeps the file browser and preview open", async ({ page }) => {
+  const directory = "C:/OpenCode/ReviewNewTabFile"
+  await openSession(page, {
+    name: "ReviewNewTabFile",
+    fileList: (path) => (path ? [] : [fileNode(directory, "README.md")]),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_reviewnewtabfile: { review: true } },
+      storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: false } },
+    },
+  })
+  const panel = page.locator("#review-panel")
+  const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
+
+  await openFileLauncher(panel)
+  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: /^Review/ }).click()
+  await expect(tab("Review")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
+  await tab("Review").hover()
+  await panel
+    .locator('div[data-value="review:changes"]')
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await tab("Open file").click()
+  await panel.getByRole("treeitem", { name: "README.md" }).click()
+  await expect(tab("README.md")).toHaveAttribute("aria-selected", "true")
+
+  // Choosing Review also leaves a single-click file preview open beside it.
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: /^Review/ }).click()
+  await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("README.md")).toHaveCount(1)
 })
 
 for (const direction of ["ltr", "rtl"] as const) {
@@ -1223,7 +1386,7 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     for (const control of [
       panel.locator('[data-slot="session-side-panel-actions"]'),
-      panel.getByRole("button", { name: "Open file", exact: true }),
+      panel.getByRole("button", { name: "Add tab", exact: true }),
     ]) {
       await expect
         .poll(async () => {
@@ -1240,45 +1403,24 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect.poll(() => toggle.boundingBox()).toEqual(closed)
     await expect(panel).toBeHidden()
 
-    // Pause in the same task as each click so even the first painted state can be inspected.
+    // The chat's width springs; once the panel settles open, it fills the rest of the row beside the chat.
     for (const opened of [true, false]) {
-      await toggle.evaluate((element) => {
-        // SAFETY: `toggle` is the review toggle, a button.
-        const button = element as HTMLButtonElement
-        button.click()
-        document
-          .getAnimations()
-          .filter((animation) => animation.timeline instanceof DocumentTimeline)
-          .forEach((animation) => animation.pause())
-      })
+      await toggle.click()
       await expect(toggle).toHaveAttribute("aria-expanded", String(opened))
       await expect(panel).toHaveAttribute("aria-hidden", String(!opened))
 
-      for (const progress of [0.25, 0.8]) await expectHeaderClearOfToggle(page, toggle, progress)
-      await page.evaluate(() =>
-        document
-          .getAnimations()
-          .filter((animation) => animation.timeline instanceof DocumentTimeline)
-          .forEach((animation) => animation.finish()),
-      )
+      if (opened) await expect(() => expectHeaderClearOfToggle(page, toggle)).toPass()
     }
 
     await expect(panel).toBeHidden()
   })
 }
 
-async function dragThumb(page: Page, thumb: Locator, dx: number) {
-  await expect(thumb).toBeVisible()
-  const box = (await thumb.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2)
-  await page.mouse.up()
-}
-
 async function statusInset(status: Locator, side: "left" | "right") {
   return status.evaluate((element, side) => {
-    const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!.getBoundingClientRect()
+    const root = element.getRootNode()
+    const host = root instanceof ShadowRoot ? root.host : element
+    const viewport = host.closest<HTMLElement>("[data-scrollable]")!.getBoundingClientRect()
     const box = element.getBoundingClientRect()
 
     return side === "right" ? viewport.right - box.right : box.left - viewport.left
@@ -1295,45 +1437,24 @@ function filesystemEvent(directory: string, file: string, event: "add" | "change
   }
 }
 
-async function expectHeaderClearOfToggle(page: Page, toggle: Locator, progress: number) {
-  const geometry = await page.locator('[data-slot="session-chat-panel"]').evaluate((chat, progress) => {
+async function expectHeaderClearOfToggle(page: Page, toggle: Locator) {
+  const geometry = await page.locator('[data-slot="session-chat-panel"]').evaluate((chat) => {
     const row = chat.parentElement!
-
-    const animations = row
-      .getAnimations({ subtree: true })
-      .filter((animation) => animation.timeline instanceof DocumentTimeline)
-
-    const width = animations.find(
-      (animation) => animation instanceof CSSTransition && animation.transitionProperty === "width",
-    )!
-
-    animations.forEach((animation) => {
-      animation.pause()
-      animation.currentTime = Number(width.effect!.getTiming().duration) * progress
-    })
     const chatBounds = chat.getBoundingClientRect()
     const panelBounds = document.querySelector("#review-panel")!.getBoundingClientRect()
 
     return {
       row: row.getBoundingClientRect().width,
-      panelWidth: panelBounds.width,
       gap:
         getComputedStyle(row).direction === "rtl"
           ? chatBounds.left - panelBounds.right
           : panelBounds.left - chatBounds.right,
-      contentOpacity: Number(getComputedStyle(document.querySelector('[data-slot="session-review-content"]')!).opacity),
       panels: chatBounds.width + panelBounds.width + parseFloat(getComputedStyle(row).columnGap),
     }
-  }, progress)
+  })
 
   expect(geometry.gap).toBeCloseTo(8, 1)
-
-  if (geometry.panelWidth > 0) expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
-
-  if (progress === 0.25) {
-    expect(geometry.contentOpacity).toBeGreaterThan(0)
-    expect(geometry.contentOpacity).toBeLessThan(1)
-  }
+  expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
 
   const clip = (await toggle.boundingBox())!
   // Header contents must make no difference to the pixels behind the fixed toggle.

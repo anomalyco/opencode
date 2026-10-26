@@ -15,9 +15,9 @@ export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1bet
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native options. Common fields (`aspectRatio`, `seed`, `images`) live on the request. */
+/** Provider-native `generationConfig` fields. Common fields (`aspect`, `resolution`, `images`) live on the request. */
 export type GoogleImageOptions = {
-  readonly imageSize?: OpenString<"1K" | "2K" | "4K">
+  readonly seed?: number
   readonly thinkingLevel?: OpenString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
   readonly includeThoughts?: boolean
 } & Record<string, unknown>
@@ -82,15 +82,14 @@ const GoogleImageResponse = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 const generationConfig = (request: Request) => {
-  const { imageSize, thinkingLevel, includeThoughts, ...native } = request.providerOptions ?? {}
-  const imageConfig = { aspectRatio: request.aspectRatio, imageSize }
+  const { thinkingLevel, includeThoughts, ...native } = request.providerOptions ?? {}
+  const imageConfig = { aspectRatio: request.aspect, imageSize: request.resolution }
   const thinkingConfig = { thinkingLevel, includeThoughts }
   return (
     mergeJsonRecords(
       {
         responseModalities: ["IMAGE"],
         imageConfig: Object.values(imageConfig).some((value) => value !== undefined) ? imageConfig : undefined,
-        seed: request.seed,
         thinkingConfig: Object.values(thinkingConfig).some((value) => value !== undefined) ? thinkingConfig : undefined,
       },
       native,
@@ -263,7 +262,6 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["mask", "size", "format"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

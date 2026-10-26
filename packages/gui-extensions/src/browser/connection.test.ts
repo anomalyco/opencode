@@ -110,7 +110,8 @@ function fixture(strip: string[] = []) {
     preview: (path) => routed.preview.push(path),
     inspect: (event) => routed.inspect.push(event),
     page: () => undefined,
-    address: () => undefined,
+    shortcut: () => undefined,
+    focused: () => undefined,
   })
 
   const emit = (index: number, event: PaneEvent) => listeners.get(calls[index].input.binding)?.(event)

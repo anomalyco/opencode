@@ -31,8 +31,6 @@ export interface Changes {
    * @param source - The view's demand: a tree, file markers or session details.
    */
   watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
-  /** Runs when review reveals a change (e.g. from a composer comment), so change lists can show theirs. */
-  onReveal(listener: () => void): () => void
 }
 
 /** The review extension provides this. The session details' changes row reads the same data. */
