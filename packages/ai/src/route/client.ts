@@ -1,4 +1,5 @@
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Pull, Schema, Stream } from "effect"
+import { isReadonlyArrayNonEmpty, type NonEmptyReadonlyArray } from "effect/Array"
 import { Auth } from "./auth.js"
 import { Endpoint, type EndpointPatch } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -333,17 +334,31 @@ const incompleteStreamError = (route: string) =>
 const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent, AIError>) =>
   Stream.suspend(() => {
     let terminal = false
-    return events.pipe(
-      Stream.mapEffect((event) => {
-        if (terminal)
-          return Effect.fail(
-            ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
-          )
-        if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
-        return Effect.succeed(event)
+    return Stream.transformPull(events, (pull) =>
+      Effect.sync(() => {
+        let pending: AIError | undefined
+        return Effect.suspend(() => {
+          if (pending) return Effect.fail(pending)
+          return Effect.flatMap(pull, (chunk) => {
+            // Events before a late event are emitted first; the failure surfaces on the next pull.
+            const late = chunk.findIndex((event) => {
+              if (terminal) return true
+              if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
+              return false
+            })
+            if (late === -1) return Effect.succeed(chunk)
+            const error = ProviderShared.eventError(
+              route,
+              `Provider emitted ${chunk[late].type} after the terminal event`,
+            )
+            const emitted = chunk.slice(0, late)
+            if (!isReadonlyArrayNonEmpty(emitted)) return Effect.fail(error)
+            pending = error
+            return Effect.succeed(emitted)
+          })
+        })
       }),
-      Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
-    )
+    ).pipe(Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))))
   })
 
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
@@ -351,17 +366,6 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
 ): Route<Body, Prepared> {
   const protocol = input.protocol
   const decodeEventEffect = Schema.decodeUnknownEffect(protocol.stream.event)
-  const decodeEvent = (route: string) => (frame: Frame) =>
-    decodeEventEffect(frame).pipe(
-      Effect.mapError((cause) =>
-        ProviderShared.eventError(
-          input.id,
-          `Invalid ${route} stream event`,
-          typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
-          cause,
-        ),
-      ),
-    )
 
   type BuiltRouteInput = Omit<MakeTransportInput<Body, Prepared, Frame, Event, State>, "defaults"> & {
     readonly defaults?: RouteDefaults
@@ -434,34 +438,86 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                             (typeof frame === "string" ? frame : ProviderShared.encodeJson(frame))),
                     }),
                   })
-              const events = execution.frames.pipe(
-                Stream.mapEffect((frame) =>
-                  decodeEvent(route)(frame).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.fail(streamError(route, `Failed to decode ${route} event`, cause)),
-                    ),
-                    Effect.map((event) => ({ event, frame })),
-                    Effect.mapError(frameError(frame)),
-                  ),
-                ),
-                terminal ? Stream.takeUntil(({ event }) => terminal(event)) : (stream) => stream,
-              )
               const stream = Stream.suspend(() => {
                 let state = protocol.stream.initial(request)
-                const parsed = events.pipe(
-                  Stream.mapEffect(({ event, frame }) =>
-                    protocol.stream.step(state, event).pipe(
-                      Effect.catchCause((cause) =>
-                        Effect.fail(streamError(route, `Failed to parse ${route} event`, cause)),
-                      ),
-                      Effect.map(([next, output]) => {
-                        state = next
-                        return output
-                      }),
-                      Effect.mapError(frameError(frame, event)),
-                    ),
-                  ),
-                  Stream.flatMap(Stream.fromIterable),
+                // Decode and step each framed batch in one pass. Events produced before a failure are emitted
+                // first and the failure surfaces on the next pull, as it would when streaming frame by frame.
+                const parsed = Stream.transformPull(execution.frames, (pull) =>
+                  Effect.sync(() => {
+                    let halted = false
+                    let pending: Cause.Cause<AIError | Schema.SchemaError> | undefined
+                    // Which effect is running, so a failure gets the same mapping as its per-frame wrapper.
+                    let stage: "glue" | "decode" | "step" = "glue"
+                    let frame: Frame
+                    let event: Event
+                    const parseFrames = (
+                      frames: ReadonlyArray<Frame>,
+                      index: number,
+                      output: Array<LLMEvent>,
+                    ): Effect.Effect<Array<LLMEvent>, AIError | Schema.SchemaError> => {
+                      if (index === frames.length || halted) return Effect.succeed(output)
+                      stage = "glue"
+                      frame = frames[index]
+                      const decoding = decodeEventEffect(frame)
+                      stage = "decode"
+                      return Effect.flatMap(decoding, (decoded) => {
+                        stage = "glue"
+                        event = decoded
+                        // The terminal protocol event is still stepped; later frames are never decoded.
+                        if (terminal?.(decoded)) halted = true
+                        const stepping = protocol.stream.step(state, decoded)
+                        stage = "step"
+                        return Effect.flatMap(stepping, (result) => {
+                          stage = "glue"
+                          state = result[0]
+                          for (const item of result[1]) output.push(item)
+                          return parseFrames(frames, index + 1, output)
+                        })
+                      })
+                    }
+                    const failure = (
+                      cause: Cause.Cause<AIError | Schema.SchemaError>,
+                    ): Cause.Cause<AIError | Schema.SchemaError> => {
+                      if (stage === "glue") return cause
+                      if (stage === "step")
+                        return Cause.fail(
+                          frameError(frame, event)(streamError(route, `Failed to parse ${route} event`, cause)),
+                        )
+                      const failed = cause.reasons.find(Cause.isFailReason)
+                      return Cause.fail(
+                        frameError(frame)(
+                          failed
+                            ? ProviderShared.eventError(
+                                input.id,
+                                `Invalid ${route} stream event`,
+                                typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
+                                failed.error,
+                              )
+                            : ProviderShared.eventError(route, `Failed to decode ${route} event`, undefined, cause),
+                        ),
+                      )
+                    }
+                    const pump: Pull.Pull<
+                      NonEmptyReadonlyArray<LLMEvent>,
+                      AIError | Schema.SchemaError
+                    > = Effect.suspend(() => {
+                      if (pending) return Effect.failCause(pending)
+                      if (halted) return Cause.done()
+                      return Effect.flatMap(pull, (frames) => {
+                        const output: Array<LLMEvent> = []
+                        return parseFrames(frames, 0, output).pipe(
+                          Effect.catchCause((cause) => {
+                            const error = failure(cause)
+                            if (output.length === 0 || Cause.hasInterrupts(cause)) return Effect.failCause(error)
+                            pending = error
+                            return Effect.succeed(output)
+                          }),
+                          Effect.flatMap((events) => (isReadonlyArrayNonEmpty(events) ? Effect.succeed(events) : pump)),
+                        )
+                      })
+                    })
+                    return pump
+                  }),
                 )
                 const onHalt = protocol.stream.onHalt
                 return onHalt
