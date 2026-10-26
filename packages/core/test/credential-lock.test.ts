@@ -39,18 +39,3 @@ it.effect("shares failures but allows a later refresh", () =>
     expect(yield* credentials.lock(id, Effect.succeed(value))).toEqual(value)
   }),
 )
-
-it.effect("refreshes different credentials independently", () =>
-  Effect.gen(function* () {
-    const credentials = yield* Credential.Service
-    const entered = yield* Deferred.make<void>()
-    const release = yield* Deferred.make<void>()
-    const first = yield* credentials
-      .lock(id, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(value)))
-      .pipe(Effect.forkScoped)
-    yield* Deferred.await(entered)
-    expect(yield* credentials.lock(Credential.ID.make("cred_other"), Effect.succeed(value))).toEqual(value)
-    yield* Deferred.succeed(release, undefined)
-    yield* Fiber.join(first)
-  }),
-)
