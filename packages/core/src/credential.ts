@@ -8,6 +8,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Database } from "./database/database.js"
 import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { CredentialTable } from "./credential/sql.js"
 import { ErrorSummary } from "./util/error-summary.js"
 
@@ -73,6 +74,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
+    const flock = yield* EffectFlock.Service
     const scope = yield* Effect.scope
     const pending = new Map<ID, Fiber.Fiber<OAuth | undefined, unknown>>()
     // Rows written before v2.1 may carry the old key credential shape.
@@ -99,7 +101,9 @@ const layer = Layer.effect(
             const current = pending.get(id)
             if (current) return yield* restore(Fiber.join(current))
             // The global scope owns the operation, not the first Session or Location waiting for it.
+            // The file lock extends this to other processes sharing the database.
             const fiber = yield* operation.pipe(
+              flock.withLock(`credential-refresh:${id}`),
               Effect.ensuring(Effect.sync(() => pending.delete(id))),
               Effect.forkIn(scope),
             )
@@ -349,4 +353,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node, EffectFlock.node] })
