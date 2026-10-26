@@ -52,6 +52,7 @@ import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
 import { Tool } from "../src/tool"
+import { readyWhenCached } from "./fixture/location"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
@@ -62,7 +63,7 @@ const it = testEffect(
 const activityLocations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
-    (ref) =>
+    (ref: Location.Ref) =>
       // LocationActivity reads each location's config during its sweep.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       Layer.merge(
@@ -77,7 +78,7 @@ const activityLocations = Layer.effect(
         Config.testLayer(),
       ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
     { idleTimeToLive: Duration.infinity },
-  ),
+  ).pipe(readyWhenCached),
 )
 const itWithActivity = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]), [
@@ -268,6 +269,49 @@ describe("LocationServiceMap", () => {
       }).pipe(Effect.provide(layer))
       expect(overlapped).toEqual(Array.from({ length: count }, () => true))
       yield* Scope.close(borrow, Exit.void)
+    }),
+  )
+
+  testEffect(Layer.empty).live("reports a location ready only between a successful start and invalidation", () =>
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const builds = { started: 0 }
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        LocationWatcher.node.replace(
+          LocationWatcher.node.mapLayer((layer) =>
+            layer.pipe(
+              Layer.tap(() =>
+                Effect.gen(function* () {
+                  if (++builds.started !== 1) return
+                  yield* Deferred.succeed(entered, undefined)
+                  yield* Deferred.await(release)
+                  yield* Effect.die("first boot failed")
+                }),
+              ),
+            ),
+          ),
+        ),
+      ])
+      yield* Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+        const locations = yield* LocationServiceMap.Service
+        const first = yield* locations.contextEffect(ref).pipe(Effect.scoped, Effect.exit, Effect.forkScoped)
+        yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+        yield* Deferred.await(entered)
+        expect(yield* locations.ready(ref)).toBe(false)
+        yield* Deferred.succeed(release, undefined)
+        expect(Exit.isFailure(yield* Fiber.join(first))).toBe(true)
+        expect(yield* locations.ready(ref)).toBe(false)
+
+        yield* locations.contextEffect(ref).pipe(Effect.scoped)
+        expect(yield* locations.ready(ref)).toBe(true)
+        yield* locations.invalidate(ref)
+        expect(yield* locations.ready(ref)).toBe(false)
+      }).pipe(Effect.provide(layer))
     }),
   )
 

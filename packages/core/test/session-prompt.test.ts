@@ -47,6 +47,7 @@ import { SessionStored } from "@opencode/core/session/stored"
 import { SessionBlob } from "@opencode/core/session/blob"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { PromptInput } from "@opencode/schema/prompt-input"
+import { readyWhenCached } from "./fixture/location"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -112,7 +113,7 @@ const locations = makeGlobalNode({
             }),
             Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
           ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-      )
+      ).pipe(readyWhenCached)
     }),
   ),
   deps: [Bus.node],

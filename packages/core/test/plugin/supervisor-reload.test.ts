@@ -28,6 +28,7 @@ import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { advance } from "../lib/clock"
 import { testEffect } from "../lib/effect"
+import { readyWhenCached } from "../fixture/location"
 
 // Real Location boot with plugin-directory discovery, so local plugin files are loaded and reloaded.
 setDefaultTimeout(30_000)
@@ -64,7 +65,7 @@ const instances = Layer.effect(
     const watcher = yield* Watcher.Test
     const map = yield* LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
       idleTimeToLive: Duration.infinity,
-    })
+    }).pipe(readyWhenCached)
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
