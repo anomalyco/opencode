@@ -148,9 +148,11 @@ test("a category's results stay under one run of headers when its groups interle
   await view.search.fill("e")
   const headers = view.results.locator('[data-slot="search-list-header"]')
   await expect(headers.filter({ hasText: "This computer" })).not.toHaveCount(0)
+
   const categories = await headers.evaluateAll((elements) =>
     elements.map((element) => element.firstElementChild?.textContent ?? ""),
   )
+
   const runs = categories.filter((category, index) => category !== categories[index - 1])
   expect(categories.filter((category) => category === "Settings")).toHaveLength(2)
   expect(runs).toEqual([...new Set(runs)])
