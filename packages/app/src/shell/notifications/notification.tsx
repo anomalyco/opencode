@@ -17,12 +17,23 @@ import { useServer } from "@/runtime/server/current"
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
-export function openNotificationSession(tabs: NotificationTabs, server: ServerConnection.Key, sessionID: string) {
-  const tab = tabs.addSessionTab({ server, sessionId: sessionID })
+/** Opens a session's tab, or reuses it, and selects it; `route` shows a child session inside its root's tab. */
+export function openNotificationSession(
+  tabs: NotificationTabs,
+  server: ServerConnection.Key,
+  sessionID: string,
+  route?: { id: string; parentID?: string },
+) {
+  const child = route && route.id !== sessionID ? route : undefined
+  const routed = { routeSessionId: child?.id, routeParentId: child?.parentID }
+  // A new tab carries its route from the start, since it joins the store in a transition; an existing
+  // tab is returned with its old route, so the route is remembered and set on the value selected.
+  const tab = tabs.addSessionTab({ server, sessionId: sessionID, ...(child && routed) })
 
   if (tab.type !== "session") return
-  tabs.rememberSessionRoute(tab, sessionID)
-  tabs.select(tab)
+
+  tabs.rememberSessionRoute(tab, child?.id ?? sessionID, child?.parentID)
+  tabs.select({ ...tab, ...routed })
 }
 
 /** A session is unread when its latest terminal execution is newer than the last one any client viewed. */

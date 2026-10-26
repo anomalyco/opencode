@@ -103,6 +103,9 @@ type PlatformBase = {
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
 
+  /** Receive `opencode://` links the OS opened in this window, until the returned function is called (desktop only) */
+  onOpenLink?(callback: (url: string) => void): () => void
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 

@@ -20,6 +20,7 @@ export const dict = {
   "voice.failure.connection": "Couldn’t connect the call.",
   ...DESKTOP_NATIVE_ENGLISH,
   "session.location.unavailable": "Session location unavailable",
+  "link.session.notFound": "Session not found on your servers",
   "session.location.description": "Choose another directory to continue this session.",
   "session.location.choose": "Choose directory",
   "session.location.worktree": "Choose worktree",

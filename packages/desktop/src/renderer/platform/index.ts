@@ -4,6 +4,7 @@ import { setPinchZoomEnabled, setZoomLevel, webviewZoom, zoomLevel } from "../wi
 import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
 import { createExtensionBridge } from "../extensions"
+import { onOpenLink } from "../startup/deep-links"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
 import { createDesktopNotify } from "./notifications"
@@ -48,6 +49,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
 
       return () => window.removeEventListener(DragCancelEvent, callback)
     },
+    onOpenLink,
     runDesktopMenuAction: createDesktopMenuAction(api),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
