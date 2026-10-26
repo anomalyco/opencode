@@ -79,11 +79,13 @@ Nix reads package URLs and integrity hashes directly from `bun.lock`, then uses 
 
 Changing `bun.lock` updates Nix dependencies automatically. There is no generated lockfile, aggregate `node_modules` hash, or hash-update workflow to maintain.
 
+The stable CLI migrates former Nix `service-prod.json` settings and discovery into the shared `service.json` paths. Existing shared files take precedence. A live former service remains discoverable until the normal client version policy reuses or replaces it.
+
 The cache filters incompatible `os`/`cpu` constraints using Bun's matching rules. It retains libc variants: Bun 1.4.2 ignores libc, while Bun 1.4.4 filters it per dependency.
 
 GitHub archives use Bun's recorded archive integrity, not a separate Nix tree hash. [GitHub can change archive compression](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives#stability-of-source-code-archives), invalidating that checksum even when Git contents are unchanged. The fetch fails rather than accepting different bytes.
 
-Build the CLI and run the installed color and service-discovery checks:
+Build the CLI and check source theme/spinner conversions against installed dependencies, compiled service discovery, and Nix service upgrades:
 
 ```bash
 nix build .#opencode

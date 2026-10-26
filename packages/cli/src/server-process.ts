@@ -71,6 +71,14 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      // A renamed prod registration may still advertise the former channel's default port.
+      if (
+        options.port === undefined &&
+        options.hostname === undefined &&
+        serviceOptions?.legacyURL !== undefined &&
+        (yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })) !== undefined
+      )
+        return
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })

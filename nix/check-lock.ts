@@ -183,5 +183,5 @@ assert.notEqual(version.exitCode, 0)
 assert.match(version.stderr.toString(), /Unsupported Bun lockfile version/)
 
 console.log(
-  `Bun lock: ${valid.length} JSONC fixtures, ${invalid.length} invalid inputs, ${platformCases.length} platform cases on ${platforms.length} targets, full-lock parity, source contexts, conflicts and automatic updates passed`,
+  `Bun lock: ${valid.length} JSONC fixtures, ${invalid.length} invalid inputs, ${platformCases.length} platform cases on ${platforms.length} targets, full-lock JSONC parity, source contexts, conflicts and automatic updates passed`,
 )
