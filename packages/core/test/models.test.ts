@@ -453,7 +453,10 @@ describe("ModelsDev Service", () => {
               release_date: "2026-01-01",
               attachment: false,
               reasoning: true,
-              reasoning_options: [{ type: "effort", values: [null, "low", "high"] }],
+              reasoning_options: [
+                { type: "effort", values: [null, "low", "high"] },
+                { type: "budget_tokens", min: 1024 },
+              ],
               temperature: true,
               tool_call: true,
               interleaved: { field: "vendor_reasoning" },

@@ -169,7 +169,14 @@ function reasoning(model: Model) {
     ...(effort
       ? { effort: (effort.values ?? []).filter((value): value is string => value !== null && value !== "null") }
       : {}),
-    ...(budget ? { budget: { min: budget.min, max: budget.max } } : {}),
+    ...(budget
+      ? {
+          budget: {
+            ...(budget.min !== undefined ? { min: budget.min } : {}),
+            ...(budget.max !== undefined ? { max: budget.max } : {}),
+          },
+        }
+      : {}),
   }
 }
 
