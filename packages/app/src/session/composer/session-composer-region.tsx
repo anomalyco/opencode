@@ -30,12 +30,14 @@ export function SessionComposerRegion(props: {
   subagent: JSX.Element
 }) {
   const controller = props.controller
+
   const face = createMemo(() => {
     const websearch = controller.state.websearch.request()
     const question = controller.state.questionRequest()
     const elicitation = controller.state.elicitationRequest()
     const permission = controller.state.permissionRequest()
     const composer = controller.showComposer() && !controller.child() && !controller.state.blocked()
+
     return { key: composer ? "composer" : "docks", websearch, question, elicitation, permission, composer }
   })
 
