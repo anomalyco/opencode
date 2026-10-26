@@ -178,7 +178,20 @@ export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
 export type ModelCacheFormat = "anthropic" | "alibaba"
 
-export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string>; temperature?: boolean }
+export type ModelRequestDefaults = {
+  outputTokenBudget?: number
+  outputTokenBudgetByReasoningEffort?: { [x: string]: number }
+}
+
+export type ModelCapabilities = {
+  tools: boolean
+  parallelTools?: boolean
+  reasoning?: boolean
+  endpoints?: Array<string>
+  input: Array<string>
+  output: Array<string>
+  temperature?: boolean
+}
 
 export type MoneyUSDPerMillionTokens = number
 
@@ -849,6 +862,8 @@ export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMete
 
 export type ConfigModelCapabilities = {
   tools?: boolean
+  parallelTools?: boolean
+  endpoints?: Array<string>
   input?: Array<string>
   output?: Array<string>
   temperature?: boolean
@@ -921,12 +936,17 @@ export type ProviderSettings = {
   compaction?: ProviderCompaction
   cache?: ProviderCache
   transport?: ProviderTransport
+  modelDiscovery?: boolean
+  outputTokenBudget?: number
   encoding?: ProviderEncoding
 } & { [x: string]: any }
 
-export type ModelSettings = { compaction?: ProviderCompaction; cache?: ProviderCache; encoding?: ProviderEncoding } & {
-  [x: string]: any
-}
+export type ModelSettings = {
+  compaction?: ProviderCompaction
+  cache?: ProviderCache
+  outputTokenBudget?: number
+  encoding?: ProviderEncoding
+} & { [x: string]: any }
 
 export type ConfigProviderSettings = {
   timeout?: number | false
@@ -935,12 +955,15 @@ export type ConfigProviderSettings = {
   compaction?: ProviderCompaction
   cache?: ProviderCache
   transport?: ProviderTransport
+  modelDiscovery?: boolean
+  outputTokenBudget?: number
   encoding?: ProviderEncoding
 } & { [x: string]: JsonValue | null }
 
 export type ConfigModelSettings = {
   compaction?: ProviderCompaction
   cache?: ProviderCache
+  outputTokenBudget?: number
   encoding?: ProviderEncoding
 } & { [x: string]: JsonValue | null }
 
@@ -2312,6 +2335,7 @@ export type ConfigEntry =
                 settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
+                requestDefaults?: ModelRequestDefaults
                 capabilities?: ConfigModelCapabilities
                 variants?: Array<{
                   id: string
@@ -2442,6 +2466,7 @@ export type ModelInfo = {
   settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
+  requestDefaults?: ModelRequestDefaults
   capabilities: ModelCapabilities
   variants: Array<ModelVariant>
   time: { released: number }

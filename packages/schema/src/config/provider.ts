@@ -2,7 +2,7 @@ export * as ConfigProvider from "./provider.js"
 
 import { Schema } from "effect"
 import { Money } from "../money.js"
-import { Capabilities, Compatibility, Family, ID, Model, VariantID } from "../model.js"
+import { Capabilities, Compatibility, Family, ID, Model, RequestDefaults, VariantID } from "../model.js"
 import { ProviderCompatibility } from "../model-compatibility.js"
 import { Provider } from "../provider.js"
 import { optional } from "../schema.js"
@@ -82,9 +82,12 @@ class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
   ...ModelOverlays,
+  requestDefaults: RequestDefaults.pipe(optional),
   // Partial: unset fields fall back to the base model's capabilities, then the defaults.
   capabilities: Capabilities.mapFields((fields) => ({
     tools: optional(fields.tools),
+    parallelTools: fields.parallelTools,
+    endpoints: fields.endpoints,
     input: optional(fields.input),
     output: optional(fields.output),
     temperature: fields.temperature,

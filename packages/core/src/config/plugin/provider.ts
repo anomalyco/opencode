@@ -106,7 +106,7 @@ export const Plugin = define({
           const inherit = source?.inherit || !models.get(providerID, id)
           overlay(
             models,
-            models.provider.get(providerID)?.provider.package,
+            models.provider.get(providerID)?.provider,
             item,
             providerID,
             id,
@@ -157,7 +157,7 @@ export function integrate(providers: ProviderEditor, document: ConfigIntegration
     // An integration lists the models it routes: each starts again from the catalog and takes the provider's
     // package and URL. Its models are complete here, so later model transforms and config apply on top.
     for (const [id, config] of Object.entries(item.models ?? {})) {
-      overlay(providers.models, providers.get(providerID)?.provider.package, item, providerID, id, config, {
+      overlay(providers.models, providers.get(providerID)?.provider, item, providerID, id, config, {
         base: source?.models.get(config.modelID ?? id) ?? source?.models.get(id),
       })
     }
@@ -204,7 +204,7 @@ function overlayProvider(
 /** Applies one configured model, first resetting it to `inherit.base` when it starts again from the catalog. */
 function overlay(
   models: Pick<ModelEditor, "update">,
-  providerPackage: string | undefined,
+  provider: Provider.Info | undefined,
   item: ConfigProvider.Info,
   providerID: string,
   id: string,
@@ -223,7 +223,17 @@ function overlay(
     if (config.releaseDate !== undefined) model.time = { released: Date.parse(config.releaseDate) }
     if (config.compatibility !== undefined) model.compatibility = { ...model.compatibility, ...config.compatibility }
     if (config.package !== undefined) model.package = config.package
+    const reasoning = config.capabilities?.reasoning
+    const effort = model.settings?.reasoningEffort ?? provider?.settings?.reasoningEffort
+    if (
+      reasoning !== undefined &&
+      (!reasoning.supported ||
+        (reasoning.effort !== undefined && (typeof effort !== "string" || !reasoning.effort.includes(effort))))
+    )
+      model.settings = { ...model.settings, reasoningEffort: null }
     if (config.settings !== undefined) model.settings = Provider.mergeOverlay(model.settings, config.settings)
+    if (config.requestDefaults !== undefined)
+      model.requestDefaults = { ...model.requestDefaults, ...config.requestDefaults }
     if (config.headers !== undefined) model.headers = Provider.mergeHeaders(model.headers, config.headers)
     if (config.body !== undefined) model.body = Provider.mergeOverlay(model.body, config.body)
     if (config.capabilities !== undefined)
@@ -236,7 +246,7 @@ function overlay(
     if (config.capabilities?.reasoning !== undefined)
       model.variants = [
         ...Variant.resolve(
-          { ...model, package: model.package ?? providerPackage },
+          { ...model, package: model.package ?? provider?.package },
           Variant.supports(config.capabilities.reasoning),
         ),
       ]

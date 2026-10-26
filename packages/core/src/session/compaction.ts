@@ -109,6 +109,8 @@ type Background = {
 
 /** A background summary of everything before `keepID`, held until automatic compaction is due. */
 type Precomputed = {
+  readonly modelPolicy: string
+  readonly summaryPolicy: string
   readonly firstID: SessionMessage.ID | undefined
   readonly keepID: SessionMessage.ID
   readonly model: SessionContext.Loaded["model"]["ref"]
@@ -279,11 +281,15 @@ export const layer = Layer.effect(
             .resolve({ ...context.session, model: agent.model }, catalog.available)
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
-      const ceiling = calculateCeiling(model.limit, buffer)
+      const ceiling = calculateCeiling(model.limit, buffer, model.model.defaults?.generation?.maxTokens)
       // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
       const cap = Number.isFinite(ceiling)
         ? ceiling
-        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, buffer)
+        : calculateCeiling(
+            { ...model.limit, context: UNKNOWN_WINDOW },
+            buffer,
+            model.model.defaults?.generation?.maxTokens,
+          )
       return { context: model === context.model ? context : { ...context, model }, cap }
     })
 
@@ -295,7 +301,11 @@ export const layer = Layer.effect(
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
       if (
         trigger.reason === "auto" &&
-        !due(context, calculateCeiling(context.model.limit, settings.buffer), trigger.estimate)
+        !due(
+          context,
+          calculateCeiling(context.model.limit, settings.buffer, context.model.model.defaults?.generation?.maxTokens),
+          trigger.estimate,
+        )
       )
         return { status: "skipped" }
       const held = precomputed.get(context.session.id)
@@ -342,7 +352,11 @@ export const layer = Layer.effect(
       if (!settings.precompute || !settings.auto) return
       const context = yield* load
       if (context.model.compaction?.type === "native") return
-      const ceiling = calculateCeiling(context.model.limit, settings.buffer)
+      const ceiling = calculateCeiling(
+        context.model.limit,
+        settings.buffer,
+        context.model.model.defaults?.generation?.maxTokens,
+      )
       if (!Number.isFinite(ceiling)) return
       const estimate = given ?? estimatePrompt(context)
       if (due(context, ceiling, estimate)) return
@@ -376,6 +390,8 @@ export const layer = Layer.effect(
         usage: (recorded) => usage.push(recorded),
       }).pipe(Effect.forkIn(scope))
       precomputed.set(sessionID, {
+        modelPolicy: compactionPolicy(context.model),
+        summaryPolicy: compactionPolicy(model.context.model),
         firstID: context.messages[0]?.id,
         keepID: anchor.id,
         model: context.model.ref,
@@ -404,6 +420,7 @@ export const layer = Layer.effect(
         settings.precompute &&
         trigger.reason !== "overflow" &&
         context.model.compaction?.type !== "native" &&
+        held.summaryPolicy === compactionPolicy(context.model) &&
         index >= 0 &&
         tailTokens(context, index) <= tailLimit(settings.keep, budget)
       if (!usable) {
@@ -501,7 +518,10 @@ export const layer = Layer.effect(
       // which still reuses the cache for that shorter prefix, and as text otherwise. Dropping exchanges to make room
       // for the tail would leave them in neither the summary nor the tail. Where 15% of the window is under
       // `RESERVE_MIN`, the ceiling equals `summaryRoom`, so automatic compaction always takes this fallback.
-      const fit = trigger.reason === "overflow" ? budget : Math.max(budget, summaryRoom(context.model.limit))
+      const fit =
+        trigger.reason === "overflow"
+          ? budget
+          : Math.max(budget, summaryRoom(context.model.limit, context.model.model.defaults?.generation?.maxTokens))
       const result = yield* deliver(
         trigger,
         prepared,
@@ -931,11 +951,20 @@ export const node = makeLocationNode({
  * conversation: a compaction or revert since replaced its start, or the model or instructions changed.
  */
 const heldIndex = (held: Precomputed, context: SessionContext.Loaded) => {
+  if (held.modelPolicy !== compactionPolicy(context.model)) return -1
   if (held.firstID !== context.messages[0]?.id || held.initial !== context.initial) return -1
   if (held.model.providerID !== context.model.ref.providerID || held.model.id !== context.model.ref.id) return -1
   if (held.model.variant !== context.model.ref.variant) return -1
   return context.messages.findIndex((message) => message.id === held.keepID)
 }
+
+const compactionPolicy = (model: SessionContext.Loaded["model"]) =>
+  JSON.stringify([
+    model.limit.context,
+    model.limit.input,
+    model.limit.output,
+    model.model.defaults?.generation?.maxTokens,
+  ])
 
 /** Estimated text a swapped-in summary keeps verbatim: every message from `index` on. */
 const tailTokens = (context: SessionContext.Loaded, index: number) =>
@@ -1112,19 +1141,37 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
  * `RESERVE_MIN` when that is more. A summary request that must be shrunk is aimed at the same size. A window too small
  * to give up `RESERVE_MIN` keeps `RESERVE_SHARE`.
  */
-const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
-  // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
-  // all, only a provider rejection can limit the request.
-  const window = limit.input || limit.context
-  if (window <= 0) return Number.POSITIVE_INFINITY
-  // A buffer that leaves no room, such as one set for a larger model, is ignored.
-  if (buffer !== undefined && buffer < window) return window - buffer
-  return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+const calculateCeiling = (
+  limit: SessionContext.Loaded["model"]["limit"],
+  buffer: number | undefined,
+  outputTokenBudget?: number,
+) => {
+  const window = Math.min(
+    ...[limit.input, limit.context].filter((value): value is number => value !== undefined && value > 0),
+  )
+  if (!Number.isFinite(window)) return Number.POSITIVE_INFINITY
+  const headroom =
+    buffer !== undefined && buffer < window
+      ? buffer
+      : Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+  const reply =
+    outputTokenBudget === undefined ? 0 : SessionModelRequest.outputLimit(limit, undefined, outputTokenBudget)
+  const context = limit.context > reply ? limit.context - reply : Number.POSITIVE_INFINITY
+  return Math.min(window - headroom, context)
 }
 
-/** The largest summary request that leaves `RESERVE_MIN` of the window for the summary. Zero for an unknown window. */
-const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"]) =>
-  Math.max(0, (limit.input || limit.context) - RESERVE_MIN)
+/** Keep cache-preserving summary requests within the independent input and chosen output reservations. */
+const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"], outputTokenBudget?: number) => {
+  const window = Math.min(
+    ...[limit.input, limit.context].filter((value): value is number => value !== undefined && value > 0),
+  )
+  if (!Number.isFinite(window)) return 0
+  const context =
+    outputTokenBudget !== undefined && limit.context > 0
+      ? limit.context - SessionModelRequest.outputLimit(limit, undefined, outputTokenBudget)
+      : Number.POSITIVE_INFINITY
+  return Math.max(0, Math.min(window - RESERVE_MIN, context))
+}
 
 /**
  * Another provider's count may describe a native window this model cannot replay. History then holds the original
@@ -1153,8 +1200,11 @@ const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["l
   const maxTokens = Math.min(
     current,
     Math.max(
-      SessionModelRequest.outputLimit(limit, { measured: 0, estimated }),
-      Math.min(SUMMARY_OUTPUT_FLOOR, SessionModelRequest.outputLimit(limit, { measured: estimated, estimated: 0 })),
+      SessionModelRequest.outputLimit(limit, { measured: 0, estimated }, current),
+      Math.min(
+        SUMMARY_OUTPUT_FLOOR,
+        SessionModelRequest.outputLimit(limit, { measured: estimated, estimated: 0 }, current),
+      ),
     ),
   )
   if (maxTokens === current) return request

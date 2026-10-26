@@ -375,13 +375,20 @@ it.effect("auto compaction estimates current content against the buffered prompt
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
     const session = yield* insertSession(Session.ID.make("ses_input_limit"))
-    const input = (tokens: number, limit: { context: number; input?: number; output: number }) => ({
+    const input = (tokens: number, limit: { context: number; input?: number; output: number }, budget?: number) => ({
       session,
-      model: SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
-        cost: [],
-        limit,
-      }),
+      model: SessionRunnerModel.resolved(
+        budget === undefined
+          ? model
+          : LanguageModel.update(model, {
+              defaults: { generation: GenerationOptions.make({ maxTokens: budget }) },
+            }),
+        {
+          capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+          cost: [],
+          limit,
+        },
+      ),
       messages: [
         Schema.decodeUnknownSync(SessionMessage.Assistant)({
           id: SessionMessage.ID.make("msg_assistant"),
@@ -428,10 +435,54 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
     expect(yield* due(input(84_000, contextLimited))).toBe(true)
 
-    // The reply limit does not lower the ceiling.
+    // A chosen reply budget reserves context independently of the supplier's output maximum.
     const outputLimited = { context: 100_000, output: 30_000 }
+    expect(yield* due(input(69_999, outputLimited, 30_000))).toBe(false)
+    expect(yield* due(input(70_000, outputLimited, 30_000))).toBe(true)
     expect(yield* due(input(83_999, outputLimited))).toBe(false)
-    expect(yield* due(input(84_000, outputLimited))).toBe(true)
+
+    // Input and context are independent: a 1.05M prompt limit does not leave room for a 128K reply.
+    const fullContext = { context: 1_050_000, input: 1_050_000, output: 128_000 }
+    expect(yield* due(input(892_499, fullContext))).toBe(false)
+    expect(yield* due(input(892_500, fullContext))).toBe(true)
+    expect(yield* due(native(892_499, fullContext))).toBe(false)
+    expect(yield* due(native(892_500, fullContext))).toBe(true)
+
+    // Child sessions compact against their selected model definition, independently of the parent's model.
+    const child = yield* insertSession(Session.ID.make("ses_input_limit_child"), { parent_id: session.id })
+    expect(yield* due({ ...input(500_000, fullContext), session: child })).toBe(false)
+    expect(yield* due({ ...input(892_500, fullContext), session: child })).toBe(true)
+    expect(yield* due({ ...input(244_800, inputLimited), session: child })).toBe(true)
+    expect(yield* due(input(244_800, fullContext))).toBe(false)
+
+    // Chosen request defaults reserve output without pretending the provider has an output maximum.
+    const requestBudget = (tokens: number, budget: number) => {
+      const selected = input(tokens, { context: 262144, output: 0 })
+      return {
+        ...selected,
+        model: {
+          ...selected.model,
+          model: LanguageModel.update(selected.model.model, {
+            defaults: { generation: GenerationOptions.make({ maxTokens: budget }) },
+          }),
+        },
+      }
+    }
+    for (const [budget, ceiling] of [
+      [8192, 222823],
+      [65536, 196608],
+      [131072, 131072],
+    ]) {
+      expect(yield* due(requestBudget(ceiling - 1, budget))).toBe(false)
+      expect(yield* due(requestBudget(ceiling, budget))).toBe(true)
+      expect(yield* due({ ...requestBudget(ceiling - 1, budget), session: child })).toBe(false)
+      expect(yield* due({ ...requestBudget(ceiling, budget), session: child })).toBe(true)
+    }
+
+    // An advertised input limit larger than total context must never hide the total-context ceiling.
+    const smallerContext = { context: 400_000, input: 1_050_000, output: 128_000 }
+    expect(yield* due(input(271_999, smallerContext, 128_000))).toBe(false)
+    expect(yield* due(input(272_000, smallerContext, 128_000))).toBe(true)
 
     // A buffer that leaves the model no room, such as one set for a larger model, falls back to the default reserve.
     yield* Effect.scoped(
@@ -555,6 +606,7 @@ const compactManually = (
   session: Session.Info,
   messages: readonly SessionMessage.Info[],
   inputID = SessionMessage.ID.create(),
+  selected = resolved,
 ) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
@@ -564,7 +616,11 @@ const compactManually = (
       reason: "manual",
       inputID,
     })
-    return yield* compaction.compact({ reason: "manual", context: loaded(session, messages), inputID })
+    return yield* compaction.compact({
+      reason: "manual",
+      context: { ...loaded(session, messages), model: selected },
+      inputID,
+    })
   })
 
 /** Stores messages as the session's history so far, ahead of anything published next. */
@@ -866,6 +922,32 @@ it.effect("compaction keeps the output limit for a request that fits its target"
   }),
 )
 
+it.effect(
+  "summary requests preserve gateway budgets above and below the old summary cap for parents and children",
+  () =>
+    Effect.gen(function* () {
+      const parent = yield* insertSession(Session.ID.create())
+      const child = yield* insertSession(Session.ID.create(), { parent_id: parent.id })
+      for (const session of [parent, child]) {
+        for (const budget of [8192, 65536, 131072]) {
+          requests = []
+          const selected = {
+            ...resolved,
+            limit: { context: 1_000_000, output: 0 },
+            model: LanguageModel.update(resolved.model, {
+              defaults: { generation: GenerationOptions.make({ maxTokens: budget }) },
+            }),
+          }
+          expect(
+            yield* compactManually(session, [textUser("Keep the gateway-selected output budget")], undefined, selected),
+          ).toEqual({ status: "completed" })
+          expect(requests).toHaveLength(1)
+          expect(requests[0].generation?.maxTokens).toBe(budget)
+        }
+      }
+    }),
+)
+
 it.effect("compaction hooks can supply the summary instead of the model", () =>
   Effect.gen(function* () {
     requests = []
@@ -1000,6 +1082,90 @@ const enablePrecompute = Effect.gen(function* () {
   yield* compaction.transform((editor) => editor.configure({ precompute: true }))
   return compaction
 })
+
+it.effect("background summaries reserve and retain the selected gateway output budget", () =>
+  Effect.gen(function* () {
+    const compaction = yield* enablePrecompute
+    for (const budget of [8192, 65536, 131072]) {
+      requests = []
+      const session = yield* insertSession(Session.ID.create())
+      const ceiling = Math.min(262144 - Math.floor(262144 * 0.15), 262144 - budget)
+      const context = {
+        ...loaded(session, [
+          textUser("First question"),
+          measured("First answer", 64_000),
+          textUser("Second question"),
+          measured("Second answer", Math.floor(ceiling * 0.9)),
+        ]),
+        model: {
+          ...resolved,
+          limit: { context: 262144, output: 0 },
+          model: LanguageModel.update(resolved.model, {
+            defaults: { generation: GenerationOptions.make({ maxTokens: budget }) },
+          }),
+        },
+      }
+      yield* compaction.precompute(Effect.succeed(context))
+      expect(
+        yield* compaction.compact({ reason: "auto", context, estimate: { measured: ceiling, estimated: 0 } }),
+      ).toEqual({ status: "completed" })
+      expect(requests).toHaveLength(1)
+      expect(requests[0].generation?.maxTokens).toBe(budget)
+    }
+  }),
+)
+
+it.effect("background summaries are invalidated when gateway budgets or limits change without a model switch", () =>
+  Effect.gen(function* () {
+    const compaction = yield* enablePrecompute
+    for (const [pending, change] of [
+      [false, "budget"],
+      [true, "budget"],
+      [false, "limit"],
+      [true, "limit"],
+    ] as const) {
+      requests = []
+      const session = yield* insertSession(Session.ID.create())
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      beforeResponse = Deferred.succeed(started, undefined).pipe(
+        Effect.andThen(pending ? Deferred.await(release) : Effect.void),
+      )
+      const history = precomputeHistory()
+      const context = {
+        ...loaded(session, [...history.near.slice(0, -1), measured("Second answer", 120000)]),
+        model: {
+          ...resolved,
+          limit: { context: 200000, output: 0 },
+          model: LanguageModel.update(resolved.model, {
+            defaults: { generation: GenerationOptions.make({ maxTokens: 65536 }) },
+          }),
+        },
+      }
+      yield* compaction.precompute(Effect.succeed(context))
+      yield* Deferred.await(started)
+      yield* Effect.yieldNow
+      beforeResponse = Effect.void
+      const changed = {
+        ...context,
+        model: {
+          ...context.model,
+          limit: { context: change === "limit" ? 180000 : 200000, output: 0 },
+          model: LanguageModel.update(context.model.model, {
+            defaults: { generation: GenerationOptions.make({ maxTokens: change === "budget" ? 8192 : 65536 }) },
+          }),
+        },
+      }
+      expect(
+        yield* compaction.compact({ reason: "auto", context: changed, estimate: { measured: 180000, estimated: 0 } }),
+      ).toEqual({ status: "completed" })
+      expect(requests).toHaveLength(2)
+      expect(requests[0].generation?.maxTokens).toBe(65536)
+      expect(requests[1].generation?.maxTokens).toBe(change === "budget" ? 8192 : 65536)
+      yield* Deferred.succeed(release, undefined)
+    }
+  }),
+)
 
 it.effect("background summaries stay off unless enabled", () =>
   Effect.gen(function* () {

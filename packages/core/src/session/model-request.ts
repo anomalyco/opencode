@@ -10,6 +10,7 @@ import {
   type Media,
   Message,
   SystemPart,
+  ToolChoice,
 } from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
@@ -82,8 +83,16 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
-  const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
+export const outputLimit = (
+  limit: Model.Info["limit"],
+  inputTokens?: Input["inputTokens"],
+  outputTokenBudget?: number,
+) => {
+  const requested = Math.min(
+    outputTokenBudget ?? (limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK),
+    limit.output > 0 ? limit.output : Number.POSITIVE_INFINITY,
+    OUTPUT_TOKEN_MAX,
+  )
   if (inputTokens === undefined || limit.context <= 0) return requested
   const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
@@ -256,7 +265,7 @@ export const layer = Layer.effect(
           messages: input.messages,
           options:
             kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
+              ? { maxTokens: outputLimit(model.limit, input.inputTokens, model.model.defaults?.generation?.maxTokens) }
               : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
@@ -272,6 +281,11 @@ export const layer = Layer.effect(
       )
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
+      const requestedBudget = generation.maxTokens ?? model.model.defaults?.generation?.maxTokens
+      const fitted =
+        requestedBudget !== undefined && (kind === "primary" || kind === "compaction")
+          ? { ...generation, maxTokens: outputLimit(model.limit, input.inputTokens, requestedBudget) }
+          : generation
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
       const affinity = SessionAffinity.get(session)
       const base = LLM.request({
@@ -294,9 +308,16 @@ export const layer = Layer.effect(
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
-        tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
-        toolChoice: input.toolChoice,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        tools: model.capabilities.tools ? Array.from(hooked, ([name, t]) => ({ ...t, name })) : [],
+        toolChoice: model.capabilities.tools
+          ? model.capabilities.parallelTools === false
+            ? {
+                ...(input.toolChoice ? ToolChoice.make(input.toolChoice) : { type: "auto" as const }),
+                disableParallelToolUse: true,
+              }
+            : input.toolChoice
+          : undefined,
+        generation: Object.keys(fitted).length === 0 ? undefined : fitted,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 

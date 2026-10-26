@@ -3,7 +3,7 @@ export * as Provider from "./provider.js"
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
 import { ProviderCompatibility } from "./model-compatibility.js"
-import { optional, statics } from "./schema.js"
+import { optional, PositiveInt, statics } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
@@ -73,6 +73,8 @@ export const Settings = Schema.StructWithRest(
     compaction: Compaction.pipe(optional),
     cache: Cache.pipe(optional),
     transport: Transport.pipe(optional),
+    modelDiscovery: Schema.Boolean.pipe(optional),
+    outputTokenBudget: PositiveInt.pipe(optional),
     encoding: Encoding.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.Any)],

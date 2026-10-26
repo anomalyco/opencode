@@ -1,8 +1,8 @@
 import type { ModelApi } from "@opencode/client/effect/api"
 import type { Model } from "@opencode/schema/model"
-import type { Effect, Types } from "effect"
+import type { Effect, Scope, Types } from "effect"
 import type { ProviderRecord } from "./provider.js"
-import type { Transform } from "./registration.js"
+import type { Registration, Transform } from "./registration.js"
 
 export interface ModelEditor {
   /** Candidates from available providers, including models disabled by earlier transforms. */
@@ -11,6 +11,8 @@ export interface ModelEditor {
   /** Edits raw model overrides; cannot create an unavailable provider. */
   update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
   remove(providerID: string, modelID: string): void
+  /** Final eligibility gate evaluated after all model edits, including local overrides. */
+  filter(predicate: (model: Model.Info) => boolean): void
   readonly default: {
     get(): { providerID: string; modelID: string } | undefined
     set(providerID: string, modelID: string): void
@@ -23,6 +25,8 @@ export interface ModelEditor {
 }
 
 export interface ModelDomain extends ModelApi<unknown> {
+  /** Readiness boundary for public model reads, excluding internal change notifications. */
+  readonly beforeRead: (effect: Effect.Effect<void>) => Effect.Effect<Registration, never, Scope.Scope>
   readonly transform: Transform<ModelEditor>
   readonly reload: () => Effect.Effect<void>
 }

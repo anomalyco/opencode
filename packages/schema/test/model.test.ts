@@ -3,6 +3,25 @@ import { Schema } from "effect"
 import { Model } from "../src/model.js"
 import { Provider } from "../src/provider.js"
 
+describe("Model.Capabilities", () => {
+  test("preserves explicit gateway flags and omits unknown optional capabilities", () => {
+    const encode = Schema.encodeSync(Model.Capabilities)
+    expect(
+      encode({
+        tools: true,
+        input: ["text"],
+        output: ["text"],
+        parallelTools: undefined,
+        reasoning: undefined,
+        endpoints: undefined,
+      }),
+    ).toEqual({ tools: true, input: ["text"], output: ["text"] })
+    expect(
+      encode({ tools: false, input: [], output: [], parallelTools: false, reasoning: false, endpoints: [] }),
+    ).toEqual({ tools: false, input: [], output: [], parallelTools: false, reasoning: false, endpoints: [] })
+  })
+})
+
 describe("Model.Ref", () => {
   test("parses model references with optional variants", () => {
     const variant = Model.Ref.parse("openrouter/openai/gpt-5#high")
@@ -96,6 +115,17 @@ describe("Model.Info", () => {
 })
 
 describe("Model.Settings", () => {
+  test("distinguishes positive request budgets from unknown supplier output limits", () => {
+    const decode = Schema.decodeUnknownSync(Model.RequestDefaults)
+    expect(decode({ outputTokenBudget: 8192, outputTokenBudgetByReasoningEffort: { max: 131072 } })).toEqual({
+      outputTokenBudget: 8192,
+      outputTokenBudgetByReasoningEffort: { max: 131072 },
+    })
+    expect(() => decode({ outputTokenBudget: 0 })).toThrow()
+    expect(() => decode({ outputTokenBudgetByReasoningEffort: { max: -1 } })).toThrow()
+    expect(Schema.encodeSync(Model.RequestDefaults)({ outputTokenBudget: undefined })).toEqual({})
+    expect(Schema.decodeUnknownSync(Model.Settings)({ outputTokenBudget: 16384 })).toEqual({ outputTokenBudget: 16384 })
+  })
   test("preserves provider-specific model options", () => {
     expect(Schema.decodeUnknownSync(Model.Settings)({ providerOption: true })).toEqual({
       providerOption: true,
