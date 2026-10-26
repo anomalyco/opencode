@@ -6,6 +6,7 @@ import { Server as ServerFlag, Standalone as StandaloneFlag } from "../commands/
 import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
 import { Standalone } from "./standalone"
+import { errorMessage } from "../util/error"
 
 export type Args = {
   readonly server?: string
@@ -98,8 +99,11 @@ function connectError(endpoint: Endpoint, cause: unknown) {
     )
   }
   if (cause instanceof ClientError && cause.reason === "Transport")
-    return new Error(`Could not reach server at ${endpoint.url}`, { cause })
-  return new Error(`Server at ${endpoint.url} did not provide a compatible V2 health response`, { cause })
+    return new Error(`Could not reach server at ${endpoint.url}: ${errorMessage(cause.cause ?? cause)}`, { cause })
+  return new Error(
+    `Server at ${endpoint.url} did not provide a compatible V2 health response: ${errorMessage(cause)}`,
+    { cause },
+  )
 }
 
 export * as ServerConnection from "./server-connection"
