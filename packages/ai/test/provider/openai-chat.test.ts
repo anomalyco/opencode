@@ -66,7 +66,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("omits reasoning defaults from versioned non-reasoning chat models", () =>
     Effect.gen(function* () {
-      for (const id of ["gpt-5-chat", "gpt-5.2-chat", "gpt-5.1-chat-latest"]) {
+      for (const id of ["gpt-5-chat", "gpt-5.2-chat", "gpt-5.1-chat-latest", "openai.gpt-5-chat"]) {
         const prepared = yield* compileRequest(
           LLM.request({ model: OpenAI.configure({ apiKey: "test" }).chat(id), prompt: "Hello" }),
         )

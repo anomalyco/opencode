@@ -39,7 +39,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
 
 export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined => {
   const id = modelID.toLowerCase()
-  if (!id.includes("gpt-5") || /^gpt-5(?:\.\d+)*-chat(?:-|$)/.test(id) || id.includes("gpt-5-pro")) return undefined
+  if (!id.includes("gpt-5") || /(?:^|[^a-z0-9])gpt-5(?:\.\d+)*-chat(?:-|$)/.test(id) || id.includes("gpt-5-pro")) return undefined
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
