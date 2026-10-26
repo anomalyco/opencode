@@ -8,7 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
-import { frameLoop, observeReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
+import { frameLoop, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
 import { showToast } from "@/shell/notifications/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode/client/promise"
@@ -893,11 +893,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     paint()
   }
 
-  onCleanup(
-    observeReducedMotion(() => {
-      if (!questionMotion() && stop) still()
-    }),
-  )
+  createEffect(() => {
+    if (!questionMotion()) still()
+  })
   onCleanup(() => stop?.())
 
   const jump = (tab: number) => {
