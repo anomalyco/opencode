@@ -8,13 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
-import {
-  frameLoop,
-  observeReducedMotion,
-  prefersReducedMotion,
-  Spring,
-  type DurationOptions,
-} from "@opencode/ui/motion"
+import { frameLoop, observeReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
 import { showToast } from "@/shell/notifications/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode/client/promise"
@@ -25,6 +19,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
 import { useCommand } from "@/shell/commands/command"
 import { questionKey, type QuestionKeyZone } from "./question-keys"
+import { questionMotion } from "./question-motion"
 
 const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
 
@@ -155,8 +150,6 @@ const footer = {
     value: 0.6,
   }),
 }
-
-const fade: DurationOptions = { duration: 0.2, bounce: 0 }
 
 const minimizing: DurationOptions = { duration: 0.3, bounce: 0 }
 
@@ -301,7 +294,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const last = createMemo(() => store.tab >= total() - 1)
   // The question text and the answers box follow their measured heights on springs, so the dock grows and shrinks with
   // each question, and the answers box folds away when the dock is minimized. One frame job steps these springs and the
-  // switch between questions, and writes the results straight to the elements. Under reduced motion heights land at once.
+  // switch between questions, and writes the results straight to the elements. Without the dock's motion (its knob is
+  // off by default, and reduced motion turns it off) every spring lands on its target and is painted at once.
   const content = { details: 0, list: 0 }
   const boxes = { details: new Spring(0), list: new Spring(0), folded: new Spring(0) }
   let ghost: Ghost | undefined
@@ -439,7 +433,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
         const key = entry.target === list ? "list" : "details"
         const spring = boxes[key]
 
-        if (content[key] === 0 || prefersReducedMotion()) spring.snap(size)
+        if (content[key] === 0 || !questionMotion()) spring.snap(size)
         else tune(spring, resize()).set(size)
         content[key] = size
 
@@ -453,9 +447,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     onCleanup(() => observer.disconnect())
   })
 
-  // One highlight card jumps between answers by its clip, so only one answer ever looks highlighted. Under reduced
-  // motion it fades in at its new answer.
-  let placed = { tab: -1, index: -1 }
+  // One highlight card jumps between answers by its clip, so only one answer ever looks highlighted.
   createEffect(() => {
     const el = highlightRef
     const index = store.focus
@@ -464,13 +456,6 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     if (!el || !row || !listRef) return
     el.style.clipPath = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
-
-    if (lit() === "none") return
-    const moved = placed.tab !== store.tab || placed.index !== index
-    placed = { tab: store.tab, index }
-
-    if (prefersReducedMotion() && moved && el.animate)
-      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "linear" })
   })
 
   onCleanup(() => {
@@ -797,18 +782,18 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     }
 
     const folded = Math.max(0, Math.min(1, boxes.folded.value))
-    const reduced = prefersReducedMotion()
+    // Without motion the boxes keep their natural heights, so a new question lays out at its size on the same frame.
+    const sized = questionMotion()
 
     if (detailsFrame && content.details > 0) {
       const shown = boxes.details.value
-      detailsFrame.style.height = `${shown.toFixed(2)}px`
+      detailsFrame.style.height = sized ? `${shown.toFixed(2)}px` : ""
       mask(detailsFrame, Math.max(content.details, ghost?.details ?? 0) - shown, shown, sliding)
     }
 
     if (optionsRef && content.list > 0) {
       const shown = boxes.list.value
-      const open = reduced ? 1 - boxes.folded.target : 1 - folded
-      optionsRef.style.height = `${(shown * open).toFixed(2)}px`
+      optionsRef.style.height = sized ? `${(shown * (1 - folded)).toFixed(2)}px` : folded > 0 ? "0px" : ""
       mask(optionsRef, Math.max(content.list, ghost?.list ?? 0) - shown, shown, sliding)
     }
 
@@ -817,9 +802,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       optionsRef.style.visibility = folded > 0.98 ? "hidden" : ""
     }
 
-    const turn = reduced ? boxes.folded.target : folded
-
-    if (chevron) chevron.style.transform = turn > 0 ? `rotate(${(turn * 180).toFixed(2)}deg)` : ""
+    if (chevron) chevron.style.transform = folded > 0 ? `rotate(${(folded * 180).toFixed(2)}deg)` : ""
 
     if (pip) pip.style.transform = `translate3d(${bar.value.toFixed(2)}px,0,0)`
 
@@ -897,22 +880,29 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }
 
   const wake = () => {
+    if (!questionMotion()) return still()
     stop ??= frameLoop.add(tick)
+  }
+
+  // Everything lands where it is going, now: no frame job runs.
+  const still = () => {
+    stop?.()
+    stop = undefined
+    dropSwitch()
+    ;[...Object.values(boxes), ...Object.values(foot), bar].forEach((spring) => spring.snap(spring.target))
+    paint()
   }
 
   onCleanup(
     observeReducedMotion(() => {
-      if (!prefersReducedMotion() || !stop) return
-      dropSwitch()
-      ;[...Object.values(boxes), ...Object.values(foot), bar].forEach((spring) => spring.snap(spring.target))
-      paint()
+      if (!questionMotion() && stop) still()
     }),
   )
   onCleanup(() => stop?.())
 
   const jump = (tab: number) => {
     if (sending() || tab === store.tab) return
-    const animate = !store.minimized && !prefersReducedMotion()
+    const animate = !store.minimized && questionMotion()
 
     if (animate) depart(tab)
     else dropSwitch()
@@ -932,7 +922,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     })
     optsRef.length = options().length
 
-    const reduced = prefersReducedMotion()
+    const reduced = !questionMotion()
 
     if (reduced) bar.snap(dash(tab))
     else tune(bar, tuning.spring()).set(dash(tab))
@@ -960,7 +950,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     // The answers box is still springing to the new list's height, so focusing must not scroll it.
     focus(pickFocus(tab), { preventScroll: true })
 
-    if (animate) wake()
+    wake()
   }
 
   const cycle = (by: number) => {
@@ -1003,12 +993,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }
 
   const fold = (target: number) => {
-    tune(boxes.folded, prefersReducedMotion() ? fade : minimizing).set(target)
+    tune(boxes.folded, minimizing).set(target)
     wake()
   }
 
   return (
-    <div data-component="session-question-dock">
+    <div data-component="session-question-dock" data-animated={questionMotion()}>
       <DockPrompt
         kind="question"
         ref={(el) => (root = el)}
@@ -1020,7 +1010,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 <bdi>
                   {summary()[0]}
                   <Show when={summary().length > 1}>
-                    <RollingNumber value={current()} spring={tuning.spring()} />
+                    <Show when={questionMotion()} fallback={current()}>
+                      <RollingNumber value={current()} spring={tuning.spring()} />
+                    </Show>
                     {summary().slice(1).join("")}
                   </Show>
                 </bdi>
@@ -1028,19 +1020,23 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
               <div data-slot="question-header-actions">
                 <Show when={total() > 1}>
                   <div data-slot="question-progress">
-                    <div data-slot="question-progress-track" aria-hidden="true">
-                      <span
-                        data-slot="question-progress-current"
-                        ref={(el) => {
-                          pip = el
-                          // Dashes have their places once the row is laid out.
-                          queueMicrotask(() => {
-                            bar.snap(dash(store.tab))
-                            paint()
-                          })
-                        }}
-                      />
-                    </div>
+                    {/* Without motion there is no sliding bar: the current question's dash lights instead. */}
+                    <Show when={questionMotion()}>
+                      <div data-slot="question-progress-track" aria-hidden="true">
+                        <span
+                          data-slot="question-progress-current"
+                          ref={(el) => {
+                            pip = el
+                            onCleanup(() => (pip = undefined))
+                            // Dashes have their places once the row is laid out.
+                            queueMicrotask(() => {
+                              bar.snap(dash(store.tab))
+                              paint()
+                            })
+                          }}
+                        />
+                      </div>
+                    </Show>
                     <For each={questions()}>
                       {(_, i) => (
                         <button

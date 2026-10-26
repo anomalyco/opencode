@@ -345,6 +345,7 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
       words: number
       highlights: number
       footer: boolean
+      animations: number
     }[] = []
 
     const queue = [...keys]
@@ -388,6 +389,7 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
           ),
           highlights: root.querySelectorAll('[data-slot="question-highlight"]').length,
           footer: !!back.getAttribute("style") || faces.some((face) => !!face.getAttribute("style")),
+          animations: document.getAnimations().length,
         }
 
         frames.push(frame)
@@ -414,222 +416,318 @@ const play = (question: Locator, keys: { key: string; after?: number }[]) =>
     return frames
   }, keys)
 
-story("keeps a question on screen while switching", async ({ mount }) => {
-  const component = await mount("app-current-session-surface--question-request")
-  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-  await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
+// The dock's motion is off unless its knob is on, so these turn it on before the dock loads.
+story.describe("with the question dock's motion on", () => {
+  story.beforeEach(({ page }) =>
+    page.addInitScript(() => localStorage.setItem("opencode.motion.v2", JSON.stringify({ "question.motion": 1 }))),
+  )
 
-  const forward = await play(question, [{ key: "ArrowRight" }])
-  await expect(question.getByRole("checkbox", { name: "Changed files", exact: true })).toBeVisible()
-  const backward = await play(question, [{ key: "ArrowLeft" }])
-  await expect(question.getByRole("radio", { name: /Focused/ })).toBeVisible()
-  await expect(question.locator("[data-ghost]")).toHaveCount(0)
+  story("keeps a question on screen while switching", async ({ mount }) => {
+    const component = await mount("app-current-session-surface--question-request")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
 
-  for (const frames of [forward, backward]) {
-    expect(frames.length).toBeLessThan(240)
-    expect(Math.min(...frames.map((frame) => frame.text))).toBeGreaterThanOrEqual(0.9)
-    expect(Math.min(...frames.map((frame) => frame.answers))).toBeGreaterThanOrEqual(0.9)
-    expect(frames.at(-1)).toMatchObject({ x: 0, scale: 1, blur: false })
+    const forward = await play(question, [{ key: "ArrowRight" }])
+    await expect(question.getByRole("checkbox", { name: "Changed files", exact: true })).toBeVisible()
+    const backward = await play(question, [{ key: "ArrowLeft" }])
+    await expect(question.getByRole("radio", { name: /Focused/ })).toBeVisible()
+    await expect(question.locator("[data-ghost]")).toHaveCount(0)
+
+    for (const frames of [forward, backward]) {
+      expect(frames.length).toBeLessThan(240)
+      expect(Math.min(...frames.map((frame) => frame.text))).toBeGreaterThanOrEqual(0.9)
+      expect(Math.min(...frames.map((frame) => frame.answers))).toBeGreaterThanOrEqual(0.9)
+      expect(frames.at(-1)).toMatchObject({ x: 0, scale: 1, blur: false })
+    }
+
+    expect(Math.min(...forward.map((frame) => frame.scale))).toBeLessThan(1)
+    expect(forward.some((frame) => frame.blur)).toBe(true)
+  })
+
+  story("switches questions without a second answer highlight", async ({ mount, page }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const highlight = question.locator('[data-slot="question-highlight"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+    await page.keyboard.press("ArrowDown")
+    await expect(highlight).toBeVisible()
+
+    // The leaving copy of the answers carries no highlight, so only the new question's answer is ever highlighted.
+    const frames = await play(question, [{ key: "ArrowRight" }])
+    expect(frames.some((frame) => frame.ghosts > 0)).toBe(true)
+    expect(frames.every((frame) => frame.highlights === 1)).toBe(true)
+  })
+
+  story("keeps one outgoing copy and a visible question through rapid switches", async ({ mount }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const options = question.locator('[data-slot="question-options"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+    // From the middle question, so every run can go two either way and comes back.
+    await play(question, [{ key: "ArrowRight" }, { key: "ArrowRight", after: 30 }])
+
+    const runs = [
+      ["ArrowRight", "ArrowLeft"],
+      ["ArrowLeft", "ArrowRight"],
+      ["ArrowRight", "ArrowRight", "ArrowLeft", "ArrowLeft"],
+      ["ArrowLeft", "ArrowLeft", "ArrowRight", "ArrowRight"],
+    ]
+
+    for (const run of runs)
+      for (const after of [0, 1, 2, 4]) {
+        const frames = await play(
+          question,
+          run.map((key) => ({ key, after })),
+        )
+
+        const label = `${run.join(" ")} every ${after} frames`
+        expect(frames.length, label).toBeLessThan(240)
+        expect(Math.min(...frames.map((frame) => frame.text)), label).toBeGreaterThanOrEqual(0.5)
+        expect(Math.min(...frames.map((frame) => frame.answers)), label).toBeGreaterThanOrEqual(0.5)
+        expect(Math.max(...frames.map((frame) => frame.ghosts)), label).toBeLessThanOrEqual(2)
+        await expect(question.locator("[data-ghost]")).toHaveCount(0)
+        expect(await options.evaluate((el) => el.scrollLeft), label).toBe(0)
+      }
+  })
+
+  story("rolls the question count up going on and down going back", async ({ mount }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const title = question.locator('[data-slot="question-header-title"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+    await expect(title).toHaveText("1 of 5 questions")
+
+    // The new digit comes up from below going on, and down from above going back.
+    const forward = await play(question, [{ key: "ArrowRight" }])
+    await expect(title).toHaveText("2 of 5 questions")
+    const backward = await play(question, [{ key: "ArrowLeft" }])
+    await expect(title).toHaveText("1 of 5 questions")
+
+    expect(Math.max(...forward.map((frame) => frame.digit))).toBeGreaterThan(0.2)
+    expect(Math.min(...forward.map((frame) => frame.digit))).toBeGreaterThanOrEqual(0)
+    expect(Math.min(...backward.map((frame) => frame.digit))).toBeLessThan(-0.2)
+    expect(Math.max(...backward.map((frame) => frame.digit))).toBeLessThanOrEqual(0)
+
+    for (const frames of [forward, backward]) expect(frames.at(-1)?.digit).toBe(0)
+    await expect(question.locator('[data-slot="rolling-number-glyph"][data-leaving]')).toHaveText("")
+  })
+
+  // Where the bar sits against each dash, from the inline start of the progress row.
+  const dashes = (question: Locator) =>
+    question.evaluate((root) => ({
+      dashes: [...root.querySelectorAll('[data-slot="question-progress-bar"]')].map(
+        (el) => el.getBoundingClientRect().left,
+      ),
+      bar: root.querySelector('[data-slot="question-progress-current"]')!.getBoundingClientRect().left,
+    }))
+
+  for (const dir of ["ltr", "rtl"] as const)
+    story(`slides the progress bar straight to a clicked dash (${dir})`, async ({ mount, page }) => {
+      const component = await mount("session-question-switch--question-series")
+      const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+      await expect(question.getByRole("radio").first()).toBeFocused()
+      await page.evaluate((dir) => document.documentElement.setAttribute("dir", dir), dir)
+
+      const start = await dashes(question)
+      expect(start.bar).toBeCloseTo(start.dashes[0]!, 0)
+
+      // Jumping from the first question to the fourth slides the one bar across the dashes in between, one way only.
+      const frames = await play(question, [{ key: "click:3" }])
+      const end = await dashes(question)
+      const bars = frames.map((frame) => frame.bar)
+      const way = Math.sign(end.dashes[3]! - end.dashes[0]!)
+      expect(end.bar).toBeCloseTo(end.dashes[3]!, 0)
+      expect(bars.at(-1)).toBeCloseTo(end.dashes[3]!, 0)
+      expect(bars.some((x) => way * (x - end.dashes[0]!) > 1 && way * (x - end.dashes[3]!) < -1)).toBe(true)
+      expect(bars.slice(1).every((x, i) => way * (x - bars[i]!) >= -0.01)).toBe(true)
+      await expect(question.locator('[data-slot="question-header-title"]')).toHaveText("4 of 5 questions")
+
+      // In RTL the dashes run from the right, so the bar moves left.
+      expect(way).toBe(dir === "rtl" ? -1 : 1)
+    })
+
+  story("swaps questions, the count and the progress bar at once under reduced motion", async ({ mount, page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+
+    const frames = await play(question, [{ key: "ArrowRight" }])
+    expect(frames.every((frame) => frame.ghosts === 0 && frame.x === 0 && frame.scale === 1 && !frame.blur)).toBe(true)
+    expect(Math.min(...frames.map((frame) => frame.text))).toBe(1)
+    expect(frames.every((frame) => frame.digit === 0)).toBe(true)
+    expect(new Set(frames.map((frame) => Math.round(frame.bar))).size).toBe(1)
+    expect(frames.every((frame) => frame.back === 1 && !frame.footer)).toBe(true)
+    await expect(question.locator('[data-slot="question-header-title"]')).toHaveText("2 of 5 questions")
+
+    const last = await play(question, [{ key: "click:4" }])
+    expect(last.every((frame) => frame.next === 0 && frame.submit === 1 && !frame.footer)).toBe(true)
+  })
+
+  // Rises, or falls, all the way from one end to the other through values in between, never turning back.
+  const glides = (values: number[], from: number, to: number) => {
+    const way = Math.sign(to - from)
+    expect(values.at(0)! * way).toBeLessThan(to * way)
+    expect(values.at(-1)).toBeCloseTo(to, 2)
+    expect(
+      values.some(
+        (value) => way * (value - from) > 0.02 * way * (to - from) && way * (to - value) > 0.02 * way * (to - from),
+      ),
+    ).toBe(true)
+    expect(values.slice(1).every((value, i) => way * (value - values[i]!) >= -0.01)).toBe(true)
   }
 
-  expect(Math.min(...forward.map((frame) => frame.scale))).toBeLessThan(1)
-  expect(forward.some((frame) => frame.blur)).toBe(true)
+  story("fades Back in and out and turns Next into Submit with the switch", async ({ mount }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const back = question.locator('[data-slot="question-footer-back"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+    await expect(question.getByRole("button", { name: "Back", exact: true })).toHaveCount(0)
+
+    // Going on from the first question, Back comes in and can be clicked at once, while Next stays where it is.
+    const nextBox = await question.getByRole("button", { name: "Next", exact: true }).boundingBox()
+    const arrive = await play(question, [{ key: "ArrowRight" }])
+    glides(
+      arrive.map((frame) => frame.back),
+      0,
+      1,
+    )
+    expect(arrive.every((frame) => frame.hit && frame.next === 1 && frame.submit === 0)).toBe(true)
+    expect(await question.getByRole("button", { name: "Next", exact: true }).boundingBox()).toMatchObject({
+      x: nextBox!.x,
+      width: nextBox!.width,
+    })
+
+    // On to the last question, Next fades into Submit while the button's edge sweeps to Submit's width.
+    await play(question, [{ key: "click:3" }])
+
+    const widths = await question.evaluate((root) =>
+      [...root.querySelectorAll<HTMLElement>('[data-slot="question-advance-face"]')].map(
+        (face) => face.getBoundingClientRect().width,
+      ),
+    )
+
+    const submit = await play(question, [{ key: "ArrowRight" }])
+    glides(
+      submit.map((frame) => frame.next),
+      1,
+      0,
+    )
+    glides(
+      submit.map((frame) => frame.submit),
+      0,
+      1,
+    )
+    glides(
+      submit.map((frame) => frame.width),
+      widths[0]!,
+      widths[1]!,
+    )
+    expect(submit.some((frame) => frame.next > 0.1 && frame.submit > 0.1)).toBe(true)
+    // The buttons overlap, but the words "Next" and "Submit" are never both legible at once.
+    expect(Math.max(...submit.map((frame) => frame.words))).toBeLessThan(0.25)
+    expect(submit.every((frame) => frame.back === 1)).toBe(true)
+
+    // Back to the first question, Back goes, and cannot be clicked from the moment it starts to.
+    const leave = await play(question, [{ key: "click:0" }])
+    glides(
+      leave.map((frame) => frame.back),
+      1,
+      0,
+    )
+    expect(leave.some((frame) => frame.hit)).toBe(false)
+    expect(leave.at(-1)).toMatchObject({ next: 1, submit: 0, footer: false })
+    await expect(back).toHaveAttribute("inert", "")
+  })
 })
 
-story("switches questions without a second answer highlight", async ({ mount, page }) => {
-  const component = await mount("session-question-switch--question-series")
-  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-  const highlight = question.locator('[data-slot="question-highlight"]')
-  await expect(question.getByRole("radio").first()).toBeFocused()
-  await page.keyboard.press("ArrowDown")
-  await expect(highlight).toBeVisible()
-
-  // The leaving copy of the answers carries no highlight, so only the new question's answer is ever highlighted.
-  const frames = await play(question, [{ key: "ArrowRight" }])
-  expect(frames.some((frame) => frame.ghosts > 0)).toBe(true)
-  expect(frames.every((frame) => frame.highlights === 1)).toBe(true)
-})
-
-story("keeps one outgoing copy and a visible question through rapid switches", async ({ mount }) => {
-  const component = await mount("session-question-switch--question-series")
-  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-  const options = question.locator('[data-slot="question-options"]')
-  await expect(question.getByRole("radio").first()).toBeFocused()
-  // From the middle question, so every run can go two either way and comes back.
-  await play(question, [{ key: "ArrowRight" }, { key: "ArrowRight", after: 30 }])
-
-  const runs = [
-    ["ArrowRight", "ArrowLeft"],
-    ["ArrowLeft", "ArrowRight"],
-    ["ArrowRight", "ArrowRight", "ArrowLeft", "ArrowLeft"],
-    ["ArrowLeft", "ArrowLeft", "ArrowRight", "ArrowRight"],
-  ]
-
-  for (const run of runs)
-    for (const after of [0, 1, 2, 4]) {
-      const frames = await play(
-        question,
-        run.map((key) => ({ key, after })),
-      )
-
-      const label = `${run.join(" ")} every ${after} frames`
-      expect(frames.length, label).toBeLessThan(240)
-      expect(Math.min(...frames.map((frame) => frame.text)), label).toBeGreaterThanOrEqual(0.5)
-      expect(Math.min(...frames.map((frame) => frame.answers)), label).toBeGreaterThanOrEqual(0.5)
-      expect(Math.max(...frames.map((frame) => frame.ghosts)), label).toBeLessThanOrEqual(2)
-      await expect(question.locator("[data-ghost]")).toHaveCount(0)
-      expect(await options.evaluate((el) => el.scrollLeft), label).toBe(0)
-    }
-})
-
-story("rolls the question count up going on and down going back", async ({ mount }) => {
+story("switches questions, folds and submits on the same frame with the dock's motion off", async ({ mount, page }) => {
   const component = await mount("session-question-switch--question-series")
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
   const title = question.locator('[data-slot="question-header-title"]')
   await expect(question.getByRole("radio").first()).toBeFocused()
-  await expect(title).toHaveText("1 of 5 questions")
+  await expect(question.locator('[data-component="rolling-number"]')).toHaveCount(0)
+  await expect(question.locator('[data-slot="question-progress-track"]')).toHaveCount(0)
 
-  // The new digit comes up from below going on, and down from above going back.
-  const forward = await play(question, [{ key: "ArrowRight" }])
-  await expect(title).toHaveText("2 of 5 questions")
-  const backward = await play(question, [{ key: "ArrowLeft" }])
-  await expect(title).toHaveText("1 of 5 questions")
+  // From the frame of the key on, the next question is at rest: no outgoing copy, nothing moved, faded or blurred,
+  // and no animation or transition running anywhere on the page.
+  for (const [key, count] of [
+    ["ArrowRight", "2 of 5 questions"],
+    ["click:3", "4 of 5 questions"],
+    ["ArrowRight", "5 of 5 questions"],
+  ] as const) {
+    const frames = await play(question, [{ key }])
+    expect(frames.length, key).toBeLessThanOrEqual(4)
+    expect(
+      frames.every(
+        (frame) =>
+          frame.ghosts === 0 &&
+          frame.x === 0 &&
+          frame.scale === 1 &&
+          !frame.blur &&
+          !frame.mask &&
+          frame.text === 1 &&
+          frame.answers === 1 &&
+          frame.back === 1 &&
+          !frame.footer &&
+          frame.animations === 0,
+      ),
+      key,
+    ).toBe(true)
+    await expect(title).toHaveText(count)
+  }
 
-  expect(Math.max(...forward.map((frame) => frame.digit))).toBeGreaterThan(0.2)
-  expect(Math.min(...forward.map((frame) => frame.digit))).toBeGreaterThanOrEqual(0)
-  expect(Math.min(...backward.map((frame) => frame.digit))).toBeLessThan(-0.2)
-  expect(Math.max(...backward.map((frame) => frame.digit))).toBeLessThanOrEqual(0)
+  // Minimizing and restoring fold the answers away and back at once.
+  const fold = (label: string) =>
+    question.evaluate(async (root, label) => {
+      const options = root.querySelector<HTMLElement>('[data-slot="question-options"]')!
+      const list = root.querySelector<HTMLElement>('[data-slot="question-options-list"]')!
 
-  for (const frames of [forward, backward]) expect(frames.at(-1)?.digit).toBe(0)
-  await expect(question.locator('[data-slot="rolling-number-glyph"][data-leaving]')).toHaveText("")
-})
+      const sample = () => ({
+        height: Math.round(options.getBoundingClientRect().height),
+        list: Math.round(list.getBoundingClientRect().height),
+        hidden: getComputedStyle(options).visibility === "hidden",
+        animations: document.getAnimations().length,
+      })
 
-// Where the bar sits against each dash, from the inline start of the progress row.
-const dashes = (question: Locator) =>
-  question.evaluate((root) => ({
-    dashes: [...root.querySelectorAll('[data-slot="question-progress-bar"]')].map(
-      (el) => el.getBoundingClientRect().left,
-    ),
-    bar: root.querySelector('[data-slot="question-progress-current"]')!.getBoundingClientRect().left,
-  }))
+      root.querySelector<HTMLElement>(`button[aria-label="${label}"]`)!.click()
+      const frames = [sample()]
 
-for (const dir of ["ltr", "rtl"] as const)
-  story(`slides the progress bar straight to a clicked dash (${dir})`, async ({ mount, page }) => {
-    const component = await mount("session-question-switch--question-series")
-    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-    await expect(question.getByRole("radio").first()).toBeFocused()
-    await page.evaluate((dir) => document.documentElement.setAttribute("dir", dir), dir)
+      for (let i = 0; i < 3; i++) {
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+        frames.push(sample())
+      }
 
-    const start = await dashes(question)
-    expect(start.bar).toBeCloseTo(start.dashes[0]!, 0)
+      return frames
+    }, label)
 
-    // Jumping from the first question to the fourth slides the one bar across the dashes in between, one way only.
-    const frames = await play(question, [{ key: "click:3" }])
-    const end = await dashes(question)
-    const bars = frames.map((frame) => frame.bar)
-    const way = Math.sign(end.dashes[3]! - end.dashes[0]!)
-    expect(end.bar).toBeCloseTo(end.dashes[3]!, 0)
-    expect(bars.at(-1)).toBeCloseTo(end.dashes[3]!, 0)
-    expect(bars.some((x) => way * (x - end.dashes[0]!) > 1 && way * (x - end.dashes[3]!) < -1)).toBe(true)
-    expect(bars.slice(1).every((x, i) => way * (x - bars[i]!) >= -0.01)).toBe(true)
-    await expect(question.locator('[data-slot="question-header-title"]')).toHaveText("4 of 5 questions")
-
-    // In RTL the dashes run from the right, so the bar moves left.
-    expect(way).toBe(dir === "rtl" ? -1 : 1)
-  })
-
-story("swaps questions, the count and the progress bar at once under reduced motion", async ({ mount, page }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" })
-  const component = await mount("session-question-switch--question-series")
-  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-  await expect(question.getByRole("radio").first()).toBeFocused()
-
-  const frames = await play(question, [{ key: "ArrowRight" }])
-  expect(frames.every((frame) => frame.ghosts === 0 && frame.x === 0 && frame.scale === 1 && !frame.blur)).toBe(true)
-  expect(Math.min(...frames.map((frame) => frame.text))).toBe(1)
-  expect(frames.every((frame) => frame.digit === 0)).toBe(true)
-  expect(new Set(frames.map((frame) => Math.round(frame.bar))).size).toBe(1)
-  expect(frames.every((frame) => frame.back === 1 && !frame.footer)).toBe(true)
-  await expect(question.locator('[data-slot="question-header-title"]')).toHaveText("2 of 5 questions")
-
-  const last = await play(question, [{ key: "click:4" }])
-  expect(last.every((frame) => frame.next === 0 && frame.submit === 1 && !frame.footer)).toBe(true)
-})
-
-// Rises, or falls, all the way from one end to the other through values in between, never turning back.
-const glides = (values: number[], from: number, to: number) => {
-  const way = Math.sign(to - from)
-  expect(values.at(0)! * way).toBeLessThan(to * way)
-  expect(values.at(-1)).toBeCloseTo(to, 2)
+  const folded = await fold("Minimize question")
+  expect(folded.every((frame) => frame.height === 0 && frame.hidden && frame.animations === 0)).toBe(true)
+  const restored = await fold("Restore question")
   expect(
-    values.some(
-      (value) => way * (value - from) > 0.02 * way * (to - from) && way * (to - value) > 0.02 * way * (to - from),
+    restored.every(
+      (frame) => frame.height > 0 && frame.height === frame.list && !frame.hidden && frame.animations === 0,
     ),
   ).toBe(true)
-  expect(values.slice(1).every((value, i) => way * (value - values[i]!) >= -0.01)).toBe(true)
-}
 
-story("fades Back in and out and turns Next into Submit with the switch", async ({ mount }) => {
-  const component = await mount("session-question-switch--question-series")
-  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
-  const back = question.locator('[data-slot="question-footer-back"]')
-  await expect(question.getByRole("radio").first()).toBeFocused()
-  await expect(question.getByRole("button", { name: "Back", exact: true })).toHaveCount(0)
+  // Submitting swaps the dock for the composer on one frame, with no closing flight.
+  const submitted = await page.evaluate(async () => {
+    const dock = () => document.querySelector('[data-component="dock-prompt"][data-kind="question"]')
+    const moving = () => !!document.querySelector("[data-moving]")
+    document.querySelector<HTMLElement>('[data-slot="question-advance-face"][data-active="true"] button')!.click()
 
-  // Going on from the first question, Back comes in and can be clicked at once, while Next stays where it is.
-  const nextBox = await question.getByRole("button", { name: "Next", exact: true }).boundingBox()
-  const arrive = await play(question, [{ key: "ArrowRight" }])
-  glides(
-    arrive.map((frame) => frame.back),
-    0,
-    1,
-  )
-  expect(arrive.every((frame) => frame.hit && frame.next === 1 && frame.submit === 0)).toBe(true)
-  expect(await question.getByRole("button", { name: "Next", exact: true }).boundingBox()).toMatchObject({
-    x: nextBox!.x,
-    width: nextBox!.width,
+    for (let i = 0; i < 120 && dock() && !moving(); i++) await new Promise((resolve) => requestAnimationFrame(resolve))
+    const frames = []
+
+    for (let i = 0; i < 3; i++) {
+      frames.push({ dock: !!dock(), moving: moving(), animations: document.getAnimations().length })
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    }
+
+    return frames
   })
 
-  // On to the last question, Next fades into Submit while the button's edge sweeps to Submit's width.
-  await play(question, [{ key: "click:3" }])
-
-  const widths = await question.evaluate((root) =>
-    [...root.querySelectorAll<HTMLElement>('[data-slot="question-advance-face"]')].map(
-      (face) => face.getBoundingClientRect().width,
-    ),
-  )
-
-  const submit = await play(question, [{ key: "ArrowRight" }])
-  glides(
-    submit.map((frame) => frame.next),
-    1,
-    0,
-  )
-  glides(
-    submit.map((frame) => frame.submit),
-    0,
-    1,
-  )
-  glides(
-    submit.map((frame) => frame.width),
-    widths[0]!,
-    widths[1]!,
-  )
-  expect(submit.some((frame) => frame.next > 0.1 && frame.submit > 0.1)).toBe(true)
-  // The buttons overlap, but the words "Next" and "Submit" are never both legible at once.
-  expect(Math.max(...submit.map((frame) => frame.words))).toBeLessThan(0.25)
-  expect(submit.every((frame) => frame.back === 1)).toBe(true)
-
-  // Back to the first question, Back goes, and cannot be clicked from the moment it starts to.
-  const leave = await play(question, [{ key: "click:0" }])
-  glides(
-    leave.map((frame) => frame.back),
-    1,
-    0,
-  )
-  expect(leave.some((frame) => frame.hit)).toBe(false)
-  expect(leave.at(-1)).toMatchObject({ next: 1, submit: 0, footer: false })
-  await expect(back).toHaveAttribute("inert", "")
+  expect(submitted).toEqual(Array(3).fill({ dock: false, moving: false, animations: 0 }))
 })
 
 story("takes Next clicks and the submit shortcut while the footer is still moving", async ({ mount, page }) => {

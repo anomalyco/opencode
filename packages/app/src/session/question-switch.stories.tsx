@@ -12,7 +12,7 @@ export default {
     docs: {
       description: {
         component:
-          "A pending question dock with five questions of different heights. Step through them with ← and →, or the Replay buttons under Knobs → Timeline → Question, and tune the switch there.",
+          "A pending question dock with five questions of different heights. Step through them with ← and →, or the Replay buttons under Knobs → Timeline → Question. Its motion is off until Question dock motion is turned on there.",
       },
     },
   },
