@@ -2,6 +2,7 @@ import { getDirectory, getFilename } from "@opencode/util/path"
 import type { SelectedLineRange } from "@pierre/diffs"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { mediaKindFromPath } from "../../pierre/media"
@@ -107,6 +108,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   let scrollRef: HTMLDivElement | undefined
   let focusToken = 0
 
+  // SAFETY: widens each initial `null` to the field's full type; the store only assigns values of those types.
   const [store, setStore] = createStore({
     selection: null as SelectedLineRange | null,
     commenting: null as SelectedLineRange | null,
@@ -284,8 +286,9 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
           <DiffChanges changes={view()} />
         </div>
       </div>
-      <div
-        ref={(el) => {
+      <ScrollView
+        orientation="both"
+        viewportRef={(el) => {
           scrollRef = el
         }}
         data-slot="session-review-v2-diff-scroll"
@@ -300,7 +303,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         >
           {diffViewer()}
         </Show>
-      </div>
+      </ScrollView>
     </>
   )
 }

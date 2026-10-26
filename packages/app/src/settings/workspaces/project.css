@@ -10,7 +10,7 @@
 }
 
 .project-settings-extension-tabs [data-slot="tabs-v2-content"] {
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .project-settings-extension-section {

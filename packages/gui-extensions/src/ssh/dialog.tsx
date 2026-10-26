@@ -1,6 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { Divider } from "@opencode/ui/divider"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js"
@@ -187,9 +188,11 @@ export function DialogSsh(props: {
           <Show when={prompt()} keyed>
             {(prompt) => (
               <div class="flex w-full min-w-0 flex-col gap-2">
-                <pre id="ssh-prompt" class="ssh-prompt" dir="auto">
-                  {prompt.text}
-                </pre>
+                <ScrollView class="max-h-[200px]">
+                  <pre id="ssh-prompt" class="ssh-prompt" dir="auto">
+                    {prompt.text}
+                  </pre>
+                </ScrollView>
                 <Show when={!prompt.confirm}>
                   <TextInput
                     id="ssh-response"

@@ -1,6 +1,7 @@
 import { TextField } from "@opencode/ui/text-field"
 import type { captureException } from "@sentry/solid"
 import { Logo } from "@opencode/ui/logo"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Button } from "@opencode/ui/button"
 import { Component, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -328,104 +329,106 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   return (
-    <div
-      class="relative flex-1 h-full w-full min-h-0 min-w-0 overflow-y-auto flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 font-sans"
-      data-tauri-drag-region
-    >
-      <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
-        <Logo class="w-48 sm:w-58.5 opacity-12 shrink-0" />
-        <div class="flex flex-col items-center gap-2 text-center">
-          <h1 class="text-lg font-medium text-text-strong">
-            {language.t(status() ? "error.page.title.status" : "error.page.title")}
-          </h1>
-          <p class="text-sm text-text-weak">
-            {status()
-              ? language.t("error.page.description.status", { status: status()! })
-              : language.t(errorDescriptionKey(props.error))}
-          </p>
-        </div>
-        <TextField
-          value={formattedError()}
-          readOnly
-          copyable
-          multiline
-          class="max-h-96 w-full font-mono text-xs no-scrollbar"
-          label={language.t("error.page.details.label")}
-          hideLabel
-        />
-        <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
-          <Button size="large" onClick={platform.restart}>
-            {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
-          </Button>
-          <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
-            <Button size="large" variant="ghost" onClick={exportDebugLogs}>
-              {language.t("error.page.action.exportLogs")}
+    <ScrollView class="relative flex-1 h-full w-full min-h-0 min-w-0 font-sans" data-tauri-drag-region>
+      <div
+        class="flex min-h-full flex-col items-center justify-start sm:justify-center p-4 sm:p-8"
+        data-tauri-drag-region
+      >
+        <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
+          <Logo class="w-48 sm:w-58.5 opacity-12 shrink-0" />
+          <div class="flex flex-col items-center gap-2 text-center">
+            <h1 class="text-lg font-medium text-text-strong">
+              {language.t(status() ? "error.page.title.status" : "error.page.title")}
+            </h1>
+            <p class="text-sm text-text-weak">
+              {status()
+                ? language.t("error.page.description.status", { status: status()! })
+                : language.t(errorDescriptionKey(props.error))}
+            </p>
+          </div>
+          <TextField
+            value={formattedError()}
+            readOnly
+            copyable
+            multiline
+            class="max-h-96 w-full font-mono text-xs no-scrollbar"
+            label={language.t("error.page.details.label")}
+            hideLabel
+          />
+          <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
+            <Button size="large" onClick={platform.restart}>
+              {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
             </Button>
-          </Show>
-          <Show when={store.captureException}>
-            {(capture) => {
-              const [reported, setReported] = createSignal(false)
+            <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
+              <Button size="large" variant="ghost" onClick={exportDebugLogs}>
+                {language.t("error.page.action.exportLogs")}
+              </Button>
+            </Show>
+            <Show when={store.captureException}>
+              {(capture) => {
+                const [reported, setReported] = createSignal(false)
 
-              return (
-                <Button
-                  size="large"
-                  disabled={reported()}
-                  onClick={() => {
-                    capture()(props.error)
-                    setReported(true)
-                  }}
-                >
-                  {language.t(reported() ? "error.page.action.reported" : "error.page.action.report")}
-                </Button>
-              )
-            }}
+                return (
+                  <Button
+                    size="large"
+                    disabled={reported()}
+                    onClick={() => {
+                      capture()(props.error)
+                      setReported(true)
+                    }}
+                  >
+                    {language.t(reported() ? "error.page.action.reported" : "error.page.action.report")}
+                  </Button>
+                )
+              }}
+            </Show>
+            <Show when={updater()}>
+              <Show
+                when={updateVersion()}
+                fallback={
+                  <Button
+                    size="large"
+                    variant="ghost"
+                    onClick={checkForUpdates}
+                    disabled={["checking", "downloading", "installing"].includes(updater()?.state()?.status ?? "")}
+                  >
+                    {updater()?.state()?.status === "checking"
+                      ? language.t("error.page.action.checking")
+                      : language.t("error.page.action.checkUpdates")}
+                  </Button>
+                }
+              >
+                {(version) => (
+                  <Button size="large" onClick={installUpdate}>
+                    {language.t("error.page.action.updateTo", { version: version() })}
+                  </Button>
+                )}
+              </Show>
+            </Show>
+          </div>
+          <Show when={store.actionError}>
+            {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
           </Show>
-          <Show when={updater()}>
-            <Show
-              when={updateVersion()}
-              fallback={
-                <Button
-                  size="large"
-                  variant="ghost"
-                  onClick={checkForUpdates}
-                  disabled={["checking", "downloading", "installing"].includes(updater()?.state()?.status ?? "")}
-                >
-                  {updater()?.state()?.status === "checking"
-                    ? language.t("error.page.action.checking")
-                    : language.t("error.page.action.checkUpdates")}
-                </Button>
-              }
-            >
+          <div class="flex flex-col items-center gap-2 text-xs text-center">
+            <div class="flex flex-wrap items-center justify-center gap-1">
+              {language.t("error.page.report.prefix")}
+              <button
+                type="button"
+                class="flex items-center text-text-interactive-base gap-1"
+                onClick={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
+              >
+                <div>{language.t("error.page.report.discord")}</div>
+                <Icon name="discord" class="text-text-interactive-base" />
+              </button>
+            </div>
+            <Show when={platform.version}>
               {(version) => (
-                <Button size="large" onClick={installUpdate}>
-                  {language.t("error.page.action.updateTo", { version: version() })}
-                </Button>
+                <p class="text-xs text-text-weak">{language.t("error.page.version", { version: version() })}</p>
               )}
             </Show>
-          </Show>
-        </div>
-        <Show when={store.actionError}>
-          {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
-        </Show>
-        <div class="flex flex-col items-center gap-2 text-xs text-center">
-          <div class="flex flex-wrap items-center justify-center gap-1">
-            {language.t("error.page.report.prefix")}
-            <button
-              type="button"
-              class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
-            >
-              <div>{language.t("error.page.report.discord")}</div>
-              <Icon name="discord" class="text-text-interactive-base" />
-            </button>
           </div>
-          <Show when={platform.version}>
-            {(version) => (
-              <p class="text-xs text-text-weak">{language.t("error.page.version", { version: version() })}</p>
-            )}
-          </Show>
         </div>
       </div>
-    </div>
+    </ScrollView>
   )
 }

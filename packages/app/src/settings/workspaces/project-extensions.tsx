@@ -1,5 +1,6 @@
 import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Tabs } from "@opencode/ui/tabs"
 import { Button } from "@opencode/ui/button"
 import { useQuery } from "@tanstack/solid-query"
@@ -346,52 +347,60 @@ export const ProjectSettingsExtensions: Component<{
           </Tabs.List>
 
           <Tabs.Content value="mcps">
-            <div class="project-settings-extension-section">
-              <ProjectSectionHeader
-                kind="mcps"
-                empty={projectMcpNames().length === 0}
-                action={<span>{language.t("settings.extensions.manageConfig")}</span>}
-              />
-              <Show when={projectMcpNames().length > 0}>
-                <ExtensionCard>{mcpRows(projectMcpNames())}</ExtensionCard>
-              </Show>
-              <SharedSection count={globalMcpNames().length}>{mcpRows(globalMcpNames())}</SharedSection>
-            </div>
+            <ScrollView class="h-full">
+              <div class="project-settings-extension-section">
+                <ProjectSectionHeader
+                  kind="mcps"
+                  empty={projectMcpNames().length === 0}
+                  action={<span>{language.t("settings.extensions.manageConfig")}</span>}
+                />
+                <Show when={projectMcpNames().length > 0}>
+                  <ExtensionCard>{mcpRows(projectMcpNames())}</ExtensionCard>
+                </Show>
+                <SharedSection count={globalMcpNames().length}>{mcpRows(globalMcpNames())}</SharedSection>
+              </div>
+            </ScrollView>
           </Tabs.Content>
 
           <Tabs.Content value="plugins">
-            <div class="project-settings-extension-section">
-              <ProjectSectionHeader
-                kind="plugins"
-                empty={projectPlugins().length === 0}
-                action={<span>{language.t("settings.extensions.manageConfig")}</span>}
-              />
-              <Show when={projectPlugins().length > 0}>
-                <ExtensionCard>{pluginRows(projectPlugins())}</ExtensionCard>
-              </Show>
-              <SharedSection count={globalPlugins().length}>{pluginRows(globalPlugins())}</SharedSection>
-            </div>
+            <ScrollView class="h-full">
+              <div class="project-settings-extension-section">
+                <ProjectSectionHeader
+                  kind="plugins"
+                  empty={projectPlugins().length === 0}
+                  action={<span>{language.t("settings.extensions.manageConfig")}</span>}
+                />
+                <Show when={projectPlugins().length > 0}>
+                  <ExtensionCard>{pluginRows(projectPlugins())}</ExtensionCard>
+                </Show>
+                <SharedSection count={globalPlugins().length}>{pluginRows(globalPlugins())}</SharedSection>
+              </div>
+            </ScrollView>
           </Tabs.Content>
 
           <Tabs.Content value="skills">
-            <div class="project-settings-extension-section">
-              <ProjectSectionHeader
-                kind="skills"
-                empty={projectSkills().length === 0}
-                action={
-                  <ExternalLink class="settings-extension-link" href="https://opencode.ai/v2/docs/skills">
-                    {language.t("settings.extensions.addSkills")}
-                  </ExternalLink>
-                }
-              />
-              <Show when={projectSkills().length > 0}>
-                <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>
-              </Show>
-              <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
-            </div>
+            <ScrollView class="h-full">
+              <div class="project-settings-extension-section">
+                <ProjectSectionHeader
+                  kind="skills"
+                  empty={projectSkills().length === 0}
+                  action={
+                    <ExternalLink class="settings-extension-link" href="https://opencode.ai/v2/docs/skills">
+                      {language.t("settings.extensions.addSkills")}
+                    </ExternalLink>
+                  }
+                />
+                <Show when={projectSkills().length > 0}>
+                  <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>
+                </Show>
+                <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
+              </div>
+            </ScrollView>
           </Tabs.Content>
           <Tabs.Content value="lsps">
-            <ProjectLanguageServers />
+            <ScrollView class="h-full">
+              <ProjectLanguageServers />
+            </ScrollView>
           </Tabs.Content>
         </Tabs>
       </div>

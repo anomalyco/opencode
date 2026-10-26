@@ -6,6 +6,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { displayName } from "@opencode/ui/project-avatar"
@@ -15,7 +16,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
-import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry } from "./inbox-model"
 
 // `since` is when the inbox was first used; Recent only lists sessions that finished a run after it.
 const InboxState = Persistence.struct({
@@ -35,6 +36,7 @@ export function SidebarInbox() {
 
   const sections = createMemo(() => {
     const list = inbox.entries()
+
     // The most recently finished session comes first.
     const finished = list
       .filter((entry) => {
@@ -77,6 +79,7 @@ export function SidebarInbox() {
       await inbox.remove(props.entry)
       dialog.close()
     }
+
     return (
       <Dialog fit>
         <DialogHeader hideClose>
@@ -125,39 +128,44 @@ export function SidebarInbox() {
 
   return (
     <div data-slot="sidebar-inbox" class="flex min-h-0 flex-1 flex-col">
-      <div data-slot="sidebar-inbox-scroll" class="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto pb-1">
-        <Show when={sections().needs.length > 0}>
-          <div class="flex shrink-0 flex-col gap-px pb-3">
-            <SectionHeader label={language.t("sidebar.inbox.section.needsAttention")} count={sections().needs.length} />
-            {rows(sections().needs)}
-          </div>
-        </Show>
-        <Show
-          when={sections().inbox.length > 0}
-          fallback={
-            <Show
-              when={
-                sections().needs.length === 0 && sections().working.length === 0 && sections().archived.length === 0
-              }
-            >
-              <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
-                {language.t("sidebar.inbox.empty")}
-              </div>
-            </Show>
-          }
-        >
+      <ScrollView data-slot="sidebar-inbox-scroll" class="min-h-0 flex-1">
+        <div class="flex flex-col gap-px pb-1">
           <Show when={sections().needs.length > 0}>
-            <SectionHeader label={language.t("sidebar.inbox.section.recent")} />
+            <div class="flex shrink-0 flex-col gap-px pb-3">
+              <SectionHeader
+                label={language.t("sidebar.inbox.section.needsAttention")}
+                count={sections().needs.length}
+              />
+              {rows(sections().needs)}
+            </div>
           </Show>
-          {rows(sections().inbox)}
-        </Show>
-        <Show when={sections().archived.length > 0}>
-          <div class="flex shrink-0 flex-col gap-px pt-3">
-            <SectionHeader label={language.t("sidebar.inbox.section.archived")} />
-            {rows(sections().archived)}
-          </div>
-        </Show>
-      </div>
+          <Show
+            when={sections().inbox.length > 0}
+            fallback={
+              <Show
+                when={
+                  sections().needs.length === 0 && sections().working.length === 0 && sections().archived.length === 0
+                }
+              >
+                <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
+                  {language.t("sidebar.inbox.empty")}
+                </div>
+              </Show>
+            }
+          >
+            <Show when={sections().needs.length > 0}>
+              <SectionHeader label={language.t("sidebar.inbox.section.recent")} />
+            </Show>
+            {rows(sections().inbox)}
+          </Show>
+          <Show when={sections().archived.length > 0}>
+            <div class="flex shrink-0 flex-col gap-px pt-3">
+              <SectionHeader label={language.t("sidebar.inbox.section.archived")} />
+              {rows(sections().archived)}
+            </div>
+          </Show>
+        </div>
+      </ScrollView>
       {/* Working sessions sit in a shelf pinned below the scrolling list. */}
       <Show when={sections().working.length > 0}>
         <div
@@ -170,10 +178,12 @@ export function SidebarInbox() {
             expanded={state.workingExpanded}
             onToggle={() => setState("workingExpanded", !state.workingExpanded)}
           />
-          <div class="flex min-h-0 flex-col gap-px overflow-y-auto">
-            {/* A collapsed shelf still shows the session that is open. */}
-            {rows(sections().working.filter((entry) => state.workingExpanded || inbox.selected(entry)))}
-          </div>
+          <ScrollView class="min-h-0">
+            <div class="flex flex-col gap-px">
+              {/* A collapsed shelf still shows the session that is open. */}
+              {rows(sections().working.filter((entry) => state.workingExpanded || inbox.selected(entry)))}
+            </div>
+          </ScrollView>
         </div>
       </Show>
     </div>
@@ -238,6 +248,13 @@ function InboxRow(props: {
   const servers = useServers()
   const project = createMemo(() => props.entry.ctx.projects.forSession(props.entry.session))
   const status = () => props.entry.status
+
+  const statusLabel = () => {
+    const value = status()
+
+    return value === "ready" ? "" : language.t(`sidebar.inbox.status.${value}`)
+  }
+
   const unread = () => status() !== "ready" && status() !== "working"
 
   // Sessions on the current server are not marked.
@@ -304,10 +321,7 @@ function InboxRow(props: {
                   "text-v2-state-fg-success": status() === "done",
                 }}
               >
-                <Show
-                  when={status() === "working"}
-                  fallback={language.t(`sidebar.inbox.status.${status() as Exclude<InboxStatus, "ready">}`)}
-                >
+                <Show when={status() === "working"} fallback={statusLabel()}>
                   {/* Announce only the status: the ticking duration would be re-read every second. */}
                   <span class="sr-only">{language.t("sidebar.inbox.status.working")}</span>
                   {/* Keep the status colour under the sweep. */}

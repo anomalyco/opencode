@@ -6,14 +6,20 @@
   gap: 12px;
   padding: 0 16px 16px;
 
-  [data-slot="error-details-text"] {
-    min-height: 0;
+  [data-slot="error-details-scroll"] {
     flex: 1;
-    margin: 0;
-    overflow: auto;
-    padding: 8px 12px;
     border-radius: 6px;
     background: var(--v2-background-bg-layer-03);
+
+    [data-scrollable]:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot="error-details-text"] {
+    margin: 0;
+    padding: 8px 12px;
     color: var(--v2-text-text-base);
     font-family: var(--v2-font-family-code);
     font-size: 12px;
@@ -21,10 +27,6 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     user-select: text;
-
-    &:focus-visible {
-      outline: 1px solid var(--v2-border-border-focus);
-    }
   }
 
   [data-slot="error-details-actions"] {

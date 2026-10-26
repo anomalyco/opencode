@@ -1,6 +1,7 @@
 import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
 import { Badge } from "@opencode/ui/badge"
 import { Icon } from "@opencode/ui/icon"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -88,106 +89,110 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
       <DialogHeader closeLabel={language.t("common.close")}>
         <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
       </DialogHeader>
-      <DialogBody class="max-h-[calc(100vh_-_68px)] min-h-0 flex-none gap-0 overflow-y-auto px-2 pb-2">
-        <div ref={listEl} class="flex min-h-0 flex-col">
-          <div data-section="free-models" class="flex w-full flex-col items-start pb-3">
-            <div class="flex h-8 w-full flex-none select-none flex-row items-center px-3 pb-2">
-              <div class="flex h-5 items-center text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
-                {language.t("dialog.model.unpaid.freeModels.title")}
-              </div>
-            </div>
-            <For each={freeModels()}>
-              {(item) => (
-                <Tooltip
-                  class="w-full"
-                  placement="right-start"
-                  gutter={6}
-                  openDelay={0}
-                  contentStyle={{ "font-family": "var(--v2-font-family-sans)" }}
-                  value={
-                    <ModelTooltip
-                      model={{ ...item, name: displayModelName(item.name) }}
-                      latest={item.latest}
-                      free={isFreeModel(item)}
-                      v2
-                    />
-                  }
-                >
-                  <button
-                    type="button"
-                    class="flex w-full scroll-my-3.5 flex-row items-center gap-1.5 rounded-md px-3 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
-                    onClick={() => selectModel(item)}
-                  >
-                    <span class="min-w-0 truncate">{displayModelName(item.name)}</span>
-                    <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
-                    <Show when={item.latest}>
-                      <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
-                    </Show>
-                    <Show when={currentKey() === modelKey(item)}>
-                      <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
-                    </Show>
-                  </button>
-                </Tooltip>
-              )}
-            </For>
-          </div>
-
-          <div class="flex w-full flex-col">
-            <div class="flex w-full flex-col items-start rounded-lg border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-02 p-2.5 pt-2">
-              <div class="flex h-8 w-full select-none items-center px-0.5 pb-2">
-                <div class="flex h-5 items-center text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
-                  {language.t("dialog.model.unpaid.addMore.title")}
+      <DialogBody class="max-h-[calc(100vh_-_68px)] min-h-0 flex-none">
+        <ScrollView focusable={false}>
+          <div class="px-2 pb-2">
+            <div ref={listEl} class="flex min-h-0 flex-col">
+              <div data-section="free-models" class="flex w-full flex-col items-start pb-3">
+                <div class="flex h-8 w-full flex-none select-none flex-row items-center px-3 pb-2">
+                  <div class="flex h-5 items-center text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
+                    {language.t("dialog.model.unpaid.freeModels.title")}
+                  </div>
                 </div>
-              </div>
-              <div class="grid w-full grid-cols-1 gap-y-1.5 gap-x-2 sm:grid-cols-2">
-                <For
-                  each={integrations
-                    .list()
-                    .filter((provider) => featuredProviders.includes(provider.id))
-                    .sort((a, b) => featuredProviders.indexOf(a.id) - featuredProviders.indexOf(b.id))}
-                >
-                  {(provider) => (
-                    <button
-                      type="button"
-                      data-provider-id={provider.id}
-                      class="flex min-h-11 w-full scroll-my-3.5 flex-row items-start gap-2 rounded-md bg-v2-background-bg-base px-3 py-2.5 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-background-bg-layer-01 focus:bg-v2-background-bg-layer-01 focus:outline-none"
-                      classList={{
-                        "border-[0.5px] border-transparent shadow-[var(--v2-elevation-raised)]":
-                          theme.mode() !== "dark",
-                        "border-[0.5px] border-v2-border-border-strong": theme.mode() === "dark",
-                      }}
-                      onClick={() => openProviders(provider.id)}
+                <For each={freeModels()}>
+                  {(item) => (
+                    <Tooltip
+                      class="w-full"
+                      placement="right-start"
+                      gutter={6}
+                      openDelay={0}
+                      contentStyle={{ "font-family": "var(--v2-font-family-sans)" }}
+                      value={
+                        <ModelTooltip
+                          model={{ ...item, name: displayModelName(item.name) }}
+                          latest={item.latest}
+                          free={isFreeModel(item)}
+                          v2
+                        />
+                      }
                     >
-                      <ProviderModelIcon
-                        provider={{ id: provider.id, name: providerName(provider) }}
-                        class="mt-0.5 shrink-0 text-v2-icon-icon-base"
-                      />
-                      <span class="flex min-w-0 flex-col">
-                        <span class="truncate">{providerName(provider)}</span>
-                        <Show when={provider.id === "opencode" || provider.id === "opencode-go"}>
-                          <span class="truncate font-[440] text-v2-text-text-muted">
-                            {language.t(
-                              provider.id === "opencode"
-                                ? "dialog.provider.opencode.tagline"
-                                : "dialog.provider.opencodeGo.tagline",
-                            )}
-                          </span>
+                      <button
+                        type="button"
+                        class="flex w-full scroll-my-3.5 flex-row items-center gap-1.5 rounded-md px-3 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                        onClick={() => selectModel(item)}
+                      >
+                        <span class="min-w-0 truncate">{displayModelName(item.name)}</span>
+                        <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
+                        <Show when={item.latest}>
+                          <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
                         </Show>
-                      </span>
-                    </button>
+                        <Show when={currentKey() === modelKey(item)}>
+                          <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
+                        </Show>
+                      </button>
+                    </Tooltip>
                   )}
                 </For>
-                <button
-                  type="button"
-                  class="col-span-full flex h-8 w-full scroll-my-3.5 items-center justify-start rounded-md px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
-                  onClick={() => openProviders()}
-                >
-                  {language.t("dialog.model.unpaid.viewMoreProviders")}
-                </button>
+              </div>
+
+              <div class="flex w-full flex-col">
+                <div class="flex w-full flex-col items-start rounded-lg border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-02 p-2.5 pt-2">
+                  <div class="flex h-8 w-full select-none items-center px-0.5 pb-2">
+                    <div class="flex h-5 items-center text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
+                      {language.t("dialog.model.unpaid.addMore.title")}
+                    </div>
+                  </div>
+                  <div class="grid w-full grid-cols-1 gap-y-1.5 gap-x-2 sm:grid-cols-2">
+                    <For
+                      each={integrations
+                        .list()
+                        .filter((provider) => featuredProviders.includes(provider.id))
+                        .sort((a, b) => featuredProviders.indexOf(a.id) - featuredProviders.indexOf(b.id))}
+                    >
+                      {(provider) => (
+                        <button
+                          type="button"
+                          data-provider-id={provider.id}
+                          class="flex min-h-11 w-full scroll-my-3.5 flex-row items-start gap-2 rounded-md bg-v2-background-bg-base px-3 py-2.5 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-background-bg-layer-01 focus:bg-v2-background-bg-layer-01 focus:outline-none"
+                          classList={{
+                            "border-[0.5px] border-transparent shadow-[var(--v2-elevation-raised)]":
+                              theme.mode() !== "dark",
+                            "border-[0.5px] border-v2-border-border-strong": theme.mode() === "dark",
+                          }}
+                          onClick={() => openProviders(provider.id)}
+                        >
+                          <ProviderModelIcon
+                            provider={{ id: provider.id, name: providerName(provider) }}
+                            class="mt-0.5 shrink-0 text-v2-icon-icon-base"
+                          />
+                          <span class="flex min-w-0 flex-col">
+                            <span class="truncate">{providerName(provider)}</span>
+                            <Show when={provider.id === "opencode" || provider.id === "opencode-go"}>
+                              <span class="truncate font-[440] text-v2-text-text-muted">
+                                {language.t(
+                                  provider.id === "opencode"
+                                    ? "dialog.provider.opencode.tagline"
+                                    : "dialog.provider.opencodeGo.tagline",
+                                )}
+                              </span>
+                            </Show>
+                          </span>
+                        </button>
+                      )}
+                    </For>
+                    <button
+                      type="button"
+                      class="col-span-full flex h-8 w-full scroll-my-3.5 items-center justify-start rounded-md px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                      onClick={() => openProviders()}
+                    >
+                      {language.t("dialog.model.unpaid.viewMoreProviders")}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </ScrollView>
       </DialogBody>
     </Dialog>
   )

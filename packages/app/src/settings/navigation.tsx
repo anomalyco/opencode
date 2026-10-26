@@ -1,6 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Tabs } from "@opencode/ui/tabs"
 import { createEffect, ErrorBoundary, For, on, Show, type ComponentProps, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -116,36 +117,38 @@ export function SettingsNavigation(props: {
             <SettingsSearch />
           </Show>
           <Show when={!searchable() || !surface.search.state.query.trim()}>
-            <Tabs.List class="settings-nav-groups">
-              <For each={props.groups}>
-                {(group) => (
-                  <div class="settings-nav-group">
-                    <Show when={group.label || group.action}>
-                      <div class="settings-nav-group-header" data-component="settings-nav-group-header">
-                        <span>{group.label}</span>
-                        {group.action}
-                      </div>
-                    </Show>
-                    <For each={group.items}>
-                      {(item) => (
-                        <Tabs.Trigger
-                          value={item.value}
-                          disabled={item.disabled}
-                          onPointerEnter={(event: PointerEvent) => {
-                            if (item.disabled || event.pointerType === "touch") return
-                            item.onPrefetch?.()
-                          }}
-                          onFocus={() => !item.disabled && item.onPrefetch?.()}
-                        >
-                          <Icon name={item.icon} />
-                          {item.label}
-                        </Tabs.Trigger>
-                      )}
-                    </For>
-                  </div>
-                )}
-              </For>
-            </Tabs.List>
+            <ScrollView focusable={false} class="min-h-0 w-full">
+              <Tabs.List class="settings-nav-groups">
+                <For each={props.groups}>
+                  {(group) => (
+                    <div class="settings-nav-group">
+                      <Show when={group.label || group.action}>
+                        <div class="settings-nav-group-header" data-component="settings-nav-group-header">
+                          <span>{group.label}</span>
+                          {group.action}
+                        </div>
+                      </Show>
+                      <For each={group.items}>
+                        {(item) => (
+                          <Tabs.Trigger
+                            value={item.value}
+                            disabled={item.disabled}
+                            onPointerEnter={(event: PointerEvent) => {
+                              if (item.disabled || event.pointerType === "touch") return
+                              item.onPrefetch?.()
+                            }}
+                            onFocus={() => !item.disabled && item.onPrefetch?.()}
+                          >
+                            <Icon name={item.icon} />
+                            {item.label}
+                          </Tabs.Trigger>
+                        )}
+                      </For>
+                    </div>
+                  )}
+                </For>
+              </Tabs.List>
+            </ScrollView>
           </Show>
         </div>
       </aside>

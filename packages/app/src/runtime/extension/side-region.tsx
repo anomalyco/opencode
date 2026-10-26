@@ -21,6 +21,7 @@ import { Mark } from "@opencode/ui/logo"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import {
   type MountedSession,
   type SessionScreen,
@@ -525,12 +526,14 @@ function Launchers(props: {
   closed: { entries: readonly ClosedSideTab[]; onReopen: (key: string) => void }
 }): JSX.Element {
   return (
-    <div class="flex-1 min-h-0 overflow-y-auto px-6">
-      <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
-        <For each={props.items}>{(item) => <LauncherRow item={item} onChoose={props.onChoose} />}</For>
-        <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+    <ScrollView class="flex-1 min-h-0">
+      <div class="px-6">
+        <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
+          <For each={props.items}>{(item) => <LauncherRow item={item} onChoose={props.onChoose} />}</For>
+          <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
+        </div>
       </div>
-    </div>
+    </ScrollView>
   )
 }
 

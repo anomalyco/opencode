@@ -453,7 +453,6 @@
 [data-component="session-review-v2"] [data-slot="session-review-v2-diff-scroll"] {
   flex: 1;
   min-height: 0;
-  overflow: auto;
   --line-comment-z: 5;
   --line-comment-popover-z: 30;
   --line-comment-open-z: 6;

@@ -84,8 +84,6 @@
   width: 100%;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
-  min-height: 0;
 }
 
 .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"] {

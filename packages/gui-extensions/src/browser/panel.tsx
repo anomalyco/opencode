@@ -1,6 +1,7 @@
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
 import { Icon, newIcons } from "@opencode/ui/icon"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
@@ -879,7 +880,7 @@ export default function SessionBrowserPane(props: {
       >
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
-          <div dir="auto" class="size-full overflow-y-auto">
+          <ScrollView dir="auto" class="size-full">
             <Show
               when={recent().length > 0}
               fallback={
@@ -907,7 +908,7 @@ export default function SessionBrowserPane(props: {
                 </div>
               </div>
             </Show>
-          </div>
+          </ScrollView>
         </Show>
         <Show when={failed() && !suspended()}>
           {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}

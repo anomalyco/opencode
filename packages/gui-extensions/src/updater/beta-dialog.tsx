@@ -2,6 +2,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Option } from "effect"
 import { Button } from "@opencode/ui/button"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useExtension, type DialogHandle, type SetupContext } from "../sdk"
@@ -67,11 +68,6 @@ export function DialogBetaNotes(props: {
       bottom: Math.min(FADE, list.scrollHeight - list.clientHeight - list.scrollTop),
     })
 
-  onMount(() => {
-    measure()
-    createResizeObserver(list, measure)
-  })
-
   return (
     <Dialog fit containerClass="w-[min(calc(100vw-32px),520px)]!">
       <DialogHeader>
@@ -81,9 +77,14 @@ export function DialogBetaNotes(props: {
         />
       </DialogHeader>
       <DialogBody class="min-h-0">
-        <div
-          ref={list}
-          class="flex max-h-[min(calc(100vh-220px),440px)] flex-col gap-6 overflow-y-auto px-4 pb-2"
+        <ScrollView
+          // ScrollView hands over its viewport on its own mount, after this component's mount has run.
+          viewportRef={(element) => {
+            list = element
+            measure()
+            createResizeObserver(element, measure)
+          }}
+          class="max-h-[min(calc(100vh-220px),440px)]"
           style={{
             "mask-image":
               fade().top || fade().bottom
@@ -92,9 +93,11 @@ export function DialogBetaNotes(props: {
           }}
           onScroll={measure}
         >
-          <Section title={ctx.t("beta.added")} notes={props.notes.added} open={props.open} />
-          <Section title={ctx.t("beta.fixed")} notes={props.notes.fixed} open={props.open} />
-        </div>
+          <div class="flex flex-col gap-6 px-4 pb-2">
+            <Section title={ctx.t("beta.added")} notes={props.notes.added} open={props.open} />
+            <Section title={ctx.t("beta.fixed")} notes={props.notes.fixed} open={props.open} />
+          </div>
+        </ScrollView>
       </DialogBody>
       <DialogFooter>
         <Show when={props.notes.more}>
