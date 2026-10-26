@@ -343,6 +343,7 @@ const session = {
     },
     title: "Test",
     location: { directory: "/tmp/project" },
+    status: "idle",
   },
 }
 

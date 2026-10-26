@@ -42,7 +42,7 @@ import {
   type SessionMessageAssistantText,
   type SessionMessageAssistantTool,
   type SessionMessageUser,
-  type SessionInfo,
+  type SessionPersisted,
   type ModelInfo,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
@@ -3750,7 +3750,7 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
 }
 
 function formatSessionTranscript(
-  session: SessionInfo,
+  session: SessionPersisted,
   messages: SessionMessageInfo[],
   thinking: boolean,
   tools = true,

@@ -1173,7 +1173,7 @@ describe("ChatGPTPlugin", () => {
           })
           const requests = yield* SessionModelRequest.Service
           return yield* requests.primary({
-            session: Session.Info.make({
+            session: Session.Persisted.make({
               id: sessionID,
               projectID: Project.ID.global,
               cost: Money.USD.zero,

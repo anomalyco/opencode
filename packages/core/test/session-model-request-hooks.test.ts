@@ -21,7 +21,7 @@ const it = testEffect(PluginTestLayer)
 
 const KINDS: ReadonlyArray<SessionRequestKind> = ["primary", "compaction", "title", "generate"]
 
-const session = Session.Info.make({
+const session = Session.Persisted.make({
   id: Session.ID.make("ses_hook_kind"),
   projectID: Project.ID.global,
   cost: Money.USD.zero,

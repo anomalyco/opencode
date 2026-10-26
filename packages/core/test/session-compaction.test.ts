@@ -569,7 +569,7 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
       .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die(`session missing: ${id}`))))
   })
 
-const loaded = (session: Session.Info, messages: readonly SessionMessage.Info[]) => ({
+const loaded = (session: Session.Persisted, messages: readonly SessionMessage.Info[]) => ({
   session,
   messages,
   model: resolved,
@@ -580,7 +580,7 @@ const loaded = (session: Session.Info, messages: readonly SessionMessage.Info[])
 
 /** Opens the compaction's message as the runner does when it delivers `/compact`, then compacts. */
 const compactManually = (
-  session: Session.Info,
+  session: Session.Persisted,
   messages: readonly SessionMessage.Info[],
   inputID = SessionMessage.ID.create(),
 ) =>

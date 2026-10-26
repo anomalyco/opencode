@@ -17,6 +17,7 @@ import { globalProjectNode } from "./lib/project"
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const awaited: Session.ID[] = []
 const execution = Layer.mock(SessionExecution.Service, {
+  active: Effect.succeed(new Set<Session.ID>()),
   awaitIdle: (sessionID) => Effect.sync(() => awaited.push(sessionID)),
 })
 const it = testEffect(

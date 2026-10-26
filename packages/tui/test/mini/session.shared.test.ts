@@ -234,6 +234,7 @@ describe("run session shared", () => {
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         model: { providerID: "openai", id: "gpt-5", variant: "high" },
+        status: "idle",
       }),
     )
 

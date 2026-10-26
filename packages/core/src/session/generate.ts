@@ -32,7 +32,7 @@ export type Result = SessionUsage.Recorded & { readonly text: string }
  * Usage is reported like a step's and added to the Session's totals.
  */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
-  session: SessionSchema.Info
+  session: SessionSchema.Persisted
   prompt: string
 }) {
   const instances = yield* Instance.Service

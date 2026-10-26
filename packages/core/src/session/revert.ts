@@ -20,7 +20,7 @@ interface BoundaryInput {
 }
 
 export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
-  session: SessionSchema.Info
+  session: SessionSchema.Persisted
   messageID: SessionMessage.ID
   files?: boolean
 }) {
@@ -46,7 +46,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
       messageID: input.messageID,
       snapshot: original,
       files,
-    } satisfies SessionSchema.Info["revert"]
+    } satisfies SessionSchema.Persisted["revert"]
     yield* bus.publish(SessionEvent.RevertEvent.Staged, {
       sessionID: input.session.id,
       revert,
@@ -55,7 +55,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   }).pipe(instances.provide(input.session))
 })
 
-export const clear = Effect.fn("SessionRevert.clear")(function* (session: SessionSchema.Info) {
+export const clear = Effect.fn("SessionRevert.clear")(function* (session: SessionSchema.Persisted) {
   const instances = yield* Instance.Service
   const bus = yield* Bus.Service
   yield* Effect.gen(function* () {
@@ -72,7 +72,10 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
   }).pipe(instances.provide(session))
 })
 
-export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Interface, session: SessionSchema.Info) {
+export const commit = Effect.fn("SessionRevert.commit")(function* (
+  bus: Bus.Interface,
+  session: SessionSchema.Persisted,
+) {
   if (!session.revert) return
   yield* bus.publish(SessionEvent.RevertEvent.Committed, {
     sessionID: session.id,
