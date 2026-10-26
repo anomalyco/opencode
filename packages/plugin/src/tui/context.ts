@@ -24,7 +24,7 @@ import type {
   VcsInfo,
 } from "@opencode/client"
 import type { ResolvedTheme } from "@opencode/theme/tui"
-import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
+import type { CliRenderer, InjectionMapping, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
 
@@ -550,11 +550,15 @@ export interface LanguageDefinition {
   readonly id: string
   /** File extensions that use this language, including the leading dot. */
   readonly extensions?: readonly string[]
+  /** Alternate filetypes for Markdown fences, such as "js" for "javascript". */
+  readonly aliases?: readonly string[]
   /** Compiled tree-sitter parser. */
   readonly wasm: string
   /** Highlight queries, concatenated in order. Captures follow nvim-treesitter names such as `keyword` or `type`. */
   readonly highlights: readonly string[]
   readonly injections?: readonly string[]
+  /** Maps grammar nodes or fence info strings to languages parsed as injections. */
+  readonly injectionMapping?: InjectionMapping
 }
 
 export interface Context {

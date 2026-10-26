@@ -5,8 +5,9 @@ import { getTreeSitterClient } from "@opentui/core"
 import { filetype } from "../../src/util/filetype"
 import { Languages } from "../../src/util/languages"
 
-// OpenTUI ships the zig grammar locally, so the parser loads without the network.
-const zig = path.join(path.dirname(fileURLToPath(import.meta.resolve("@opentui/core"))), "assets", "zig")
+// OpenTUI ships these grammars locally, so the parsers load without the network.
+const assets = path.join(path.dirname(fileURLToPath(import.meta.resolve("@opentui/core"))), "assets")
+const zig = path.join(assets, "zig")
 const language = (id: string, extensions: string[]) => ({
   id,
   extensions,
@@ -44,6 +45,14 @@ test("highlights a registered language through the shared parser worker", async 
   expect(result.highlights?.length).toBeGreaterThan(0)
 })
 
+test("resolves a registered alias to its language", async () => {
+  Languages.set("config", [{ ...language("testlang-alias", [".tla"]), aliases: ["testlang"] }])
+
+  const result = await getTreeSitterClient().highlightOnce("const answer: u32 = 42;", "testlang")
+  expect(result.error).toBeUndefined()
+  expect(result.highlights?.length).toBeGreaterThan(0)
+})
+
 test("resolves sources into locations the parser worker can load", () => {
   const directory = path.resolve("config")
   const queries = path.resolve("queries", "highlights.scm")
@@ -51,19 +60,35 @@ test("resolves sources into locations the parser worker can load", () => {
     Languages.resolve(
       {
         id: "elm",
+        aliases: ["elm-lang"],
         wasm: "./elm/tree-sitter-elm.wasm",
         highlights: ["https://example.com/highlights.scm", pathToFileURL(queries).href],
         injections: [queries],
+        injectionMapping: { infoStringMap: { elm: "elm" } },
       },
       directory,
     ),
   ).toEqual({
     id: "elm",
+    aliases: ["elm-lang"],
     wasm: path.join(directory, "elm", "tree-sitter-elm.wasm"),
     highlights: ["https://example.com/highlights.scm", queries],
     injections: [queries],
+    injectionMapping: { infoStringMap: { elm: "elm" } },
   })
   expect(() => Languages.resolve({ id: "elm", wasm: "./tree-sitter-elm.wasm", highlights: [queries] })).toThrow(
     "Language elm: ./tree-sitter-elm.wasm must be a URL or an absolute path",
   )
+})
+
+test("keeps a runtime registration's own filetype instead of the built-in typescript alias", () => {
+  Languages.set("config", [
+    {
+      id: "javascript",
+      extensions: [".js"],
+      wasm: path.join(assets, "javascript", "tree-sitter-javascript.wasm"),
+      highlights: [path.join(assets, "javascript", "highlights.scm")],
+    },
+  ])
+  expect(filetype("script.js")).toBe("javascript")
 })

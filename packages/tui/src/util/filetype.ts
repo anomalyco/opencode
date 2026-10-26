@@ -138,7 +138,11 @@ export function setRegisteredExtensions(lookup: (extension: string) => string | 
 export function filetype(input?: string) {
   if (!input) return "none"
   const extension = path.extname(input)
-  const language = registered(extension) ?? LANGUAGE_EXTENSIONS[extension]
+  const registeredLanguage = registered(extension)
+  if (registeredLanguage) return registeredLanguage
+  const language = LANGUAGE_EXTENSIONS[extension]
+  // The built-in table points these at the typescript parser, which handles all of them. A runtime
+  // registration keeps its own filetype so a custom javascript parser is not silently ignored.
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
 }

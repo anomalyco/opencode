@@ -54,9 +54,21 @@ export const Plugin = Schema.Union([
   }),
 ])
 
+export const InjectionMapping = Schema.Struct({
+  nodeTypes: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description: "Grammar nodes to parse as another language",
+  }),
+  infoStringMap: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description: "Markdown fence info strings to parse as another language",
+  }),
+})
+
 export const Language = Schema.Struct({
   extensions: Schema.optional(Schema.Array(Schema.String.check(Schema.isPattern(/^\.[^./\\\s]+$/u)))).annotate({
     description: "File extensions that use this language, including the leading dot",
+  }),
+  aliases: Schema.optional(Schema.Array(Schema.String.check(Schema.isNonEmpty()))).annotate({
+    description: "Alternate filetypes for Markdown fences, such as 'js' for 'javascript'",
   }),
   wasm: Schema.String.check(Schema.isNonEmpty()).annotate({
     description: "Compiled tree-sitter parser: an http(s) URL or a path relative to this file",
@@ -66,6 +78,9 @@ export const Language = Schema.Struct({
   }),
   injections: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: "Injection queries (injections.scm): URLs or paths relative to this file",
+  }),
+  injectionMapping: Schema.optional(InjectionMapping).annotate({
+    description: "Maps grammar nodes or fence info strings to languages parsed as injections",
   }),
 })
 export type Language = Schema.Schema.Type<typeof Language>
