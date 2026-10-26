@@ -15,7 +15,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-const cacheKey = "models-dev:catalog"
+const cacheKey = "models-dev:v2:catalog"
 const metaKey = `${cacheKey}:meta`
 
 test("normalizes permissive interleaved values to compatibility", () => {
@@ -25,27 +25,52 @@ test("normalizes permissive interleaved values to compatibility", () => {
   expect(Model.compatibility(false)).toBeUndefined()
 })
 
+// A chat model in the models.dev v2 shape, served over one OpenAI-compatible API.
+const sourceModel = (id: string, input: Record<string, unknown> = {}) => ({
+  id,
+  type: "chat",
+  name: id,
+  description: "A model",
+  release_date: "2026-01-01",
+  modalities: { input: ["text"], output: ["text"] },
+  capabilities: { tools: { supported: true }, reasoning: { supported: false }, temperature: true },
+  limit: { context: 128000, output: 8192 },
+  api: {
+    "chat-completions": {
+      base_url: "https://api.example.test/v1",
+      sdk: { aisdk: "@ai-sdk/openai-compatible", opencodeai: "@opencode/ai/providers/openai-compatible" },
+    },
+  },
+  ...input,
+})
+
 const fixture = {
   acme: {
     id: "acme",
     name: "Acme",
     env: ["ACME_API_KEY"],
-    npm: "@ai-sdk/openai-compatible",
     models: {
-      "acme-1": {
-        id: "acme-1",
+      "acme-1": sourceModel("acme-1", {
         name: "Acme One",
-        release_date: "2026-01-01",
-        attachment: false,
-        reasoning: false,
-        temperature: true,
-        tool_call: true,
-        interleaved: { field: "vendor_reasoning" },
-        limit: { context: 128000, output: 8192 },
-      },
+        api: {
+          "chat-completions": {
+            base_url: "https://api.acme.test/v1",
+            sdk: { aisdk: "@ai-sdk/openai-compatible", opencodeai: "@opencode/ai/providers/openai-compatible" },
+            compatibility: { reasoning_field: "vendor_reasoning" },
+          },
+        },
+      }),
     },
   },
 }
+
+const zeroCost = [
+  {
+    input: Money.USDPerMillionTokens.zero,
+    output: Money.USDPerMillionTokens.zero,
+    cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+  },
+]
 
 const fixtureSnapshot = [
   {
@@ -54,30 +79,23 @@ const fixtureSnapshot = [
       name: "Acme",
       activation: "auto",
       package: "@opencode/ai/providers/openai-compatible",
+      settings: { baseURL: "https://api.acme.test/v1" },
     },
     models: [
       {
         id: Model.ID.make("acme-1"),
         modelID: Model.ID.make("acme-1"),
         providerID: Provider.ID.make("acme"),
+        type: "chat",
         name: "Acme One",
         compatibility: { reasoningField: "vendor_reasoning" },
         family: undefined,
         package: undefined,
         settings: { provider: "acme" },
-        capabilities: { tools: true, input: [], output: [], temperature: true },
+        capabilities: { tools: true, input: ["text"], output: ["text"], temperature: true },
         variants: [],
         time: { released: Date.parse("2026-01-01") },
-        cost: [
-          {
-            input: Money.USDPerMillionTokens.zero,
-            output: Money.USDPerMillionTokens.zero,
-            cache: {
-              read: Money.USDPerMillionTokens.zero,
-              write: Money.USDPerMillionTokens.zero,
-            },
-          },
-        ],
+        cost: zeroCost,
         status: "active",
         enabled: true,
         limit: { context: 128000, input: undefined, output: 8192 },
@@ -86,7 +104,6 @@ const fixtureSnapshot = [
       },
     ],
     environment: ["ACME_API_KEY"],
-    types: new Map(),
   },
 ] satisfies readonly ModelsDev.Snapshot[]
 
@@ -95,18 +112,13 @@ const fixture2 = {
     id: "beta",
     name: "Beta",
     env: ["BETA_API_KEY"],
-    npm: "@ai-sdk/openai-compatible",
     models: {
-      "beta-1": {
-        id: "beta-1",
+      "beta-1": sourceModel("beta-1", {
         name: "Beta One",
         release_date: "2026-02-01",
-        attachment: false,
-        reasoning: true,
-        temperature: false,
-        tool_call: false,
+        capabilities: { tools: { supported: false }, reasoning: { supported: false }, temperature: false },
         limit: { context: 64000, output: 4096 },
-      },
+      }),
     },
   },
 }
@@ -118,29 +130,23 @@ const fixture2Snapshot = [
       name: "Beta",
       activation: "auto",
       package: "@opencode/ai/providers/openai-compatible",
+      settings: { baseURL: "https://api.example.test/v1" },
     },
     models: [
       {
         id: Model.ID.make("beta-1"),
         modelID: Model.ID.make("beta-1"),
         providerID: Provider.ID.make("beta"),
+        type: "chat",
         name: "Beta One",
+        compatibility: undefined,
         family: undefined,
         package: undefined,
         settings: { provider: "beta" },
-        capabilities: { tools: false, input: [], output: [], temperature: false },
+        capabilities: { tools: false, input: ["text"], output: ["text"], temperature: false },
         variants: [],
         time: { released: Date.parse("2026-02-01") },
-        cost: [
-          {
-            input: Money.USDPerMillionTokens.zero,
-            output: Money.USDPerMillionTokens.zero,
-            cache: {
-              read: Money.USDPerMillionTokens.zero,
-              write: Money.USDPerMillionTokens.zero,
-            },
-          },
-        ],
+        cost: zeroCost,
         status: "active",
         enabled: true,
         limit: { context: 64000, input: undefined, output: 4096 },
@@ -149,7 +155,6 @@ const fixture2Snapshot = [
       },
     ],
     environment: ["BETA_API_KEY"],
-    types: new Map(),
   },
 ] satisfies readonly ModelsDev.Snapshot[]
 
@@ -254,64 +259,82 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("maps models.dev npm packages onto native packages", () =>
+  it.live("takes each model's package from its first API and skips URLs packages build themselves", () =>
     Effect.gen(function* () {
       const cache = makeCache()
+      const azureAPI = (protocol: string, opencodeai: string) => ({
+        [protocol]: {
+          base_url: "https://${AZURE_RESOURCE_NAME}.openai.azure.com/openai/v1",
+          sdk: { aisdk: "@ai-sdk/azure", opencodeai },
+        },
+      })
       writeCache(cache, {
         acme: {
           ...fixture.acme,
           models: {
-            "acme-1": {
-              ...fixture.acme.models["acme-1"],
-              provider: { npm: "@ai-sdk/openai" },
-            },
+            ...fixture.acme.models,
+            "acme-responses": sourceModel("acme-responses", {
+              api: {
+                responses: {
+                  base_url: "https://api.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/openai", opencodeai: "@opencode/ai/providers/openai/responses" },
+                },
+                "chat-completions": { base_url: "https://other.acme.test/v1", sdk: { aisdk: "@ai-sdk/openai" } },
+              },
+            }),
+            "acme-fallback": sourceModel("acme-fallback", {
+              api: { messages: { base_url: "https://claude.acme.test/v1", sdk: { aisdk: "@ai-sdk/anthropic" } } },
+            }),
           },
-        },
-        "cloudflare-workers-ai": {
-          id: "cloudflare-workers-ai",
-          name: "Cloudflare Workers AI",
-          env: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"],
-          npm: "@ai-sdk/openai-compatible",
-          api: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-          models: {},
         },
         azure: {
           id: "azure",
           name: "Azure",
           env: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"],
-          npm: "@ai-sdk/azure",
           models: {
-            "gpt-5": {
-              ...fixture.acme.models["acme-1"],
-              id: "gpt-5",
-            },
-            "custom-chat": {
-              ...fixture.acme.models["acme-1"],
-              id: "custom-chat",
-              provider: { shape: "completions" },
-            },
+            "gpt-5": sourceModel("gpt-5", { api: azureAPI("responses", "@opencode/ai/providers/azure/responses") }),
+            "custom-chat": sourceModel("custom-chat", {
+              api: azureAPI("chat-completions", "@opencode/ai/providers/azure/chat"),
+            }),
+            claude: sourceModel("claude", {
+              api: {
+                messages: {
+                  base_url: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1",
+                  sdk: { aisdk: "@ai-sdk/anthropic", opencodeai: "@opencode/ai/providers/anthropic-compatible" },
+                },
+              },
+            }),
           },
         },
       })
       const state = yield* Ref.make(initialState)
-      const result = yield* provided(
+      const [acme, azure] = yield* provided(
         state,
         cache,
         ModelsDev.Service.use((service) => service.get()),
       )
-      expect(result[0]?.info.package).toBe("@opencode/ai/providers/openai-compatible")
-      expect(result[0]?.models[0]?.package).toBe("@opencode/ai/providers/openai")
-      expect(result[1]?.info.package).toBe("@opencode/ai/providers/cloudflare-workers-ai")
-      expect(result[1]?.info.settings).toBeUndefined()
-      expect(result[2]?.info.package).toBe("@opencode/ai/providers/azure/responses")
-      expect(result[2]?.models.find((model) => model.id === "gpt-5")?.package).toBeUndefined()
-      expect(result[2]?.models.find((model) => model.id === "custom-chat")?.package).toBe(
-        "@opencode/ai/providers/azure/chat",
-      )
+      const acmeModel = (id: string) => acme?.models.find((model) => model.id === id)
+      expect(acmeModel("acme-responses")?.package).toBe("@opencode/ai/providers/openai/responses")
+      expect(acmeModel("acme-responses")?.settings).toBeUndefined()
+      // Without an opencode package, the AI SDK package maps to the native one as before.
+      expect(acmeModel("acme-fallback")?.package).toBe("@opencode/ai/providers/anthropic")
+      expect(acmeModel("acme-fallback")?.settings).toEqual({ baseURL: "https://claude.acme.test/v1" })
+
+      const azureModel = (id: string) => azure?.models.find((model) => model.id === id)
+      expect(azure?.info.package).toBe("@opencode/ai/providers/azure/responses")
+      expect(azure?.info.settings).toBeUndefined()
+      expect(azureModel("gpt-5")?.package).toBeUndefined()
+      expect(azureModel("gpt-5")?.settings).toBeUndefined()
+      expect(azureModel("custom-chat")?.package).toBe("@opencode/ai/providers/azure/chat")
+      expect(azureModel("custom-chat")?.settings).toBeUndefined()
+      expect(azureModel("claude")?.settings).toEqual({
+        baseURL: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1",
+        provider: "azure",
+      })
     }),
   )
 
-  it.live("keeps typed models in the snapshot with their models.dev type", () =>
+  it.live("keeps non-chat models with their type, maps MIME modalities, and skips malformed models", () =>
     Effect.gen(function* () {
       const cache = makeCache()
       writeCache(cache, {
@@ -319,11 +342,159 @@ describe("ModelsDev Service", () => {
           ...fixture.acme,
           models: {
             ...fixture.acme.models,
-            "acme-live": {
-              ...fixture.acme.models["acme-1"],
-              id: "acme-live",
-              type: "realtime",
+            "acme-image": sourceModel("acme-image", {
+              type: "image",
+              modalities: { input: ["text", "image/png", "application/pdf"], output: ["image/png", "image/webp"] },
+              api: {
+                "chat-completions": {
+                  base_url: "https://api.example.test/v1",
+                  sdk: { aisdk: "@acme/ai-sdk-provider" },
+                },
+                images: {
+                  base_url: "https://api.example.test/v1",
+                  sdk: { aisdk: "@acme/ai-sdk-provider", opencodeai: "@opencode/ai/protocols/openai-images" },
+                },
+              },
               experimental: { modes: { fast: {} } },
+              future_field: { anything: true },
+            }),
+            "acme-broken": { id: "acme-broken", type: "chat" },
+            "acme-sdk-image": sourceModel("acme-sdk-image", {
+              type: "image",
+              api: { images: { base_url: "https://api.example.test/v1", sdk: { aisdk: "@acme/ai-sdk-provider" } } },
+            }),
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(acme?.models.map((model) => [model.id, model.type])).toEqual([
+        ["acme-1", "chat"],
+        ["acme-image", "image"],
+        ["acme-image-fast", "image"],
+      ])
+      expect(acme?.models[1]?.capabilities).toMatchObject({ input: ["text", "image", "pdf"], output: ["image"] })
+      expect(acme?.models[1]?.package).toBe("@opencode/ai/protocols/openai-images")
+      // Without an opencode package a non-chat model is left out ("acme-sdk-image" above).
+    }),
+  )
+
+  it.live("maps per-token text prices, context tiers, and mode multipliers onto cost", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          ...fixture.acme,
+          models: {
+            "acme-1": sourceModel("acme-1", {
+              cost: {
+                text: {
+                  input: {
+                    price: 2,
+                    cache: { read: 0.2, write: { "5m": 2.5, "1h": 4 } },
+                    overrides: [
+                      { when: { context: { gt: 200000 } }, price: 4, cache: { read: 0.4 } },
+                      { when: { service_tier: { equals: "flex" } }, price: 1 },
+                    ],
+                  },
+                  output: { price: 10, overrides: [{ when: { context: { gt: 200000 } }, price: 15 }] },
+                },
+                image: { output: { unit: "image", price: 0.04 } },
+                multipliers: [{ when: { service_tier: { equals: "priority" } }, factor: { text: 2 } }],
+              },
+              experimental: { modes: { fast: { service_tier: "priority", body: { service_tier: "priority" } } } },
+            }),
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      const price = Money.USDPerMillionTokens.make
+      const tier = {
+        tier: { type: "context" as const, size: 200000 },
+        input: price(4),
+        output: price(15),
+        cache: { read: price(0.4), write: price(2.5) },
+      }
+      expect(acme?.models[0]?.cost).toEqual([
+        { input: price(2), output: price(10), cache: { read: price(0.2), write: price(2.5) } },
+        tier,
+      ])
+      expect(acme?.models[1]?.cost).toEqual([
+        { input: price(4), output: price(20), cache: { read: price(0.4), write: price(5) } },
+        tier,
+      ])
+      expect(acme?.models[1]?.body).toEqual({ service_tier: "priority" })
+    }),
+  )
+
+  it.live("drops model types opencode doesn't keep", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const api = {
+        images: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "@opencode/ai/providers/openai" } },
+      }
+      const model = (id: string, type: string) => ({
+        id,
+        type,
+        name: id,
+        release_date: "2026-01-01",
+        modalities: { input: ["text"], output: ["image"] },
+        capabilities: { tools: { supported: false }, reasoning: { supported: false } },
+        api,
+      })
+      writeCache(cache, {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          models: { "acme-image": model("acme-image", "image"), "acme-video": model("acme-video", "video") },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(acme?.models.map((item) => item.id)).toEqual([Model.ID.make("acme-image")])
+    }),
+  )
+
+  it.live("skips API entries and modes it can't read and keeps the model", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          models: {
+            "acme-1": {
+              id: "acme-1",
+              type: "chat",
+              name: "Acme One",
+              release_date: "2026-01-01",
+              modalities: { input: ["text"], output: ["text"] },
+              capabilities: { tools: { supported: true }, reasoning: { supported: false } },
+              api: {
+                future: { url: 42 },
+                "chat-completions": {
+                  base_url: "https://api.acme.test/v1",
+                  sdk: { opencodeai: "@opencode/ai/providers/openai-compatible" },
+                },
+              },
+              experimental: {
+                modes: { future: { cost: "free" }, fast: { body: { service_tier: "priority" } } },
+              },
             },
           },
         },
@@ -334,10 +505,111 @@ describe("ModelsDev Service", () => {
         cache,
         ModelsDev.Service.use((service) => service.get()),
       )
-      expect(acme?.models.map((model) => model.id)).toEqual(
-        ["acme-1", "acme-live", "acme-live-fast"].map((id) => Model.ID.make(id)),
+      expect(acme?.info).toMatchObject({
+        package: "@opencode/ai/providers/openai-compatible",
+        settings: { baseURL: "https://api.acme.test/v1" },
+      })
+      expect(acme?.models.map((model) => model.id)).toEqual([Model.ID.make("acme-1"), Model.ID.make("acme-1-fast")])
+    }),
+  )
+
+  it.live("reads a models.dev v1 catalog by converting it to v2", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.acme.test/v1",
+          models: {
+            "acme-1": {
+              id: "acme-1",
+              name: "Acme One",
+              release_date: "2026-01-01",
+              attachment: false,
+              reasoning: true,
+              reasoning_options: [
+                { type: "effort", values: [null, "low", "high"] },
+                { type: "budget_tokens", min: 1024 },
+              ],
+              temperature: true,
+              tool_call: true,
+              interleaved: { field: "vendor_reasoning" },
+              cost: { input: 1, output: 2, tiers: [{ tier: { type: "context", size: 200000 }, input: 3, output: 4 }] },
+              limit: { context: 128000, output: 8192 },
+            },
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
       )
-      expect(Object.fromEntries(acme?.types ?? [])).toEqual({ "acme-live": "realtime", "acme-live-fast": "realtime" })
+      expect(acme?.info).toMatchObject({
+        package: "@opencode/ai/providers/openai-compatible",
+        settings: { baseURL: "https://api.acme.test/v1" },
+      })
+      expect(acme?.models[0]).toMatchObject({
+        type: "chat",
+        compatibility: { reasoningField: "vendor_reasoning" },
+        capabilities: { tools: true, input: ["text"], output: ["text"], temperature: true },
+      })
+      expect(acme?.models[0]?.variants.map((variant) => String(variant.id))).toEqual(["low", "high"])
+      expect(acme?.models[0]?.cost.map((item) => [item.tier?.size, item.input, item.output])).toEqual([
+        [undefined, 1, 2],
+        [200000, 3, 4],
+      ])
+    }),
+  )
+
+  it.live("falls back to /api.json when a custom mirror has no v2 catalog", () =>
+    Effect.gen(function* () {
+      const v1Catalog = {
+        beta: {
+          id: "beta",
+          name: "Beta",
+          env: ["BETA_API_KEY"],
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.beta.test/v1",
+          models: {
+            "beta-1": {
+              id: "beta-1",
+              name: "Beta One",
+              release_date: "2026-02-01",
+              tool_call: true,
+              limit: { context: 64000, output: 4096 },
+            },
+          },
+        },
+      }
+      const urls: string[] = []
+      const client = HttpClient.make((request) =>
+        Effect.sync(() => {
+          urls.push(request.url)
+          const v1 = request.url.endsWith("/api.json")
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(v1 ? JSON.stringify(v1Catalog) : null, { status: v1 ? 200 : 404 }),
+          )
+        }),
+      )
+      const layer = Layer.fresh(
+        AppNodeBuilder.build(ModelsDev.node, [
+          ModelsDev.node.replace(ModelsDev.configured({ url: "https://mirror.example", fetch: true, snapshot: false })),
+          LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, client)),
+          KV.node.replace(makeMockKV(makeCache())),
+        ]),
+      )
+      const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
+      expect(urls).toEqual([
+        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image",
+        "https://mirror.example/api.json",
+      ])
+      expect(beta?.models.map((model) => model.id)).toEqual([Model.ID.make("beta-1")])
     }),
   )
 
@@ -414,7 +686,9 @@ describe("ModelsDev Service", () => {
       yield* ModelsDev.Service.use((service) => service.get()).pipe(
         Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
       )
-      expect((yield* Ref.get(state)).calls[0]?.url).toBe("https://models.opencode.ai/api.json")
+      expect((yield* Ref.get(state)).calls[0]?.url).toBe(
+        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image",
+      )
     }),
   )
 
@@ -478,7 +752,7 @@ describe("ModelsDev Service", () => {
       })
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
-      expect(final.calls[0].url).toContain("/api.json")
+      expect(final.calls[0].url).toContain(ModelsDev.catalogPath)
       expect(final.calls[0].userAgent).toContain("/opencode")
     }),
   )
@@ -561,12 +835,14 @@ describe("ModelsDev Service", () => {
               Effect.flatMap((fiber) =>
                 Effect.gen(function* () {
                   yield* Effect.yieldNow
-                  yield* svc.refresh(true).pipe(
-                    Effect.provideService(
-                      Location.Service,
-                      Location.Service.of(location({ directory: AbsolutePath.make("/initial-location") })),
-                    ),
-                  )
+                  yield* svc
+                    .refresh(true)
+                    .pipe(
+                      Effect.provideService(
+                        Location.Service,
+                        Location.Service.of(location({ directory: AbsolutePath.make("/initial-location") })),
+                      ),
+                    )
                   return yield* Fiber.join(fiber)
                 }),
               ),

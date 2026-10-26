@@ -48,6 +48,13 @@ export { Compatibility, MaxTokensField, ReasoningField }
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
+/** What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for sessions; an unset type means chat. */
+export type Type = "chat" | "decision" | "image" | (string & {})
+export const Type: Schema.Codec<Type> = Schema.Union([
+  Schema.Literals(["chat", "decision", "image"]),
+  Schema.String,
+]).annotate({ identifier: "Model.Type" })
+
 export const Settings = Schema.StructWithRest(
   Schema.Struct(Struct.pick(Provider.Settings.schema.fields, ["compaction", "cache", "encoding"])),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
@@ -102,6 +109,7 @@ export const Info = Schema.Struct({
   modelID: ID,
   providerID: Provider.ID,
   canonical: Provider.ID.pipe(optional),
+  type: Type.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
   compatibility: Compatibility.pipe(optional),

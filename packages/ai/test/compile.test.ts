@@ -8,11 +8,11 @@ import {
   ToolCallPart,
   ToolDefinition,
   ToolNamespace,
-  mergeProviderOptions,
 } from "../src/effect.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
+import { mergeProviderOptions } from "../src/schema/index.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"

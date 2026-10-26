@@ -1222,14 +1222,13 @@ effect: (ctx) =>
   }),
 ```
 
-Use Stream operators to select and process event types.
+Pass `types` to receive only the event types you need. The stream is typed to match, so no type guard is needed.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const event = ctx.event
-    yield* event.subscribe().pipe(
-      Stream.filter((item) => item.type === "config.updated"),
+    yield* event.subscribe({ types: ["config.updated"] }).pipe(
       Stream.runForEach(() => Effect.logInfo("configuration changed")),
       Effect.forkScoped,
     )
@@ -1239,14 +1238,13 @@ effect: (ctx) =>
 Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded).
 
 ```ts
-type EventSubscribeOutput = OpenCodeEvent
-type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
 
-interface EventApi<E = never> {
-  readonly subscribe: EventSubscribeOperation<E>
+interface EventDomain {
+  readonly subscribe: <Type extends EventType = EventType>(input?: {
+    readonly types?: ReadonlyArray<Type>
+  }) => Stream.Stream<Extract<OpenCodeEvent, { type: Type }>, unknown>
 }
-
-interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}
 ```
 
 ## Hooks

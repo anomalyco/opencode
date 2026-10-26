@@ -96,9 +96,10 @@ type Face<T> = {
 
 // The composer and the docks that stand in for it as one surface: a new face grows the region to its height on one
 // spring while the old face closes in its own box above or below it, so the two never draw over each other. Faces
-// present on mount rest immediately.
+// present on mount rest immediately, as does a change to or from a face `instant` picks.
 export function ComposerMorph<T extends { key: string }>(props: {
   face: T
+  instant?: (face: T) => boolean
   children: (face: Accessor<T>) => JSX.Element
 }) {
   const born = performance.now()
@@ -220,6 +221,12 @@ export function ComposerMorph<T extends { key: string }>(props: {
 
         if (!root || performance.now() - born < 250) return setFaces([face(next, 1)])
 
+        if (props.instant?.(next) || list.some((item) => props.instant?.(item.value()))) {
+          if (stop) settle(list)
+
+          return setFaces([face(next, 1)])
+        }
+
         const from = height ? height.value : root.getBoundingClientRect().height
         const reduced = prefersReducedMotion()
         const back = next.key === "composer" ? list.find((item) => item.key === next.key) : undefined
@@ -330,9 +337,11 @@ function styleFace(
     hidden > 0 ? `linear-gradient(to top, transparent ${hidden}px, #000 ${hidden + Math.min(24, hidden)}px)` : ""
 }
 
-// Mounts its children when `when` turns truthy and grows them in; when it turns falsy they close and unmount.
+// Mounts its children when `when` turns truthy and grows them in; when it turns falsy they close and unmount. With
+// `instant` they mount and unmount at once.
 export function Grow<T>(props: {
   when: T | undefined | null | false
+  instant?: boolean
   appear?: boolean
   fade?: boolean
   card?: boolean
@@ -360,6 +369,15 @@ export function Grow<T>(props: {
 
         if (!el || (!entering && (!prev || prev[0] === when))) return
         entering = false
+
+        if (props.instant && !growing.has(el)) {
+          if (when) return
+
+          setPresent(false)
+
+          return props.onClosed?.()
+        }
+
         grow(el, when, props.fade, props.card, props.close?.(), () => {
           setPresent(false)
           props.onClosed?.()

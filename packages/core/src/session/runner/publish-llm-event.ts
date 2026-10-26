@@ -1,5 +1,5 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode/ai/effect"
-import { isRecord } from "@opencode/ai/utils/record"
+import { isRecord } from "@opencode/util/record"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { RelativePath } from "@opencode/schema/schema"

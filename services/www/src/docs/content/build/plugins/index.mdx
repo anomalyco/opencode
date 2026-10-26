@@ -1329,7 +1329,7 @@ interface WebSearchEditor {
 
 ### Events
 
-Subscribe to the connected server's public event stream. Abort the stream during plugin cleanup.
+Subscribe to the connected server's public event stream. Abort the stream during plugin cleanup. Pass `types`, for example `ctx.event.subscribe({ types: ["config.updated"] })`, to receive only those event types; the events are typed to match. Plugins run inside the server, so unlike SDK clients they never receive `server.connected`. Unknown type names are ignored with a warning in the server log.
 
 ```ts
 const controller = new AbortController()
@@ -1346,8 +1346,13 @@ return () => controller.abort()
 Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
 
 ```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
 interface EventContext {
-  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeEvent>
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
 }
 ```
 

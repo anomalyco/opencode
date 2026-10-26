@@ -21,7 +21,7 @@ const Note = Schema.Struct({
   visual: Schema.optional(Schema.Struct({ animated: Schema.String, still: Schema.String })),
 })
 
-/** What a beta build embeds (packages/desktop/scripts/beta-notes.ts), newest first. */
+/** What a beta build embeds (packages/desktop/script/beta-notes.ts), newest first. */
 const Embedded = Schema.Struct({
   /** The build's commit. */
   sha: Schema.String,

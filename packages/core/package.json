@@ -22,6 +22,7 @@
     "benchmark:location": "bun run script/benchmark-location.ts",
     "benchmark:location-memory": "bun run script/benchmark-location-memory.ts",
     "build": "bun run script/build.ts",
+    "pack": "bun run script/pack.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
     "typecheck": "bun check --no-script -b -p tsconfig.tests.json",

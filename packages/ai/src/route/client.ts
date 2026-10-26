@@ -592,7 +592,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   }
 })
 
-/** @internal Test-only projection of the execution compiler; not exported from package barrels. */
+/** Test-only projection of the execution compiler; exported from `@opencode/ai/testing`. */
 export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request: LLMRequest) {
   const compiled = yield* compile(request)
   return {
