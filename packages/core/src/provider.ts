@@ -183,14 +183,17 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
+const settingsKeys = Struct.keys(Provider.Settings.schema.fields)
+const providerOnlyKeys = settingsKeys.filter((key) => !(key in Model.Settings.schema.fields))
+
 /** The provider options: every settings key OpenCode doesn't read itself. */
 export function nativeSettings(settings: Settings) {
-  return Struct.omit(settings, Struct.keys(Provider.SettingsFields))
+  return Struct.omit(settings, settingsKeys)
 }
 
 /** Settings a model inherits from its provider. */
 export function modelSettings(settings: Settings | undefined) {
-  return settings && Struct.omit(settings, Struct.keys(Provider.ProviderOnlySettingsFields))
+  return settings && Struct.omit(settings, providerOnlyKeys)
 }
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)

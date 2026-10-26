@@ -1,6 +1,6 @@
 export * as Model from "./model.js"
 
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Compatibility, MaxTokensField, ReasoningField } from "./model-compatibility.js"
@@ -49,7 +49,7 @@ export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
 export const Settings = Schema.StructWithRest(
-  Schema.Struct(Provider.ModelSettingsFields),
+  Schema.Struct(Struct.pick(Provider.Settings.schema.fields, ["compaction", "cache", "encoding"])),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Model.Settings" })

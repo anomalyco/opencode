@@ -21,11 +21,11 @@ export type AgentID = string
 
 export type ProviderID = string
 
-export type ProviderTransport = "http" | "websocket"
-
 export type ProviderCompaction = { type: "summary" } | { type: "native" }
 
 export type ProviderCacheTTL = `${number}${"ms" | "s" | "m" | "h" | "d"}`
+
+export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
 
@@ -918,9 +918,9 @@ export type ProviderSettings = {
   timeout?: number | false
   headerTimeout?: number | false
   chunkTimeout?: number | false
-  transport?: ProviderTransport
   compaction?: ProviderCompaction
   cache?: ProviderCache
+  transport?: ProviderTransport
   encoding?: ProviderEncoding
 } & { [x: string]: any }
 
@@ -932,9 +932,9 @@ export type ConfigProviderSettings = {
   timeout?: number | false
   headerTimeout?: number | false
   chunkTimeout?: number | false
-  transport?: ProviderTransport
   compaction?: ProviderCompaction
   cache?: ProviderCache
+  transport?: ProviderTransport
   encoding?: ProviderEncoding
 } & { [x: string]: JsonValue | null }
 

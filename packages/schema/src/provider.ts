@@ -64,25 +64,19 @@ export type Encoding = typeof Encoding.Type
 
 const Timeout = Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional)
 
-// The settings OpenCode reads itself. Every other settings key is a provider option for the provider package.
-/** OpenCode settings that only apply per provider. */
-export const ProviderOnlySettingsFields = {
-  timeout: Timeout,
-  headerTimeout: Timeout,
-  chunkTimeout: Timeout,
-  transport: Transport.pipe(optional),
-}
-/** OpenCode settings that also apply per model and variant. */
-export const ModelSettingsFields = {
-  compaction: Compaction.pipe(optional),
-  cache: Cache.pipe(optional),
-  encoding: Encoding.pipe(optional),
-}
-export const SettingsFields = { ...ProviderOnlySettingsFields, ...ModelSettingsFields }
-
-export const Settings = Schema.StructWithRest(Schema.Struct(SettingsFields), [
-  Schema.Record(Schema.String, Schema.Any),
-]).annotate({ identifier: "Provider.Settings" })
+// The named fields are the settings OpenCode reads itself; every other key is a provider option for the provider package.
+export const Settings = Schema.StructWithRest(
+  Schema.Struct({
+    timeout: Timeout,
+    headerTimeout: Timeout,
+    chunkTimeout: Timeout,
+    compaction: Compaction.pipe(optional),
+    cache: Cache.pipe(optional),
+    transport: Transport.pipe(optional),
+    encoding: Encoding.pipe(optional),
+  }),
+  [Schema.Record(Schema.String, Schema.Any)],
+).annotate({ identifier: "Provider.Settings" })
 export type Settings = typeof Settings.Type
 
 export const Overlays = {
