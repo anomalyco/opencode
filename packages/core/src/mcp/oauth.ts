@@ -30,6 +30,7 @@ export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.js
 
 // Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
 type PendingRefresh = {
+  key: string
   controller: AbortController
   pending: ReturnType<FetchLike>
   waiting: number
@@ -51,7 +52,10 @@ const share = (current: PendingRefresh, signal: RequestInit["signal"]) =>
     const cleanup = () => signal?.removeEventListener("abort", onAbort)
     const onAbort = () => {
       current.waiting--
-      if (current.waiting === 0) current.controller.abort(signal?.reason)
+      if (current.waiting === 0) {
+        if (refreshes.get(current.key) === current) refreshes.delete(current.key)
+        current.controller.abort(signal?.reason)
+      }
       cleanup()
       reject(signal?.reason)
     }
@@ -73,12 +77,14 @@ const share = (current: PendingRefresh, signal: RequestInit["signal"]) =>
   })
 
 const send: FetchLike = (url, init) => {
+  if (init?.signal?.aborted) return Promise.reject(init.signal.reason)
   const key = refreshKey(url, init)
   if (key === undefined) return base(url, init)
   const existing = refreshes.get(key)
   if (existing) return share(existing, init?.signal)
   const controller = new AbortController()
   const current: PendingRefresh = {
+    key,
     controller,
     waiting: 0,
     pending: base(url, { ...init, signal: controller.signal }),
