@@ -286,9 +286,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     void store.listHeight
 
     if (!el || !row || !listRef) return
+    el.style.clipPath = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
+
+    if (lit() === "none") return
     const moved = placed.tab !== store.tab || placed.index !== index
     placed = { tab: store.tab, index }
-    el.style.clipPath = `inset(${row.offsetTop}px 0 ${listRef.offsetHeight - row.offsetTop - row.offsetHeight}px round 6px)`
 
     if (prefersReducedMotion() && moved && el.animate)
       el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "linear" })
@@ -405,9 +407,15 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     focus(options().length)
   }
 
+  // Scrolling the list under a still cursor makes the browser fire a pointermove at the same spot; it is not the user.
+  let pointer = { x: -1, y: -1 }
+
   // The pointer moves the highlight like the arrows do, but never takes focus from the custom answer's field.
   const hover = (i: number, event: PointerEvent) => {
-    if (event.pointerType !== "mouse" || store.editing || sending()) return
+    const still = event.clientX === pointer.x && event.clientY === pointer.y
+    pointer = { x: event.clientX, y: event.clientY }
+
+    if (event.pointerType !== "mouse" || still || store.editing || sending()) return
     setLit("hover")
     setStore("focus", i)
   }
@@ -478,7 +486,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     if (store.minimized || sending()) return
 
-    setLit("keys")
+    if (intent.type === "move" || intent.type === "edge") setLit("keys")
 
     if (intent.type === "number") {
       event.preventDefault()
@@ -758,7 +766,10 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
           <div
             data-slot="question-options-list"
             ref={(el) => (listRef = el)}
+            onPointerDown={(event) => setLit(event.pointerType === "mouse" ? "hover" : "none")}
             onPointerLeave={() => {
+              pointer = { x: -1, y: -1 }
+
               if (lit() === "hover") setLit("none")
             }}
           >

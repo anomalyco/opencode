@@ -125,6 +125,19 @@ story("shows the highlight only for hover or the arrow keys, never for a click",
   await expect(focused).toBeFocused()
   await expect(highlight).toBeHidden()
 
+  await wide.dispatchEvent("click")
+  await expect(wide).toBeChecked()
+  await expect(highlight).toBeHidden()
+
+  await page.keyboard.press("1")
+  await expect(highlight).toBeHidden()
+
+  await wide.hover()
+  await expect(highlight).toBeVisible()
+  await page.keyboard.press(" ")
+  await page.mouse.move(0, 0)
+  await expect(highlight).toBeHidden()
+
   await wide.hover()
   await expect(highlight).toBeVisible()
   const hovered = await clip()
