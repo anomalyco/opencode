@@ -79,6 +79,24 @@ export type SessionsCursor = string
 
 export type SessionActive = { type: "running" }
 
+export type PermissionID = string
+
+export type PermissionSource = { type: "tool"; messageID: string; id: string }
+
+export type FormID = string
+
+export type FormMetadata = { [x: string]: JsonValue }
+
+export type FormWhen = {
+  key: string
+  op: "eq" | "neq"
+  value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+}
+
+export type FormOption = { value: string; label: string; description?: string }
+
+export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
+
 export type PromptBase64 = string
 
 export type PromptFileSource = { type: "inline" } | { type: "uri"; uri: string }
@@ -122,20 +140,6 @@ export type SessionStructuredError = {
 export type SessionGenerateResponse = { data: { text: string } }
 
 export type SessionInterruptResponse = { interrupted: boolean }
-
-export type FormID = string
-
-export type FormMetadata = { [x: string]: JsonValue }
-
-export type FormWhen = {
-  key: string
-  op: "eq" | "neq"
-  value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-}
-
-export type FormOption = { value: string; label: string; description?: string }
-
-export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
 
 export type FormValue = string | number | "Infinity" | "-Infinity" | "NaN" | boolean | Array<string>
 
@@ -285,10 +289,6 @@ export type ProjectIcon = { url?: string; override?: string; color?: string }
 export type ProjectCommands = { start?: string }
 
 export type ProjectTime = { created: number; updated: number; active: number; archived?: number }
-
-export type PermissionID = string
-
-export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
 export type PermissionSavedID = string
 
@@ -459,6 +459,87 @@ export type SessionRevert = {
   files?: Array<FileDiffInfo>
 }
 
+export type PermissionRequest = {
+  id: PermissionID
+  sessionID: SessionID
+  action: string
+  resources: Array<string>
+  save?: Array<string>
+  metadata?: { [x: string]: JsonValue }
+  source?: PermissionSource
+  message?: string
+}
+
+export type FormNumberField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  hidden?: boolean
+  when?: Array<FormWhen>
+  type: "number"
+  minimum?: number | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormIntegerField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  hidden?: boolean
+  when?: Array<FormWhen>
+  type: "integer"
+  minimum?: number | "Infinity" | "-Infinity" | "NaN"
+  maximum?: number | "Infinity" | "-Infinity" | "NaN"
+  default?: number | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type FormBooleanField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  hidden?: boolean
+  when?: Array<FormWhen>
+  type: "boolean"
+  default?: boolean
+}
+
+export type FormStringField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  hidden?: boolean
+  when?: Array<FormWhen>
+  type: "string"
+  format?: "email" | "uri" | "date" | "date-time"
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  placeholder?: string
+  default?: string
+  options?: Array<FormOption>
+  custom?: boolean
+}
+
+export type FormMultiselectField = {
+  key: string
+  title?: string
+  description?: string
+  required?: boolean
+  hidden?: boolean
+  when?: Array<FormWhen>
+  type: "multiselect"
+  options: Array<FormOption>
+  minItems?: number
+  maxItems?: number
+  custom?: boolean
+  default?: Array<string>
+}
+
 export type GenerateImageOutput2 = { type: "image"; data: PromptBase64; mime: string; name?: string }
 
 export type PromptFileAttachment = {
@@ -583,76 +664,6 @@ export type SessionMessageIdle = {
   type: "idle"
   outcome: "succeeded" | "failed" | "interrupted"
   error?: SessionStructuredError
-}
-
-export type FormNumberField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  hidden?: boolean
-  when?: Array<FormWhen>
-  type: "number"
-  minimum?: number | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormIntegerField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  hidden?: boolean
-  when?: Array<FormWhen>
-  type: "integer"
-  minimum?: number | "Infinity" | "-Infinity" | "NaN"
-  maximum?: number | "Infinity" | "-Infinity" | "NaN"
-  default?: number | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type FormBooleanField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  hidden?: boolean
-  when?: Array<FormWhen>
-  type: "boolean"
-  default?: boolean
-}
-
-export type FormStringField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  hidden?: boolean
-  when?: Array<FormWhen>
-  type: "string"
-  format?: "email" | "uri" | "date" | "date-time"
-  minLength?: number
-  maxLength?: number
-  pattern?: string
-  placeholder?: string
-  default?: string
-  options?: Array<FormOption>
-  custom?: boolean
-}
-
-export type FormMultiselectField = {
-  key: string
-  title?: string
-  description?: string
-  required?: boolean
-  hidden?: boolean
-  when?: Array<FormWhen>
-  type: "multiselect"
-  options: Array<FormOption>
-  minItems?: number
-  maxItems?: number
-  custom?: boolean
-  default?: Array<string>
 }
 
 export type FormAnswer = { [x: string]: FormValue }
@@ -786,17 +797,6 @@ export type Project = {
   commands?: ProjectCommands
   time: ProjectTime
   sandboxes: Array<string>
-}
-
-export type PermissionRequest = {
-  id: PermissionID
-  sessionID: SessionID
-  action: string
-  resources: Array<string>
-  save?: Array<string>
-  metadata?: { [x: string]: JsonValue }
-  source?: PermissionSource
-  message?: string
 }
 
 export type PermissionSavedInfo = {
@@ -1061,6 +1061,14 @@ export type UsageLimitsBudget = {
   resetsAt: number
 }
 
+export type FormField =
+  | FormStringField
+  | FormNumberField
+  | FormIntegerField
+  | FormBooleanField
+  | FormMultiselectField
+  | FormExternalField
+
 export type GenerateImageResult = {
   images: Array<GenerateImageOutput2>
   cost?: MoneyUSD
@@ -1109,14 +1117,6 @@ export type SessionMessageToolStateError = {
   content?: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
 }
-
-export type FormField =
-  | FormStringField
-  | FormNumberField
-  | FormIntegerField
-  | FormBooleanField
-  | FormMultiselectField
-  | FormExternalField
 
 export type FormState =
   | { status: "pending" }
@@ -2550,6 +2550,8 @@ export type UsageLimitsInfo = {
   budgets: Array<UsageLimitsBudget>
 }
 
+export type FormFields = [FormField, ...Array<FormField>]
+
 export type GenerateImageResponse = { data: GenerateImageResult }
 
 export type SessionInboxUser = {
@@ -2574,8 +2576,6 @@ export type SessionMessageAssistantTool = {
     | SessionMessageToolStateError
   time: { created: number; ran?: number; completed?: number }
 }
-
-export type FormFields = [FormField, ...Array<FormField>]
 
 export type SessionInboxItem =
   | { type: "user"; payload: SessionInboxUserPayload1; delivery: SessionInboxDelivery }
@@ -2653,6 +2653,23 @@ export type SessionsResponse = {
   cursor: { previous?: SessionsCursor | null; next?: SessionsCursor | null }
 }
 
+export type FormInfo = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
+
+export type FormDetail = {
+  id: FormID
+  sessionID: string
+  title: string
+  metadata?: FormMetadata
+  fields: FormFields
+  state: FormState
+}
+
+export type IntegrationOAuthMethod = { id: IntegrationMethodID; type: "oauth"; label: string; form?: FormFields }
+
+export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
+
+export type IntegrationExternalMethod = { id: IntegrationMethodID; type: "external"; label: string; form?: FormFields }
+
 export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
 
 export type SessionMessageAssistant = {
@@ -2673,23 +2690,6 @@ export type SessionMessageAssistant = {
   retry?: SessionMessageAssistantRetry
 }
 
-export type FormInfo = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
-
-export type FormDetail = {
-  id: FormID
-  sessionID: string
-  title: string
-  metadata?: FormMetadata
-  fields: FormFields
-  state: FormState
-}
-
-export type IntegrationOAuthMethod = { id: IntegrationMethodID; type: "oauth"; label: string; form?: FormFields }
-
-export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
-
-export type IntegrationExternalMethod = { id: IntegrationMethodID; type: "external"; label: string; form?: FormFields }
-
 export type SessionInboxEnqueued = {
   id: EventID
   created: number
@@ -2709,6 +2709,20 @@ export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
 export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
 
+export type SessionFamily = {
+  rootID: SessionID
+  sessions: Array<SessionInfo>
+  permissions: Array<PermissionRequest>
+  forms: Array<FormInfo>
+}
+
+export type IntegrationMethod =
+  | IntegrationOAuthMethod
+  | IntegrationCommandMethod
+  | IntegrationKeyMethod
+  | IntegrationExternalMethod
+  | IntegrationEnvMethod
+
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
   | SessionMessageModelSelected
@@ -2721,13 +2735,6 @@ export type SessionMessageInfo =
   | SessionMessageAssistant
   | SessionMessageCompaction
   | SessionMessageIdle
-
-export type IntegrationMethod =
-  | IntegrationOAuthMethod
-  | IntegrationCommandMethod
-  | IntegrationKeyMethod
-  | IntegrationExternalMethod
-  | IntegrationEnvMethod
 
 export type SessionMessageContentUpdated = {
   id: EventID
@@ -2748,19 +2755,19 @@ export type FormCreated = {
   data: { form: FormInfo1 }
 }
 
-export type SessionTransferData = { info: SessionPersisted; messages: Array<SessionMessageInfo> }
-
-export type SessionMessagesResponse = {
-  data: Array<SessionMessageInfo>
-  cursor: { previous?: string | null; next?: string | null }
-}
-
 export type IntegrationInfo = {
   id: IntegrationID
   name: string
   metadata?: { [x: string]: any }
   methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
+}
+
+export type SessionTransferData = { info: SessionPersisted; messages: Array<SessionMessageInfo> }
+
+export type SessionMessagesResponse = {
+  data: Array<SessionMessageInfo>
+  cursor: { previous?: string | null; next?: string | null }
 }
 
 export type SessionEventDurable =
@@ -3315,6 +3322,10 @@ export type SessionActiveOutput = { data: { [x: SessionID]: SessionActive } }["d
 export type SessionGetInput = { readonly sessionID: string }
 
 export type SessionGetOutput = { data: SessionInfo }["data"]
+
+export type SessionFamilyInput = { readonly sessionID: string }
+
+export type SessionFamilyOutput = { data: SessionFamily }["data"]
 
 export type SessionRemoveInput = { readonly sessionID: string }
 

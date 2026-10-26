@@ -1721,6 +1721,74 @@
         }
       }
     },
+    "/api/session/{sessionID}/family": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.family",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Session.Family"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve every session in the tree that contains the session, with the family's pending permission requests and forms. The result is complete, not paginated: the root comes first, then its descendants ordered by creation time. Pending requests come only from locations that are running; a location that is not running holds none.",
+        "summary": "Get session family"
+      }
+    },
     "/api/session/{sessionID}/fork": {
       "post": {
         "tags": ["session"],
@@ -22658,6 +22726,34 @@
             "$ref": "#/components/schemas/session.message.content.updated"
           }
         ]
+      },
+      "Session.Family": {
+        "type": "object",
+        "properties": {
+          "rootID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.Info"
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission.Request"
+            }
+          },
+          "forms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.Info"
+            }
+          }
+        },
+        "required": ["rootID", "sessions", "permissions", "forms"],
+        "additionalProperties": false
       },
       "Session.ForkBoundary": {
         "anyOf": [

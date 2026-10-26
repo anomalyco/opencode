@@ -54,6 +54,11 @@ export type MessagesInput = {
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Persisted | undefined>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Persisted[]>
+  /**
+   * The family containing `sessionID`: its root, then every descendant by `time_created` and `id`.
+   * Empty when the Session does not exist.
+   */
+  readonly family: (sessionID: Session.ID) => Effect.Effect<Session.Persisted[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
@@ -184,6 +189,37 @@ const layer = Layer.effect(
           Effect.orDie,
         )
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+      }),
+      family: Effect.fn("SessionStore.family")(function* (sessionID) {
+        // The root is the topmost ancestor, also when its recorded parent no longer exists. UNION, not
+        // UNION ALL, so a corrupt parent cycle ends instead of recursing forever (and yields no root).
+        const rows = yield* db
+          .select()
+          .from(SessionTable)
+          .where(
+            sql`${SessionTable.id} IN (
+              WITH RECURSIVE
+                ancestor(id, parent_id) AS (
+                  SELECT id, parent_id FROM ${SessionTable} WHERE id = ${sessionID}
+                  UNION
+                  SELECT session.id, session.parent_id FROM ${SessionTable} AS session
+                  JOIN ancestor ON session.id = ancestor.parent_id
+                ),
+                member(id) AS (
+                  SELECT id FROM ancestor
+                  WHERE parent_id IS NULL OR NOT EXISTS (SELECT 1 FROM ${SessionTable} AS parent WHERE parent.id = ancestor.parent_id)
+                  UNION
+                  SELECT session.id FROM ${SessionTable} AS session JOIN member ON session.parent_id = member.id
+                )
+              SELECT id FROM member
+            )`,
+          )
+          .orderBy(asc(SessionTable.time_created), asc(SessionTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        const ids = new Set(rows.map((row) => row.id))
+        const root = rows.find((row) => row.parent_id === null || !ids.has(row.parent_id))
+        return root ? [root, ...rows.filter((row) => row !== root)].map((row) => fromRow(row)) : []
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
         return yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))

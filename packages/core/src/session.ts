@@ -135,6 +135,10 @@ export interface Interface {
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  /** The whole family containing `sessionID`: the root first, then every descendant by creation time and ID. */
+  readonly family: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<{ readonly rootID: SessionSchema.ID; readonly sessions: SessionSchema.Info[] }, NotFoundError>
   readonly environment: (input: {
     readonly sessionID: SessionSchema.ID
     readonly variables?: SessionEnvironment.Variables
@@ -393,6 +397,12 @@ const layer = Layer.effect(
       get: Effect.fn("Session.get")(function* (sessionID) {
         const active = yield* execution.active
         return withStatus(active, yield* sessions.forSession(sessionID).get())
+      }),
+      family: Effect.fn("Session.family")(function* (sessionID) {
+        const active = yield* execution.active
+        const members = yield* store.family(sessionID)
+        if (members.length === 0) return yield* new NotFoundError({ sessionID })
+        return { rootID: members[0].id, sessions: members.map((session) => withStatus(active, session)) }
       }),
       environment: Effect.fn("Session.environment")(function* (input) {
         yield* result.get(input.sessionID)

@@ -31,6 +31,8 @@ import type {
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
+  SessionFamilyInput,
+  SessionFamilyOutput,
   SessionRemoveInput,
   SessionRemoveOutput,
   SessionForkInput,
@@ -477,6 +479,14 @@ const EndpointSessionGet = (raw: RawClient["server.session"]) => (input: Session
     ),
   )
 
+const EndpointSessionFamily = (raw: RawClient["server.session"]) => (input: SessionFamilyInput) =>
+  preserveEffect<SessionFamilyOutput>()(
+    raw["session.family"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointSessionRemove = (raw: RawClient["server.session"]) => (input: SessionRemoveInput) =>
   preserveEffect<SessionRemoveOutput>()(
     raw["session.remove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
@@ -751,6 +761,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   create: EndpointSessionCreate(raw),
   active: EndpointSessionActive(raw),
   get: EndpointSessionGet(raw),
+  family: EndpointSessionFamily(raw),
   remove: EndpointSessionRemove(raw),
   fork: EndpointSessionFork(raw),
   switchAgent: EndpointSessionSwitchAgent(raw),
