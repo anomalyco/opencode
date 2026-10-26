@@ -248,6 +248,34 @@ describe("PluginSupervisor reload", () => {
     )
   })
 
+  it.effect("reports a configured plugin directory without an entrypoint as failed", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const root = path.join(directory.path, "external/entryless")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(root, { recursive: true })
+        await Bun.write(path.join(root, "notes.txt"), "no plugin here")
+        await Bun.write(
+          path.join(directory.path, ".opencode/opencode.json"),
+          JSON.stringify({ plugins: [root] }),
+        )
+      })
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        const failure = yield* failed(plugins)
+        expect(failure.source).toEqual({ type: "local", path: root })
+        expect(failure.state).toEqual(
+          expect.objectContaining({ status: "failed", error: `Plugin entrypoint not found: ${root}` }),
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }),
+  )
+
   it.live("keeps the running generation when an updated local plugin fails to import", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()

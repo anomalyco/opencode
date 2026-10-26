@@ -164,12 +164,12 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
       const entrypoints: Host.Entrypoints = directory
         ? yield* Effect.sync(() => Host.resolve({ directory: operation.target }))
         : { server: pathToFileURL(operation.target).href }
-      if (!entrypoints.server) return []
-      if (directory) {
+      if (directory && entrypoints.server) {
         const root = yield* fs.resolve(operation.target)
         const server = yield* fs.resolve(fileURLToPath(entrypoints.server))
         if (!FSUtil.contains(root, server)) return []
       }
+      // Directories without an entrypoint stay in the operations so loading reports them as failed.
       const times = yield* Effect.forEach(
         [
           ...Object.values(entrypoints)
