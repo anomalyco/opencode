@@ -85,14 +85,16 @@ You can also install it with the following commands:
   brew install anomalyco/tap/opencode
   ```
 
-  > We recommend using the OpenCode tap for the most up to date releases. The official `brew install opencode` formula is maintained by the Homebrew team and is updated less frequently.
+  > Use the OpenCode tap above for V1. Homebrew's `brew install opencode` formula currently installs V2. See the [V2 docs](https://opencode.ai/v2/docs/).
 
 - **Installing on Arch Linux**
 
   ```bash
-  sudo pacman -S opencode           # Arch Linux (Stable)
-  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  sudo pacman -S opencode           # Arch Linux (OpenCode 2)
+  paru -S opencode-bin              # Arch Linux (OpenCode 1, from AUR)
   ```
+
+  The official Arch package installs OpenCode 2. Use the AUR package to install OpenCode 1.
 
 #### Windows
 
@@ -337,25 +339,6 @@ Or you **can redo** the changes using the `/redo` command.
 ```bash frame="none"
 /redo
 ```
-
----
-
-## Share
-
-The conversations that you have with OpenCode can be [shared with your
-team](/docs/share).
-
-```bash frame="none"
-/share
-```
-
-This will create a link to the current conversation and copy it to your clipboard.
-
-:::note
-Conversations are not shared by default.
-:::
-
-Here's an [example conversation](https://opencode.ai/s/4XP1fce5) with OpenCode.
 
 ---
 

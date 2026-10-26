@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test"
-import { allowedDestination, destinationOrigin, fileURLWithin, localFileURL, normalizeURL, refusal } from "./policy"
+import {
+  allowedDestination,
+  committedLoad,
+  destinationOrigin,
+  fileURLWithin,
+  localFileURL,
+  normalizeURL,
+  refusal,
+} from "./policy"
 
 test("allows cross-origin HTTP navigation but rejects unsafe destinations and embedded credentials", () => {
   expect(destinationOrigin("https://other.example/path")).toBe("https://other.example")
@@ -79,4 +87,22 @@ test("windows workspace roots match drive-letter file URLs", () => {
   expect(fileURLWithin("file:///c:/users/me/repo/out/index.html", roots)).toBe(inside)
   expect(fileURLWithin("file:///C:/Users/me/repo2/x.html", roots)).toBe(false)
   expect(fileURLWithin("file:///D:/Users/me/repo/x.html", roots)).toBe(false)
+})
+
+test("a media URL whose viewer committed has loaded, while a download or network failure still fails", () => {
+  // The shape Electron's loadURL rejects with when loading stops before did-finish-load.
+  const stopped = Object.assign(new Error("ERR_FAILED (-2) loading 'http://127.0.0.1/clip.mp4'"), {
+    errno: -2,
+    code: "ERR_FAILED",
+  })
+
+  const refused = Object.assign(new Error("ERR_CONNECTION_REFUSED (-102) loading 'http://127.0.0.1/'"), {
+    errno: -102,
+    code: "ERR_CONNECTION_REFUSED",
+  })
+
+  expect(committedLoad(stopped, true)).toBe(true)
+  expect(committedLoad(stopped, false)).toBe(false)
+  expect(committedLoad(refused, true)).toBe(false)
+  expect(committedLoad(new Error("ERR_FAILED"), true)).toBe(false)
 })

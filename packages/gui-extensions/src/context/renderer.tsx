@@ -42,6 +42,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       legacy: { context: "main", "usage:context": "main" },
       mobile: { title: ctx.t("mobile.title"), order: 40, kind: "menu", icon: "status" },
       list: (input) => (input.open.includes("main") ? [tab] : []),
+      closed: () => ({ icon: "status" }),
       render: (props) => {
         const panel = usePanel()
 

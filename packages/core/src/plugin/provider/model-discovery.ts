@@ -106,13 +106,19 @@ export function make(interval: Duration.Input = "30 seconds") {
               }
               if (item.supports_reasoning === false) {
                 model.variants = []
-                if (model.settings) delete model.settings.reasoningEffort
+                model.settings = { ...model.settings, reasoningEffort: null }
               }
+              const effort = model.settings?.reasoningEffort ?? result.source.settings?.reasoningEffort
+              if (
+                item.reasoning_effort_levels != null &&
+                (typeof effort !== "string" || !item.reasoning_effort_levels.includes(effort))
+              )
+                model.settings = { ...model.settings, reasoningEffort: null }
               if (item.supports_reasoning !== false && item.reasoning_effort_levels != null)
                 model.variants = [
                   ...Variant.resolve(
                     { ...model, package: model.package ?? providers.get(model.providerID)?.provider.package },
-                    [{ type: "effort", values: item.reasoning_effort_levels }],
+                    Variant.supports({ supported: true, effort: item.reasoning_effort_levels }),
                   ),
                 ]
               if (

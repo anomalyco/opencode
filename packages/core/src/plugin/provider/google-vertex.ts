@@ -14,7 +14,7 @@ const decodeADCFile = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ quota_project_id: Schema.optional(Schema.String) })),
 )
 
-function resolveProject(options: Record<string, any>) {
+function resolveProject(options: Record<string, unknown>) {
   // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex, while Google SDKs
   // and ADC examples commonly use the broader Google Cloud project aliases.
   const project =
@@ -26,7 +26,7 @@ function resolveProject(options: Record<string, any>) {
   return typeof project === "string" ? project : undefined
 }
 
-function resolveLocation(options: Record<string, any>) {
+function resolveLocation(options: Record<string, unknown>) {
   const location =
     options.location ??
     process.env.GOOGLE_VERTEX_LOCATION ??
@@ -203,10 +203,11 @@ export const GoogleVertexPlugin = define({
         const location = resolveLocation(settings) ?? "global"
         for (const model of models.list(item.provider.id)) {
           if (typeof model.settings?.baseURL !== "string") continue
+          const baseURL = replaceVertexVars(model.settings.baseURL, project, location)
           models.update(item.provider.id, model.id, (draft) => {
             draft.settings = {
               ...draft.settings,
-              baseURL: replaceVertexVars(String(draft.settings?.baseURL), project, location),
+              baseURL,
             }
           })
         }

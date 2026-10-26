@@ -120,30 +120,21 @@ test("settings opened from a remote session sweep every server and keep the remo
   await expect(page).toHaveURL("/settings")
   await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveCount(0)
   await view.listed(REMOTE_SERVER, directoryB)
   await expect.poll(() => view.replies).toEqual([reply(sessionA.id, "permission-pending-a")])
 
-  await settings.getByRole("tab", { name: "127.0.0.1:4097", exact: true }).click()
-  await expect(settings.getByRole("tab")).toHaveText([
-    "127.0.0.1:4097",
-    "Projects",
-    "Worktrees",
-    "Providers",
-    "Models",
-    "Extensions",
-  ])
-  await settings.getByRole("tab", { name: "Models" }).click()
+  // Per-server pages start on the server of the tab settings opened from.
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  await expect(settings.getByRole("button", { name: "Server 127.0.0.1:4097", exact: true })).toBeVisible()
   await expect(settings.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
   await expect(settings.getByRole("switch", { name: "Server A Model" })).toHaveCount(0)
-  await settings.getByRole("button", { name: "Back to settings" }).click()
   await settings.getByRole("button", { name: "Back to app" }).click()
   await expect(settings).toBeHidden()
   await expectPath(page, sessionHref(sessionB.id, REMOTE_SERVER))
   await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toContainText(sessionB.title)
   await page.keyboard.press("Control+]")
-  await expect(page).toHaveURL("/settings")
-  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page).toHaveURL("/settings?tab=models")
+  await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press("Escape")
   await expectPath(page, sessionHref(sessionB.id, REMOTE_SERVER))
   await expectSessionTitle(page, sessionB.title)
@@ -242,10 +233,7 @@ test("a project's auto-accept choice overrides the default in both directions", 
       onPermissionReply: (reply) => replies.push(reply.permissionID),
     },
   })
-  await seed(page, {
-    projects: { local: [{ worktree: "/work/api" }, { worktree: "/work/web" }] },
-    tabs: [api.id, web.id],
-  })
+  await seed(page, { tabs: [api.id, web.id] })
   const dock = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
   const settings = page.getByTestId("settings-screen")
 

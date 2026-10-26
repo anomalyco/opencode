@@ -4,6 +4,7 @@ import { extend, useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
+import { useSessionTerminals } from "../context/session-terminals"
 import { useTheme, useThemes } from "../context/theme"
 import { errorMessage } from "../util/error"
 
@@ -35,6 +36,7 @@ export function TerminalPane(props: {
   const theme = useTheme()
   const themes = useThemes()
   const renderer = useRenderer()
+  const terminals = useSessionTerminals()
   const [failure, setFailure] = createSignal<string>()
   const attachmentID = crypto.randomUUID()
   const stream: StreamItem[] = []
@@ -65,7 +67,7 @@ export function TerminalPane(props: {
     if (terminalTheme) terminal?.write(terminalTheme)
   }
 
-  const send = (data: Uint8Array) => {
+  const send = (data: Uint8Array<ArrayBuffer>) => {
     if (attached && socket?.readyState === WebSocket.OPEN) socket.send(data)
   }
 
@@ -89,6 +91,8 @@ export function TerminalPane(props: {
     }
     if (size) send(interactionFrame(size, data))
   }
+
+  onCleanup(terminals.attachWriter(props.ptyID, sendInput))
 
   const processStream = () => {
     if (disposed || !terminal || !sameSize(canonicalSize, terminalSize)) return
@@ -295,6 +299,7 @@ export function TerminalPane(props: {
       <Show when={!failure()} fallback={<text fg={theme.text.feedback.error.base}>{failure()}</text>}>
         <>
           <embeddedTerminal
+            transparentBackground={themes.currentTokens().background.raised.base.a === 0}
             ref={(value) => {
               terminal = value
               props.onFocusRequest?.(() => {

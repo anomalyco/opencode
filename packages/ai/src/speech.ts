@@ -3,7 +3,14 @@ import { ProgressEvent, QueuedEvent } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  HttpOptions,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+} from "./schema/index.js"
 import { SpeechClient, Service } from "./speech-client.js"
 
 // ---------------------------------------------------------------------------
@@ -76,7 +83,7 @@ export class SpeechRequest extends Schema.Class<SpeechRequest>("Speech.Request")
   language: Schema.optional(Schema.String),
   instructions: Schema.optional(Schema.String),
   timestamps: Schema.optional(Schema.Boolean),
-  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
 }) {
   declare protected readonly _SpeechRequest: void

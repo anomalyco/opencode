@@ -18,7 +18,7 @@ Pick an entry from `/models` instead of guessing its provider or model ID. The s
 and does not change your configuration.
 
 ```text
-anthropic/claude-sonnet-4-5
+anthropic/claude-sonnet-5-5
 ```
 
 Availability is project-specific:
@@ -32,7 +32,7 @@ Availability is project-specific:
 Use `--model` to choose a model for one command-line run without changing the configured default:
 
 ```bash
-opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
 ```
 
 Agents and commands can also choose their own model. See [Agents](/agents) and [Commands](/commands).
@@ -44,7 +44,7 @@ Set `model` in `opencode.json` or `opencode.jsonc` to choose the default for new
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
 }
 ```
 
@@ -57,13 +57,31 @@ falls back to the newest available supported model.
 
 See [Config](/config) for configuration locations and precedence.
 
+## Free models
+
+Set `OPENCODE_DISABLE_FREE_MODELS=1` (or `true`) on the server process to hide [free OpenCode models](/console/models#free-models):
+
+```bash
+OPENCODE_DISABLE_FREE_MODELS=1 opencode serve
+```
+
+For the shared background server:
+
+```bash
+opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
+```
+
+Free means an `opencode` or `opencode-go` model with no input price. These models disappear from the catalog and defaults;
+explicitly selecting one fails with `Model unavailable`. Signed out, the `opencode` provider is absent until you connect
+an OpenCode Console account or set `OPENCODE_API_KEY`, which restores its paid models.
+
 ## Variants
 
 Variants are named options for one model, often used for reasoning effort or token budgets. Add `#variant` when selecting
 one for a run, session, agent, or command:
 
 ```bash
-opencode run --model openai/gpt-5.2#high "Review this migration plan"
+opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 ```
 
 Variant names come from the selected model's current catalog metadata. Names such as `low`, `high`, and `max` are not
@@ -77,7 +95,7 @@ Define new variants, or replace catalog variants with the same ID, in the model'
   "providers": {
     "openai": {
       "models": {
-        "gpt-5.2": {
+        "gpt-6.1-sol": {
           "settings": {
             "reasoningEffort": "medium",
           },
@@ -105,6 +123,37 @@ Define new variants, or replace catalog variants with the same ID, in the model'
 
 Each variant can contain `settings`, `headers`, and `body`. Its values are applied after provider and model values.
 
+To replace a model's reasoning variants, describe its reasoning controls in `capabilities.reasoning`, using the
+[models.dev](https://models.dev) v2 shape. OpenCode builds the variants for the model's package from them:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "capabilities": {
+            "reasoning": {
+              "supported": true,
+              "effort": ["low", "medium", "high"],
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| Field       | Purpose                                                                    |
+| ----------- | -------------------------------------------------------------------------- |
+| `supported` | Whether the model reasons. `false`, or `true` without controls, adds no variants. |
+| `toggle`    | Adds a `none` variant that turns reasoning off.                             |
+| `effort`    | Effort levels to offer. `default` keeps the provider default and adds no variant. |
+| `budget`    | Optional `min` and `max` thinking tokens. Ignored when `effort` is set.     |
+
+Variants listed in `variants` are applied on top of the ones built from `capabilities.reasoning`.
+
 ## Options
 
 Provider and model entries can customize requests with `settings`, `headers`, and `body`:
@@ -120,7 +169,7 @@ Provider and model entries can customize requests with `settings`, `headers`, an
         "X-Team": "platform",
       },
       "models": {
-        "gpt-5.2": {
+        "gpt-6.1-sol": {
           "settings": {
             "reasoningEffort": "high",
           },
@@ -159,7 +208,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
     "openai": {
       "models": {
         "coding-default": {
-          "modelID": "gpt-5.2",
+          "modelID": "gpt-6.1-sol",
           "name": "Coding default",
           "capabilities": {
             "tools": true,
@@ -177,7 +226,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
 }
 ```
 
-Here, `openai/coding-default` is the selectable reference and `gpt-5.2` is sent to the provider. For a model that is not
+Here, `openai/coding-default` is the selectable reference and `gpt-6.1-sol` is sent to the provider. For a model that is not
 already in the catalog, OpenCode assumes:
 
 - Tool support, text and image input, and text output.
@@ -239,14 +288,14 @@ Anthropic-style `cache_control` breakpoints. Set `compatibility.cacheFormat` on 
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": { "baseURL": "https://litellm.example.com/v1" },
       "models": {
-        "claude-sonnet-5": {
+        "claude-sonnet-5-5": {
           "compatibility": { "cacheFormat": "anthropic" },
         },
         "claude-opus-5-5": {
           "compatibility": { "cacheFormat": "anthropic" },
         },
         // Other models on the same proxy cache automatically and need no setting.
-        "gpt-6.1": {},
+        "gpt-6.1-sol": {},
       },
     },
   },
@@ -415,9 +464,9 @@ substitution such as `"apiKey": "{env:LOCAL_API_KEY}"`; do not commit secrets.
 Model selectors use `provider/model` with an optional `#variant`:
 
 ```text
-openai/gpt-5.2
-openai/gpt-5.2#high
-openrouter/anthropic/claude-sonnet-4.5#high
+openai/gpt-6.1-sol
+openai/gpt-6.1-sol#high
+openrouter/anthropic/claude-sonnet-5.5#high
 ```
 
 | Part       | Rule                                                       |
@@ -434,7 +483,7 @@ or an expanded object:
 {
   "model": {
     "providerID": "openrouter",
-    "model": "anthropic/claude-sonnet-4.5",
+    "model": "anthropic/claude-sonnet-5.5",
   },
 }
 ```
@@ -447,7 +496,7 @@ Keep these rules in mind when configuring models:
 
 ```jsonc
 {
-  "model": "openai/gpt-5.2"
+  "model": "openai/gpt-6.1-sol"
 }
 ```
 

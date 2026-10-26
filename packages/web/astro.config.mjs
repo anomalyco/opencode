@@ -8,6 +8,7 @@ import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { copyFileSync } from "fs"
+import { execFileSync } from "child_process"
 
 // https://astro.build/config
 export default defineConfig({
@@ -231,7 +232,6 @@ export default defineConfig({
             "web",
             "ide",
             { label: "Console", link: "https://opencode.ai/v2/docs/console/" },
-            "share",
             "github",
             "gitlab",
           ],
@@ -327,8 +327,8 @@ function configSchema() {
     name: "configSchema",
     hooks: {
       "astro:build:done": async () => {
-        // V1 schemas are frozen in the console app since packages/opencode lives on the v1 branch.
-        copyFileSync("../console/app/public/config.json", "./dist/config.json")
+        execFileSync("bun", ["../schema/script/config-schema.ts", "./dist/config.json"], { stdio: "inherit" })
+        // The V1 TUI schema is frozen in the console app since packages/opencode lives on the v1 branch.
         copyFileSync("../console/app/public/tui.json", "./dist/tui.json")
       },
     },

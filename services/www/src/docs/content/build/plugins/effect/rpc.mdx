@@ -154,16 +154,16 @@ effect: (ctx) =>
 RPC events are Streams. Subscribe by event name and run the Stream in a scoped
 fiber:
 
+{/* prettier-ignore */}
 ```ts
 import { Effect, Stream } from "effect"
 
 const acme = ctx.rpc(Acme)
 
-yield *
-  acme.events.subscribe("updated").pipe(
-    Stream.runForEach((event) => Effect.logInfo(event.data.text)),
-    Effect.forkScoped,
-  )
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)
 ```
 
 Subscriptions are live only and close when Stream consumption stops.

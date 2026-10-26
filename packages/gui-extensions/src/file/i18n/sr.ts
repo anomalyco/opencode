@@ -1,9 +1,5 @@
 export default {
   "tree.all": "Све датотеке",
-  "tree.empty": "Нема датотека",
-  "tree.changes.one": "{{count}} датотека је измењена",
-  "tree.changes.few": "{{count}} датотеке су измењене",
-  "tree.changes.other": "{{count}} датотека је измењено",
   "tab.notFound": "Фајл није пронађен: {{name}}",
   "mobile.title": "Датотеке",
   "mobile.openTabs": "Отворене датотеке",

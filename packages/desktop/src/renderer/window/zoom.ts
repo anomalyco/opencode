@@ -70,16 +70,19 @@ api.onZoomFactorChanged((factor) => {
 
 void api.getPinchZoomEnabled().then((enabled) => {
   pinchZoomEnabled = enabled
+  syncWheelPinchListener()
 })
 
 api.onPinchZoomEnabledChanged((enabled) => {
   pinchZoomEnabled = enabled
   resetWheelPinch()
+  syncWheelPinchListener()
 })
 
 const setPinchZoomEnabled = (enabled: boolean) => {
   pinchZoomEnabled = enabled
   resetWheelPinch()
+  syncWheelPinchListener()
 
   return api.setPinchZoomEnabled(enabled)
 }
@@ -129,18 +132,24 @@ const updateWheelPinch = (event: WheelEvent) => {
   applyZoom(clamp(wheelPinch.startZoom - (wheelPinch.totalDelta / WHEEL_PINCH_THRESHOLD) * WHEEL_PINCH_STEP))
 }
 
-window.addEventListener(
-  "wheel",
-  (event) => {
-    if (!pinchZoomEnabled) return
+const onWheelPinch = (event: WheelEvent) => {
+  if (!event.ctrlKey) return
 
-    if (!event.ctrlKey) return
+  event.preventDefault()
+  updateWheelPinch(event)
+}
 
-    event.preventDefault()
-    updateWheelPinch(event)
-  },
-  { passive: false },
-)
+// A cancelable window wheel listener makes every scroll gesture wait for the main thread, so it
+// is only attached while pinch zoom is on. Main's zoom-changed handler covers Ctrl+wheel otherwise.
+const syncWheelPinchListener = () => {
+  if (pinchZoomEnabled) {
+    window.addEventListener("wheel", onWheelPinch, { passive: false })
+
+    return
+  }
+
+  window.removeEventListener("wheel", onWheelPinch)
+}
 
 window.addEventListener("keydown", (event) => {
   if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return

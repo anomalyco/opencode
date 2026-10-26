@@ -9,7 +9,6 @@ import type { HighlightGroup } from "~/lib/changelog"
 import { For, Show, createSignal } from "solid-js"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { LocaleLinks } from "~/component/locale-links"
 
 function formatDate(dateString: string, locale: string) {
   const date = new Date(dateString)
@@ -107,7 +106,6 @@ export default function Changelog() {
   return (
     <main data-page="changelog">
       <Title>{i18n.t("changelog.title")}</Title>
-      <LocaleLinks path="/changelog" />
       <Meta name="description" content={i18n.t("changelog.meta.description")} />
 
       <div data-component="container">

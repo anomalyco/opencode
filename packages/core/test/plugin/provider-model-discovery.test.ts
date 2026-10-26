@@ -497,16 +497,16 @@ describe("OpenAI-compatible model discovery", () => {
                 providers: {
                   gateway: {
                     settings: { baseURL: `${server.url.origin}/v1`, modelDiscovery: true },
-                     models: {
-                       [remote.id]: {
-                         package: "@opencode/ai/providers/openai-compatible",
-                         limit: { input: 400_000 },
-                         capabilities: { tools: false },
-                         settings: { reasoningEffort: "low" },
-                         compatibility: { maxTokensField: "max_completion_tokens" },
-                       },
-                     },
-                     compatibility: { cacheFormat: "anthropic", maxTokensField: "max_tokens" },
+                    models: {
+                      [remote.id]: {
+                        package: "@opencode/ai/providers/openai-compatible",
+                        limit: { input: 400_000 },
+                        capabilities: { tools: false },
+                        settings: { reasoningEffort: "low" },
+                        compatibility: { maxTokensField: "max_completion_tokens" },
+                      },
+                    },
+                    compatibility: { cacheFormat: "anthropic", maxTokensField: "max_tokens" },
                   },
                 },
               }),
@@ -528,12 +528,93 @@ describe("OpenAI-compatible model discovery", () => {
           expect(selected).toMatchObject({
             package: "@opencode/ai/providers/openai-compatible",
             limit: { context: 1_050_000, input: 400_000, output: 128_000 },
-             capabilities: { tools: false, reasoning: true },
-             settings: { reasoningEffort: "low" },
-             compatibility: { cacheFormat: "anthropic", maxTokensField: "max_completion_tokens" },
+            capabilities: { tools: false, reasoning: true },
+            settings: { reasoningEffort: "low" },
+            compatibility: { cacheFormat: "anthropic", maxTokensField: "max_completion_tokens" },
           })
           expect(selected?.variants.map((variant) => String(variant.id))).toEqual(["low", "high", "xhigh", "max"])
           expect(selected?.variants.every((variant) => variant.settings?.include === undefined)).toBe(true)
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("uses standard local reasoning controls and preserves explicit request-default overrides", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              data: ["restricted", "disabled", "explicit", "budget", "inherited"].map((id) => ({
+                ...remote,
+                id,
+                default_reasoning_effort: id === "inherited" ? null : remote.default_reasoning_effort,
+                request_defaults: {
+                  output_token_budget: 8192,
+                  output_token_budget_by_reasoning_effort: { high: 65536 },
+                },
+              })),
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const config = yield* Config.Test
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  gateway: {
+                    settings: { baseURL: `${server.url.origin}/v1`, modelDiscovery: true, reasoningEffort: "high" },
+                    models: {
+                      restricted: { capabilities: { reasoning: { supported: true, effort: ["low"] } } },
+                      inherited: { capabilities: { reasoning: { supported: true, effort: ["low", "high"] } } },
+                      disabled: { capabilities: { reasoning: { supported: false } } },
+                      explicit: {
+                        capabilities: { reasoning: { supported: false } },
+                        settings: { reasoningEffort: "low" },
+                      },
+                      budget: { requestDefaults: { outputTokenBudget: 16384, outputTokenBudgetByReasoningEffort: {} } },
+                    },
+                  },
+                },
+              }),
+            }),
+          ])
+          yield* make().effect(host)
+          yield* ConfigProviderPlugin.Plugin.effect(host)
+          const models = yield* Model.Service
+          const restricted = yield* models.get(Provider.ID.make("gateway"), Model.ID.make("restricted"))
+          expect(restricted?.variants.map((variant) => String(variant.id))).toEqual(["low"])
+          expect(restricted?.settings?.reasoningEffort).toBeUndefined()
+          const disabled = yield* models.get(Provider.ID.make("gateway"), Model.ID.make("disabled"))
+          expect(disabled?.capabilities.reasoning).toBe(false)
+          expect(disabled?.variants).toEqual([])
+          expect(disabled?.settings?.reasoningEffort).toBeUndefined()
+          if (!disabled) throw new Error("Expected the discovered disabled-reasoning model")
+          const resolved = yield* ModelResolver.fromCatalogModel({
+            ...disabled,
+            settings: { ...disabled.settings, apiKey: "fixture-key" },
+          })
+          expect(resolved.defaults?.generation?.maxTokens).toBe(8192)
+          expect(resolved.defaults?.providerOptions?.reasoningEffort).toBeUndefined()
+          const inherited = yield* models.get(Provider.ID.make("gateway"), Model.ID.make("inherited"))
+          expect(inherited?.settings?.reasoningEffort).toBe("high")
+          if (!inherited) throw new Error("Expected the discovered model with an inherited reasoning default")
+          const inheritedRuntime = yield* ModelResolver.fromCatalogModel({
+            ...inherited,
+            settings: { ...inherited.settings, apiKey: "fixture-key" },
+          })
+          expect(inheritedRuntime.defaults?.generation?.maxTokens).toBe(65536)
+          expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make("explicit"))).toMatchObject({
+            settings: { reasoningEffort: "low" },
+          })
+          expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make("budget"))).toMatchObject({
+            requestDefaults: { outputTokenBudget: 16384, outputTokenBudgetByReasoningEffort: {} },
+          })
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),

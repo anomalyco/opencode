@@ -7,10 +7,12 @@ import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
+import { pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
 import { createProfiling, type Recording } from "./profiling"
 import type { BrowserNetwork } from "./network"
 import {
   allowedDestination,
+  committedLoad,
   destinationOrigin,
   fileURLWithin,
   localFileURL,
@@ -134,8 +136,10 @@ export function createBrowserPage(
     detail?: (detail: PageDetail) => void
     /** The page's zoom changed, which Chromium applies to every page of the same origin in the partition. */
     zoomed?: () => void
-    /** The user pressed the address shortcut while the page had focus. */
-    address?: () => void
+    /** Hands a browser or shell shortcut to the app window. */
+    shortcut?: (shortcut: PageShortcut) => void
+    /** The page took keyboard focus. */
+    focused?: () => void
     fail: () => void
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
@@ -175,7 +179,7 @@ export function createBrowserPage(
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return
 
-    if (input.key === "F5" && !input.meta && !input.control && !input.alt && !input.shift) {
+    if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
       contents.reload()
 
@@ -189,20 +193,21 @@ export function createBrowserPage(
       return
     }
 
-    if (input.alt || !(process.platform === "darwin" ? input.meta : input.control)) return
+    const shortcut = pageShortcut(input, process.platform === "darwin")
 
-    // The same chord as Chromium DevTools' element picker.
-    if (input.shift && input.code === "KeyC") {
+    if (shortcut) {
       event.preventDefault()
-      void toggleInspect(!inspecting)
+      options.shortcut?.(shortcut)
 
       return
     }
 
-    // The system browser's address shortcut. The app's own focus moves to the address field.
-    if (!input.shift && input.code === "KeyL") {
+    if (input.alt || !(process.platform === "darwin" ? input.meta : input.control)) return
+
+    // The same chord as Chromium DevTools' element picker.
+    if (input.shift && pageLetter(input) === "c") {
       event.preventDefault()
-      options.address?.()
+      void toggleInspect(!inspecting)
 
       return
     }
@@ -291,13 +296,19 @@ export function createBrowserPage(
   // through later navigations; blank and failed documents hide until a real one is ready.
   let content = false
   let failure: { url: string; message: string } | undefined
+  // A blank document is never shown, so its load does not count as loading: a new tab shows its new tab page at once.
+  let blank = options.initialize !== false && !options.restore?.url
+  // Chromium names a document after its URL until its <title> parses. A navigation on the same site keeps the shown
+  // title until the new document names itself or stops loading, so a page that reloads or redirects to itself does
+  // not flash its URL in the tab strip.
+  let title = ""
 
   const state = (): Browser.Tab => {
     const page = {
       id: options.id,
       url: (failure?.url ?? contents.getURL()).slice(0, 16_384),
-      title: contents.getTitle().slice(0, 2_048),
-      loading: contents.isLoading(),
+      title: title.slice(0, 2_048),
+      loading: contents.isLoading() && !blank,
     }
 
     const history = {
@@ -315,6 +326,7 @@ export function createBrowserPage(
 
   const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
+    blank = event.url === "about:blank"
     failure = undefined
     generation++
     documents.clear()
@@ -344,6 +356,7 @@ export function createBrowserPage(
     if (next !== origin) {
       icon = undefined
       iconRequest++
+      title = contents.getTitle()
     }
 
     origin = next
@@ -362,12 +375,21 @@ export function createBrowserPage(
     publish()
   })
   contents.on("dom-ready", settle)
+
+  const retitle = () => {
+    title = contents.getTitle()
+    publish()
+  }
+
   contents.on("did-stop-loading", () => {
     settle()
-    publish()
+    retitle()
   })
-  contents.on("did-navigate-in-page", publish)
-  contents.on("page-title-updated", publish)
+  contents.on("did-navigate-in-page", retitle)
+  contents.on("focus", () => {
+    if (!closed) options.focused?.()
+  })
+  contents.on("page-title-updated", retitle)
   contents.on("render-process-gone", () => {
     if (!closed) options.fail()
   })
@@ -524,12 +546,29 @@ export function createBrowserPage(
   // whether there is a document worth exposing over the themed background.
   const updateVisibility = () => embed.show(content)
 
+  const load = (url: string) => {
+    let committed = false
+
+    const commit = () => {
+      committed = true
+    }
+
+    contents.once("did-navigate", commit)
+
+    return contents
+      .loadURL(url)
+      .catch((error: Error) => {
+        if (!committedLoad(error, committed)) throw error
+      })
+      .finally(() => contents.off("did-navigate", commit))
+  }
+
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false
       ? []
       : [
-          contents.loadURL(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
+          load(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
             options.publish(error.message)
@@ -711,7 +750,7 @@ export function createBrowserPage(
         signal.addEventListener("abort", cancel, { once: true })
 
         try {
-          await contents.loadURL(url)
+          await load(url)
         } finally {
           signal.removeEventListener("abort", cancel)
         }
@@ -967,7 +1006,7 @@ export function createBrowserPage(
 
         if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
           throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
-        const format = action.format ?? "png"
+        const format = action.format ?? "jpeg"
 
         const capture = await cdp.send("Page.captureScreenshot", {
           format,

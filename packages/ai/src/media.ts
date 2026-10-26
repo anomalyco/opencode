@@ -4,9 +4,9 @@ import { Effect, FileSystem, Schema, SchemaGetter } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
-import { AIError, HttpContext, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
+import { AIError, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
-import { Service } from "./route/executor-service.js"
+import { responseHttp, Service } from "./route/executor-service.js"
 import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
@@ -254,7 +254,7 @@ const download = Effect.fn("Media.download")(function* (
         new AIError({
           reason: new InvalidProviderOutputError({
             message: `Failed to read media from ${source.url}`,
-            http: new HttpContext({ url: response.request.url, status: response.status, headers: response.headers }),
+            http: responseHttp(response),
             cause,
           }),
         }),

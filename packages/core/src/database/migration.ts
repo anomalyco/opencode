@@ -125,7 +125,9 @@ export function applyOnly(db: Database, input: Migration[]) {
               const relaxForeignKeys = supportsForeignKeyToggle
                 ? db.run(sql`PRAGMA foreign_keys = OFF`)
                 : db.run(sql`PRAGMA defer_foreign_keys = ON`)
-              const restoreForeignKeys = supportsForeignKeyToggle ? db.run(sql`PRAGMA foreign_keys = ON`) : Effect.void
+              const restoreForeignKeys = supportsForeignKeyToggle
+                ? Effect.asVoid(db.run(sql`PRAGMA foreign_keys = ON`))
+                : Effect.void
               yield* relaxForeignKeys
               yield* apply.pipe(Effect.ensuring(restoreForeignKeys.pipe(Effect.orDie)))
             })

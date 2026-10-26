@@ -57,9 +57,16 @@ export namespace TimelineRow {
     ref: PartRef
   }> {}
 
+  /**
+   * `free-limit` marks OpenCode Zen's daily free allowance running out. `budget-limit` marks an OpenCode Console budget
+   * on all spend pausing paid models, and `model-budget-limit` one pausing only the models it covers. `resetAt` is when
+   * the allowance or budget comes back, if known.
+   */
   export class Error extends Data.TaggedClass("Error")<{
     userMessageID: string
     text: string
+    kind?: "free-limit" | "budget-limit" | "model-budget-limit"
+    resetAt?: number
   }> {}
 
   export class Retry extends Data.TaggedClass("Retry")<{
@@ -70,6 +77,19 @@ export namespace TimelineRow {
   export class CompactionQueued extends Data.TaggedClass("CompactionQueued")<{
     userMessageID: string
     inboxID: string
+  }> {}
+
+  /**
+   * The files a finished turn changed, shown once the Session goes idle. `messageID` is the
+   * idle marker that ended the turn; `from` is the prompt that opened it, which names the turn
+   * to the session diff route even when later prompts were steered in. `files` are the paths its
+   * steps recorded, listed before the diff loads; the diff can omit a file a later step reverted.
+   */
+  export class TurnDiff extends Data.TaggedClass("TurnDiff")<{
+    userMessageID: string
+    messageID: string
+    from: string
+    files: readonly string[]
   }> {}
 
   /** Where the host shows the active turn's live status when undelivered input waits below it. */
@@ -88,6 +108,7 @@ export namespace TimelineRow {
     | Error
     | Retry
     | CompactionQueued
+    | TurnDiff
     | Activity
 
   export const key: (row: TimelineRow) => string = Match.typeTags<TimelineRow>()({
@@ -104,6 +125,7 @@ export namespace TimelineRow {
     Error: (row) => `error:${row.userMessageID}`,
     Retry: (row) => `retry:${row.userMessageID}`,
     CompactionQueued: (row) => `compaction-queued:${row.inboxID}`,
+    TurnDiff: (row) => `turn-diff:${row.messageID}`,
     // One live status exists at a time; it keeps its identity when the active turn changes.
     Activity: () => "activity",
   })
@@ -127,7 +149,13 @@ export type TimelineRowMap = {
   }
   Thinking: { userMessageID: string; ref: PartRef }
   Retry: { userMessageID: string }
-  Error: { userMessageID: string; text: string }
+  Error: {
+    userMessageID: string
+    text: string
+    kind?: "free-limit" | "budget-limit" | "model-budget-limit"
+    resetAt?: number
+  }
   CompactionQueued: { userMessageID: string; inboxID: string }
+  TurnDiff: { userMessageID: string; messageID: string; from: string; files: readonly string[] }
   Activity: { userMessageID: string }
 }

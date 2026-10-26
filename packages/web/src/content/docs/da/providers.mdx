@@ -553,7 +553,7 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -751,13 +751,12 @@ gemme tokenet i opencode auth-lagring.
 OpenCode bruger en lille model til nogle AI-opgaver som at generere sessionstitlen.
 Den er konfigureret til at bruge gpt-5-nano som standard, hostet af Zen. For at låse OpenCode
 til kun at bruge din egen GitLab-hostede instans, tilføj følgende i din
-`opencode.json` fil. Det anbefales også at deaktivere sessionsdeling.
+`opencode.json` fil.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 

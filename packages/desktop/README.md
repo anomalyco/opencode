@@ -40,6 +40,18 @@ CLI preparation uses these channel rules:
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development. Neither path
 requires `OPENCODE_CLI_DIST` or runs the production prebuild.
 
+## Beta channel
+
+Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to
+the `beta` update channel. Beta publishes only the desktop app and `beta.opencode.ai`; the CLI and SDK packages ship
+from `dev`. Install it from `https://opencode.ai/download/beta/<platform>`, for example `darwin-aarch64-dmg` or
+`windows-x64-nsis`. Installed builds update in place on every platform.
+
+Each beta build compiles in its commit and the `feat`, `fix` and `perf` commits among its newest 200
+(`scripts/beta-notes.ts`, embedded by `electron.vite.config.ts`; run `bun scripts/beta-notes.ts` to preview them). After an
+update, the beta app lists the ones after the commit of the build the user saw last in a "What's new in beta" dialog,
+unless release notes are turned off in Settings.
+
 ## Startup benchmark
 
 `bun run bench:startup` measures a **packaged** build from process spawn to the restored tab being ready and the

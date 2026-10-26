@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Přepnout panel ladění",
-  "status.toggle": "Přepínání nástrojů pro ladění",
   ariaLabel: "Diagnostika vývoje výkonnosti",
   providerAriaLabel: "Diagnostika výkonu poskytovatele",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Doba od odeslání požadavku poskytovateli do prvního výstupu modelu.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Doba od odeslání požadavku poskytovateli do prvního textu odpovědi.",
+  "duration.label": "TIME",
+  "duration.tip": "Doba od výzvy, která zahájila poslední tah, do dokončení odpovědi.",
   "tps.label": "TPS",
-  "tps.tip": "Počet výstupních tokenů za sekundu po prvním výstupu modelu.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Doba od odeslání požadavku poskytovateli do ukončení proudu odpovědi.",
+  "tps.tip":
+    "Výstupní tokeny a tokeny uvažování za sekundu napříč požadavky na model v posledním tahu, bez času nástrojů.",
   "nav.label": "NAV",
   "nav.tip":
     "Poslední dokončený přechod trasy dotykem stránky relace, měřeno od spuštění routeru do prvního nátěru po jeho usazení.",

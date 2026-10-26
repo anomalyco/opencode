@@ -3,6 +3,8 @@
 @import "./token/space.css";
 
 @import "./component/button.css";
+@import "./component/faq.css";
+@import "./component/focus.css";
 
 @import "./reset.css";
 @import "./base.css";

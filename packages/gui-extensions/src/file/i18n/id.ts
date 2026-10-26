@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Semua berkas",
-  "tree.empty": "Tidak ada berkas",
-  "tree.changes.one": "{{count}} file diubah",
-  "tree.changes.other": "{{count}} file diubah",
   "tab.notFound": "Berkas tidak ditemukan: {{name}}",
   "mobile.title": "File",
   "mobile.openTabs": "Buka file",

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/client",
-  "version": "2.0.28",
+  "version": "2.1.4",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,14 +23,16 @@
     "./solid": "./src/solid/index.ts",
     "./effect": "./src/effect/index.ts",
     "./effect/api": "./src/effect/api.ts",
-    "./effect/service": "./src/effect/service.ts"
+    "./effect/service": "./src/effect/service.ts",
+    "./mcp": "./src/mcp.ts"
   },
   "scripts": {
     "build": "bun run script/build-package.ts",
     "generate": "bun run script/build.ts",
     "check:generated": "bun run generate && git diff --exit-code -- src/promise/generated src/effect/generated src/effect/api",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode/schema": "workspace:*",
@@ -50,10 +52,11 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
+    "@modelcontextprotocol/client": "2.3.1",
     "@opencode/httpapi-codegen": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "effect": "catalog:",
     "solid-js": "catalog:"
   }

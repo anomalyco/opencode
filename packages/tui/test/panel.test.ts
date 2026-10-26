@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createPanelState } from "../src/context/panel"
+import { SESSION_PANEL_SPLIT_MIN_WIDTH } from "../src/ui/layout"
 
 test("presentation changes preserve the selected panel identity", () => {
   createRoot((dispose) => {
@@ -25,11 +26,11 @@ test("narrow geometry overrides presentation without discarding the user's choic
   createRoot((dispose) => {
     const panels = createPanelState()
     panels.open({ plugin: "review", name: "diff", sessionID: "session" })
-    panels.setWidth(80)
+    panels.setWidth(SESSION_PANEL_SPLIT_MIN_WIDTH - 1)
     expect(panels.canSplit()).toBe(false)
     expect(panels.presentation()).toBe("fullscreen")
     panels.toggleFullscreen()
-    panels.setWidth(81)
+    panels.setWidth(SESSION_PANEL_SPLIT_MIN_WIDTH)
     expect(panels.canSplit()).toBe(true)
     expect(panels.presentation()).toBe("panel")
     panels.toggleFullscreen()

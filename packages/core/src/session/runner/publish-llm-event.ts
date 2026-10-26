@@ -1,8 +1,10 @@
-import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode/ai"
+import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/ai/utils/record"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { RelativePath } from "@opencode/schema/schema"
 import type { Snapshot } from "@opencode/schema/snapshot"
+import type { TokenUsage } from "@opencode/schema/token-usage"
 import { Effect, Fiber, Iterable } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
@@ -11,9 +13,9 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionError } from "@opencode/schema/session-error"
 import { Money } from "@opencode/schema/money"
-import { SessionUsage } from "../usage.js"
 import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
+import { stringify } from "../../tool/runtime.js"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -26,8 +28,7 @@ type Input = {
   readonly assistantMessageID: SessionMessage.ID
 }
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
+const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : { value })
 
 const INPUT_EXCERPT_LIMIT = 2048
 
@@ -66,23 +67,14 @@ export interface StepRecord {
   readonly finish?: {
     readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]["normalized"]
     readonly rawFinish?: string
-    readonly providerState?: SessionMessage.ProviderState
-    readonly tokens: ReturnType<typeof SessionUsage.tokens>
+    readonly native?: SessionMessage.Native
+    readonly usage: Extract<LLMEvent, { type: "step-finish" }>["usage"]
   }
   readonly needsContinuation: boolean
 }
 
 /** Derives canonical model content from a provider-hosted tool result. */
 type NonEmptyContent = readonly [Tool.Content, ...Tool.Content[]]
-
-const stringify = (value: unknown) => {
-  if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
-}
 
 const hostedContent = (result: ToolResultValue): NonEmptyContent => {
   if (result.type === "content" && isReadonlyArrayNonEmpty(result.value)) return result.value
@@ -150,10 +142,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       assistantMessageID: yield* startAssistant(),
     })
   })
-  const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
+  const native = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
   const fragments = (
     name: string,
-    ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
+    ended: (id: string, value: string, ordinal: number, native?: SessionMessage.Native) => Effect.Effect<void>,
     delta?: (id: string, value: string, ordinal: number) => Effect.Effect<void>,
     single = false,
   ) => {
@@ -162,16 +154,16 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       readonly values: string[]
       pending: string
       timer?: Fiber.Fiber<void>
-      state?: Record<string, unknown>
+      native?: SessionMessage.Native
     }
     const chunks = new Map<string, Fragment>()
     let nextOrdinal = 0
-    const start = (id: string, state?: Record<string, unknown>) =>
+    const start = (id: string, native?: SessionMessage.Native) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
         if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
         const ordinal = nextOrdinal++
-        chunks.set(id, { ordinal, values: [], pending: "", state })
+        chunks.set(id, { ordinal, values: [], pending: "", native })
         return Effect.succeed(ordinal)
       })
     const publishDelta = Effect.fnUntraced(function* (id: string) {
@@ -185,12 +177,12 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       yield* delta(id, value, current.ordinal)
       return undefined
     }, Effect.uninterruptible)
-    const append = Effect.fnUntraced(function* (id: string, value: string, state?: Record<string, unknown>) {
+    const append = Effect.fnUntraced(function* (id: string, value: string, native?: SessionMessage.Native) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       current.values.push(value)
       if (delta) current.pending += value
-      if (state !== undefined) current.state = { ...current.state, ...state }
+      if (native !== undefined) current.native = { ...current.native, ...native }
       if (current.pending && !current.timer) {
         // Own the trailing flush in the provider fiber, even if no more chunks arrive.
         current.timer = yield* Effect.gen(function* () {
@@ -209,7 +201,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       }
       return current.ordinal
     })
-    const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>, value?: string) {
+    const end = Effect.fnUntraced(function* (id: string, native?: SessionMessage.Native, value?: string) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
       if (current.timer) yield* Fiber.interrupt(current.timer)
@@ -218,7 +210,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         id,
         value ?? current.values.join(""),
         current.ordinal,
-        state === undefined ? current.state : { ...current.state, ...state },
+        native === undefined ? current.native : { ...current.native, ...native },
       )
       chunks.delete(id)
       return undefined
@@ -238,14 +230,14 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const text = fragments(
     "text",
-    (_textID, value, ordinal, state) =>
+    (_textID, value, ordinal, native) =>
       Effect.gen(function* () {
         yield* bus.publish(SessionEvent.Text.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
           ordinal,
           text: value,
-          state,
+          native,
         })
       }),
     (_textID, value, ordinal) =>
@@ -261,14 +253,14 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   )
   const reasoning = fragments(
     "reasoning",
-    (_reasoningID, value, ordinal, state) =>
+    (_reasoningID, value, ordinal, native) =>
       Effect.gen(function* () {
         yield* bus.publish(SessionEvent.Reasoning.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
           ordinal,
           text: value,
-          state,
+          native,
         })
       }),
     (_reasoningID, value, ordinal) =>
@@ -419,7 +411,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const publishStepFailure = Effect.fnUntraced(function* (details?: {
     readonly cost?: Money.USD
-    readonly tokens?: ReturnType<typeof SessionUsage.tokens>
+    readonly tokens?: TokenUsage.Info
     readonly snapshot?: Snapshot.ID
     readonly files?: readonly RelativePath[]
   }) {
@@ -431,7 +423,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       error: stepFailure,
       finish: stepSettlement?.finish === "content-filter" ? stepSettlement.finish : undefined,
       rawFinish: stepSettlement?.rawFinish,
-      providerState: stepSettlement?.providerState,
+      native: stepSettlement?.native,
       ...details,
     })
   })
@@ -447,7 +439,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "text-start":
         outputStarted = true
-        const startedTextOrdinal = yield* text.start(event.id, providerState(event.providerMetadata))
+        const startedTextOrdinal = yield* text.start(event.id, native(event.providerMetadata))
         yield* publishPendingDeltas()
         yield* bus.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
@@ -456,27 +448,27 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         })
         return
       case "text-delta":
-        yield* text.append(event.id, event.text, providerState(event.providerMetadata))
+        yield* text.append(event.id, event.text, native(event.providerMetadata))
         return
       case "text-end":
-        yield* text.end(event.id, providerState(event.providerMetadata), event.text)
+        yield* text.end(event.id, native(event.providerMetadata), event.text)
         return
       case "reasoning-start":
         outputStarted = true
-        const startedReasoningOrdinal = yield* reasoning.start(event.id, providerState(event.providerMetadata))
+        const startedReasoningOrdinal = yield* reasoning.start(event.id, native(event.providerMetadata))
         yield* publishPendingDeltas()
         yield* bus.publish(SessionEvent.Reasoning.Started, {
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
           ordinal: startedReasoningOrdinal,
-          state: providerState(event.providerMetadata),
+          native: native(event.providerMetadata),
         })
         return
       case "reasoning-delta":
-        yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
+        yield* reasoning.append(event.id, event.text, native(event.providerMetadata))
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
+        yield* reasoning.end(event.id, native(event.providerMetadata), event.text)
         return
       case "tool-input-start":
         outputStarted = true
@@ -513,7 +505,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           id: event.id,
           input: asRecord(event.input),
           executed: tool.providerExecuted,
-          state: providerState(event.providerMetadata),
+          native: native(event.providerMetadata),
         })
         return
       }
@@ -531,7 +523,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         }
         tool.settled = true
         const executed = event.providerExecuted === true || tool.providerExecuted
-        const resultState = providerState(event.providerMetadata)
         if (event.result.type === "error") {
           yield* bus.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
@@ -540,7 +531,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
             error: { type: "tool.execution", message: stringify(event.result.value) },
             ...failureSnapshot(tool),
             executed,
-            resultState,
+            native: native(event.providerMetadata),
           })
           return
         }
@@ -550,7 +541,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           id: event.id,
           content: hostedContent(event.result),
           executed,
-          resultState,
+          native: native(event.providerMetadata),
         })
         return
       }
@@ -571,7 +562,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
               : { type: "tool.execution", message: event.message },
           ...failureSnapshot(tool),
           executed: tool.providerExecuted,
-          resultState: providerState(event.providerMetadata),
+          native: native(event.providerMetadata),
         })
         return
       }
@@ -581,8 +572,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         stepSettlement = {
           finish: event.reason.normalized,
           rawFinish: event.reason.raw,
-          providerState: providerState(event.providerMetadata),
-          tokens: SessionUsage.tokens(event.usage),
+          native: native(event.providerMetadata),
+          usage: event.usage,
         }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true

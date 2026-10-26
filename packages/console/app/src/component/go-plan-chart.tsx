@@ -81,7 +81,7 @@ export function GoPlanChart(props: { href: string }) {
                           <small>{i18n.t("go.graph.limitedTime")}</small>
                         </Show>
                         <Show when={model.regions}>
-                          <a href="https://ai.developer.meta.com/legal/geographic-use-policy">
+                          <a href="https://dev.meta.ai/legal/geographic-use-policy">
                             {i18n.t("go.graph.limitedRegions")}
                           </a>
                         </Show>

@@ -13,7 +13,7 @@ if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode ==
   process.exit(0)
 }
 
-await $`bun run typecheck`
+await $`bun run typecheck:tsc`
 await $`bun run build`
 const original = await Bun.file("package.json").text()
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`

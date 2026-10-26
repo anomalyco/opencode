@@ -557,7 +557,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -754,13 +754,12 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 يستخدم OpenCode نموذجا صغيرا لبعض مهام الذكاء الاصطناعي مثل إنشاء عنوان الجلسة.
 تم ضبطه لاستخدام gpt-5-nano افتراضيا، مستضافا عبر Zen. لحصر OpenCode
 على استخدام مثيل GitLab المستضاف لديك فقط، أضف ما يلي إلى ملف
-`opencode.json` لديك. يوصى أيضا بتعطيل مشاركة الجلسات.
+`opencode.json` لديك.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 

@@ -31,27 +31,6 @@ O opencode é de código aberto e não armazena nenhum de seus códigos ou dados
 
 Isso significa que, enquanto você estiver usando um provedor em quem confia, ou um gateway de IA interno, você pode usar o opencode com segurança.
 
-A única ressalva aqui é o recurso opcional `/share`.
-
----
-
-#### Compartilhando conversas
-
-Se um usuário habilitar o recurso `/share`, a conversa e os dados associados a ela são enviados para o serviço que usamos para hospedar essas páginas de compartilhamento em opencode.ai.
-
-Os dados são atualmente servidos através da rede de borda do nosso CDN e são armazenados em cache na borda perto de seus usuários.
-
-Recomendamos que você desative isso para seu teste.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "disabled"
-}
-```
-
-[Saiba mais sobre compartilhamento](/docs/share).
-
 ---
 
 ### Propriedade do código

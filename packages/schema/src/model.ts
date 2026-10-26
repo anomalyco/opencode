@@ -1,6 +1,6 @@
 export * as Model from "./model.js"
 
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { optional, PositiveInt, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Compatibility, MaxTokensField, ReasoningField } from "./model-compatibility.js"
@@ -49,11 +49,7 @@ export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
 export const Settings = Schema.StructWithRest(
-  Schema.Struct({
-    compaction: Provider.Compaction.pipe(optional),
-    outputTokenBudget: PositiveInt.pipe(optional),
-    encoding: Provider.Encoding.pipe(optional),
-  }),
+  Schema.Struct(Struct.pick(Provider.Settings.schema.fields, ["compaction", "cache", "encoding", "outputTokenBudget"])),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Model.Settings" })
@@ -73,6 +69,8 @@ export const Capabilities = Schema.Struct({
   endpoints: Schema.Array(Schema.String).pipe(optional),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
+  /** Whether the model accepts a sampling temperature. Unknown when unset. */
+  temperature: Schema.Boolean.pipe(optional),
 })
   .annotate({ identifier: "Model.Capabilities" })
   .pipe(

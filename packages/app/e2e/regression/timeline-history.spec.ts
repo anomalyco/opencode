@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { seed, sessionHref } from "../utils/app"
+import { sessionHref } from "../utils/app"
 import { trackPageErrors } from "../utils/errors"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 import {
@@ -362,10 +362,6 @@ declare global {
 async function openStressTarget(page: Page, input: Parameters<typeof mockStressTimeline>[1] = {}) {
   await mockStressTimeline(page, input)
   await installTimelineSettings(page)
-  await seed(page, {
-    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
-    lastProject: { local: fixture.directory },
-  })
   await page.goto(sessionHref(fixture.targetID))
   await expectSessionTitle(page, fixture.expected.targetTitle)
   await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")

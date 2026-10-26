@@ -147,8 +147,8 @@ export type Ref = Integration.Ref
 
 type Entry = {
   ref: Types.DeepMutable<Ref>
-  methods: Types.DeepMutable<Method>[]
-  implementations: Map<MethodID, Types.DeepMutable<OAuthImplementation>>
+  methods: Method[]
+  implementations: Map<MethodID, OAuthImplementation>
 }
 
 type Data = {
@@ -156,8 +156,8 @@ type Data = {
 }
 
 export type Editor = {
-  list: () => readonly Ref[]
-  get: (id: ID) => Ref | undefined
+  list: () => readonly Types.DeepMutable<Ref>[]
+  get: (id: ID) => Types.DeepMutable<Ref> | undefined
   update: (id: ID, update: (integration: Types.DeepMutable<Ref>) => void) => void
   remove: (id: ID) => void
   method: {
@@ -318,8 +318,8 @@ const layer = Layer.effect(
       name: "integration",
       initial: () => ({ integrations: new Map<ID, Entry>() }),
       editor: (editor) => ({
-        list: () => Array.from(editor.integrations.values(), (entry) => entry.ref) as Ref[],
-        get: (id) => editor.integrations.get(id)?.ref as Ref | undefined,
+        list: () => Array.from(editor.integrations.values(), (entry) => entry.ref),
+        get: (id) => editor.integrations.get(id)?.ref,
         update: (id, update) => {
           const current = editor.integrations.get(id) ?? {
             ref: { id, name: id },
@@ -332,7 +332,7 @@ const layer = Layer.effect(
         },
         remove: (id) => editor.integrations.delete(id),
         method: {
-          list: (integrationID) => (editor.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
+          list: (integrationID) => editor.integrations.get(integrationID)?.methods ?? [],
           update: (implementation) => {
             const current = editor.integrations.get(implementation.integrationID) ?? {
               ref: {
@@ -340,7 +340,7 @@ const layer = Layer.effect(
                 name: implementation.integrationID,
               },
               methods: [],
-              implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
+              implementations: new Map<MethodID, OAuthImplementation>(),
             }
             if (!editor.integrations.has(implementation.integrationID)) {
               editor.integrations.set(implementation.integrationID, current)
@@ -355,13 +355,10 @@ const layer = Layer.effect(
                 return method.id === implementation.method.id
               return true
             })
-            if (index === -1) current.methods.push(implementation.method as Types.DeepMutable<Method>)
-            else current.methods[index] = implementation.method as Types.DeepMutable<Method>
-            if (implementation.method.type === "oauth") {
-              current.implementations.set(
-                implementation.method.id,
-                implementation as Types.DeepMutable<OAuthImplementation>,
-              )
+            if (index === -1) current.methods.push(implementation.method)
+            else current.methods[index] = implementation.method
+            if ("authorize" in implementation) {
+              current.implementations.set(implementation.method.id, implementation)
             }
           },
           remove: (integrationID, method) => {
@@ -379,7 +376,13 @@ const layer = Layer.effect(
           },
         },
       }),
-      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (data) =>
+          Array.from(data.integrations.values(), (entry) => project(entry, resolveConnections(entry, []))).toSorted(
+            (a, b) => a.name.localeCompare(b.name),
+          ),
+        () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
@@ -728,16 +731,29 @@ const layer = Layer.effect(
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
           if (credential.value.type !== "oauth") return credential.value
-          const implementation = state
+          const refresh = state
             .get()
             .integrations.get(credential.integrationID)
-            ?.implementations.get(credential.value.methodID)
-          if (!implementation?.refresh) return credential.value
-          const now = yield* Clock.currentTimeMillis
-          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
-          yield* credentials.update(credential.id, { value })
-          return value
+            ?.implementations.get(credential.value.methodID)?.refresh
+          const expiring = (value: Credential.OAuth) =>
+            Clock.currentTimeMillis.pipe(
+              Effect.map((now) => value.expires <= now + Duration.toMillis(Duration.minutes(5))),
+            )
+          if (!refresh || !(yield* expiring(credential.value))) return credential.value
+          return yield* authorize(
+            credentials.lock(
+              credential.id,
+              Effect.gen(function* () {
+                // Another Location may have refreshed while this caller waited.
+                const current = yield* credentials.get(credential.id)
+                if (!current || current.value.type !== "oauth") return undefined
+                if (!(yield* expiring(current.value))) return current.value
+                const value = yield* refresh(current.value).pipe(Effect.timeout("30 seconds"))
+                yield* credentials.update(current.id, { value })
+                return value
+              }),
+            ),
+          )
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -759,7 +775,7 @@ const layer = Layer.effect(
             value: Credential.Key.make({
               type: "key",
               key: input.key,
-              ...(Object.keys(answer).length > 0 ? { configuration: answer } : {}),
+              ...(Object.keys(answer).length > 0 ? { metadata: answer } : {}),
             }),
           })
         }),

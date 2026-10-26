@@ -1,19 +1,13 @@
 import { expect, test } from "bun:test"
-import { type Virtualizer } from "@tanstack/solid-virtual"
-import { Node, Window } from "happy-dom"
+import { Virtualizer } from "@tanstack/solid-virtual"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 
 test("restores a view observed before its first attachment", async () => {
-  const targetWindow = new Window()
+  const frame = openFrame()
+  const targetWindow = frame.targetWindow
   const mutations = controlledMutations(targetWindow)
   const viewport = targetWindow.document.createElement("div")
-
-  const instance = {
-    scrollElement: viewport,
-    targetWindow,
-    scrollOffset: 240,
-    options: { horizontal: false, isRtl: false, isScrollingResetDelay: 0, useScrollendEvent: false },
-  } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+  const instance = attachedVirtualizer(viewport, { scrollOffset: 240, isScrollingResetDelay: 0 })
 
   const connections: boolean[] = []
 
@@ -32,12 +26,13 @@ test("restores a view observed before its first attachment", async () => {
     expect(instance.scrollOffset).toBe(0)
   } finally {
     cleanup()
-    await targetWindow.happyDOM.close()
+    frame.close()
   }
 })
 
 test("reports a divergent native offset once and ignores equal offsets and unrelated mutations", async () => {
-  const targetWindow = new Window()
+  const frame = openFrame()
+  const targetWindow = frame.targetWindow
   const mutations = controlledMutations(targetWindow)
   const route = targetWindow.document.createElement("section")
   const viewport = targetWindow.document.createElement("div")
@@ -45,17 +40,7 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
   route.append(viewport)
   targetWindow.document.body.append(route)
 
-  const instance = {
-    scrollElement: viewport,
-    targetWindow,
-    scrollOffset: 79_400,
-    options: {
-      horizontal: false,
-      isRtl: false,
-      isScrollingResetDelay: 0,
-      useScrollendEvent: false,
-    },
-  } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+  const instance = attachedVirtualizer(viewport, { scrollOffset: 79_400, isScrollingResetDelay: 0 })
 
   const calls: [number, boolean][] = []
 
@@ -80,12 +65,13 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
     expect(calls).toEqual([[0, false]])
   } finally {
     cleanup?.()
-    await targetWindow.happyDOM.close()
+    frame.close()
   }
 })
 
 test("keeps checking until stale reset-delay callbacks can no longer win", async () => {
-  const targetWindow = new Window()
+  const frame = openFrame()
+  const targetWindow = frame.targetWindow
   const mutations = controlledMutations(targetWindow)
   const animation = controlledAnimationFrames(targetWindow)
   const route = targetWindow.document.createElement("section")
@@ -93,17 +79,7 @@ test("keeps checking until stale reset-delay callbacks can no longer win", async
   route.append(viewport)
   targetWindow.document.body.append(route)
 
-  const instance = {
-    scrollElement: viewport,
-    targetWindow,
-    scrollOffset: 79_400,
-    options: {
-      horizontal: false,
-      isRtl: false,
-      isScrollingResetDelay: 20,
-      useScrollendEvent: false,
-    },
-  } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+  const instance = attachedVirtualizer(viewport, { scrollOffset: 79_400, isScrollingResetDelay: 20 })
 
   const calls: number[] = []
 
@@ -127,7 +103,39 @@ test("keeps checking until stale reset-delay callbacks can no longer win", async
     expect(animation.pending()).toBe(0)
   } finally {
     cleanup?.()
-    await targetWindow.happyDOM.close()
+    frame.close()
+  }
+})
+
+test("settles on the live offset after a write whose scroll event is still pending", async () => {
+  const route = document.createElement("section")
+  const viewport = document.createElement("div")
+  route.append(viewport)
+  document.body.append(route)
+
+  const instance = attachedVirtualizer(viewport, { scrollOffset: 0, isScrollingResetDelay: 10 })
+
+  const calls: [number, boolean][] = []
+
+  const cleanup = observeElementOffsetReconnectAware(instance, (offset, isScrolling) => {
+    calls.push([offset, isScrolling])
+    instance.scrollOffset = offset
+  })
+
+  try {
+    viewport.scrollTop = 100
+    viewport.dispatchEvent(new Event("scroll"))
+    // A prepend anchor write lands before the reset delay; the browser has not dispatched its scroll event.
+    viewport.scrollTop = 2_500
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    expect(calls).toEqual([
+      [100, true],
+      [2_500, false],
+    ])
+  } finally {
+    cleanup?.()
+    route.remove()
   }
 })
 
@@ -137,17 +145,7 @@ test("cleanup suppresses queued delegated callbacks, reconnect checks, and later
   route.append(viewport)
   document.body.append(route)
 
-  const instance = {
-    scrollElement: viewport,
-    targetWindow: window,
-    scrollOffset: 0,
-    options: {
-      horizontal: false,
-      isRtl: false,
-      isScrollingResetDelay: 10,
-      useScrollendEvent: false,
-    },
-  } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+  const instance = attachedVirtualizer(viewport, { scrollOffset: 0, isScrollingResetDelay: 10 })
 
   const calls: [number, boolean][] = []
 
@@ -170,49 +168,71 @@ test("cleanup suppresses queued delegated callbacks, reconnect checks, and later
   route.remove()
 })
 
-type FrameWindow = {
-  requestAnimationFrame(callback: () => void): unknown
-  performance: { now(): number }
+// A real virtualizer attached to the viewport the way its mount does (scroll element plus the window that owns it),
+// without starting its own rect and offset observers, so each test drives the observer under test directly.
+function attachedVirtualizer(viewport: HTMLDivElement, state: { scrollOffset: number; isScrollingResetDelay: number }) {
+  const instance = new Virtualizer<HTMLDivElement, HTMLDivElement>({
+    count: 0,
+    getScrollElement: () => viewport,
+    estimateSize: () => 0,
+    scrollToFn: () => {},
+    observeElementRect: () => {},
+    observeElementOffset: () => {},
+    isScrollingResetDelay: state.isScrollingResetDelay,
+  })
+
+  instance.scrollElement = viewport
+  instance.targetWindow = viewport.ownerDocument.defaultView
+  instance.scrollOffset = state.scrollOffset
+
+  return instance
 }
 
-async function frames(count: number, targetWindow: FrameWindow = window) {
+// A separate window whose MutationObserver and animation frames a test can replace without touching the global
+// window. happy-dom loads a srcdoc frame synchronously, so its window is ready once the frame is attached.
+function openFrame() {
+  const frame = document.createElement("iframe")
+  frame.srcdoc = ""
+  document.body.append(frame)
+  const targetWindow = frame.contentDocument?.defaultView
+
+  if (!targetWindow) throw new Error("Frame window did not load")
+
+  return { targetWindow, close: () => frame.remove() }
+}
+
+async function frames(count: number, targetWindow: Window = window) {
   for (let index = 0; index < count; index++) {
     await new Promise<void>((resolve) => targetWindow.requestAnimationFrame(() => resolve()))
   }
 }
 
-function controlledMutations(targetWindow: Window) {
-  let emit: (record: MutationRecord) => void = () => {
+function controlledMutations(targetWindow: Window & typeof globalThis) {
+  let flush: () => void = () => {
     throw new Error("Mutation observer is not active")
   }
 
-  class ControlledMutationObserver {
+  // Delivers each operation's records as soon as it happens instead of at the next microtask.
+  class ControlledMutationObserver extends targetWindow.MutationObserver {
     constructor(callback: MutationCallback) {
-      emit = (record) => callback([record], this as unknown as MutationObserver)
-    }
-    observe() {}
-    disconnect() {}
-    takeRecords() {
-      return []
+      super(callback)
+      flush = () => callback(this.takeRecords(), this)
     }
   }
 
   Object.defineProperty(targetWindow, "MutationObserver", { value: ControlledMutationObserver })
 
-  const record = (target: Node, addedNodes: Node[], removedNodes: Node[]) =>
-    ({ type: "childList", target, addedNodes, removedNodes }) as unknown as MutationRecord
-
   return {
     append(parent: Node, node: Node) {
       parent.appendChild(node)
-      emit(record(parent, [node], []))
+      flush()
     },
     remove(node: Node) {
       const parent = node.parentNode
 
       if (!parent) throw new Error("Mutation target has no parent")
       parent.removeChild(node)
-      emit(record(parent, [], [node]))
+      flush()
     },
   }
 }

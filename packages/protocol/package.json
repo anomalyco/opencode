@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/protocol",
-  "version": "2.0.28",
+  "version": "2.1.4",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,7 +23,9 @@
     "build": "bun run script/build.ts",
     "generate": "bun run script/generate-openapi.ts",
     "check:generated": "bun run script/generate-openapi.ts --check",
-    "typecheck": "tsgo --noEmit"
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode/schema": "workspace:*",
@@ -32,7 +34,7 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "prettier": "3.6.2",
     "typescript": "catalog:"
   }

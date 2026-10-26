@@ -32,13 +32,6 @@ export interface HttpPrepared<Frame> {
   readonly middleware?: HttpMiddleware
 }
 
-const applyQuery = (url: string, query: Record<string, string> | undefined) => {
-  if (!query) return url
-  const next = new URL(url)
-  Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
-  return next.toString()
-}
-
 const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
   Effect.gen(function* () {
     if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
@@ -51,10 +44,11 @@ const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (bod
 
 export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
   Effect.gen(function* () {
-    const url = applyQuery(
-      renderEndpoint(input.endpoint, { request: input.request, body: input.body }).toString(),
-      input.request.http?.query,
-    )
+    const endpoint = renderEndpoint(input.endpoint, { request: input.request, body: input.body })
+    if (input.request.http?.query) {
+      Object.entries(input.request.http.query).forEach(([key, value]) => endpoint.searchParams.set(key, value))
+    }
+    const url = endpoint.toString()
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)
     const headers = yield* Auth.toEffect(input.auth)({
       request: input.request,

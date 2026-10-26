@@ -32,15 +32,12 @@ export function rewrite<ID extends string>(
   const replacement = resolve(input.specifier, { ...input, settings }) ?? plain
   const translated = options(replacement, input.modelID, settings)
   if (target.package !== undefined || replacement !== input.specifier) target.package = replacement
-  target.settings =
-    target.settings === undefined
-      ? undefined
-      : {
-          ...translated.settings,
-          ...(!NATIVE.has(input.specifier) && replacement === "@opencode/ai/providers/openai-compatible"
-            ? { provider: input.canonical ?? input.providerID }
-            : {}),
-        }
+  // Without `provider`, the native compatible package reports every AI SDK-mapped host as `openai-compatible`.
+  const identity =
+    replacement === "@opencode/ai/providers/openai-compatible" && !Provider.builtinPackages.has(input.specifier)
+      ? { provider: input.canonical ?? input.providerID }
+      : {}
+  target.settings = target.settings === undefined ? undefined : { ...translated.settings, ...identity }
   target.headers = Provider.mergeHeaders(translated.headers, target.headers)
   target.body = Provider.mergeOverlay(translated.body, target.body)
   target.variants = target.variants?.map((variant) => {
@@ -122,15 +119,6 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "zhipuai-coding-plan": protocols("zai-coding-plan"),
 }
 
-const NATIVE = new Set([
-  ...Object.values(PACKAGES),
-  ...Object.values(HOSTS).flatMap((host) => Object.values(host)),
-  "@opencode/ai/providers/azure/chat",
-  "@opencode/ai/providers/amazon-bedrock/mantle",
-  "@opencode/ai/providers/amazon-bedrock/mantle/chat",
-  "@opencode/ai/providers/amazon-bedrock/mantle/responses",
-])
-
 export function native(npm: string, context: Context & { readonly settings?: Provider.Settings }): string | undefined {
   const host = HOSTS[context.providerID]?.[npm]
   if (host) return host
@@ -142,8 +130,10 @@ export function native(npm: string, context: Context & { readonly settings?: Pro
 const azureChat = (context: Context & { readonly settings?: Provider.Settings }) =>
   context.shape === "completions" || context.settings?.useCompletionUrls === true
 
+// Mantle serves Claude only through Anthropic Messages and GPT-OSS only through Chat.
 const mantle = (modelID: string | undefined) => {
   if (modelID === undefined) return "@opencode/ai/providers/amazon-bedrock/mantle"
+  if (modelID.includes("anthropic.")) return "@opencode/ai/providers/amazon-bedrock/mantle/messages"
   return `@opencode/ai/providers/amazon-bedrock/mantle/${modelID.includes("gpt-oss") ? "chat" : "responses"}`
 }
 
@@ -151,9 +141,14 @@ function resolve(specifier: string, context: Context & { readonly settings?: Pro
   const npm = Provider.packageName(specifier)
   if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
     return native(npm, context)
-  if (npm === "@opencode/ai/providers/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@opencode/ai/providers/azure/responses" && azureChat(context)) return "@opencode/ai/providers/azure/chat"
-  return NATIVE.has(npm) ? npm : undefined
+  if (npm === "@opencode/ai/providers/amazon-bedrock/mantle" || npm === "@opencode/ai/providers/amazon-bedrock-mantle")
+    return mantle(context.modelID)
+  if (
+    (npm === "@opencode/ai/providers/azure" || npm === "@opencode/ai/providers/azure/responses") &&
+    azureChat(context)
+  )
+    return "@opencode/ai/providers/azure/chat"
+  return Provider.builtinPackages.has(npm) ? npm : undefined
 }
 
 type Overlay = {

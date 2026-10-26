@@ -559,7 +559,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -757,13 +757,12 @@ GitLab Duo предоставляет агентский чат на базе и
 opencode использует небольшую модель для некоторых задач ИИ, таких как создание заголовка сеанса.
 По умолчанию он настроен на использование gpt-5-nano, размещенного на Zen. Чтобы заблокировать opencode
 чтобы использовать только свой собственный экземпляр, размещенный на GitLab, добавьте следующее в свой
-`opencode.json` файл. Также рекомендуется отключить совместное использование сеансов.
+`opencode.json` файл.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 

@@ -420,6 +420,35 @@ describe("ConfigNormalize", () => {
     ).toBe(true)
   })
 
+  test("expands numeric MCP timeouts to every phase", () => {
+    const result = normalized({
+      mcp: {
+        timeout: 4000,
+        servers: {
+          local: { type: "local", command: ["local"], timeout: 6000 },
+          remote: { type: "remote", url: "https://remote.example.com", timeout: 8000 },
+          structured: { type: "local", command: ["structured"], timeout: { catalog: 9000 } },
+          invalid: { type: "local", command: ["invalid"], timeout: -1 },
+        },
+      },
+    })
+    expect(result.encoded.mcp).toEqual({
+      timeout: { startup: 4000, catalog: 4000, execution: 4000 },
+      servers: {
+        local: { type: "local", command: ["local"], timeout: { startup: 6000, catalog: 6000, execution: 6000 } },
+        remote: {
+          type: "remote",
+          url: "https://remote.example.com",
+          timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+        },
+        structured: { type: "local", command: ["structured"], timeout: { catalog: 9000 } },
+      },
+    })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["mcp", "servers", "invalid"]],
+    ])
+  })
+
   test("uses raw MCP discriminators for reserved server names", () => {
     const result = normalized({
       mcp: {
@@ -495,12 +524,23 @@ describe("ConfigNormalize", () => {
         policies: [{ action: "provider.use", resource: "native", effect: "deny" }],
         experimental: {
           portable_shell_scanner: true,
+          todo: true,
+          background_compaction: true,
+          media_blob: true,
           subagent_depth: 0,
+          location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
       }).encoded,
     ).toMatchObject({
-      experimental: { portable_shell_scanner: true, subagent_depth: 0 },
+      experimental: {
+        portable_shell_scanner: true,
+        todo: true,
+        background_compaction: true,
+        media_blob: true,
+        subagent_depth: 0,
+        location_idle_timeout: "7200000 millis",
+      },
       policies: [
         { action: "provider.use", resource: "*", effect: "deny" },
         { action: "provider.use", resource: "anthropic", effect: "allow" },
@@ -671,7 +711,7 @@ describe("ConfigNormalize", () => {
       agents: {},
       providers: {},
       instructions: [],
-      experimental: { subagent_depth: 0 },
+      experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
     expect(result.encoded).toMatchObject({
       snapshots: false,
@@ -680,7 +720,7 @@ describe("ConfigNormalize", () => {
       agents: {},
       providers: {},
       instructions: [],
-      experimental: { subagent_depth: 0 },
+      experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
     expect(result.encoded.share).toBeUndefined()
   })

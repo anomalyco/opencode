@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/stats-server",
-  "version": "2.0.28",
+  "version": "2.1.4",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -11,7 +11,8 @@
   },
   "scripts": {
     "start": "bun src/stat-sync.ts",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -23,7 +24,7 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

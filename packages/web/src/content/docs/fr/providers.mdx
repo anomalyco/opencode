@@ -563,7 +563,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
-        "openai/gpt-4o": {},
+        "openai/gpt-6.1-sol": {},
         "anthropic/claude-sonnet-4": {}
       }
     }
@@ -746,8 +746,6 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
     /models
     ```
 
-````
-
 Trois modèles basés sur Claude sont disponibles :
 
 - **duo-chat-haiku-4-5** (Par défaut) - Réponses rapides pour des tâches rapides
@@ -765,15 +763,14 @@ pour stocker le jeton dans le stockage d'authentification opencode.
 OpenCode utilise un petit modèle pour certaines tâches d'IA telles que la génération du titre de la session.
 Il est configuré pour utiliser gpt-5-nano par défaut, hébergé par Zen. Pour verrouiller OpenCode
 pour utiliser uniquement votre propre instance hébergée par GitLab, ajoutez ce qui suit à votre
-Fichier `opencode.json`. Il est également recommandé de désactiver le partage de session.
+Fichier `opencode.json`.
 
 ```json
 {
-"$schema": "https://opencode.ai/config.json",
-"small_model": "gitlab/duo-chat-haiku-4-5",
-"share": "disabled"
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
-````
+```
 
 :::
 

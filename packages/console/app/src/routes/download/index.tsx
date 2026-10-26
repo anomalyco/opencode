@@ -7,6 +7,7 @@ import { Header } from "~/component/header"
 import { IconCheck, IconCopy } from "~/component/icon"
 import { Legal } from "~/component/legal"
 import { LocaleLinks } from "~/component/locale-links"
+import { SocialMeta } from "~/component/social-meta"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
@@ -41,6 +42,7 @@ export default function Download() {
       <Title>{i18n.t("download.title")}</Title>
       <LocaleLinks path="/download" />
       <Meta name="description" content={i18n.t("download.meta.description")} />
+      <SocialMeta title={i18n.t("download.title")} description={i18n.t("download.meta.description")} path="/download" />
       <div data-component="container">
         <Header hideGetStarted />
 
@@ -421,8 +423,8 @@ export default function Download() {
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q7")}>
-                {i18n.t("download.faq.a6.p1")} {i18n.t("download.faq.a6.p2.beforeShare")}{" "}
-                <a href={language.route("/docs/share/#privacy")}>{i18n.t("download.faq.a6.shareLink")}</a>.
+                {i18n.t("home.faq.a7.p1")} {i18n.t("home.faq.a7.p2.beforeModels")}{" "}
+                <a href="/v2/docs/console/models/#privacy">{i18n.t("home.faq.a7.p2.modelsLink")}</a>.
               </Faq>
             </li>
             <li>

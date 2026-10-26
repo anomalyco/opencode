@@ -66,10 +66,10 @@ The selected agent or provider system prompt is sent first. OpenCode then assemb
 
 ```text
 1. Agent or provider system prompt
-2. Built-in environment and date context
-3. Code Mode tool guidance, when enabled
-4. Global and project AGENTS.md files
-5. Available skill, reference, and MCP guidance
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
 6. Session-specific instruction entries supplied through the API
 ```
 
@@ -100,13 +100,31 @@ Instruction values remain privileged. Clients can see which sources changed, but
 
 ## Configuration
 
-The V2 config schema accepts an `instructions` array, but V2 does not currently resolve its files, glob patterns, or URLs. This configuration does not add instructions to the model yet:
+Use the `instructions` array to add files, glob patterns, or HTTP(S) URLs alongside discovered `AGENTS.md` files:
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
 }
 ```
 
-Use `AGENTS.md` for active V2 instructions. See [Config](/config) for configuration locations and precedence.
+Configured instructions load after `AGENTS.md` files, in the order they are listed. Entries from every config document are combined.
+
+| Entry                   | Resolution                                                           |
+| ----------------------- | -------------------------------------------------------------------- |
+| Relative path or glob   | Searched in each directory from the workspace up to the project root |
+| `~/` path               | Resolved from your home directory                                    |
+| Absolute path           | Used as written; the file name may be a glob                         |
+| `http://` or `https://` | Fetched when config loads, with a five-second timeout                |
+
+- Local files update like `AGENTS.md` when they change. New files matching a glob load on the next config change.
+- Missing files are skipped. A URL that cannot be fetched is skipped, or keeps its last fetched content.
+- With `OPENCODE_DISABLE_PROJECT_CONFIG=1`, or when the workspace is outside the project, relative entries resolve against the global config directory.
+
+See [Config](/config) for configuration locations and precedence.

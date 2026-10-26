@@ -1,5 +1,6 @@
 import type { PanelPresentation } from "@opencode/plugin/tui/context"
 import { batch, createContext, createMemo, createSignal, useContext, type ParentProps } from "solid-js"
+import { SESSION_PANEL_SPLIT_MIN_WIDTH } from "../ui/layout"
 
 export type PanelTarget = {
   readonly plugin: string
@@ -11,7 +12,7 @@ export function createPanelState() {
   const [current, setCurrent] = createSignal<PanelTarget>()
   const [requested, setRequested] = createSignal<PanelPresentation>("panel")
   const [width, setWidth] = createSignal(0)
-  const canSplit = () => width() > 80
+  const canSplit = () => width() >= SESSION_PANEL_SPLIT_MIN_WIDTH
   const presentation = createMemo(() => (canSplit() ? requested() : "fullscreen"))
   return {
     current,

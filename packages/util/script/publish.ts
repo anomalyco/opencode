@@ -25,7 +25,7 @@ const output = (value: string, extension: ".js" | ".d.ts") =>
   value.replace("./src/", "./dist/").replace(/\.ts$/, extension)
 
 try {
-  await $`bun run typecheck`
+  await $`bun run typecheck:tsc`
   await $`bun run build`
   pkg.exports = Object.fromEntries(
     Object.entries(pkg.exports).map(([key, value]) => {

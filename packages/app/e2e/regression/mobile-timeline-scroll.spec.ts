@@ -11,7 +11,10 @@ import {
   textPart,
   userMessage,
 } from "../utils/timeline"
-import { capturePromptMotion, promptMotionIssues, readPromptPositions } from "../utils/prompt-motion"
+import { capturePromptMotion, markPrompt, promptMotionIssues, readPromptPositions } from "../utils/prompt-motion"
+
+// The thumb's track is the part of the timeline above the composer region, which the timeline scrolls on under.
+const thumbSelector = '[data-slot="session-timeline-visible"] [data-orientation="vertical"]'
 
 // Compositor prediction can add 20–25px to discrete CDP moves even in a plain
 // scrollport. Disable it so the visual assertion measures the supplied gesture.
@@ -117,6 +120,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await devtools.send("Input.dispatchTouchEvent", {
         type: "touchStart",
         touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 }],
+        timestamp: restingTimestamp(),
       })
       image.resolve()
 
@@ -134,14 +138,19 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         await devtools.send("Input.dispatchTouchEvent", {
           type: "touchMove",
           touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 + step * 30 }],
+          timestamp: restingTimestamp(),
         })
         await expect
           .poll(() => reading.anchor.evaluate((element) => element.getBoundingClientRect().top))
           .toBeCloseTo(before + step * 30 - 15, 0)
       }
 
-      await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-      await expect(reading.timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+      await devtools.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+        timestamp: Date.now() / 1000,
+      })
+      await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
       expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(
         before + 615,
         0,
@@ -198,7 +207,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(reading.start, 0)
       const before = await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)
       await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-      await expect(reading.timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+      await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
       await testInfo.attach("start-released.png", { body: await page.screenshot(), contentType: "image/png" })
       expect(await first.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(reading.start, 0)
       expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
@@ -252,11 +261,18 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         if (nestedStart) {
           await page.evaluate(() => document.fonts.ready)
           const position = await tail.evaluate((element) => element.getBoundingClientRect().top)
-          await nested.evaluate((element) => (element.scrollTop = 500))
+          await nested.evaluate((element) => {
+            element.scrollTop = 500
+            // Control+End animates, and Chromium drops a key scroll that starts after that animation reaches
+            // the end but before it finishes. Wait for the scroll to end there, not only for its offset.
+            element.addEventListener("scrollend", function settled() {
+              if (element.scrollHeight - element.clientHeight - element.scrollTop >= 1) return
+              element.dataset.endSettled = ""
+              element.removeEventListener("scrollend", settled)
+            })
+          })
           await nested.press("Control+End")
-          await expect
-            .poll(() => nested.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
-            .toBeLessThan(1)
+          await expect(nested).toHaveAttribute("data-end-settled")
           await nested.press("Control+Home")
           await expect(nested).toHaveJSProperty("scrollTop", 0)
           expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(position, 0)
@@ -301,7 +317,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         }
 
         await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-        await expect(root.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
         const released = await tail.evaluate((element) => element.getBoundingClientRect().top)
         await timeline.send(
           partUpdated(
@@ -352,7 +368,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
         await expect(tail).toBeInViewport()
         await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
-        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
         const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
         const bounds = (await scroller.boundingBox())!
         const point = { x: bounds.x + 150, y: bounds.y + 200 }
@@ -478,7 +494,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
           (element, distance) => (element.scrollTop = element.scrollHeight - element.clientHeight - distance),
           growsBeforeDrag ? 1200 : handoff.key === "latest" ? 800 : 80,
         )
-        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
         const latest = page.getByRole("button", { name: "Jump to latest", exact: true })
 
         if (handoff.key === "latest") await expect(latest.locator("..")).toHaveCSS("opacity", "1")
@@ -538,7 +554,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
           await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(extent)
         }
 
-        const thumb = usesScrollbar ? timeline.locator('.scroll-view__thumb[data-orientation="vertical"]') : undefined
+        const thumb = usesScrollbar ? page.locator(thumbSelector) : undefined
         await thumb?.hover()
         const grip = await thumb?.boundingBox()
 
@@ -562,7 +578,11 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
 
         if (!handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
 
-        if (handoff.key === "latest") await latest.click()
+        if (handoff.key === "latest") {
+          await latest.click()
+          // The hidden button no longer covers the timeline, so a resting pointer would hover it and keep the thumb shown.
+          await page.mouse.move(0, 0)
+        }
 
         if (handoff.key !== "latest" && !usesScrollbar) await scroller.press(handoff.key)
 
@@ -609,7 +629,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         if (toStart) await expect(first).toBeInViewport()
 
         if (!toStart) await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
-        await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+        await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
 
         if (handoff.held) await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
 
@@ -669,7 +689,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
 
           const timeline = page.locator('[data-slot="session-timeline-scroll"]')
           const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
-          const hidden = timeline.locator('[data-orientation="vertical"][data-visible="false"]')
+          const hidden = page.locator(`${thumbSelector}[data-visible="false"]`)
           const heading = page.locator(`[data-timeline-part-id="${renderedPartID("prt_target_heading")}"]`)
           const last = detach === "scroll" ? page.getByText("Part 79.", { exact: true }) : heading
           await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
@@ -700,20 +720,30 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
 
           if (detach === "scroll") {
             const bounds = (await scroller.boundingBox())!
-            const touched = page.getByText("Part 66.", { exact: true })
+            // The timeline scrolls on under the composer, and rows behind it stay mounted, so the drag must carry the
+            // touched row past the bottom of the screen before virtualization removes it.
+            const touched = page.getByText("Part 68.", { exact: true })
             await expect(touched).toBeInViewport()
+            const box = (await touched.boundingBox())!
+            const point = { x: bounds.x + 100, y: box.y + box.height / 2 }
             await devtools.send("Input.dispatchTouchEvent", {
               type: "touchStart",
-              touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 }],
+              touchPoints: [point],
+              timestamp: restingTimestamp(),
             })
 
             for (let step = 1; step <= 23; step++)
               await devtools.send("Input.dispatchTouchEvent", {
                 type: "touchMove",
-                touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 + step * 30 }],
+                touchPoints: [{ x: point.x, y: point.y + step * 30 }],
+                timestamp: restingTimestamp(),
               })
             await expect(touched).not.toBeInViewport()
-            await devtools.send("Input.dispatchTouchEvent", { type: release, touchPoints: [] })
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: release,
+              touchPoints: [],
+              timestamp: Date.now() / 1000,
+            })
             await expect(hidden).toHaveCount(1)
             await expect(touched).toHaveCount(0)
           }
@@ -727,7 +757,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               type: "touchMove",
               touchPoints: [{ x: point.x, y: point.y + 60 }],
             })
-            await expect(timeline.locator('[data-orientation="vertical"][data-visible="true"]')).toHaveCount(1)
+            await expect(page.locator(`${thumbSelector}[data-visible="true"]`)).toHaveCount(1)
             await fixture.send(partDelta("prt_target_heading", "\n\nMore content."))
             await expect(heading).toContainText("More content.")
             await expect(heading.locator("p")).toHaveCount(2)
@@ -737,7 +767,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await expect(hidden).toHaveCount(1)
           }
 
-          const anchor = page.getByText(detach === "scroll" ? "Part 47." : "Reading 20.", { exact: true })
+          const anchor = page.getByText(detach === "scroll" ? "Part 48." : "Reading 20.", { exact: true })
           await expect(anchor).toBeInViewport()
           const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
           image.resolve()
@@ -794,7 +824,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await expect
         .poll(() => tail.evaluate((element) => element.getBoundingClientRect().top))
         .toBeGreaterThan(before + 50)
-      await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
+      await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
 
       const chosen = await scroller.evaluate((root) => {
         const view = root.getBoundingClientRect()
@@ -836,6 +866,7 @@ test("painted motion rejects a prompt whose pixels disappear", async ({ page }) 
   await page.evaluate(() => document.fonts.ready)
   const prompt = timeline.locator('[data-timeline-row="UserMessage"]')
   await expect(prompt).toBeInViewport()
+  await markPrompt(page)
   const view = (await timeline.getByRole("region", { name: "scrollable content", exact: true }).boundingBox())!
   const frames = [(await page.screenshot({ type: "jpeg" })).toString("base64")]
   // Negative control: a captured disappearance must fail even if the layout recovers.
@@ -870,4 +901,13 @@ async function readFrom(page: Page, text: string) {
   await expect(anchor).toBeInViewport()
 
   return { timeline, scroller, anchor, start }
+}
+
+// Chromium flings a touchEnd that lands within 80 ms of a touchMove made within 40 ms of the previous one
+// (ui/events/velocity_tracker), and CDP stamps an unstamped event when it arrives. A drag released as soon
+// as a quick check passed then carried momentum past the position it asserts. Stamping the drag's
+// touchStart and touchMoves 100 ms early, and its release from the same clock, makes the finger always
+// rest at least 100 ms before it lifts.
+function restingTimestamp() {
+  return (Date.now() - 100) / 1000
 }

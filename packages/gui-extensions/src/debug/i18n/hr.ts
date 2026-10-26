@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Uključi/isključi traku za otklanjanje pogrešaka",
-  "status.toggle": "Uključivanje/isključivanje alata za otklanjanje pogrešaka",
   ariaLabel: "Dijagnostika izvedbe razvoja",
   providerAriaLabel: "Dijagnostika performansi pružatelja usluge",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Vrijeme od slanja zahtjeva pružatelju do prvog izlaza modela.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Vrijeme od slanja zahtjeva pružatelju do prvog teksta odgovora.",
+  "duration.label": "TIME",
+  "duration.tip": "Vrijeme od upita koji je započeo posljednji potez do završetka odgovora.",
   "tps.label": "TPS",
-  "tps.tip": "Izlazni tokeni u sekundi nakon prvog izlaza modela.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Vrijeme od slanja zahtjeva pružatelju do završetka toka odgovora.",
+  "tps.tip":
+    "Izlazni tokeni i tokeni rasuđivanja u sekundi kroz zahtjeve modelu u posljednjem potezu, bez vremena alata.",
   "nav.label": "NAV",
   "nav.tip":
     "Zadnji dovršeni prijelaz rute koji dodiruje stranicu sesije, mjereno od početka usmjerivača do prve boje nakon što se slegne.",

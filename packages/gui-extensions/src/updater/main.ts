@@ -105,7 +105,7 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
       after: "about",
       enabled: () => enabled,
       run(window) {
-        // Beta builds check in the focused window, which can offer the stable installer.
+        // Beta builds check in the focused window, which reports the result in-app.
         if (build.channel !== "beta") return void runFork(show)
 
         if (window) provider.emit("check", null, window.id)

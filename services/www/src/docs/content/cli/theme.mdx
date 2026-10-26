@@ -8,7 +8,7 @@ OpenCode comes with many built-in themes for light and dark modes. Choose one in
 
 Press `Ctrl+P`, select **Open settings**, then open **Theme**. The default theme is `opencode`.
 
-You can also set them in your global [CLI settings](/cli/config):
+You can also set the theme and mode in your global [CLI settings](/cli/config):
 
 ```json title="~/.config/opencode/cli.json"
 {
@@ -174,7 +174,7 @@ Semantic tokens assign colors to UI roles. Components use these roles instead of
 
 | Group | Purpose |
 | --- | --- |
-| `text` | Base, muted, action, form-field, status, and feedback text. |
+| `text` | Base, muted, faint, action, form-field, and feedback text. `faint` defaults to `muted`. |
 | `background` | Base, raised surfaces, actions, form fields, and feedback fills. |
 | `border`, `scrollbar` | Border and scrollbar colors. |
 | `diff` | Added, removed, context, highlight, and line-number colors. |

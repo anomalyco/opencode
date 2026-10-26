@@ -1,6 +1,6 @@
 export * as DesktopFiles from "./index"
 
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { clipboard, dialog, nativeImage, shell } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
@@ -87,6 +87,26 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
     }),
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
       if (!application) return yield* Effect.promise(() => shell.openPath(target))
+
+      if (process.platform === "win32" && /^powershell(\.exe)?$/i.test(path.basename(application))) {
+        const info = yield* fs.stat(target)
+        const cwd = info.type === "Directory" ? target : path.dirname(target)
+
+        // PowerShell takes its working directory rather than a path argument, and needs its own console window:
+        // `start` opens one, and ignored stdio keeps the console from holding cmd's pipes open until PowerShell exits.
+        return yield* Effect.tryPromise(() =>
+          new Promise<void>((resolve, reject) => {
+            spawn("cmd.exe", ["/d", "/c", "start", "", application, "-NoExit"], {
+              cwd,
+              stdio: "ignore",
+              windowsHide: true,
+            })
+              .once("error", reject)
+              .once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`start exited with code ${code}`))))
+          }),
+        )
+      }
+
       yield* Effect.tryPromise(() =>
         new Promise<void>((resolve, reject) => {
           const command =

@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Fileshli faýllar",
-  "tree.empty": "Faýl ýok",
-  "tree.changes.one": "{{count}} faýl üýtgedi",
-  "tree.changes.other": "{{count}} faýl üýtgedi",
   "tab.notFound": "Faýl tapylmady: {{name}}",
   "mobile.title": "Faýllar",
   "mobile.openTabs": "Açyk faýllar",

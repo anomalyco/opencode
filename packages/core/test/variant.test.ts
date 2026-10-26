@@ -164,6 +164,17 @@ test("spells Vercel AI Gateway variants for their selected routes", () => {
     { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 19_456 } } },
     { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 38_911 } } },
   ])
+  expect(resolve(model(`${pkg}/chat`, "anthropic/claude-sonnet-4.6"), [{ type: "effort", values: ["high"] }])).toEqual([
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+  expect(
+    resolve(model(`${pkg}/messages`, "anthropic/claude-sonnet-4.6"), [{ type: "effort", values: ["high"] }]),
+  ).toEqual([{ id: "high", settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } } }])
+  expect(resolve(model(`${pkg}/responses`, "spacexai/grok-4.7"), [{ type: "effort" }]).map((item) => item.id)).toEqual([
+    "low",
+    "medium",
+    "high",
+  ])
 })
 
 test("spells xAI Responses variants with catalog effort levels", () => {
@@ -495,4 +506,53 @@ test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
 
   expect(resolve(gitlab("duo-chat-gpt-5-4"), [])).toEqual([])
   expect(resolve(gitlab("duo-workflow-opus-5-5"), [{ type: "effort" }])).toEqual([])
+})
+
+test("spells reasoning variants for every bundled native package", () => {
+  const supports: Variant.Support[] = [{ type: "toggle" }, { type: "effort" }, { type: "budget_tokens" }]
+  const missing = Array.from(Provider.builtinPackages).filter(
+    (packageName) => Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
+  )
+  expect(missing).toEqual([])
+})
+
+test("spells Mantle variants for the API each model is routed through", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock/mantle/messages", "anthropic.claude-opus-4-8"), [
+      { type: "effort", values: ["low", "max"] },
+    ]),
+  ).toEqual([
+    { id: "low", settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } } },
+    { id: "max", settings: { effort: "max", thinking: { type: "adaptive", display: "summarized" } } },
+  ])
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock/mantle/chat", "openai.gpt-oss-120b"), [{ type: "effort" }]),
+  ).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+})
+
+test("spells Google Interactions variants as thinking levels", () => {
+  for (const packageName of [
+    "@opencode/ai/providers/google/interactions",
+    "@opencode/ai/providers/google-vertex/interactions",
+  ])
+    expect(resolve(model(packageName, "gemini-3.5-pro"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+      { id: "low", settings: { thinkingLevel: "low", thinkingSummaries: "auto" } },
+      { id: "high", settings: { thinkingLevel: "high", thinkingSummaries: "auto" } },
+    ])
+})
+
+test("reads models.dev v2 reasoning as variant support", () => {
+  expect(Variant.supports({ supported: false })).toEqual([])
+  expect(Variant.supports({ supported: true })).toEqual([])
+  expect(
+    Variant.supports({ supported: true, toggle: true, effort: ["default", "low"], budget: { min: 1024, max: 8000 } }),
+  ).toEqual([
+    { type: "toggle" },
+    { type: "effort", values: ["low"] },
+    { type: "budget_tokens", min: 1024, max: 8000 },
+  ])
 })

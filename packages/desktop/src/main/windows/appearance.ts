@@ -1,7 +1,12 @@
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import type { Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
-import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
+import {
+  WindowFocusChanged,
+  WindowFullscreenChanged,
+  WindowPinchZoomChanged,
+  WindowZoomChanged,
+} from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import type { DesktopPaths } from "../paths"
 import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
@@ -83,6 +88,11 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
   updateTitlebar(win)
 }
 
+export function setTrafficLightsPosition(win: BrowserWindow, position: { x: number; y: number }) {
+  if (process.platform !== "darwin") return
+  win.setWindowButtonPosition({ x: Math.round(position.x), y: Math.round(position.y) })
+}
+
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
   win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
@@ -135,6 +145,16 @@ export function wireFullscreen(win: BrowserWindow) {
 
   win.on("enter-full-screen", () => send(true))
   win.on("leave-full-screen", () => send(false))
+}
+
+export function wireFocus(win: BrowserWindow) {
+  const send = (focused: boolean) => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) return
+    emitIpcEvent(win.webContents, new WindowFocusChanged({ focused }))
+  }
+
+  win.on("focus", () => send(true))
+  win.on("blur", () => send(false))
 }
 
 function iconsDir(path: Path.Path, paths: DesktopPaths.Resolved) {

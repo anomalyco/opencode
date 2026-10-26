@@ -5,7 +5,7 @@ import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { watch } from "fs"
+import { safeWatch } from "../util/watch"
 import path from "path"
 import { TuiKeybind } from "./keybind"
 
@@ -120,6 +120,9 @@ export const Info = Schema.Struct({
       }),
       tree: Schema.optional(Schema.Boolean).annotate({ description: "Show the diff file tree" }),
       single: Schema.optional(Schema.Boolean).annotate({ description: "Show only the selected file patch" }),
+      fullscreen: Schema.optional(Schema.Boolean).annotate({
+        description: "Open the diff side panel full screen; remembers the last full screen toggle",
+      }),
       view: Schema.optional(Schema.Literals(["auto", "split", "unified"])).annotate({
         description: "Diff layout; 'auto' selects a layout from the available width",
       }),
@@ -159,7 +162,8 @@ export const Info = Schema.Struct({
         description: "Group related transcript items automatically or render each item separately",
       }),
       verbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])).annotate({
-        description: "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
+        description:
+          "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
       }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
@@ -285,8 +289,7 @@ export function resolve(
   input: Info,
   options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
-  const tabsMode =
-    input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
+  const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -358,7 +361,7 @@ export function ConfigProvider(props: {
   }
   let reload = Promise.resolve()
   const watcher = host?.path
-    ? watch(path.dirname(host.path), () => {
+    ? safeWatch(path.dirname(host.path), () => {
         reload = reload
           .then(() => host.get())
           .then(apply)
@@ -375,4 +378,16 @@ export function useConfig() {
   const value = useContext(ConfigContext)
   if (!value) throw new Error("ConfigProvider is missing")
   return value
+}
+
+/** Reactive accessor for the temporary "new-designs" experiment. */
+export function useNewDesigns() {
+  const config = useConfig()
+  return () => config.data.experimental?.["new-designs"] === true
+}
+
+/** Reactive accessor for the temporary "client-mcp" experiment. */
+export function useClientMcpExperiment() {
+  const config = useConfig()
+  return () => config.data.experimental?.["client-mcp"] === true
 }

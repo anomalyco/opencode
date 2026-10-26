@@ -34,8 +34,7 @@ export const configure = (input: GenericModelOptions) => {
   })
   return {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) =>
-      route.model<OpenAIProviderOptionsInput>({ id: modelID, provider: ProviderID.make(provider) }),
+    model: (modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }

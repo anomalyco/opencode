@@ -35,8 +35,8 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     (server) => server.server,
     (before, after) => before.instructions !== after.instructions || before.codemode !== after.codemode,
   )
-  // Additions and removals render as small deltas; anything else restates the full list.
-  if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
+  // Added, changed, and removed servers render as deltas; the full list is restated only when no entry differs.
+  if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
     return [
       "The available MCP server instructions have changed. This list supersedes the previous one.",
       render(current),
@@ -45,6 +45,12 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     ...(diff.added.length === 0
       ? []
       : ["New MCP server instructions are available in addition to those previously listed:", ...entries(diff.added)]),
+    ...(diff.changed.length === 0
+      ? []
+      : [
+          "The following MCP server instructions have changed. Each entry replaces the previously listed server with the same name:",
+          ...entries(diff.changed.map((change) => change.current)),
+        ]),
     ...(diff.removed.length === 0
       ? []
       : [

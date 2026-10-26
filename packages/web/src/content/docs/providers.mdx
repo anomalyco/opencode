@@ -57,7 +57,7 @@ You can hide specific models from the `/models` picker for a provider using the 
   "$schema": "https://opencode.ai/config.json",
   "provider": {
     "anthropic": {
-      "blacklist": ["claude-opus-4-20250514"]
+      "blacklist": ["claude-opus-5-5"]
     }
   }
 }
@@ -70,7 +70,7 @@ The inverse `whitelist` option hides every model except the ones listed.
   "$schema": "https://opencode.ai/config.json",
   "provider": {
     "anthropic": {
-      "whitelist": ["claude-sonnet-4-20250514"]
+      "whitelist": ["claude-sonnet-5-5"]
     }
   }
 }
@@ -337,14 +337,13 @@ For custom inference profiles, use the model and provider name in the key and se
    /connect
    ```
 
-2. Here you can select the **Claude Pro/Max** option and it'll open your browser
-   and ask you to authenticate.
+2. Create an API key in the [Anthropic Console](https://console.anthropic.com/settings/keys) and enter it when prompted.
 
    ```txt
-   ┌ Select auth method
+   ┌ API key
    │
-   │ Manually enter API Key
-   └
+   │
+   └ enter
    ```
 
 3. Now all the Anthropic models should be available when you use the `/models` command.
@@ -477,7 +476,7 @@ OpenCode does not query Azure management APIs or discover deployments. Select a 
   "provider": {
     "azure": {
       "models": {
-        "gpt-5-mini": {
+        "gpt-6-luna": {
           "id": "gpt-production"
         }
       }
@@ -644,8 +643,8 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
-           "anthropic/claude-sonnet-4": {}
+           "openai/gpt-6.1-sol": {},
+           "anthropic/claude-sonnet-5.5": {}
          }
        }
      }
@@ -895,13 +894,13 @@ Selecting a router model is a drop-in replacement for any other model — OpenCo
    └ enter
    ```
 
-4. Run the `/models` command to select a model like _Mistral Large 3_ or _Claude Sonnet 5_.
+4. Run the `/models` command to select a model like _Mistral Large 3_ or _Claude Sonnet 5.5_.
 
    ```txt
    /models
    ```
 
-   Eden AI model ids are themselves in `vendor/model` form, so a full reference has three segments, for example `edenai/anthropic/claude-sonnet-5`.
+   Eden AI model ids are themselves in `vendor/model` form, so a full reference has three segments, for example `edenai/anthropic/claude-sonnet-5-5`.
 
 5. To keep requests on Eden AI's EU gateway, set its base URL.
 
@@ -1042,13 +1041,12 @@ to store token in opencode auth storage.
 OpenCode uses a small model for some AI tasks like generating the session title.
 It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
 to only use your own GitLab-hosted instance, add the following to your
-`opencode.json` file. It is also recommended to disable session sharing.
+`opencode.json` file.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1365,8 +1363,8 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
           // Model ID (from Helicone's model directory page)
           "name": "GPT-4o", // Your own custom name for the model
         },
-        "claude-sonnet-4-20250514": {
-          "name": "Claude Sonnet 4",
+        "claude-sonnet-4-5-20250929": {
+          "name": "Claude Sonnet 4.5",
         },
       },
     },
@@ -1952,14 +1950,14 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
            "glm-4.7": {
              "name": "GLM 4.7"
            },
-           "gpt-5.2": {
-             "name": "GPT-5.2"
+           "gpt-6.1-sol": {
+             "name": "GPT-6.1 Sol"
            },
-           "gemini-2.5-pro": {
-             "name": "Gemini 2.5 Pro"
+           "gemini-4-argon": {
+             "name": "Gemini 4 Argon"
            },
-           "claude-3-5-sonnet-20241022": {
-             "name": "Claude 3.5 Sonnet"
+           "claude-sonnet-5-5": {
+             "name": "Claude Sonnet 5.5"
            }
          }
        }
@@ -2302,7 +2300,7 @@ The model catalog is provided automatically. A minimal `opencode.json` is all th
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "snowflake-cortex/claude-sonnet-4-6",
+  "model": "snowflake-cortex/claude-sonnet-5",
   "small_model": "snowflake-cortex/claude-haiku-4-5"
 }
 ```
@@ -2398,7 +2396,7 @@ You can also customize models through your opencode config. Here's an example of
   "provider": {
     "vercel": {
       "models": {
-        "anthropic/claude-sonnet-4": {
+        "anthropic/claude-sonnet-5.5": {
           "options": {
             "order": ["anthropic", "vertex"]
           }

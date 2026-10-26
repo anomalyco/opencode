@@ -243,17 +243,6 @@ check_version() {
     fi
 }
 
-unbuffered_sed() {
-    if echo | sed -u -e "" >/dev/null 2>&1; then
-        sed -nu "$@"
-    elif echo | sed -l -e "" >/dev/null 2>&1; then
-        sed -nl "$@"
-    else
-        local pad="$(printf "\n%512s" "")"
-        sed -ne "s/$/\\${pad}/" "$@"
-    fi
-}
-
 print_progress() {
     local bytes="$1"
     local length="$2"
@@ -283,52 +272,34 @@ download_with_progress() {
         exec 4>/dev/null
     fi
 
-    local tmp_dir=${TMPDIR:-/tmp}
-    local basename="${tmp_dir}/opencode_install_$$"
-    local tracefile="${basename}.trace"
-
-    rm -f "$tracefile"
-    mkfifo "$tracefile"
+    local headers="${output}.headers"
 
     # Hide cursor
     printf "\033[?25l" >&4
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    trap "trap - RETURN; rm -f \"$headers\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
-    (
-        curl --trace-ascii "$tracefile" -fsL -o "$output" "$url"
-    ) &
+    # Poll the file size on a timer so rendering cost stays fixed no matter how many bytes arrive.
+    # Read the size with ls because busybox wc -c reads the whole file.
+    curl -fsL -D "$headers" -o "$output" "$url" &
     local curl_pid=$!
 
-    unbuffered_sed \
-        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
-        -e '/^0000: content-length:/p' \
-        -e '/^<= recv data/p' \
-        "$tracefile" | \
-    {
-        local length=0
-        local bytes=0
+    local length bytes
+    while kill -0 "$curl_pid" 2>/dev/null; do
+        if [ -f "$output" ]; then
+            length=$(grep -i '^content-length:' "$headers" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
+            bytes=$(ls -ln "$output" | awk '{print $5}')
+            print_progress "$bytes" "${length:-0}"
+        fi
+        sleep 0.1 2>/dev/null || sleep 1
+    done
 
-        while IFS=" " read -r -a line; do
-            [ "${#line[@]}" -lt 2 ] && continue
-            local tag="${line[0]} ${line[1]}"
-
-            if [ "$tag" = "0000: content-length:" ]; then
-                length="${line[2]}"
-                length=$(echo "$length" | tr -d '\r')
-                bytes=0
-            elif [ "$tag" = "<= recv" ]; then
-                local size="${line[3]}"
-                bytes=$(( bytes + size ))
-                if [ "$length" -gt 0 ]; then
-                    print_progress "$bytes" "$length"
-                fi
-            fi
-        done
-    }
-
-    wait $curl_pid
-    local ret=$?
+    local ret=0
+    wait "$curl_pid" || ret=$?
+    if [ "$ret" -eq 0 ]; then
+        bytes=$(ls -ln "$output" | awk '{print $5}')
+        print_progress "$bytes" "$bytes"
+    fi
     echo "" >&4
     return $ret
 }
@@ -395,6 +366,7 @@ fi
 install_legacy_shim
 
 
+path_added=false
 add_to_path() {
     local config_file=$1
     local command=$2
@@ -404,6 +376,7 @@ add_to_path() {
     elif [[ -w $config_file ]]; then
         echo -e "\n# opencode" >> "$config_file"
         echo "$command" >> "$config_file"
+        path_added=true
         print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
@@ -444,6 +417,18 @@ if [[ "$no_modify_path" != "true" ]]; then
             break
         fi
     done
+
+    # A new Mac has no ~/.zshrc, so create the shell's main config file rather than leaving opencode off PATH.
+    if [[ -z $config_file ]]; then
+        case $current_shell in
+            zsh) new_config_file="${ZDOTDIR:-$HOME}/.zshrc" ;;
+            fish) new_config_file="$HOME/.config/fish/config.fish" ;;
+            *) new_config_file="" ;;
+        esac
+        if [[ -n $new_config_file ]] && mkdir -p "$(dirname "$new_config_file")" 2>/dev/null && touch "$new_config_file" 2>/dev/null; then
+            config_file=$new_config_file
+        fi
+    fi
 
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
@@ -488,6 +473,9 @@ echo -e ""
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
+if [[ $path_added == "true" ]]; then
+    echo -e "exec \$SHELL   ${MUTED}# Reload PATH (or open a new terminal)${NC}"
+fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""

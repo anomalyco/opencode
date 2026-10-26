@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Всички файлове",
-  "tree.empty": "Няма файлове",
-  "tree.changes.one": "{{count}} файл е променен",
-  "tree.changes.other": "{{count}} файла са променени",
   "tab.notFound": "Файлът не е намерен: {{name}}",
   "mobile.title": "Файлове",
   "mobile.openTabs": "Отворени файлове",

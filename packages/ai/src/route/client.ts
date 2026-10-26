@@ -94,8 +94,6 @@ export type AnyRoute<Compact extends CompactionOperations | undefined = Compacti
   Compact
 >
 
-export type HttpOptionsInput = HttpOptions.Input
-
 export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "route">
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
@@ -132,7 +130,7 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
 ) => {
   const provider = route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
   if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
-  if (!endpointBaseURL(route.endpoint))
+  if (!route.endpoint.baseURL)
     throw new ProviderConfigurationError({
       provider: ProviderID.make(provider),
       message: `Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`,
@@ -150,7 +148,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     ...base,
     ...patch,
     headers,
-    generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
+    generation: mergeGenerationOptions(base?.generation, patch.generation),
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(
       base?.http,
@@ -160,9 +158,6 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   }
 }
 
-const endpointBaseURL = <Body>(endpoint: Endpoint.Definition<Body>) =>
-  typeof endpoint.baseURL === "string" ? endpoint.baseURL : undefined
-
 const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined>) => {
   const entries = items.flatMap((item) =>
     item === undefined ? [] : Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -170,9 +165,6 @@ const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined
   if (entries.length === 0) return undefined
   return Object.fromEntries(entries)
 }
-
-export const generationOptions = (input: GenerationOptions.Input | undefined) =>
-  input === undefined ? undefined : GenerationOptions.make(input)
 
 export interface Interface {
   readonly compact: CompactMethod
@@ -399,8 +391,8 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           provider: provider ?? routeInput.provider,
           providerMetadataKey:
             providerMetadataKey ??
-            (provider !== undefined && String(provider) !== String(routeInput.provider)
-              ? String(provider)
+            (provider !== undefined && provider !== routeInput.provider
+              ? provider
               : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
@@ -572,6 +564,20 @@ const prepareRequest = (request: LLMRequest) => {
 }
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+  const references = request.messages.flatMap((message) =>
+    message.content.flatMap((part) => {
+      if (part.type === "media") {
+        const source = part.media.source
+        return source.type === "url" ? [source.url] : source.type === "ref" ? [source.id] : []
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return []
+      return part.result.value.flatMap((item) => (item.type === "file" ? [item.uri] : []))
+    }),
+  )
+  if (references.some((reference) => /^\s*file:/i.test(reference)))
+    return yield* ProviderShared.invalidRequest(
+      "Local file references must be read with Media.file(path) before sending",
+    )
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
@@ -646,13 +652,6 @@ export function compact(request: LLMRequest, options?: EndpointCompactOptions | 
     return yield* unsupportedCompaction(request, options?.mechanism)
   })
 }
-
-export const streamRequest = (request: LLMRequest, options?: StreamOptions) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      return (yield* Service).stream(request, options)
-    }),
-  )
 
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,

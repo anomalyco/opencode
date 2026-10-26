@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Slå fejlfindingslinjen til eller fra",
-  "status.toggle": "Slå fejlfindingsværktøjer til/fra",
   ariaLabel: "Udviklingsydelsesdiagnostik",
   providerAriaLabel: "Diagnosticering af udbyderens ydeevne",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Tid fra afsendelse af udbyderanmodningen til modellens første output.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Tid fra afsendelse af udbyderanmodningen til den første svartekst.",
+  "duration.label": "TIME",
+  "duration.tip": "Tid fra prompten, der startede den seneste tur, til svaret var færdigt.",
   "tps.label": "TPS",
-  "tps.tip": "Outputtokens pr. sekund efter modellens første output.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Tid fra afsendelse af udbyderanmodningen, til dens svarstream sluttede.",
+  "tps.tip":
+    "Output- og ræsonneringstokens pr. sekund på tværs af den seneste turs modelforespørgsler, uden værktøjstid.",
   "nav.label": "NAV",
   "nav.tip":
     "Sidste gennemførte ruteovergang, der berører en sessionsside, målt fra routerstart til den første optegning efter den falder til ro.",

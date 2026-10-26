@@ -131,7 +131,8 @@ async function prepareCli(dest: string) {
 
   if (process.platform !== "win32") await chmod(dest, 0o755)
 
-  if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
+  // electron-builder signs the bundled CLI again in Package, so beta signs it only there.
+  if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true" && resolveChannel() !== "beta") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
   }
 

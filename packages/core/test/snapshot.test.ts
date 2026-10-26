@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Logger } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Git } from "@opencode/core/git"
 import { Global } from "@opencode/util/global"
@@ -185,8 +185,22 @@ describe("Snapshot", () => {
                   ),
               )
             }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
-          const results = yield* Effect.all([writer(0), writer(1), writer(2)], { concurrency: "unbounded" })
-          expect(results.flat().every((tree) => tree !== undefined)).toBe(true)
+          // capture() reports a failure only as a logged warning, so collect warnings to show the cause on failure.
+          const warnings: string[] = []
+          const results = yield* Effect.all([writer(0), writer(1), writer(2)], { concurrency: "unbounded" }).pipe(
+            Effect.provide(
+              Logger.layer([
+                Logger.make((entry) => {
+                  if (entry.logLevel === "Warn" || entry.logLevel === "Error")
+                    warnings.push(Bun.inspect(entry.message, { depth: 8 }))
+                }),
+              ]),
+            ),
+          )
+          expect(
+            results.flat().every((tree) => tree !== undefined),
+            warnings.join("\n"),
+          ).toBe(true)
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

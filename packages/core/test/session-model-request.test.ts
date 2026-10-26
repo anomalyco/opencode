@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message, ToolResultPart, Media } from "@opencode/ai"
+import { Message, ToolResultPart, Media } from "@opencode/ai/effect"
 import { boundImages, outputLimit, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
@@ -7,13 +7,12 @@ const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"
 describe("SessionModelRequest.outputLimit", () => {
   test("uses chosen defaults while keeping unknown supplier maxima unknown", () => {
     const limit = { context: 262144, output: 0 }
-    expect(outputLimit(limit, "primary")).toBe(32000)
+    expect(outputLimit(limit)).toBe(32000)
     for (const budget of [8192, 65536, 131072]) {
-      expect(outputLimit(limit, "primary", undefined, budget)).toBe(budget)
-      expect(outputLimit(limit, "compaction", undefined, budget)).toBe(Math.min(budget, 32000))
+      expect(outputLimit(limit, undefined, budget)).toBe(budget)
     }
-    expect(outputLimit({ ...limit, output: 128000 }, "primary", undefined, 131072)).toBe(128000)
-    expect(outputLimit(limit, "primary", { measured: 200000, estimated: 0 }, 131072)).toBe(62144)
+    expect(outputLimit({ ...limit, output: 128000 }, undefined, 131072)).toBe(128000)
+    expect(outputLimit(limit, { measured: 200000, estimated: 0 }, 131072)).toBe(62144)
   })
 })
 
@@ -214,6 +213,21 @@ describe("SessionModelRequest.boundImages", () => {
     expect(result[2]).not.toBe(messages[2])
     expect(result[2]?.content[0]).toMatchObject({ type: "text" })
     expect(result[3]).toBe(third)
+  })
+
+  test("keeps the replaced prefix stable as new images arrive, so the prompt cache survives", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("a".repeat(3 * 1024 * 1024), "image/png"), filename: name })
+    const removed = (messages: ReturnType<typeof boundImages>) =>
+      messages.filter((message) => message.content[0]?.type === "text").length
+    const history = Array.from({ length: 9 }, (_, i) => image(`${i}.png`))
+
+    // 27 MiB passes the 25 MiB trigger: the oldest four go, leaving 15 MiB.
+    expect(removed(boundImages(history))).toBe(4)
+    // Each later image used to move the cut by one; now the cut holds until the kept payload passes the trigger again.
+    expect(removed(boundImages([...history, image("9.png")]))).toBe(4)
+    expect(removed(boundImages([...history, image("9.png"), image("10.png"), image("11.png")]))).toBe(4)
+    expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
   test("replaces images nested in tool results", () => {

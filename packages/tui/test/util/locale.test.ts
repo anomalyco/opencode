@@ -12,3 +12,9 @@ test("takes whole graphemes within terminal width", () => {
   expect(Locale.takeWidth("ab界cd", 4)).toBe("ab界")
   expect(Locale.graphemes("a👨‍👩‍👧‍👦b")).toEqual(["a", "👨‍👩‍👧‍👦", "b"])
 })
+
+test("rolls the compact form over at the rounding boundary", () => {
+  expect(Locale.number(999949)).toBe("999.9K")
+  expect(Locale.number(999950)).toBe("1.0M")
+  expect(Locale.number(1000000)).toBe("1.0M")
+})
