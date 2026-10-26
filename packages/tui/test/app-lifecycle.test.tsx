@@ -391,9 +391,8 @@ test("session title generated while an untitled session is loading remains visib
     setTitle(title)
   }
   const sessionRequested = Promise.withResolvers<void>()
-  const renameSyncRequested = Promise.withResolvers<void>()
+  const probeRequested = Promise.withResolvers<void>()
   const releaseSession = Promise.withResolvers<void>()
-  let sessionRequests = 0
   const session = {
     id: "dummy",
     projectID: "project",
@@ -406,11 +405,13 @@ test("session title generated while an untitled session is loading remains visib
   const calls = createFetch(async (url) => {
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/dummy") {
-      sessionRequests++
       sessionRequested.resolve()
-      if (sessionRequests === 2) renameSyncRequested.resolve()
       await releaseSession.promise
       return json({ data: session })
+    }
+    if (url.pathname === "/api/session/probe") {
+      probeRequested.resolve()
+      return json({ data: { ...session, id: "probe" } })
     }
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
@@ -440,10 +441,18 @@ test("session title generated while an untitled session is loading remains visib
       durable: { aggregateID: "dummy", seq: 1, version: 1 },
       data: { sessionID: "dummy", title: "Generated title" },
     })
+    // Events arrive in order, so the client has applied the rename once it reads the Session created after it.
+    events.emit({
+      id: "evt_probe",
+      created: 2,
+      type: "session.created",
+      durable: { aggregateID: "probe", seq: 1, version: 1 },
+      data: { sessionID: "probe", projectID: "project", location: { directory }, slug: "probe", version: "test" },
+    })
     await Promise.race([
-      renameSyncRequested.promise,
+      probeRequested.promise,
       Bun.sleep(2_000).then(() => {
-        throw new Error("rename sync did not start")
+        throw new Error("rename was not observed")
       }),
     ])
     releaseSession.resolve()
