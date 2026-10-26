@@ -893,8 +893,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     paint()
   }
 
+  // Turning the knob off also lands any running pick or dash transition.
   createEffect(() => {
-    if (!questionMotion()) still()
+    if (questionMotion()) return
+    still()
+    root?.getAnimations({ subtree: true }).forEach((animation) => animation.cancel())
   })
   onCleanup(() => stop?.())
 
