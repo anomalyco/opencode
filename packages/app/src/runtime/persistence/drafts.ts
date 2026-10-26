@@ -2,7 +2,7 @@ import type { AsyncStorage } from "@solid-primitives/storage"
 import { Option, Schema } from "effect"
 import { mediaHashFromUri } from "@/runtime/server/media"
 
-type BlobReference = { id: string; url: string }
+export type BlobReference = { id: string; url: string }
 
 type Driver = {
   get(key: string): Promise<string | null>

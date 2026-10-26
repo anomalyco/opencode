@@ -36,7 +36,7 @@ export function createSessionRevert(input: {
         return false
       })
 
-  const draft = (message: SessionMessageUser) =>
+  const messageDraft = (message: SessionMessageUser) =>
     extractPromptFromMessage(message, {
       directory: location().directory,
       attachmentName: language.t("common.attachment"),
@@ -46,7 +46,7 @@ export function createSessionRevert(input: {
   const restore = (
     target: ReturnType<typeof prompt.capture>,
     message: SessionMessageUser,
-    restored = draft(message),
+    restored = messageDraft(message),
   ) => {
     const context = extractPromptContext(message, { directory: location().directory })
 
@@ -67,7 +67,7 @@ export function createSessionRevert(input: {
     if (data.session.input.has(sessionID, message.id)) {
       // The cancel releases the prompt's blob refs and sweeps blobs nothing else references, so the draft takes
       // local copies of its media first; if they cannot load, the prompt stays queued.
-      const restored = await pinPromptMedia(draft(message)).catch((error) => {
+      const restored = await pinPromptMedia(messageDraft(message)).catch((error) => {
         fail(error)
 
         return undefined
