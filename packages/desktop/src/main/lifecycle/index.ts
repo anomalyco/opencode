@@ -13,6 +13,7 @@ import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 import { consoleReturnWindow } from "./deep-link"
+import { advertiseSessionActivity, registerHandoffListeners } from "./handoff"
 
 export interface Interface {
   readonly relaunch: () => void
@@ -90,8 +91,15 @@ const runtime = Layer.effect(
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
+      if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
       focusWindow(emitDeepLinks([url]) ?? null)
     }
+
+    const stopHandoff = registerHandoffListeners(app, (url) => {
+      runFork(Effect.logInfo("deep link received via handoff", { sessionID: url.split(/[?/]/)[3] }))
+      if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
+      focusWindow(emitDeepLinks([url]) ?? null)
+    })
 
     const beforeQuit = (event: Event) => {
       setAppQuitting()
@@ -156,6 +164,8 @@ const runtime = Layer.effect(
         app.off("activate", activate)
         process.off("SIGINT", signal)
         process.off("SIGTERM", signal)
+        stopHandoff()
+        advertiseSessionActivity(null)
         resetRelaunchHandler()
       }),
     )

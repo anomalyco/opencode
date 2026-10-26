@@ -34,6 +34,21 @@ export const WindowSetTitlebar = Rpc.make("WindowSetTitlebar", {
   },
 })
 
+export const WindowSetUserActivity = Rpc.make("WindowSetUserActivity", {
+  payload: {
+    activity: Schema.NullOr(
+      Schema.Struct({
+        sessionID: Schema.String,
+        directory: Schema.optionalKey(Schema.String),
+        projectID: Schema.optionalKey(Schema.String),
+        serverKey: Schema.optionalKey(Schema.String),
+        serverURLs: Schema.Array(Schema.String),
+        webpageURL: Schema.optionalKey(Schema.String),
+      }),
+    ),
+  },
+})
+
 export const WindowRpcs = RpcGroup.make(
   WindowThemeReady,
   WindowGetFocused,
@@ -45,4 +60,5 @@ export const WindowRpcs = RpcGroup.make(
   WindowGetPinchZoomEnabled,
   WindowSetPinchZoomEnabled,
   WindowSetTitlebar,
+  WindowSetUserActivity,
 )

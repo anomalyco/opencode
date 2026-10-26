@@ -41,3 +41,12 @@ export type ClipboardImage = {
   width: number
   height: number
 }
+
+export type UserActivity = {
+  sessionID: string
+  directory?: string
+  projectID?: string
+  serverKey?: string
+  serverURLs: readonly string[]
+  webpageURL?: string
+}

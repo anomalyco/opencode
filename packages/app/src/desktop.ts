@@ -12,7 +12,7 @@ export { ServerConnection, useServers } from "./runtime/server/registry"
 
 export { useGlobal } from "./runtime/server/runtime"
 
-export { useTabs } from "./shell/tabs/tabs"
+export { findSessionTab, tabKey, useTabs } from "./shell/tabs/tabs"
 
 export { createDraftStore } from "./runtime/persistence/drafts"
 

@@ -1,13 +1,15 @@
 import { Route, useParams } from "@solidjs/router"
-import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
+import { createEffect, createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
+import { routeAppDeepLink } from "./deep-links"
 import { requireServerKey } from "./session"
 import { ExtensionAttachment } from "@/runtime/extension/root"
 
@@ -101,10 +103,46 @@ function AppLayout(props: ParentProps) {
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <ExtensionAttachment>
+            <DeepLinkBridge />
             <Shell>{props.children}</Shell>
           </ExtensionAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>
     </Show>
   )
+}
+
+function DeepLinkBridge() {
+  const servers = useServers()
+  const tabs = useTabs()
+
+  const consumePending = () => {
+    if (typeof window === "undefined") return
+    const holder = (window as Window & { __OPENCODE__?: { deepLinks?: string[] } }).__OPENCODE__
+    const queued = holder?.deepLinks?.splice(0) ?? []
+    for (const url of queued) {
+      routeAppDeepLink(url, { servers, tabs })
+    }
+  }
+
+  createEffect(() => {
+    if (!tabs.ready() || servers.list.length === 0) return
+    consumePending()
+  })
+
+  createEffect(() => {
+    if (typeof window === "undefined" || !tabs.ready() || servers.list.length === 0) return
+    const onDeepLink = (event: Event) => {
+      const holder = (window as Window & { __OPENCODE__?: { deepLinks?: string[] } }).__OPENCODE__
+      const queued = holder?.deepLinks?.splice(0)
+      const urls = queued?.length ? queued : (event as CustomEvent<{ urls?: string[] }>).detail?.urls ?? []
+      for (const url of urls) {
+        routeAppDeepLink(url, { servers, tabs })
+      }
+    }
+    window.addEventListener("opencode:deep-link", onDeepLink)
+    onCleanup(() => window.removeEventListener("opencode:deep-link", onDeepLink))
+  })
+
+  return null
 }
