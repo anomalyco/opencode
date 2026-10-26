@@ -315,10 +315,10 @@ export const make = Effect.gen(function* () {
     )
   })
 
-  const removeBlock = Effect.fnUntraced(function* (input: BlockInput) {
+  const removeBlock = Effect.fnUntraced(function* (input: BlockInput, generation: Scope.Closeable) {
     yield* SynchronizedRef.update(state.jobs, (jobs) => {
       const job = jobs.get(input.id)
-      if (!job || job.info.status !== "running" || job.isBackgrounded) return jobs
+      if (!job || job.scope !== generation || job.info.status !== "running" || job.isBackgrounded) return jobs
       return new Map(jobs).set(input.id, {
         ...job,
         blockingSessions: decrementSession(job.blockingSessions, input.sessionID),
@@ -351,7 +351,7 @@ export const make = Effect.gen(function* () {
       Deferred.await(result.wait.backgrounded).pipe(Effect.map((info) => ({ type: "backgrounded" as const, info }))),
     ).pipe(
       Effect.tap((outcome) => (outcome.type === "finished" ? consume(input.id, result.wait.generation) : Effect.void)),
-      Effect.ensuring(removeBlock(input)),
+      Effect.ensuring(removeBlock(input, result.wait.generation)),
     )
   })
 

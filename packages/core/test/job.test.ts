@@ -156,6 +156,51 @@ describe("Job", () => {
     }),
   )
 
+  it.live("preserves replacement blockers when a cancelled generation finishes waiting", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const parent = SessionSchema.ID.make("ses_replacement_parent")
+      const id = "job_replaced_blocker"
+      yield* jobs.start({ id, type: "test", run: Effect.never })
+      // Cancellation wakes this waiter before the old blocking wait finishes its cleanup.
+      const replacement = yield* jobs
+        .wait({ id })
+        .pipe(
+          Effect.andThen(jobs.start({ id, type: "replacement", run: Effect.never })),
+          Effect.andThen(jobs.block({ id, sessionID: parent })),
+          Effect.forkChild({ startImmediately: true }),
+        )
+      const previous = yield* jobs.block({ id, sessionID: parent }).pipe(Effect.forkChild({ startImmediately: true }))
+
+      yield* jobs.cancel(id)
+      expect(yield* Fiber.join(previous)).toMatchObject({ type: "finished", info: { status: "cancelled" } })
+      expect(yield* jobs.get(id)).toMatchObject({ type: "replacement", status: "running" })
+      expect(yield* jobs.backgroundAll({ sessionID: parent })).toMatchObject([{ id, status: "running" }])
+      expect(yield* Fiber.join(replacement)).toMatchObject({ type: "backgrounded", info: { id } })
+    }),
+  )
+
+  it.live("removes only the interrupted blocker from the current generation", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const parent = SessionSchema.ID.make("ses_blocker_cleanup")
+      const id = "job_blocker_cleanup"
+      yield* jobs.start({ id, type: "test", run: Effect.never })
+      const first = yield* jobs.block({ id, sessionID: parent }).pipe(Effect.forkChild({ startImmediately: true }))
+      const second = yield* jobs.block({ id, sessionID: parent }).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Fiber.interrupt(first)
+      expect(yield* jobs.backgroundAll({ sessionID: parent })).toMatchObject([{ id }])
+      expect(yield* Fiber.join(second)).toMatchObject({ type: "backgrounded", info: { id } })
+
+      const idle = yield* jobs.start({ id: "job_no_blockers", type: "test", run: Effect.never })
+      const last = yield* jobs
+        .block({ id: idle.id, sessionID: parent })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Fiber.interrupt(last)
+      expect(yield* jobs.backgroundAll({ sessionID: parent })).toEqual([])
+    }),
+  )
+
   it.live("returns finished from a blocking wait when completion wins", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
