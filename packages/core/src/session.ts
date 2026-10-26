@@ -241,7 +241,11 @@ export interface Interface {
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
-  readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  /**
+   * Each Session with a running execution, mapped to the root of its family: itself when it is a root, or when its
+   * root cannot be resolved because its row is gone or it sits on a parent cycle.
+   */
+  readonly active: Effect.Effect<ReadonlyMap<SessionSchema.ID, SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) => Effect.Effect<boolean>
@@ -535,7 +539,11 @@ const layer = Layer.effect(
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
-      active: execution.active,
+      active: Effect.gen(function* () {
+        const active = Array.from(yield* execution.active)
+        const roots = yield* store.roots(active)
+        return new Map(active.map((sessionID) => [sessionID, roots.get(sessionID) ?? sessionID]))
+      }).pipe(Effect.withSpan("Session.active")),
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })

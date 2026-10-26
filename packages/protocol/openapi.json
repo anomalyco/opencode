@@ -1484,7 +1484,7 @@
             }
           }
         },
-        "description": "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+        "description": "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Each entry's `rootID` is the root of the family that contains the Session: the Session itself when it is a root.",
         "summary": "List active sessions"
       }
     },
@@ -24235,9 +24235,12 @@
           "type": {
             "type": "string",
             "enum": ["running"]
+          },
+          "rootID": {
+            "$ref": "#/components/schemas/Session.ID"
           }
         },
-        "required": ["type"],
+        "required": ["type", "rootID"],
         "additionalProperties": false
       },
       "SessionBusyErrorEncoded": {

@@ -224,7 +224,10 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     }
     if (url.endsWith("/api/session/active")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(request, Response.json({ data: { ses_test: { type: "running" } } })),
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({ data: { ses_test: { type: "running", rootID: "ses_test" } } }),
+        ),
       )
     }
     if (request.method === "POST" && url.endsWith("/api/session")) {
@@ -284,7 +287,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(DateTime.toEpochMillis(listed.time.created)).toBe(1_717_171_717_000)
   expect(DateTime.toEpochMillis(listed.time.idle)).toBe(1_717_171_717_002)
   expect(DateTime.toEpochMillis(listed.time.viewed)).toBe(1_717_171_717_001)
-  expect(result.active).toEqual({ ses_test: { type: "running" } })
+  expect(result.active).toEqual({ ses_test: { type: "running", rootID: "ses_test" } })
   expect(result.interrupted).toEqual({ interrupted: true })
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)

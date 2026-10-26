@@ -51,6 +51,21 @@ export type MessagesInput = {
   }
 }
 
+// Walks up from every Session matching `starts` to its root: the topmost ancestor, also when its recorded parent no
+// longer exists. `root(session_id, id)` pairs each starting Session with its root. UNION, not UNION ALL, so a corrupt
+// parent cycle ends instead of recursing forever (and yields no root).
+const rootCTE = (starts: SQL) => sql`
+  ancestor(session_id, id, parent_id) AS (
+    SELECT id, id, parent_id FROM ${SessionTable} WHERE ${starts}
+    UNION
+    SELECT ancestor.session_id, session.id, session.parent_id FROM ${SessionTable} AS session
+    JOIN ancestor ON session.id = ancestor.parent_id
+  ),
+  root(session_id, id) AS (
+    SELECT session_id, id FROM ancestor
+    WHERE parent_id IS NULL OR NOT EXISTS (SELECT 1 FROM ${SessionTable} AS parent WHERE parent.id = ancestor.parent_id)
+  )`
+
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Persisted | undefined>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Persisted[]>
@@ -59,6 +74,11 @@ export interface Interface {
    * Empty when the Session does not exist.
    */
   readonly family: (sessionID: Session.ID) => Effect.Effect<Session.Persisted[]>
+  /**
+   * The root of the family containing each Session, by Session ID, with the same root rule as {@link Interface.family}.
+   * Sessions that do not exist or sit on a parent cycle are absent.
+   */
+  readonly roots: (sessionIDs: ReadonlyArray<Session.ID>) => Effect.Effect<ReadonlyMap<Session.ID, Session.ID>>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
@@ -191,23 +211,15 @@ const layer = Layer.effect(
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       family: Effect.fn("SessionStore.family")(function* (sessionID) {
-        // The root is the topmost ancestor, also when its recorded parent no longer exists. UNION, not
-        // UNION ALL, so a corrupt parent cycle ends instead of recursing forever (and yields no root).
         const rows = yield* db
           .select()
           .from(SessionTable)
           .where(
             sql`${SessionTable.id} IN (
               WITH RECURSIVE
-                ancestor(id, parent_id) AS (
-                  SELECT id, parent_id FROM ${SessionTable} WHERE id = ${sessionID}
-                  UNION
-                  SELECT session.id, session.parent_id FROM ${SessionTable} AS session
-                  JOIN ancestor ON session.id = ancestor.parent_id
-                ),
+                ${rootCTE(sql`id = ${sessionID}`)},
                 member(id) AS (
-                  SELECT id FROM ancestor
-                  WHERE parent_id IS NULL OR NOT EXISTS (SELECT 1 FROM ${SessionTable} AS parent WHERE parent.id = ancestor.parent_id)
+                  SELECT id FROM root
                   UNION
                   SELECT session.id FROM ${SessionTable} AS session JOIN member ON session.parent_id = member.id
                 )
@@ -220,6 +232,18 @@ const layer = Layer.effect(
         const ids = new Set(rows.map((row) => row.id))
         const root = rows.find((row) => row.parent_id === null || !ids.has(row.parent_id))
         return root ? [root, ...rows.filter((row) => row !== root)].map((row) => fromRow(row)) : []
+      }),
+      roots: Effect.fn("SessionStore.roots")(function* (sessionIDs) {
+        if (sessionIDs.length === 0) return new Map()
+        // One JSON parameter instead of one per ID: some SQLite hosts cap bound parameters per query.
+        const starts = sql`${SessionTable.id} IN (SELECT value FROM json_each(${JSON.stringify(sessionIDs)}))`
+        const rows = yield* db
+          .all<{
+            session_id: Session.ID
+            id: Session.ID
+          }>(sql`WITH RECURSIVE ${rootCTE(starts)} SELECT session_id, id FROM root`)
+          .pipe(Effect.orDie)
+        return new Map(rows.map((row) => [row.session_id, row.id]))
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
         return yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))

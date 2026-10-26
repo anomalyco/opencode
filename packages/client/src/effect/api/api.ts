@@ -162,7 +162,9 @@ export type SessionCreateInput = {
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
 
-export type SessionActiveOutput = { readonly [x: Session.ID]: { readonly type: "running" } }
+export type SessionActiveOutput = {
+  readonly [x: Session.ID]: { readonly type: "running"; readonly rootID: Session.ID }
+}
 export type SessionActiveOperation<E = never> = () => Effect.Effect<SessionActiveOutput, E>
 
 export type SessionGetInput = { readonly sessionID: Session.ID }

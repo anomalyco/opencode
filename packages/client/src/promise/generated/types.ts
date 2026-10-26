@@ -77,8 +77,6 @@ export type FileDiffInfo = {
 
 export type SessionsCursor = string
 
-export type SessionActive = { type: "running" }
-
 export type PermissionID = string
 
 export type PermissionSource = { type: "tool"; messageID: string; id: string }
@@ -406,6 +404,8 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+
+export type SessionActive = { type: "running"; rootID: SessionID }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
