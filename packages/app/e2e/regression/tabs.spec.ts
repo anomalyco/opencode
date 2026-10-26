@@ -858,9 +858,7 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
 })
 
-test("switching between busy sessions keeps the busy indicators and the activity capsule at rest @quarantine", async ({
-  page,
-}) => {
+test("switching between busy sessions keeps the busy indicators and the activity capsule at rest", async ({ page }) => {
   const children = [
     { id: "ses_tab_a_child", title: "Map the orchard", parentID: a.id },
     { id: "ses_tab_b_child", title: "Chart the harbor", parentID: b.id },
@@ -882,11 +880,12 @@ test("switching between busy sessions keeps the busy indicators and the activity
   await expect(capsule).toHaveText("1 subagent")
   await expect(capsule).toHaveCSS("opacity", "1")
 
-  // Record any capsule animation or any moment without a capsule, and mark the indicators to compare them later.
+  // Record any capsule animation or any moment without a capsule, and mark the indicators to compare them later. The
+  // capsule's spinner always runs its own phase-synced loop, so only an animation of the capsule itself counts.
   await page.evaluate(() => {
     const record = document.documentElement
     document.addEventListener("animationstart", (event) => {
-      if (event.target instanceof Element && event.target.closest('[data-slot="session-activity-chip"]'))
+      if (event.target instanceof Element && event.target.matches('[data-slot="session-activity-chip"]'))
         record.setAttribute("data-test-capsule-animated", "")
     })
     new MutationObserver(() => {
