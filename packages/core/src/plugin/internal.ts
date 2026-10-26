@@ -43,6 +43,7 @@ import { Form } from "../form.js"
 import { FileSystem } from "../filesystem.js"
 import { LocationWatcherPolicy } from "../filesystem/location-watcher-policy.js"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Git } from "../git.js"
 import { Global } from "@opencode/util/global"
 import { Image } from "../image.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
@@ -122,6 +123,7 @@ const services = [
   LocationWatcherPolicy.Service,
   FileSystem.Service,
   FSUtil.Service,
+  Git.Service,
   Global.Service,
   HttpClient.HttpClient,
   Image.Service,
@@ -176,6 +178,7 @@ export const requirements = LayerNode.group([
   LocationWatcherPolicy.node,
   FileSystem.node,
   FSUtil.node,
+  Git.node,
   Global.node,
   httpClient,
   Image.node,

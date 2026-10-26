@@ -782,6 +782,44 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("reads branch info from .git without spawning Git", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await initGit(directory, "-b", "main")
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await $`git remote add origin https://example.com/repo.git`.cwd(directory).quiet()
+          await $`git update-ref refs/remotes/origin/trunk HEAD`.cwd(directory).quiet()
+          await $`git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk`.cwd(directory).quiet()
+          await $`git checkout -q -b feature`.cwd(directory).quiet()
+        })
+        const vcs = yield* Vcs.Service
+        const processes = yield* AppProcess.Service
+        const spawned: string[] = []
+        const context = host()
+        yield* VcsGitPlugin.Plugin.effect({
+          ...context,
+          vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+        }).pipe(
+          Effect.provideService(
+            AppProcess.Service,
+            AppProcess.Service.of({
+              ...processes,
+              run: (command, options) => {
+                spawned.push(command._tag === "StandardCommand" ? command.args.join(" ") : command._tag)
+                return processes.run(command, options)
+              },
+            }),
+          ),
+        )
+
+        expect(yield* vcs.info()).toEqual({ provider: "git", branch: { current: "feature", default: "trunk" } })
+        expect(spawned).toEqual([])
+      }).pipe(provide(directory, { git: true, worktree: directory })),
+    ),
+  )
+
   it.live("caches branch info and publishes HEAD changes", () =>
     withGit((directory) =>
       Effect.gen(function* () {

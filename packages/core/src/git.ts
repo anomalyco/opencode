@@ -2,7 +2,7 @@ export * as Git from "./git.js"
 
 import os from "os"
 import path from "path"
-import { Cause, Context, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -12,6 +12,7 @@ import { FileDiff } from "@opencode/schema/file-diff"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { VcsPatch } from "./vcs/patch.js"
 import { gitExecutable } from "./util/git-executable.js"
+import { GitMetadata } from "./git-metadata.js"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -109,6 +110,11 @@ export interface Interface {
      * read for the `.git` entry at `dotGit`: undefined when it isn't a readable repository.
      */
     readonly fingerprint: (dotGit: AbsolutePath) => Effect.Effect<string | undefined>
+    /**
+     * Config, HEAD and refs of the repository containing `input`, read without starting Git.
+     * Undefined when there is none or Git must answer, for example on Windows or for reftable refs.
+     */
+    readonly metadata: (input: AbsolutePath) => Effect.Effect<GitMetadata.Repository | undefined>
     readonly clone: (input: {
       remote: string
       directory: AbsolutePath
@@ -217,6 +223,13 @@ const layer = Layer.effect(
         Effect.orElseSucceed(() => undefined),
       )
       if (!dotgit) return undefined
+      const layout = yield* Effect.promise(() => GitMetadata.discover(dotgit))
+      if (layout)
+        return new Repository({
+          worktree: AbsolutePath.make(layout.worktree),
+          gitDirectory: AbsolutePath.make(layout.gitDirectory),
+          commonDirectory: AbsolutePath.make(layout.commonDirectory),
+        })
 
       const cwd = path.dirname(dotgit)
       const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
@@ -276,10 +289,47 @@ const layer = Layer.effect(
       return [gitDir, commonDir, head, ...files, ...stamps].join("\0")
     })
 
+    // Config file locations depend on how Git was built and on these variables, so ask Git once for each value.
+    const configFileLookups = new Map<string, Effect.Effect<GitMetadata.ConfigFiles | undefined>>()
+    const configFiles = Effect.gen(function* () {
+      const key = ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM", "HOME", "XDG_CONFIG_HOME"]
+        .map((name) => process.env[name] ?? "\u0001")
+        .join("\0")
+      const lookup =
+        configFileLookups.get(key) ??
+        (yield* Effect.cached(
+          run("/", proc, ["var", "-l"]).pipe(
+            Effect.map((result) => (result.exitCode === 0 ? GitMetadata.parseConfigFiles(result.text) : undefined)),
+          ),
+        ))
+      configFileLookups.set(key, lookup)
+      return yield* lookup
+    })
+
+    /** Repository metadata read without starting Git; undefined when Git itself must answer. */
+    const open = Effect.fnUntraced(function* (layout: GitMetadata.Layout) {
+      if (!GitMetadata.supported()) return undefined
+      const files = yield* configFiles
+      if (!files) return undefined
+      return yield* Effect.promise(() => GitMetadata.open(layout, files))
+    })
+
+    const metadata = Effect.fn("Git.repo.metadata")(function* (input: AbsolutePath) {
+      if (!GitMetadata.supported()) return undefined
+      const dotgit = yield* fs.up({ targets: [".git"], start: input, mode: "first" }).pipe(
+        Effect.map((matches) => matches[0]),
+        Effect.orElseSucceed(() => undefined),
+      )
+      const layout = dotgit ? yield* Effect.promise(() => GitMetadata.discover(dotgit)) : undefined
+      return layout ? yield* open(layout) : undefined
+    })
+
     const command = (cwd: string, args: string[]) =>
       execute(cwd, proc, args).pipe(Effect.mapError((cause) => new CommandError({ args, cause })))
 
     const remote = Effect.fn("Git.remote.get")(function* (repository: Repository, name = "origin") {
+      const repo = yield* open(repository)
+      if (repo) return GitMetadata.remoteUrl(repo, name) || undefined
       const args = ["remote", "get-url", name]
       const result = yield* command(repository.worktree, args)
       // Exit 2: no such remote.
@@ -304,12 +354,16 @@ const layer = Layer.effect(
     })
 
     const head = Effect.fn("Git.history.head")(function* (repository: Repository) {
+      const repo = yield* open(repository)
+      if (repo) return yield* Effect.promise(() => GitMetadata.resolveRef(repo.layout, "HEAD"))
       const result = yield* run(repository.worktree, proc, ["rev-parse", "HEAD"])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
 
     const branch = Effect.fn("Git.history.branch")(function* (repository: Repository) {
+      const repo = yield* open(repository)
+      if (repo) return yield* Effect.promise(() => GitMetadata.branch(repo))
       const result = yield* run(repository.worktree, proc, ["symbolic-ref", "--quiet", "--short", "HEAD"])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
@@ -319,6 +373,13 @@ const layer = Layer.effect(
       repository: Repository,
       remoteName = "origin",
     ) {
+      const repo = yield* open(repository)
+      if (repo)
+        return (
+          (yield* Effect.promise(() =>
+            GitMetadata.symbolicRef(repo.layout, `refs/remotes/${remoteName}/HEAD`),
+          ))?.replace(new RegExp(`^refs/remotes/${remoteName}/`), "") || undefined
+        )
       const result = yield* run(repository.worktree, proc, ["symbolic-ref", `refs/remotes/${remoteName}/HEAD`])
       if (result.exitCode !== 0) return undefined
       return result.text.trim().replace(new RegExp(`^refs/remotes/${remoteName}/`), "") || undefined
@@ -743,8 +804,35 @@ const layer = Layer.effect(
       )
 
     // A clean capture returns the tree last written from the exact index it scanned.
-    const lastCaptures = new Map<string, { readonly fingerprint: string; readonly tree: TreeID }>()
+    const lastCaptures = new Map<
+      string,
+      { readonly fingerprint: string; readonly tree: TreeID; readonly ignoredUntracked?: string }
+    >()
     const preparedStores = new Set<string>()
+    const pendingCaptures = new Map<string, Deferred.Deferred<TreeID, OperationError>>()
+
+    /**
+     * Stamps every file whose rules decide whether the source ignores `untracked`: its exclude file, config,
+     * the excludes file that config names, and any untracked `.gitignore`. Undefined when the excludes file
+     * can't be resolved without Git, so the caller asks Git.
+     */
+    const sourceExcludes = Effect.fnUntraced(function* (source: Repository, untracked: readonly RelativePath[]) {
+      const metadata = yield* open(source)
+      if (!metadata) return undefined
+      const files = [
+        path.join(source.commonDirectory, "info", "exclude"),
+        path.join(source.commonDirectory, "config"),
+        path.join(source.gitDirectory, "config.worktree"),
+        GitMetadata.excludesFile(metadata) ?? "",
+        ...untracked
+          .filter((file) => path.basename(file) === ".gitignore")
+          .map((file) => path.join(source.worktree, file)),
+      ]
+      const stamps = yield* Effect.forEach(files, (file) => (file ? stamp(file) : Effect.succeed("")), {
+        concurrency: "unbounded",
+      })
+      return [...files, ...stamps].join("\0")
+    })
 
     /**
      * Changes are listed against the temporary index they are written to, never the
@@ -760,51 +848,95 @@ const layer = Layer.effect(
           })
           const last = lastCaptures.get(input.repository.gitDirectory)
           const untracked = changes.flatMap((change) => change.untracked)
-          // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged.
-          const excluded =
-            scanned && last?.fingerprint === scanned && changes.every((change) => !change.tracked.length)
-              ? input.ignores
-                ? yield* ignored({ repository: input.ignores, paths: untracked })
-                : new Set<RelativePath>()
-              : undefined
-          if (last && excluded && untracked.every((file) => excluded.has(file))) return last.tree
+          const clean = !!scanned && last?.fingerprint === scanned && changes.every((change) => !change.tracked.length)
+          // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged, and
+          // while the same paths meet the same source rules, Git need not be asked again.
+          const rules =
+            clean && input.ignores && untracked.length ? yield* sourceExcludes(input.ignores, untracked) : undefined
+          const ignoredUntracked = rules ? [...untracked, rules].join("\0") : undefined
+          if (last && ignoredUntracked && last.ignoredUntracked === ignoredUntracked)
+            return { tree: last.tree, ignoredUntracked }
+          const excluded = clean
+            ? input.ignores
+              ? yield* ignored({ repository: input.ignores, paths: untracked })
+              : new Set<RelativePath>()
+            : undefined
+          if (last && excluded && untracked.every((file) => excluded.has(file)))
+            return { tree: last.tree, ignoredUntracked }
           yield* Effect.forEach(changes, (change) => updateIndex({ ...input, changes: change, index, excluded }), {
             discard: true,
           })
-          return yield* writeTree(input.repository, index)
+          return { tree: yield* writeTree(input.repository, index), ignoredUntracked: undefined }
         }),
       )
       if (result.installed)
-        lastCaptures.set(input.repository.gitDirectory, { fingerprint: result.installed, tree: result.value })
+        lastCaptures.set(input.repository.gitDirectory, { fingerprint: result.installed, ...result.value })
       if (!result.installed) lastCaptures.delete(input.repository.gitDirectory)
-      return result.value
+      return result.value.tree
     })
 
-    const captureTree = Effect.fn("Git.tree.capture")((input: CaptureInput) =>
-      locked(
-        input.repository,
-        Effect.gen(function* () {
-          if (!preparedStores.has(input.repository.gitDirectory)) {
-            preparedStores.add(input.repository.gitDirectory)
-            yield* sweepTemporaryIndexes(input.repository)
-            yield* ensureSnapshotConfig(input.repository)
-          }
-          return yield* attemptCapture(input).pipe(
-            Effect.catch((error) =>
-              Effect.gen(function* () {
-                if (!(yield* isIndexUnreadable(input.repository))) return yield* error
-                yield* Effect.logWarning("rebuilding unreadable snapshot index", {
-                  directory: input.repository.gitDirectory,
-                  message: error.message,
-                })
-                yield* rebuildIndex(input.repository, input.ignores)
-                return yield* attemptCapture(input)
-              }),
-            ),
-          )
-        }),
-      ),
+    /**
+     * Captures waiting for the same store and scopes share the next scan. That scan starts after
+     * each of them was requested, so it records every change any of them must see.
+     */
+    const captureTree: (input: CaptureInput) => Effect.Effect<TreeID, OperationError> = Effect.fn("Git.tree.capture")(
+      function* (input: CaptureInput) {
+        const key = JSON.stringify([
+          input.repository.gitDirectory,
+          input.repository.worktree,
+          input.scopes,
+          input.ignores?.gitDirectory,
+          input.maximumUntrackedFileBytes,
+        ])
+        const pending = pendingCaptures.get(key)
+        if (pending) {
+          const exit = yield* Effect.exit(Deferred.await(pending))
+          // The caller that owned the shared scan was interrupted, so this caller scans for itself.
+          if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* captureTree(input)
+          return yield* exit
+        }
+        const deferred = yield* Deferred.make<TreeID, OperationError>()
+        pendingCaptures.set(key, deferred)
+        const release = () => {
+          if (pendingCaptures.get(key) === deferred) pendingCaptures.delete(key)
+        }
+        return yield* locked(
+          input.repository,
+          Effect.suspend(() => {
+            // Later requests start a new scan once this one has begun.
+            release()
+            return scan(input)
+          }),
+        ).pipe(
+          Effect.onExit((exit) => {
+            release()
+            return Deferred.done(deferred, exit)
+          }),
+        )
+      },
     )
+
+    const scan = (input: CaptureInput) =>
+      Effect.gen(function* () {
+        if (!preparedStores.has(input.repository.gitDirectory)) {
+          preparedStores.add(input.repository.gitDirectory)
+          yield* sweepTemporaryIndexes(input.repository)
+          yield* ensureSnapshotConfig(input.repository)
+        }
+        return yield* attemptCapture(input).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              if (!(yield* isIndexUnreadable(input.repository))) return yield* error
+              yield* Effect.logWarning("rebuilding unreadable snapshot index", {
+                directory: input.repository.gitDirectory,
+                message: error.message,
+              })
+              yield* rebuildIndex(input.repository, input.ignores)
+              return yield* attemptCapture(input)
+            }),
+          ),
+        )
+      })
 
     /**
      * Only an index Git itself cannot read is rebuilt, decided by exit status rather
@@ -1363,7 +1495,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      repo: { discover, fingerprint, clone, create },
+      repo: { discover, fingerprint, metadata, clone, create },
       remote: { get: remote },
       history: { head, branch, defaultRemoteBranch: remoteHead, rootCommits: roots },
       sync: { fetchRemotes: fetch, fetchBranch, checkoutRemoteBranch: checkout, resetHard: reset },

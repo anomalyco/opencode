@@ -2,13 +2,15 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Git } from "@opencode/core/git"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { VcsPatch } from "@opencode/core/vcs/patch"
 import { branch, commit, initGit, initRepo, read, withRemote } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { tmpdir } from "./fixture/tmpdir"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(LayerNode.compile(Git.node))
@@ -518,6 +520,101 @@ describe("Git capture", () => {
         "store-ignored/\n",
       )
     }),
+  )
+})
+
+describe("Git capture spawns", () => {
+  // Git is a global node, so a counting spawner needs a test without the shared Git layer.
+  const isolated = testEffect(Layer.empty)
+  // Reusing `check-ignore` needs the in-process reader to resolve the excludes file, and it is POSIX-only.
+  const posix = process.platform === "win32" ? isolated.live.skip : isolated.live
+  const counted = <A, E>(body: (input: { project: string; spawned: string[] }) => Effect.Effect<A, E, Git.Service>) =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const project = path.join(root.path, "project")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await Bun.write(path.join(project, ".git", "info", "exclude"), "source-ignored/\n")
+      })
+      const spawned: string[] = []
+      const counter = countingSpawner((args) => {
+        spawned.push(args.find((arg) => /^[a-z][a-z-]*$/.test(arg)) ?? "")
+        return false
+      })
+      return yield* body({ project, spawned }).pipe(Effect.provide(AppNodeBuilder.build(Git.node, [counter.node])))
+    })
+
+  const store = Effect.fnUntraced(function* (project: string) {
+    const git = yield* Git.Service
+    const source = (yield* git.repo.discover(AbsolutePath.make(project)))!
+    const repository = yield* git.repo.create({
+      worktree: source.worktree,
+      gitDirectory: AbsolutePath.make(path.join(path.dirname(project), "storage")),
+      seed: source,
+    })
+    return () => git.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+  })
+
+  posix("asks Git about paths only the source ignores once while its exclude rules stay the same", () =>
+    counted(({ project, spawned }) =>
+      Effect.gen(function* () {
+        const capture = yield* store(project)
+        const before = yield* capture()
+        yield* Effect.promise(() => Bun.write(path.join(project, "source-ignored", "a.txt"), "a\n"))
+        expect(yield* capture()).toBe(before)
+
+        spawned.length = 0
+        expect(yield* capture()).toBe(before)
+        expect(spawned).toEqual(["diff-files", "ls-files"])
+
+        yield* Effect.promise(() => Bun.write(path.join(project, ".git", "info", "exclude"), "# none\n"))
+        expect(yield* capture()).not.toBe(before)
+      }),
+    ),
+  )
+
+  posix("asks Git again when the excludes file named by per-worktree config changes", () =>
+    counted(({ project, spawned }) =>
+      Effect.gen(function* () {
+        const excludes = path.join(path.dirname(project), "excludes")
+        yield* Effect.promise(async () => {
+          await Bun.write(excludes, "extra.txt\n")
+          await $`git config core.repositoryformatversion 1`.cwd(project).quiet()
+          await $`git config extensions.worktreeConfig true`.cwd(project).quiet()
+          await $`git config --worktree core.excludesFile ${excludes}`.cwd(project).quiet()
+        })
+        const capture = yield* store(project)
+        const before = yield* capture()
+        yield* Effect.promise(() => Bun.write(path.join(project, "extra.txt"), "a\n"))
+        expect(yield* capture()).toBe(before)
+
+        spawned.length = 0
+        expect(yield* capture()).toBe(before)
+        expect(spawned).toEqual(["diff-files", "ls-files"])
+
+        yield* Effect.promise(() => Bun.write(excludes, "# none at all\n"))
+        expect(yield* capture()).not.toBe(before)
+      }),
+    ),
+  )
+
+  isolated.live("shares one scan between captures waiting for the same store", () =>
+    counted(({ project, spawned }) =>
+      Effect.gen(function* () {
+        const capture = yield* store(project)
+        yield* capture()
+        yield* Effect.promise(() => Bun.write(path.join(project, "a.txt"), "a\n"))
+        spawned.length = 0
+        const trees = yield* Effect.all([capture(), capture(), capture(), capture()], { concurrency: "unbounded" })
+        expect(new Set(trees).size).toBe(1)
+        // The first request may start scanning before the rest arrive; all of those share the next scan.
+        expect(spawned.filter((command) => command === "diff-files").length).toBeLessThanOrEqual(2)
+      }),
+    ),
   )
 })
 

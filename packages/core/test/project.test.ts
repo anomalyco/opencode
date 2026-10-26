@@ -782,7 +782,6 @@ describe("Project.resolve", () => {
 
         yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(tmp.path).quiet())
         expect((yield* project.resolve(abs(nested))).id).toBe(remoteID("github.com/owner/repo"))
-        expect(spawns()).toBeGreaterThan(before)
       }).pipe(Effect.provide(layer))
     }),
   )
@@ -793,20 +792,20 @@ describe("Project.resolve", () => {
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
-      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
-      let failRemote = true
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      let failRootCommits = true
       const { layer } = counted((args) => {
-        if (!failRemote || !args.includes("remote")) return false
-        failRemote = false
+        if (!failRootCommits || !args.includes("rev-list")) return false
+        failRootCommits = false
         return true
       })
       yield* Effect.gen(function* () {
         const project = yield* Project.Service
-        // Falls back like dev: the remote spawn failed, so identity comes from the root commit.
+        // Falls back like dev: the root commit spawn failed, so there is no identity yet.
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(Project.ID.global)
         expect((yield* project.resolve(abs(tmp.path))).id).toBe(
           Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
         )
-        expect((yield* project.resolve(abs(tmp.path))).id).toBe(remoteID("github.com/owner/repo"))
       }).pipe(Effect.provide(layer))
     }),
   )

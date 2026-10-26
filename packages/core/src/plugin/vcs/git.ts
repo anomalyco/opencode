@@ -14,6 +14,9 @@ import { Location } from "../../location.js"
 import type { Adapter, BranchOptions, DiffOptions, Untracked } from "../../vcs.js"
 import { DiffError } from "../../vcs.js"
 import { gitExecutable } from "../../util/git-executable.js"
+import { Git } from "../../git.js"
+import { GitMetadata } from "../../git-metadata.js"
+import { AbsolutePath } from "../../schema.js"
 import {
   chunksByFile,
   emptyPatch,
@@ -32,7 +35,8 @@ export const Plugin = define({
     if (location.vcs && location.vcs.type !== "git") return
 
     const processes = yield* AppProcess.Service
-    const adapter = make(processes, {
+    const git = yield* Git.Service
+    const adapter = make(processes, (cwd) => git.repo.metadata(AbsolutePath.make(cwd)), {
       directory: location.directory,
       worktree: location.project.directory,
     })
@@ -64,10 +68,16 @@ export const Plugin = define({
  * batched through one `git diff` invocation where possible and capped by
  * per-file and total byte budgets, falling back to empty patches when capped.
  */
-function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }) {
+function make(proc: AppProcess.Interface, metadata: Metadata, input: { directory: string; worktree: string }) {
   // Listing commands scope pathspecs to the requested directory; per-file
   // commands run from the worktree root because git lists root-relative paths.
-  const ctx: Ctx = { proc, git: makeGit(proc), directory: input.directory, worktree: input.worktree }
+  const ctx: Ctx = {
+    proc,
+    metadata,
+    git: makeGit(proc, metadata),
+    directory: input.directory,
+    worktree: input.worktree,
+  }
 
   return {
     info: Effect.fn("VcsGit.info")(function* () {
@@ -156,8 +166,11 @@ interface PatchOptions extends GitDiffOptions {
   readonly maxOutputBytes?: number
 }
 
+type Metadata = (cwd: string) => Effect.Effect<GitMetadata.Repository | undefined>
+
 interface Ctx {
   readonly proc: AppProcess.Interface
+  readonly metadata: Metadata
   readonly git: GitOps
   readonly directory: string
   readonly worktree: string
@@ -209,7 +222,7 @@ const numstat = (text: string) =>
     ]
   })
 
-function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
+function makeGit(proc: AppProcess.Interface, metadata: Metadata, env?: Record<string, string>) {
   const run = Effect.fnUntraced(
     function* (args: string[], opts: { cwd: string; maxOutputBytes?: number }) {
       const result = yield* proc.run(
@@ -249,14 +262,12 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const primary = Effect.fnUntraced(function* (cwd: string) {
-    const list = yield* lines(["remote"], { cwd })
-    if (list.includes("origin")) return "origin"
-    if (list.length === 1) return list[0]
-    if (list.includes("upstream")) return "upstream"
-    return list[0]
+    return primaryRemote(yield* lines(["remote"], { cwd }))
   })
 
   const branch = Effect.fn("VcsGit.branch")(function* (cwd: string) {
+    const repo = yield* metadata(cwd)
+    if (repo) return yield* Effect.promise(() => GitMetadata.branch(repo))
     const result = yield* run(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd })
     if (result.exitCode !== 0) return
     return result.text().trim() || undefined
@@ -282,6 +293,8 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const defaultBranch = Effect.fn("VcsGit.defaultBranch")(function* (cwd: string) {
+    const repo = yield* metadata(cwd)
+    if (repo) return yield* Effect.promise(() => defaultBranchOf(repo))
     const remote = yield* primary(cwd)
     if (remote) {
       const head = yield* run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
@@ -358,6 +371,8 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const hasHead = Effect.fn("VcsGit.hasHead")(function* (cwd: string) {
+    const repo = yield* metadata(cwd)
+    if (repo) return (yield* Effect.promise(() => GitMetadata.resolveRef(repo.layout, "HEAD"))) !== undefined
     const result = yield* run(["rev-parse", "--verify", "HEAD"], { cwd })
     return result.exitCode === 0
   })
@@ -544,6 +559,29 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   }
 }
 
+function primaryRemote(list: readonly string[]) {
+  if (list.includes("origin")) return "origin"
+  if (list.length === 1) return list[0]
+  if (list.includes("upstream")) return "upstream"
+  return list[0]
+}
+
+/** The spawning `defaultBranch` path, answered from metadata already read from `.git`. */
+async function defaultBranchOf(repo: GitMetadata.Repository) {
+  const remote = primaryRemote(GitMetadata.remotes(repo))
+  const ref = remote
+    ? (await GitMetadata.symbolicRef(repo.layout, `refs/remotes/${remote}/HEAD`))?.replace(/^refs\/remotes\//, "")
+    : undefined
+  const name = remote && ref?.startsWith(`${remote}/`) ? ref.slice(remote.length + 1) : ""
+  if (ref && name) return { name, ref }
+  const candidates = [GitMetadata.get(repo.config, "init", "defaultbranch"), "main", "master"].filter(
+    (item): item is string => !!item,
+  )
+  const present = await Promise.all(candidates.map((item) => GitMetadata.hasBranch(repo, item)))
+  const found = candidates.find((_, index) => present[index])
+  return found ? { name: found, ref: found } : undefined
+}
+
 const emptyUntracked = () => ({ stats: new Map<string, Stat>(), patches: new Map<string, string>() })
 
 /**
@@ -583,7 +621,7 @@ const untrackedBatch = Effect.fnUntraced(function* (
     }),
     (base) =>
       Effect.gen(function* () {
-        const git = makeGit(ctx.proc, { GIT_INDEX_FILE: `${base}.index` })
+        const git = makeGit(ctx.proc, ctx.metadata, { GIT_INDEX_FILE: `${base}.index` })
         yield* git.intentToAdd(ctx.worktree, `${base}.list`)
         const [stats, patch] = yield* Effect.all(
           [
