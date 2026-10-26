@@ -66,14 +66,14 @@ Official container images are published to GitHub Packages:
 
 [github.com/anomalyco/opencode/pkgs/container/opencode](https://github.com/anomalyco/opencode/pkgs/container/opencode)
 
-Images use versioned tags, for example `ghcr.io/anomalyco/opencode:2.0.0`.
+Images use versioned tags, for example `ghcr.io/anomalyco/opencode:2.1.4`.
 
 ```bash
 $ docker run --rm -it \
     -v opencode-config:/root \
     -v "$PWD:/workspace" \
     -w /workspace \
-    ghcr.io/anomalyco/opencode:2.0.0
+    ghcr.io/anomalyco/opencode:2.1.4
 ```
 
 Mount these directories so settings and projects survive container restarts:
