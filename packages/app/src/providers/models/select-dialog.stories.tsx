@@ -1,7 +1,9 @@
 import { Button } from "@opencode/ui/button"
-import { createSignal } from "solid-js"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import type { ModelSelection } from "./selection"
-import { ModelSelectorPopoverView } from "./select-dialog"
+import { DialogSelectModel } from "./select-dialog"
 
 const chatgpt = {
   id: "gpt-5.6-sol",
@@ -47,26 +49,52 @@ const models = [
   },
 ]
 
-function SelectorStory(props: { plan: boolean }) {
-  const [current, setCurrent] = createSignal(models[0].id)
+function SelectorStory(props: { favorite?: boolean }) {
+  const dialog = useDialog()
+
+  const [store, setStore] = createStore<{ current: string; favorite: string[]; variant?: string }>({
+    current: models[0].id,
+    favorite: props.favorite ? [models[1].id] : [],
+  })
+
+  const find = (id: string) => models.find((model) => model.id === id)
+
+  const selection = {
+    ready: Object.assign(() => true, { promise: undefined }),
+    key: () => ({ providerID: "openai", modelID: store.current }),
+    current: () => find(store.current),
+    recent: () => [find(store.current)].filter((model) => !!model),
+    favorite: {
+      list: () => store.favorite.flatMap((id) => find(id) ?? []),
+      toggle: (key: { modelID: string }) =>
+        setStore("favorite", (ids) =>
+          ids.includes(key.modelID) ? ids.filter((id) => id !== key.modelID) : [key.modelID, ...ids],
+        ),
+    },
+    list: () => models,
+    cycle() {},
+    set: (key: { modelID: string } | undefined) => key && setStore("current", key.modelID),
+    visible: () => true,
+    setVisibility() {},
+    variant: {
+      configured: () => undefined,
+      selected: () => store.variant,
+      current: () => store.variant,
+      list: () => [],
+      set: (variant: string | undefined) => setStore("variant", variant),
+      cycle() {},
+    },
+  } satisfies ModelSelection
+
+  const open = () => dialog.show(() => <DialogSelectModel model={selection} />)
+
+  onMount(open)
 
   return (
     <div class="flex min-h-[280px] items-end justify-center">
-      <ModelSelectorPopoverView
-        trigger={(trigger) => (
-          <Button {...trigger} variant="ghost-muted">
-            {models.find((model) => model.id === current())?.name}
-          </Button>
-        )}
-        all={() => models}
-        models={(search) => models.filter((model) => model.name.toLowerCase().includes(search.toLowerCase()))}
-        groups={(items) => [{ category: "openai", items }]}
-        current={`openai:${current()}`}
-        chatgptPlan={props.plan}
-        select={(item) => setCurrent(item.id)}
-        onManage={() => undefined}
-        onClose={() => undefined}
-      />
+      <Button variant="ghost-muted" onClick={open}>
+        {find(store.current)?.name}
+      </Button>
     </div>
   )
 }
@@ -76,6 +104,6 @@ export default {
   id: "app-dialog-model-selector",
 }
 
-export const ChatGPTPlan = { render: () => <SelectorStory plan /> }
+export const Dialog = { render: () => <SelectorStory /> }
 
-export const ApiKey = { render: () => <SelectorStory plan={false} /> }
+export const Favorites = { render: () => <SelectorStory favorite /> }

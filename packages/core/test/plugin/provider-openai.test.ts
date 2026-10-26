@@ -93,7 +93,9 @@ describe("OpenAIPlugin", () => {
         catalog.update(Provider.ID.openai, (draft) => {
           draft.package = "@opencode/ai/providers/openai"
         })
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
@@ -115,18 +117,8 @@ describe("OpenAIPlugin", () => {
           model.body = { reasoning: { mode: "pro" } }
         })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6"), () => {})
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
-          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
-        })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), (model) => {
-          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
-        })
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6.1-sol"), (model) => {
-          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
-        })
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6.1-sol-fast"), (model) => {
-          model.modelID = Model.ID.make("gpt-6.1-sol")
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.10"), (model) => {
@@ -174,31 +166,20 @@ describe("OpenAIPlugin", () => {
       const child = yield* sessions.create({ parentID: parent.id })
       const childRequest = yield* request(Provider.ID.openai, "https://api.openai.com/v1", child.id)
       expect(childRequest.headers).toMatchObject({ "session-id": parent.id })
-      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
+      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(eligible.cost).toEqual([])
-      expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(eligible.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5"))).enabled).toBe(false)
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.4-pro"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.4"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
-      const gpt56 = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
-      expect(gpt56.enabled).toBe(true)
-      expect(gpt56.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
-      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6.1-sol"))).limit).toEqual({
-        context: 628_000,
-        input: 500_000,
-        output: 128_000,
-      })
-      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6.1-sol-fast"))).limit).toEqual({
-        context: 628_000,
-        input: 500_000,
-        output: 128_000,
-      })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)

@@ -11,7 +11,9 @@ import tabStyles from "./tabs.css?inline"
 const setup: Setup<typeof definition> = (ctx) => {
   const sessions = ctx.sessions
   const [model, setModel] = createSignal<Model>()
-  // Settings > Shortcuts lists the command on every platform; it stays disabled until the pane can open.
+  const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
+  // Settings > Shortcuts lists the command on every platform; it stays disabled until the pane can open. Bound like
+  // Review's and Open file's launchers, since the sidebar owns mod+shift+b and mod+t opens a tab inside the pane.
   ctx.add(Command, (): Command | undefined => {
     const view = sessions.current()
 
@@ -22,7 +24,8 @@ const setup: Setup<typeof definition> = (ctx) => {
       id: "open",
       title: ctx.t("command.open"),
       group: ctx.t("command.category.view"),
-      bind: "mod+shift+b",
+      bind: mac ? "ctrl+meta+b" : "ctrl+alt+b",
+      editable: true,
       enabled: !!value?.available(view),
       run: () => value?.open(view),
     }
@@ -69,8 +72,28 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  // The system browser's address shortcut. While the page has focus, the page claims it and main forwards it; here it
-  // covers focus elsewhere in the pane. Ctrl+L focuses the composer outside the pane on Windows and Linux.
+  // The system browser's reload shortcut. While the page has focus, the page claims it itself; here it covers focus
+  // elsewhere in the pane. Everywhere else mod+r keeps the window's Reload.
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return undefined
+
+    return {
+      id: "reloadPage",
+      title: ctx.t("command.reload"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+r",
+      scope: "#browser-panel",
+      hidden: true,
+      editable: true,
+      enabled: pane.visible(),
+      run: pane.reload,
+    }
+  })
+
+  // The system browser's address shortcut, in the pane and, forwarded like mod+t and mod+w, from a page with focus.
+  // Ctrl+L focuses the composer outside the pane on Windows and Linux.
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
 
@@ -99,6 +122,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       title: ctx.t("command.close"),
       group: ctx.t("command.category.view"),
       bind: "mod+w",
+      follows: "tab.close",
       scope: "#browser-panel",
       hidden: true,
       editable: true,
@@ -107,7 +131,29 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  // Ctrl+Shift+C copies in the terminal, so only the focused page claims it, as in Chromium.
+  // As in a browser, mod+t opens a tab inside the pane; everywhere else it keeps the app's new session.
+  ctx.add(Command, (): Command | undefined => {
+    const view = sessions.current()
+    const value = model()
+    const pane = value?.pane()
+
+    if (!view || !value || !pane) return undefined
+
+    return {
+      id: "newTab",
+      title: ctx.t("command.newTab"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+t",
+      scope: "#browser-panel",
+      hidden: true,
+      editable: true,
+      enabled: pane.visible() && value.available(view),
+      run: () => value.open(view),
+    }
+  })
+
+  // Chromium's element picker chord. While the page has focus, the page claims it itself; here it covers focus elsewhere
+  // in the pane. Ctrl+Shift+C copies in the terminal outside the pane.
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
 
@@ -117,6 +163,9 @@ const setup: Setup<typeof definition> = (ctx) => {
       id: "inspect",
       title: ctx.t("command.inspect"),
       group: ctx.t("command.category.view"),
+      bind: "mod+shift+c",
+      scope: "#browser-panel",
+      editable: true,
       enabled: pane.visible() && pane.inspectable(),
       run: pane.inspect,
     }
@@ -126,15 +175,17 @@ const setup: Setup<typeof definition> = (ctx) => {
     const view = sessions.current()
     const value = model()
 
-    if (!view || !value?.available(view)) return undefined
+    // Only once the desktop's pane answers.
+    if (!view || !value?.available(view) || !value.attached(view)) return undefined
 
+    // A launcher of the side panel's new tab view, between Review and Terminal.
     return {
       menu: "session.panel",
       id: "open",
       title: ctx.t("tab.title"),
       icon: "globe",
       keybind: "browser.open",
-      order: 20,
+      order: 15,
       run: () => value.open(view),
     }
   })
@@ -215,7 +266,24 @@ const setup: Setup<typeof definition> = (ctx) => {
       </Show>
     ),
     close: (input) => model()?.closeTab(input.session, input.tab.id),
+    // A blank new tab does not come back; a page comes back as a new tab on its address.
+    closed(input) {
+      const url = model()?.tab(input.session, input.tab.id)?.url
+
+      if (!url || url === "about:blank") return false
+
+      return { icon: "globe", detail: URL.canParse(url) ? new URL(url).host : undefined, data: url }
+    },
+    restore: (input) => {
+      if (input.data) model()?.openURL(input.session, input.data)
+    },
     focus: (input) => model()?.focusTab(input.session, input.tab.id),
+    // A blank tab starts in its address field, like a browser's new tab.
+    enter: () => {
+      const pane = model()?.pane()
+
+      if (pane?.visible() && !pane.address()) pane.focusAddress()
+    },
   })
 }
 

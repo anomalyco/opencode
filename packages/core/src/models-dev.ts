@@ -1,5 +1,5 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
@@ -18,6 +18,20 @@ import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
 
+// models.dev treats a model without a type as a chat model.
+export const CatalogModelType = Schema.Literals([
+  "chat",
+  "image",
+  "video",
+  "embedding",
+  "reranking",
+  "decision",
+  "transcription",
+  "speech",
+  "realtime",
+])
+export type CatalogModelType = typeof CatalogModelType.Type
+
 type Cost = {
   readonly input: Money.USDPerMillionTokens
   readonly output: Money.USDPerMillionTokens
@@ -31,6 +45,7 @@ type Modality = "text" | "audio" | "image" | "video" | "pdf"
 type SourceModel = {
   readonly id: string
   readonly name: string
+  readonly type?: CatalogModelType
   readonly family?: string
   readonly release_date: string
   readonly attachment: boolean
@@ -80,6 +95,8 @@ export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
   readonly environment: readonly string[]
+  /** The models.dev type of each typed model, by catalog model ID. */
+  readonly types?: ReadonlyMap<Model.ID, CatalogModelType>
 }
 
 function nativePackage(provider: SourceProvider, model?: SourceModel) {
@@ -108,12 +125,14 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
         : {}),
     } satisfies Provider.Info
     const models: Model.Info[] = []
+    const types = new Map<Model.ID, CatalogModelType>()
     for (const model of Object.values(item.models)) {
       const baseCost = cost(model.cost)
       const id = Model.ID.make(model.id)
       const base = modelInfo(item, id, model, { cost: baseCost })
       const variants = Variant.resolve({ ...base, package: nativePackage(item, model) }, supports(model))
       models.push({ ...base, variants })
+      if (model.type) types.set(id, model.type)
       for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
         const modeID = Model.ID.make(`${model.id}-${mode}`)
         models.push(
@@ -124,9 +143,10 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
             variants,
           }),
         )
+        if (model.type) types.set(modeID, model.type)
       }
     }
-    providers.push({ info, models, environment: [...item.env] })
+    providers.push({ info, models, environment: [...item.env], types })
   }
   return providers
 }
@@ -277,11 +297,19 @@ const Cache = Schema.Struct({
   digest: Schema.optional(Schema.String),
   body: CatalogJson,
 })
+const CacheMeta = Schema.Struct({
+  updatedAt: Schema.Number,
+  digest: Schema.optional(Schema.String),
+  etag: Schema.optional(Schema.String),
+})
 const defaultSource = "https://models.opencode.ai"
+
+export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map(normalize))
 
 // Bundled snapshot of https://models.opencode.ai/api.json, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
-// `bun run script/update-models-snapshot.ts`. Decoded and normalized once per
+// `bun run script/update-models-snapshot.ts`. Release builds bundle the live
+// catalog in its place when it can be fetched. Decoded and normalized once per
 // isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
@@ -289,9 +317,9 @@ let bundledCache: readonly Snapshot[] | undefined
 const bundledSnapshot = Effect.suspend(() =>
   bundledCache
     ? Effect.succeed(bundledCache)
-    : decodeCatalog(snapshotText).pipe(
-        Effect.map((catalog) => {
-          bundledCache = normalize(catalog)
+    : decodeSnapshot(snapshotText).pipe(
+        Effect.map((snapshot) => {
+          bundledCache = snapshot
           return bundledCache
         }),
       ),
@@ -328,6 +356,7 @@ export const layer = (options?: Options) =>
       const fetch = options?.fetch ?? true
       const userAgent = App.useragent(app)
       const key = cacheKey(source)
+      const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
 
@@ -340,14 +369,17 @@ export const layer = (options?: Options) =>
             updatedAt: cached.value.updatedAt,
             digest: cached.value.digest,
           }
-        if (value !== undefined) yield* kv.remove(key)
+        if (value === undefined) return
+        yield* kv.remove(key)
+        yield* kv.remove(metaKey)
       })
 
-      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
+      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* (etag?: string) {
         return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
           HttpClientRequest.setHeader("User-Agent", userAgent),
+          HttpClientRequest.setHeaders(etag ? { "If-None-Match": etag } : {}),
           http.execute,
-          Effect.flatMap((res) => res.text),
+          Effect.flatMap((res) => Effect.map(res.text, (text) => ({ text, etag: res.headers.etag }))),
           Effect.timeout("10 seconds"),
         )
       })
@@ -363,12 +395,21 @@ export const layer = (options?: Options) =>
       // periodic fetch below still refreshes on top.
       const loadSnapshot = options?.snapshot === false ? Effect.undefined : bundledSnapshot
 
+      const writeMeta = (updatedAt: number, digest: string | undefined, etag: string | undefined) =>
+        kv.set(metaKey, { updatedAt, ...(digest ? { digest } : {}), ...(etag ? { etag } : {}) })
+
       // Best-effort: a cache-write failure must never kill catalog
       // population. The payload has outgrown some KV backends' per-value
       // limits (Durable Object SQLite caps values at 2 MB and api.json
       // passed it in Aug 2026); a boot without a cache hit just refetches.
-      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
-        yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
+      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (
+        text: string,
+        etag: string | undefined,
+        digest = bodyDigest(text),
+      ) {
+        const updatedAt = Date.now()
+        yield* kv.set(key, { updatedAt, digest, body: text }).pipe(
+          Effect.andThen(writeMeta(updatedAt, digest, etag)),
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
@@ -377,9 +418,9 @@ export const layer = (options?: Options) =>
       })
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
-        const text = yield* fetchApi()
-        const catalog = yield* decodeCatalog(text)
-        yield* writeCache(text)
+        const response = yield* fetchApi()
+        const catalog = yield* decodeCatalog(response.text)
+        yield* writeCache(response.text, response.etag)
         return catalog
       })
 
@@ -409,16 +450,27 @@ export const layer = (options?: Options) =>
         yield* lock
           .withPermit(
             Effect.gen(function* () {
-              const stored = yield* loadFromCache()
+              const stored = Option.getOrUndefined(
+                Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+              )
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const text = yield* fetchApi()
-              const digest = bodyDigest(text)
-              // models.dev rarely changes between polls; skip the cache write,
-              // invalidation, and Refreshed event for a byte-identical body so
-              // downstream provider/model update listeners stay quiet.
-              if (!force && stored?.digest === digest) return
-              yield* decodeCatalog(text)
-              yield* writeCache(text, digest)
+              const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
+                Effect.catchIf(
+                  (error) => HttpClientError.isHttpClientError(error) && error.response?.status === 304,
+                  () => Effect.undefined,
+                ),
+              )
+              const digest = response && bodyDigest(response.text)
+              // models.dev rarely changes between polls; skip invalidation and
+              // the Refreshed event for a byte-identical body so downstream
+              // provider/model update listeners stay quiet.
+              if (!force && stored && (!response || stored.digest === digest)) {
+                yield* writeMeta(Date.now(), stored.digest, response?.etag ?? stored.etag)
+                return
+              }
+              if (!response) return
+              yield* decodeCatalog(response.text)
+              yield* writeCache(response.text, response.etag, digest)
               yield* invalidate
               yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
             }),

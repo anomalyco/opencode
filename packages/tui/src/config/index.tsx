@@ -385,3 +385,9 @@ export function useNewDesigns() {
   const config = useConfig()
   return () => config.data.experimental?.["new-designs"] === true
 }
+
+/** Reactive accessor for the temporary "client-mcp" experiment. */
+export function useClientMcpExperiment() {
+  const config = useConfig()
+  return () => config.data.experimental?.["client-mcp"] === true
+}

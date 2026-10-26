@@ -19,6 +19,8 @@ export type SettingsSearchExtension = { extension: string; value: SettingsPage }
 
 export function settingsSearchIndex(input: {
   servers: readonly SettingsSearchServer[]
+  /** The server per-server pages show; only its settings and projects are indexed. */
+  selected?: string
   desktop: boolean
   browser: boolean
   mobile: boolean
@@ -26,6 +28,7 @@ export function settingsSearchIndex(input: {
   extensions?: readonly SettingsSearchExtension[]
 }) {
   const items: SettingsSearchResult[] = []
+  const multiple = input.servers.length > 1
 
   const add = (
     entry: (typeof clientSettings)[number],
@@ -42,7 +45,9 @@ export function settingsSearchIndex(input: {
             entry.section ??
               (view.type !== "root" && view.tab === "general"
                 ? "settings.general.section.general"
-                : pageLabels[view.tab]),
+                : view.tab === "servers" && multiple
+                  ? "settings.tab.servers"
+                  : pageLabels[view.tab]),
           )
 
     items.push({
@@ -123,11 +128,9 @@ export function settingsSearchIndex(input: {
     })
   })
   input.servers.forEach((server) => {
-    const view = (tab: SettingsServerTab, target?: string, subtab?: SettingsView["subtab"]): SettingsHostView => {
-      if (input.servers.length === 1) return { type: "root", tab: tab === "general" ? "servers" : tab, target, subtab }
-
-      return { type: "server", server: server.key, tab, target, subtab }
-    }
+    // With several servers, a result names the server its page shows.
+    const view = (tab: SettingsServerTab | "servers", target?: string, subtab?: SettingsView["subtab"]) =>
+      ({ type: "root", tab, server: multiple ? server.key : undefined, target, subtab }) satisfies SettingsHostView
 
     items.push({
       id: `server:${server.key}`,
@@ -138,16 +141,16 @@ export function settingsSearchIndex(input: {
       owner: input.translate("settings.tab.servers"),
       page: input.translate("settings.server.section.connection"),
       server: server.key,
-      view: view("general"),
+      view: view("servers"),
     })
 
-    if (!server.connected) return
+    if (!server.connected || server.key !== input.selected) return
     serverSettings.forEach((entry) => add(entry, view(entry.tab, entry.target, entry.subtab), server.name, server.key))
-    // Sections on the servers page render under each server's general page.
+    // Sections on the servers page render with each server's connection.
     extensions.forEach((item) => {
       if (item.value.page !== "servers") return
       item.value.entries?.forEach((entry) =>
-        addExtension(item, entry, view("general", entry.id), item.value.title, server.name, server.key),
+        addExtension(item, entry, view("servers", entry.id), item.value.title, server.name, server.key),
       )
     })
     server.projects.forEach((project) => {
@@ -156,7 +159,6 @@ export function settingsSearchIndex(input: {
         server: server.key,
         project: project.worktree,
         tab: "general",
-        parent: input.servers.length > 1 ? "server" : "root",
       }
 
       const name = displayName(project)

@@ -28,7 +28,7 @@ Du kan angi tillatelser globalt (med `*`), og overstyre spesifikke verktøy.
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ For de fleste tillatelser kan du bruke et objekt til å bruke forskjellige handl
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ Du kan bruke `~` eller `$HOME` i starten av et mønster for å referere til hjem
 
 ### Eksterne kataloger
 
-Bruk `external_directory` for å tillate verktøyanrop som berører stier utenfor arbeidskatalogen der OpenCode ble startet. Dette gjelder alle verktøy som tar en bane som input (for eksempel `read`, `edit`, `glob`, `grep` og mange `shell`-kommandoer).
+Bruk `external_directory` for å tillate verktøyanrop som berører stier utenfor arbeidskatalogen der OpenCode ble startet. Dette gjelder alle verktøy som tar en bane som input (for eksempel `read`, `edit`, `glob`, `grep` og mange `bash`-kommandoer).
 
 Hjemmeutvidelse (som `~/...`) påvirker bare hvordan et mønster skrives. Den gjør ikke en ekstern bane til en del av det gjeldende arbeidsområdet, så stier utenfor arbeidskatalogen må fortsatt tillates via `external_directory`.
 
@@ -121,7 +121,7 @@ Enhver katalog som er tillatt her, arver de samme standardinnstillingene som gje
 }
 ```
 
-Hold listen fokusert på klarerte baner, og lag ekstra tillat eller avslå regler etter behov for andre verktøy (for eksempel `shell`).
+Hold listen fokusert på klarerte baner, og lag ekstra tillat eller avslå regler etter behov for andre verktøy (for eksempel `bash`).
 
 ---
 
@@ -133,7 +133,7 @@ OpenCode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakte
 - `edit` — alle filendringer (dekker `edit`, `write`, `patch`)
 - `glob` — fil-globing (tilsvarer glob-mønsteret)
 - `grep` — innholdssøk (samsvarer med regex-mønsteret)
-- `shell` — kjører skallkommandoer (matcher analyserte kommandoer som `git status --porcelain`)
+- `bash` — kjører skallkommandoer (matcher analyserte kommandoer som `git status --porcelain`)
 - `task` — start av subagenter (tilsvarer subagenttypen)
 - `skill` — laster en ferdighet (tilsvarer navnet på ferdigheten)
 - `lsp` — kjører LSP-spørringer (for øyeblikket ikke-granulære)
@@ -175,7 +175,7 @@ Når OpenCode ber om godkjenning, gir brukergrensesnittet tre alternativer:
 - `always` — godkjenn fremtidige forespørsler som samsvarer med de foreslåtte mønstrene (for resten av den nåværende OpenCode-økten)
 - `reject` — avslå forespørselen
 
-Settet med mønstre som `always` vil godkjenne, leveres av verktøyet (for eksempel, shell-godkjenninger hvitlister vanligvis et trygt kommandoprefiks som `git status*`).
+Settet med mønstre som `always` vil godkjenne, leveres av verktøyet (for eksempel, bash-godkjenninger hvitlister vanligvis et trygt kommandoprefiks som `git status*`).
 
 ---
 
@@ -191,7 +191,7 @@ Se avsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ove
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ Se avsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ove
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

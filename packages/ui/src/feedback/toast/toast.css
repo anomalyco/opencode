@@ -215,7 +215,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .toast-v2,
   .toast-v2 > * {
     animation: none !important;

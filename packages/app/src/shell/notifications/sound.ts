@@ -60,9 +60,9 @@ export const SOUND_OPTIONS = [
   { id: "yup-06", label: "sound.option.yup06" },
 ] as const
 
-export type SoundOption = (typeof SOUND_OPTIONS)[number]
+type SoundOption = (typeof SOUND_OPTIONS)[number]
 
-export type SoundID = SoundOption["id"]
+type SoundID = SoundOption["id"]
 
 function getLoads() {
   if (loads) return loads
@@ -81,7 +81,7 @@ function getLoads() {
 
 const cache = new Map<SoundID, Promise<string | undefined>>()
 
-export function soundSrc(id: string | undefined) {
+function soundSrc(id: string | undefined) {
   const loads = getLoads()
 
   if (!id || !(id in loads)) return Promise.resolve(undefined)

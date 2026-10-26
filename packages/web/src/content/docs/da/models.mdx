@@ -58,7 +58,7 @@ OpenCode konfig.
 }
 ```
 
-Her er det fulde ID `provider_id/model_id`. For eksempel, hvis du bruger [OpenCode Zen](https://opencode.ai/v2/docs/console/), vil du bruge `opencode/gpt-5.1-codex` til GPT 5.1 Codex.
+Her er det fulde ID `provider_id/model_id`. For eksempel, hvis du bruger [OpenCode Zen](https://opencode.ai/v2/docs/console/), vil du bruge `opencode/gpt-6.1-sol` til GPT-6.1 Sol.
 
 Hvis du har konfigureret en [custom provider](/docs/providers#custom), er `provider_id` nøglen fra `provider` delen af ​​din konfiguration, og `model_id` er nøglen fra `provider.models`.
 
@@ -74,7 +74,7 @@ Du kan konfigurere en models muligheder globalt gennem konfigurationen.
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ Du kan konfigurere en models muligheder globalt gennem konfigurationen.
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ Du kan konfigurere en models muligheder globalt gennem konfigurationen.
 }
 ```
 
-Her konfigurerer vi globale indstillinger for to indbyggede modeller: `gpt-5` når de tilgås via `openai` udbyderen og `claude-sonnet-4-20250514` når de tilgås via `anthropic` udbyderen.
+Her konfigurerer vi globale indstillinger for to indbyggede modeller: `gpt-6.1-sol` når de tilgås via `openai` udbyderen og `claude-sonnet-5-5` når de tilgås via `anthropic` udbyderen.
 Den indbyggede udbyder og modelnavne kan findes på [Models.dev](https://models.dev).
 
 Du kan også konfigurere disse indstillinger for alle agenter, du bruger. Agentkonfigurationen tilsidesætter alle globale muligheder her. [Learn more](/docs/agents/#additional).
@@ -113,7 +113,7 @@ Du kan også definere brugerdefinerede varianter, der udvider de indbyggede. Var
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ Du kan tilsidesætte eksisterende varianter eller tilføje dine egne:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -212,7 +212,7 @@ Når OpenCode starter op, søger den efter modeller i følgende prioriterede ræ
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

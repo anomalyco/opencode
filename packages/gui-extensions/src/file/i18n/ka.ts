@@ -1,8 +1,5 @@
 export default {
   "tree.all": "ყველა ფაილი",
-  "tree.empty": "ფაილები არ არის",
-  "tree.changes.one": "{{count}} ფაილი შეიცვალა",
-  "tree.changes.other": "{{count}} ფაილი შეიცვალა",
   "tab.notFound": "ფაილი ვერ მოიძებნა: {{name}}",
   "mobile.title": "ფაილები",
   "mobile.openTabs": "გახსნილი ფაილები",

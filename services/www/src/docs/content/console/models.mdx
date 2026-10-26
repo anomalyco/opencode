@@ -28,7 +28,8 @@ You are charged per request and can add credits to your account.
 
 ## Endpoints
 
-You can also access the models directly through the following API endpoints.
+You can also access the models directly through the following API endpoints. Free-tier chat models require OpenCode;
+use paid models or [Go](/console/go) from other clients.
 
 <div class="docs-table-scroll" role="region" aria-label="Console model endpoints" tabIndex={0}>
 
@@ -89,8 +90,6 @@ You can also access the models directly through the following API endpoints.
 | Muse Spark 1.2                  | muse-spark-1.2                  | `https://opencode.ai/inference/openai/v1/responses`                        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                     | qwen3.8-max                     | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Qwen3.8 Flash                   | qwen3.8-flash                   | `https://opencode.ai/inference/anthropic/v1/messages`                      | `@ai-sdk/anthropic`         |
-| Qwen3.7 Max                     | qwen3.7-max                     | `https://opencode.ai/inference/anthropic/v1/messages`                      | `@ai-sdk/anthropic`         |
-| Qwen3.7 Plus                    | qwen3.7-plus                    | `https://opencode.ai/inference/anthropic/v1/messages`                      | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                    | qwen3.6-plus                    | `https://opencode.ai/inference/anthropic/v1/messages`                      | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus                    | qwen3.5-plus                    | `https://opencode.ai/inference/anthropic/v1/messages`                      | `@ai-sdk/anthropic`         |
 | DeepSeek V4.1 Flash             | deepseek-v4.1-flash             | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -113,13 +112,9 @@ You can also access the models directly through the following API endpoints.
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | GLM-5.3-Flash Free              | glm-5.3-flash-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | DeepSeek V4.1 Flash Free        | deepseek-v4.1-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
-| MiniMax M3.1 Flash Free         | minimax-m3.1-flash-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Beam Free                       | beam-free                       | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Flint 40B Free                  | flint-40b-free                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
-| LongCat 2.5 Preview Free        | longcat-2.5-preview-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
-| Exo Free                        | exo-free                        | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Super VL Free      | nemotron-3.5-super-vl-free      | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -132,7 +127,7 @@ use the format `opencode/<model-id>`:
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/gpt-5.5",
+  "model": "opencode/gpt-6.1-sol",
 }
 ```
 
@@ -207,13 +202,9 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Big Pickle                        | Free            | Free            | Free            | -            |
 | GLM-5.3-Flash Free                | Free            | Free            | Free            | -            |
 | DeepSeek V4.1 Flash Free          | Free            | Free            | Free            | -            |
-| MiniMax M3.1 Flash Free           | Free            | Free            | Free            | -            |
 | Beam Free                         | Free            | Free            | Free            | -            |
 | Flint 40B Free                    | Free            | Free            | Free            | -            |
-| LongCat 2.5 Preview Free          | Free            | Free            | Free            | -            |
-| Exo Free                          | Free            | Free            | Free            | -            |
 | MiMo-V2.6-Flash Free              | Free            | Free            | Free            | -            |
-| MiMo-V2.5 Free                    | Free            | Free            | Free            | -            |
 | Nemotron 3 Ultra Free             | Free            | Free            | Free            | -            |
 | Nemotron 3.5 Lightning Free       | Free            | Free            | Free            | -            |
 | Nemotron 3.5 Super VL Free        | Free            | Free            | Free            | -            |
@@ -228,14 +219,12 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | GLM 5.1                           | $1.40           | $4.40           | $0.26           | -            |
 | GLM 5                             | $1.00           | $3.20           | $0.20           | -            |
 | Kimi K2.7 Code                    | $0.95           | $4.00           | $0.19           | -            |
-| Kimi K3                           | $3.00           | $15.00          | $0.30           | -            |
+| Kimi K3                           | $3.00           | $15.00          | $0.30           | $3.00        |
 | Kimi K2.6                         | $0.95           | $4.00           | $0.16           | -            |
 | Kimi K2.5                         | $0.60           | $3.00           | $0.10           | -            |
 | Mistral Large 4 (50% off)         | ~~$1.36~~ $0.68 | ~~$4.18~~ $2.09 | ~~$0.14~~ $0.07 | -            |
 | Qwen3.8 Max                       | $2.00           | $6.00           | $0.25           | $2.50        |
 | Qwen3.8 Flash                     | $0.15           | $0.47           | $0.016          | $0.20        |
-| Qwen3.7 Max                       | $2.50           | $7.50           | $0.50           | $3.125       |
-| Qwen3.7 Plus                      | $0.40           | $1.60           | $0.04           | $0.50        |
 | Qwen3.6 Plus                      | $0.50           | $3.00           | $0.05           | $0.625       |
 | Qwen3.5 Plus                      | $0.20           | $1.20           | $0.02           | $0.25        |
 | DeepSeek V4.1 Flash               | $0.30           | $1.20           | $0.006          | -            |
@@ -324,17 +313,13 @@ models to generate session titles.
 
 - GLM-5.3-Flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - DeepSeek V4.1 Flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
-- Exo Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - MiMo-V2.6-Flash Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- MiMo-V2.5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3 Ultra Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Lightning Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Super VL Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- MiniMax M3.1 Flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- LongCat 2.5 Preview Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - Jev 1.13 Free is available on OpenCode for a limited time.
 
 To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free models](/models#free-models).
@@ -375,9 +360,7 @@ All our models are hosted in the US and EU. Our providers follow a zero-retentio
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
 - Flint 40B Free: During its free period, collected data may be used to improve the model. Data is retained for 30 days.
-- Exo Free: During its free period, collected data may be used to improve the model.
 - MiMo-V2.6-Flash Free: During its free period, collected data may be used to improve the model.
-- MiMo-V2.5 Free: During its free period, collected data may be used to improve the model.
 - Nemotron 3 Ultra Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - Nemotron 3.5 Lightning Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - Nemotron 3.5 Super VL Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).

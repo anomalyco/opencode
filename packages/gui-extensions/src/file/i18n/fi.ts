@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Kaikki tiedostot",
-  "tree.empty": "Ei tiedostoja",
-  "tree.changes.one": "{{count}} tiedosto muuttunut",
-  "tree.changes.other": "{{count}} tiedostoa muuttunut",
   "tab.notFound": "Tiedostoa ei löydy: {{name}}",
   "mobile.title": "Tiedostot",
   "mobile.openTabs": "Avoimet tiedostot",

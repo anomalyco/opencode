@@ -17,7 +17,7 @@ const FILE_RETENTION = Duration.days(2)
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native `parameters`. Common fields (`aspectRatio`, `resolution`, `durationSeconds`, `seed`) live on the request. */
+/** Provider-native `parameters`. Common fields (`aspect`, `resolution`, `durationSeconds`, `seed`) live on the request. */
 export type GoogleVideoOptions = {
   readonly personGeneration?: OpenString<"allow_all" | "allow_adult" | "dont_allow">
 } & Record<string, unknown>
@@ -115,7 +115,7 @@ const fromRequest = Effect.fn("GoogleVideo.fromRequest")(function* (request: Req
         ],
         parameters: mergeJsonRecords(
           {
-            aspectRatio: request.aspectRatio,
+            aspectRatio: request.aspect,
             resolution: request.resolution,
             durationSeconds: request.durationSeconds,
             negativePrompt: request.negativePrompt,

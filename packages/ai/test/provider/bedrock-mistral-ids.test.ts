@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LLM, Message, ToolCallPart } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { BedrockConverse } from "../../src/protocols/bedrock-converse.js"
 import { compileRequest } from "../../src/route/client.js"

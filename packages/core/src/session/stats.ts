@@ -1,6 +1,6 @@
 export * as SessionStats from "./stats.js"
 
-import { DateTime, Effect, Option, Schema } from "effect"
+import { DateTime, Effect, Option, Schema, type Types } from "effect"
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
@@ -22,12 +22,7 @@ type Input = {
   readonly tools?: ToolMode
 }
 
-type Tokens = {
-  input: number
-  output: number
-  reasoning: number
-  cache: { read: number; write: number }
-}
+type Tokens = Types.DeepMutable<TokenUsage.Info>
 
 type MessageRow = {
   sessionID: string
@@ -375,7 +370,7 @@ function emptyTokens(): Tokens {
   return { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 }
 
-function addTokens(target: Tokens, source: Tokens) {
+function addTokens(target: Tokens, source: TokenUsage.Info) {
   target.input += source.input
   target.output += source.output
   target.reasoning += source.reasoning

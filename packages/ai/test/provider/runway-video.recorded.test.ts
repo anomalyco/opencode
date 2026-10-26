@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Video } from "../../src/index.js"
+import { Video } from "../../src/effect.js"
 import { Runway } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
@@ -25,7 +25,7 @@ describe("Runway recorded", () => {
           {
             model,
             prompt: "A single red balloon drifting slowly upward against a clear blue sky.",
-            aspectRatio: "1280:720",
+            aspect: "1280:720",
             durationSeconds: 2,
           },
           { poll: queuedPoll },

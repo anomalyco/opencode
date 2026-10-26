@@ -1,17 +1,13 @@
 export default {
   "command.toggle": "Aktifkan/nonaktifkan bilah debug",
-  "status.toggle": "Alihkan alat debug",
   ariaLabel: "Diagnostik kinerja pengembangan",
   providerAriaLabel: "Diagnostik kinerja penyedia",
   na: "n/a",
-  "ttft.label": "TTFT",
-  "ttft.tip": "Waktu sejak permintaan dikirim ke penyedia hingga keluaran pertama model.",
-  "ttfa.label": "TTFA",
-  "ttfa.tip": "Waktu sejak permintaan dikirim ke penyedia hingga teks jawaban pertama.",
+  "duration.label": "TIME",
+  "duration.tip": "Waktu dari prompt yang memulai giliran terakhir hingga responsnya selesai.",
   "tps.label": "TPS",
-  "tps.tip": "Jumlah token keluaran per detik setelah keluaran pertama model.",
-  "e2e.label": "E2E",
-  "e2e.tip": "Waktu sejak permintaan dikirim ke penyedia hingga aliran responsnya berakhir.",
+  "tps.tip":
+    "Token keluaran dan penalaran per detik di seluruh permintaan model pada giliran terakhir, tanpa waktu alat.",
   "nav.label": "NAV",
   "nav.tip":
     "Transisi rute terakhir yang mencapai halaman sesi, diukur sejak perute dimulai hingga render pertama setelah stabil.",

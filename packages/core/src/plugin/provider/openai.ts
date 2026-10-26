@@ -23,9 +23,8 @@ const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-// ChatGPT accounts lost gpt-5.4 and gpt-5.4-mini in Codex on 2026-08-31 (replacements: gpt-5.6-terra, gpt-5.6-luna).
-const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark"])
-const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
+// Codex rejects gpt-5.5 and older models, including gpt-5.3-codex-spark, for ChatGPT accounts.
+const codexDisallowed = new Set(["gpt-5.6"])
 
 type Pkce = {
   verifier: string
@@ -289,19 +288,11 @@ export const OpenAIPlugin = define({
           const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
           const major = Number(match?.[1])
           const minor = Number(match?.[2] ?? 0)
-          if (
-            !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
-          ) {
+          if (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 5))) {
             draft.enabled = false
             return
           }
           draft.cost = []
-          // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
-          draft.limit =
-            apiID === "gpt-6.1-sol"
-              ? { ...draft.limit, context: 628_000, input: 500_000 }
-              : { ...draft.limit, context: 400_000, input: 272_000 }
         })
       }
     })

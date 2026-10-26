@@ -84,14 +84,60 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | --- | ---: | --- |
 | `auto` | `true` | Compact automatically near the context limit, and recover once when a provider rejects a request as too long. Manual compaction always works. |
 | `keep.tokens` | `15000` | Approximate recent conversation kept beside the summary. Larger values preserve more detail but leave less room for new work. |
-| `buffer` | 15% of the limit, at least 16k | Tokens to keep free below the model's limit. Larger values start automatic compaction earlier. |
+| `buffer` | 15% of the limit, at least 16k | Tokens to keep free below the model's limit. Larger values start automatic compaction earlier. A buffer at least as large as the model's limit is ignored. |
 
 `keep.tokens` and `buffer` accept non-negative integers.
 
+## Model
+
+By default OpenCode writes the summary itself, using the session's model. Set
+`agents.compaction.model` to use another model for summaries:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "compaction": { "model": "anthropic/claude-sonnet-5-5" },
+  },
+}
+```
+
+If that model cannot be resolved, OpenCode falls back to the session's model.
+
+## Background compaction
+
+<Callout type="warning">
+  Experimental. This may change, break, or be removed in any release without notice.
+</Callout>
+
+Automatic compaction normally pauses the session while the summary is written. With background compaction, OpenCode
+writes the summary ahead of time and swaps it in when compaction is due:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "background_compaction": true,
+  },
+}
+```
+
+```text
+85% of the threshold   summary of the conversation so far starts in the background
+                       the session keeps going; the summary is held, not applied
+threshold              the held summary is swapped in; everything since it is kept as is
+```
+
+| Rule | Behavior |
+| --- | --- |
+| Cost | The summary request reuses the prompt cache. A summary that is never used still costs tokens. |
+| Falls back | Compaction summarizes as usual if too much conversation arrived since the held summary, or if the model, instructions, or start of the conversation changed. |
+| Skipped | Not used for native compaction, in sessions under about 64k tokens, right after a model switch, or when a provider rejects a request as too long. |
+| Storage | Held summaries live in memory and are lost on restart. |
+
 ## Providers
 
-By default OpenCode writes the summary itself, using the session's model. Some
-providers can compact the conversation on their side instead. Enable it per
+Some providers can compact the conversation on their side instead. Enable it per
 provider or model with `settings.compaction`:
 
 ```jsonc title="opencode.jsonc"
@@ -101,7 +147,7 @@ provider or model with `settings.compaction`:
     "openai": {
       "settings": { "compaction": { "type": "native" } },
       "models": {
-        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
       },
     },
   },
@@ -153,7 +199,7 @@ session's baseline; see [Instructions](/instructions).
 
 | Limit | Result |
 | --- | --- |
-| Model | Compaction uses the session's model. There is no separate compaction model. |
+| Model | Summary compaction honors `agents.compaction.model`; otherwise it uses the session's model. Native compaction always uses the session's model. |
 | History | Compaction needs older conversation to replace. It cannot create room when a request is mostly fixed instructions and tool schemas. |
 | Size | If the conversation to compact is itself too long, OpenCode sends a shortened text version and may leave out the oldest exchanges. |
 | Recovery | A request rejected as too long is compacted and retried once. A second rejection is returned as an error. |

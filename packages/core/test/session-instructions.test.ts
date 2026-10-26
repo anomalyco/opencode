@@ -21,6 +21,7 @@ import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionInstructions } from "@opencode/core/session/instructions"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
@@ -103,10 +104,14 @@ const readCall = (
 const writeAgents = (file: string, content: string) => Effect.promise(() => fs.writeFile(file, content))
 const mkdir = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 
+// The instruction ledger reads only synthetic rows; they must match what full history shows the model.
 const synthetics = (sessionID: Session.ID) =>
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
-    return (yield* store.context(sessionID)).filter((message) => message.type === "synthetic")
+    const { db } = yield* Database.Service
+    const visible = (yield* store.context(sessionID)).filter((message) => message.type === "synthetic")
+    expect(yield* SessionHistory.synthetics(db, sessionID)).toEqual(visible)
+    return visible
   })
 
 // Seed a prior synthetic message with an instruction dedup ledger, simulating a prior turn

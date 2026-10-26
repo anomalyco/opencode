@@ -97,14 +97,8 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       {
         type: "item",
         labelKey: "desktop.menu.newSession",
-        command: "session.new",
-        accelerator: { macos: "Shift+Cmd+S" },
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.openProject",
-        command: "project.open",
-        accelerator: { macos: "Cmd+O" },
+        command: "tab.new",
+        accelerator: { macos: "Cmd+N" },
       },
       {
         type: "item",
@@ -120,7 +114,13 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         accelerator: { macos: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
       },
       { type: "separator" },
-      { type: "item", labelKey: "desktop.menu.closeWindow", action: "window.close", role: "close" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.closeWindow",
+        action: "window.close",
+        role: "close",
+        accelerator: { macos: "Shift+Cmd+W", windows: "Ctrl+Shift+W" },
+      },
     ],
   },
   {
@@ -177,14 +177,18 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "view",
     labelKey: "desktop.menu.view",
     items: [
-      { type: "item", labelKey: "desktop.menu.toggleSidebar", command: "sidebar.toggle" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.toggleSidebar",
+        command: "sidebar.toggle",
+        accelerator: { macos: "Shift+Cmd+B" },
+      },
       {
         type: "item",
         labelKey: "desktop.menu.toggleTerminal",
         command: "terminal.toggle",
         accelerator: { macos: "Ctrl+`" },
       },
-      { type: "item", labelKey: "desktop.menu.toggleFileTree", command: "fileTree.toggle" },
       { type: "separator" },
       { type: "item", labelKey: "desktop.menu.reload", action: "view.reload", role: "reload" },
       {
@@ -243,19 +247,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         command: "session.next",
         accelerator: { macos: "Option+Down" },
       },
-      { type: "separator" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.previousProject",
-        command: "project.previous",
-        accelerator: { macos: "Cmd+Option+Up" },
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.nextProject",
-        command: "project.next",
-        accelerator: { macos: "Cmd+Option+Down" },
-      },
     ],
   },
   {
@@ -307,12 +298,14 @@ export function desktopMenuWithExtensions<Entry, Extra extends { readonly id: st
   base: readonly { readonly key?: string; readonly entry: Entry }[],
   extra: readonly Extra[],
 ) {
-  return extra.reduce<readonly { readonly key?: string; readonly entry: Entry | Extra }[]>((list, item) => {
+  const list: { readonly key?: string; readonly entry: Entry | Extra }[] = [...base]
+
+  extra.forEach((item) => {
     const next = { key: item.id, entry: item }
     const index = item.after ? list.findIndex((entry) => entry.key === item.after) : -1
 
-    if (index < 0) return [...list, next]
+    list.splice(index < 0 ? list.length : index + 1, 0, next)
+  })
 
-    return [...list.slice(0, index + 1), next, ...list.slice(index + 1)]
-  }, base)
+  return list
 }

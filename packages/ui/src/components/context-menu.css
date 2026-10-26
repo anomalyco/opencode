@@ -93,7 +93,7 @@
   [data-slot="context-menu-separator"] {
     height: 1px;
     margin: 4px -4px;
-    border-top-color: var(--border-weak-base);
+    border-top-color: var(--v2-border-border-muted);
   }
 
   [data-slot="context-menu-group-label"] {

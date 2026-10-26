@@ -27,12 +27,37 @@ export function reviewRootDirectory(root: string) {
 export function reviewDiffDirectory(root: string, file: string) {
   const path = normalizePath(file)
   const index = path.lastIndexOf("/")
+
+  if (index < 0) return reviewRootDirectory(root)
+
+  return reviewFolderDirectory(root, path.slice(0, index))
+}
+
+/** The directory of a workspace-relative folder inside the review root. */
+export function reviewFolderDirectory(root: string, folder: string) {
   const separator = root.includes("\\") ? "\\" : "/"
   const base = reviewRootDirectory(root)
 
-  if (index < 0) return base
+  return `${base.endsWith(separator) ? base : base + separator}${normalizePath(folder).replaceAll("/", separator)}`
+}
 
-  return `${base.endsWith(separator) ? base : base + separator}${path.slice(0, index).replaceAll("/", separator)}`
+/** An untracked folder that Git lists as one row, as `git status` shows it. */
+export function isReviewFolder(file: string) {
+  return file.endsWith("/")
+}
+
+/** The rows with each loaded folder's entries after its row, depth first. A folder's `more` entry stays out. */
+export function expandReviewFolders(
+  rows: readonly RenderDiff[],
+  loaded: ReadonlyMap<string, readonly RenderDiff[]>,
+): RenderDiff[] {
+  return rows.flatMap((row) => [
+    row,
+    ...expandReviewFolders(
+      (loaded.get(row.file) ?? []).filter((entry) => !entry.more),
+      loaded,
+    ),
+  ])
 }
 
 export function reviewDiffKinds(diffs: readonly RenderDiff[]) {

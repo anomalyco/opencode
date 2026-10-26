@@ -1,10 +1,5 @@
 export default {
   "tree.all": "Všechny soubory",
-  "tree.empty": "Žádné soubory",
-  "tree.changes.one": "{{count}} soubor změněn",
-  "tree.changes.few": "{{count}} soubory změněny",
-  "tree.changes.many": "{{count}} souboru změněno",
-  "tree.changes.other": "{{count}} souborů změněno",
   "tab.notFound": "Soubor nebyl nalezen: {{name}}",
   "mobile.title": "Soubory",
   "mobile.openTabs": "Otevřené soubory",

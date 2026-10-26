@@ -5,7 +5,7 @@ description: Use when writing, reviewing, speeding up, or fixing a flaky `bun te
 
 # Fast, Reliable Unit Tests
 
-CI runs `bun turbo test --affected --concurrency=3` on 4-vCPU Linux and Windows runners (unit job in `.github/workflows/test.yml`), so each suite shares the CPU with two others, and Windows is the slower leg. Most slow or flaky unit tests here wait on real time, spawn too many processes, or assert wall-clock speed.
+CI runs `bun turbo test --affected --concurrency=3` on 4-vCPU Linux and Windows runners (unit job in `.github/workflows/check-test.yml`), so each suite shares the CPU with two others, and Windows is the slower leg. Most slow or flaky unit tests here wait on real time, spawn too many processes, or assert wall-clock speed.
 
 Read these first; this skill does not repeat them:
 
@@ -13,7 +13,7 @@ Read these first; this skill does not repeat them:
 - `packages/app/AGENTS.md` Tests (`packages/desktop` and `packages/gui-extensions` follow it): one owner per contract, and no production seams for tests.
 - `packages/ai/AGENTS.md`: cassettes. The `effect` skill: `it.effect` and `it.live`.
 
-Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-tests` (Playwright in `packages/app/e2e`), `component-tests` (Storybook Playwright). This skill owns cli subprocess and service tests.
+Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-tests` (Playwright in `packages/app/e2e`), `component-tests` (Playwright on stories, `packages/stories`). This skill owns cli subprocess and service tests.
 
 ## Know the budget
 
@@ -114,7 +114,7 @@ To avoid adding more:
 ## Turbo test tasks
 
 - `bun turbo test` runs every workspace package that has a `test` script, through the generic `test` task in `turbo.json` (`"dependsOn": ["transit"], "outputs": []`). A package with test files but no `test` script never runs in CI: give a new suite a script, and check with `bun turbo test --dry=json`. Add an `@opencode/<pkg>#test` entry only to override the generic task (desktop disables caching). Suites CI skipped rotted: client, util, sdk, http-recorder and merman needed fixes before CI could run them.
-- `transit` runs nothing and depends on `^transit`, so a test hash covers the package's whole workspace closure. The global dependencies add root `package.json` (whose `packageManager` pins Bun), `bunfig.toml`, `patches/**`, `.npmrc`, `.github/actions/setup-bun/**` and `test.yml`.
+- `transit` runs nothing and depends on `^transit`, so a test hash covers the package's whole workspace closure. The global dependencies add root `package.json` (whose `packageManager` pins Bun), `bunfig.toml`, `patches/**`, `.npmrc`, `.github/actions/setup-bun/**` and `check-test.yml`.
 - Tests do not wait for builds: workspace packages export their sources (`"./*": "./src/*.ts"` in `packages/core/package.json`), so a test must not read a dependency's `dist`. The build job's "Build workspace libraries" step checks the library builds on Linux.
 - A package that compiles `src` with tsc keeps colocated tests out of the build (`"exclude": ["src/**/*.test.ts"]` in `packages/util/tsconfig.build.json`). Otherwise `bun test` also runs the compiled copies, as Windows CI did with `packages/util/dist/retry.test.js`.
 
@@ -123,7 +123,7 @@ To avoid adding more:
 - Most suites print only failures (`--only-failures`): `(fail) <name> [5000ms]` and `^ this test timed out after 5000ms`.
   - When `killed 1 dangling process` and `# Unhandled error between tests` follow (for example `NpmInstallFailedError` with `SIGTERM` from a `git clone`), the test was still doing real work, not hanging.
   - The unhandled error is the abandoned Effect failing after Bun killed its child, not a second bug. Count the work (see Before you push) before choosing a fix.
-- Check whether the test also fails on dev pushes: `gh run list --workflow test.yml --branch dev --event push --status failure`. In one census before core's 30s default, 4 of 25 dev pushes went red, all on Windows unit tests (3 of them Npm.add 5s timeouts).
+- Check whether the test also fails on dev pushes: `gh run list --workflow check-test.yml --branch dev --event push --status failure`. In one census before core's 30s default, 4 of 25 dev pushes went red, all on Windows unit tests (3 of them Npm.add 5s timeouts).
 - Read whole job logs with `gh run view --log --job <id>`; `--log-failed` omits green jobs, whose `Ran N tests across M files. [Xs]` lines you need for comparison.
 - Assert a child's stderr before its exit codes. `packages/core/test/util/effect-flock.test.ts:327-328` checks codes first, so its one CI failure never showed the cause.
 

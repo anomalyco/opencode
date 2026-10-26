@@ -8,6 +8,7 @@ import {
   sansDefault,
   sansFontFamily,
   sansInput,
+  type ReduceMotion,
   terminalDefault,
   terminalFontFamily,
   terminalInput,
@@ -19,10 +20,6 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
-
-export { createShellOptions, createSoundPreviewController } from "./behavior"
-
-export type { ShellOption, ShellSelectOption } from "./behavior"
 
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
@@ -89,6 +86,10 @@ export function createAppearanceSettingsController() {
       options: themes,
       current: createMemo(() => themes().find((option) => option.id === theme.themeId())),
       select: (option: { id: string } | null) => option && theme.setTheme(option.id),
+    },
+    reduceMotion: {
+      current: settings.appearance.reduceMotion,
+      select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
     fonts: {
       ui: createMemo(() => ({

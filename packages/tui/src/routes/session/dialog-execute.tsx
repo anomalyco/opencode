@@ -207,7 +207,7 @@ function executeCode(input: SessionMessageAssistantTool["state"]["input"]) {
 }
 
 function outputText(state: SessionMessageAssistantTool["state"]) {
-  if (state.status === "error") return state.error.message || undefined
+  if (state.status === "error") return stripAnsi(state.error.message) || undefined
   if (state.status !== "completed") return
   const text = stripAnsi(
     state.content
