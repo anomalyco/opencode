@@ -3,10 +3,19 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    bun2nix = {
+      url = "github:nix-community/bun2nix/0f2a1f0b6f42cebe3b149bf62d38754c5e0e9729";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs, ... }:
+    {
+      self,
+      nixpkgs,
+      bun2nix,
+      ...
+    }:
     let
       systems = [
         "aarch64-linux"
@@ -29,12 +38,44 @@
         };
       });
 
+      checks = forEachSystem (
+        pkgs:
+        let
+          opencode = self.packages.${pkgs.stdenv.hostPlatform.system}.opencode;
+        in
+        {
+          runtime =
+            pkgs.runCommand "opencode-runtime-checks"
+              {
+                nativeBuildInputs = [ pkgs.bun ];
+                OPENCODE_NIX_CLI = pkgs.lib.getExe opencode;
+                OPENCODE_NIX_VERSION = opencode.version;
+                OPENCODE_DISABLE_MODELS_FETCH = "1";
+              }
+              ''
+                export HOME=$(mktemp -d)
+                export XDG_CONFIG_HOME="$HOME/config" XDG_DATA_HOME="$HOME/data"
+                export XDG_STATE_HOME="$HOME/state" XDG_CACHE_HOME="$HOME/cache"
+                cp -R ${opencode.src}/. .
+                chmod -R u+w .
+                cp -R ${opencode.node_modules}/. .
+                mkdir -p nix
+                cp ${./nix/check-tui-colors.ts} nix/check-tui-colors.ts
+                cp ${./nix/check-service.ts} nix/check-service.ts
+                bun nix/check-tui-colors.ts
+                bun nix/check-service.ts
+                touch $out
+              '';
+        }
+      );
+
       overlays = {
         default =
           final: _prev:
           let
             node_modules = final.callPackage ./nix/node_modules.nix {
               inherit rev;
+              bun2nix = bun2nix.packages.${final.stdenv.hostPlatform.system}.bun2nix;
             };
           in
           rec {
@@ -52,6 +93,7 @@
         let
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
+            bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
           };
         in
         rec {
@@ -61,10 +103,6 @@
           };
           opencode-desktop = pkgs.callPackage ./nix/desktop.nix {
             inherit opencode;
-          };
-          # Updater derivation with fakeHash - build fails and reveals correct hash
-          node_modules_updater = node_modules.override {
-            hash = pkgs.lib.fakeHash;
           };
         }
       );

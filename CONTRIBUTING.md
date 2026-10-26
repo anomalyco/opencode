@@ -73,6 +73,25 @@ Follow package-specific instructions in nearby `AGENTS.md` files. After changing
 
 Follow the repository [style guide](./AGENTS.md).
 
+### Nix packaging
+
+Nix reads package URLs and integrity hashes directly from `bun.lock`, then uses bun2nix to prepare Bun's offline cache. Bun installs the original lockfile, links workspaces and peers, and applies patches. CLI and Desktop share these dependencies.
+
+Changing `bun.lock` updates Nix dependencies automatically. There is no generated lockfile, aggregate `node_modules` hash, or hash-update workflow to maintain.
+
+The cache filters incompatible `os`/`cpu` constraints using Bun's matching rules. It retains libc variants: Bun 1.4.2 ignores libc, while Bun 1.4.4 filters it per dependency.
+
+GitHub archives use Bun's recorded archive integrity, not a separate Nix tree hash. [GitHub can change archive compression](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives#stability-of-source-code-archives), invalidating that checksum even when Git contents are unchanged. The fetch fails rather than accepting different bytes.
+
+Build the CLI and run the installed color and service-discovery checks:
+
+```bash
+nix build .#opencode
+nix build ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).runtime"
+```
+
+CI checks the lock reader, installed CLI runtime, and Desktop build before dependency input changes merge. Unrelated source-only PRs keep evaluation-only Nix checks. The reader supports lockfile v1 registry, GitHub, and HTTP sources with recorded integrity; unsupported formats fail explicitly.
+
 ## Pull Requests
 
 ### Link Issues When Required

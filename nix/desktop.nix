@@ -61,6 +61,8 @@ stdenv.mkDerivation (finalAttrs: {
   });
 
   env = opencode.env // {
+    # Desktop calls the stable channel "prod"; the CLI calls it "latest".
+    OPENCODE_CHANNEL = "prod";
     ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
   };
 
@@ -95,21 +97,17 @@ stdenv.mkDerivation (finalAttrs: {
 
     cd packages/desktop
 
-    export OPENCODE_CLI_DIST="$TMPDIR/desktop-cli"
-    cli_package=$(bun -e 'import { getCurrentCli } from "./script/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')
-    # copyBuiltCliToResources joins this dist with the npm package name getCurrentCli()
-    # reports, not the Nix build's name. It reads only .version from the manifest and
-    # writes it as opencode-cli.version beside the binary.
-    mkdir -p "$OPENCODE_CLI_DIST/$cli_package/bin"
-    cp ${lib.getExe opencode} "$OPENCODE_CLI_DIST/$cli_package/bin/opencode"
+    # Stage the real Nix CLI where the production Desktop build expects its package.
+    cli_package="../cli/dist/$(bun -e 'import { getCurrentCli } from "./script/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')"
+    mkdir -p "$cli_package/bin"
+    cp ${lib.getExe opencode} "$cli_package/bin/opencode"
     # OPENCODE_VERSION is what the bundled CLI prints for --version, so the manifest
     # and the executable cannot drift.
     bun -e 'await Bun.write(process.argv[1], JSON.stringify({ version: process.env.OPENCODE_VERSION }) + "\n")' \
-      "$OPENCODE_CLI_DIST/$cli_package/package.json"
+      "$cli_package/package.json"
 
     bun run build
-    npx electron-builder --dir \
-      --config electron-builder.config.ts \
+    bun run electron-builder --dir --publish never --config electron-builder.config.ts \
       --config.mac.identity=null \
       --config.electronDist="$HOME/.electron-dist"
 

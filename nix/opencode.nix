@@ -1,7 +1,6 @@
 {
   lib,
   stdenvNoCC,
-  callPackage,
   bun,
   nodejs,
   sysctl,
@@ -12,7 +11,7 @@
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
-  node_modules ? callPackage ./node_modules.nix { },
+  node_modules,
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode";
@@ -48,7 +47,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
   env.OPENCODE_DISABLE_MODELS_FETCH = true;
   env.OPENCODE_VERSION = finalAttrs.version;
-  env.OPENCODE_CHANNEL = "prod";
+  env.OPENCODE_CHANNEL = "latest";
   env.NODE_OPTIONS = "--max-old-space-size=4096";
 
   buildPhase = ''
@@ -116,7 +115,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ];
   doInstallCheck = true;
-  versionCheckKeepEnvironment = [ "HOME" "OPENCODE_DISABLE_MODELS_FETCH" ];
+  versionCheckKeepEnvironment = [
+    "HOME"
+    "OPENCODE_DISABLE_MODELS_FETCH"
+  ];
   versionCheckProgramArg = "--version";
 
   passthru = {

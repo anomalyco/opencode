@@ -19,10 +19,28 @@ jobs:
   nix-eval:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Detect dependency input changes
+        id: dependencies
+        env:
+          BASE_REV: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_REV"
+          changed=$(git diff --name-only "$BASE_REV" HEAD -- \
+            bun.lock package.json '**/package.json' flake.nix flake.lock \
+            nix patches .github/workflows/check-nix.yml)
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
@@ -41,8 +59,8 @@ jobs:
 
           SYSTEMS="x86_64-linux aarch64-linux aarch64-darwin"
           PACKAGES="opencode"
-          # TODO: move 'desktop' to PACKAGES when #11755 is fixed
-          OPTIONAL_PACKAGES="desktop"
+          # TODO: move 'opencode-desktop' to PACKAGES when #11755 is fixed
+          OPTIONAL_PACKAGES="opencode-desktop"
 
           echo ""
           echo "=== Evaluating packages for all systems ==="
@@ -95,3 +113,11 @@ jobs:
 
           echo ""
           echo "=== All evaluations passed ==="
+
+      - name: Check Bun lock source import
+        if: steps.dependencies.outputs.changed == 'true'
+        run: nix develop --command bun nix/check-lock.ts
+
+      - name: Check CLI runtime and Desktop build
+        if: steps.dependencies.outputs.changed == 'true'
+        run: nix build .#checks.x86_64-linux.runtime .#opencode-desktop --max-jobs auto --no-link -L
