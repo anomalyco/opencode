@@ -13,8 +13,15 @@ export const fileTabPath = (file: Files, id: string) => file.resolve(`file:${id}
 export const isFileTab = (id: string) => id.startsWith("//")
 
 /** The file:// URL the browser pane loads for a workspace file. */
-export const workspaceFileUrl = (root: string, path: string) =>
-  pathToFileUrl(`${root.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`)
+export const workspaceFileUrl = (root: string, path: string) => {
+  // Keep UNC roots in backslashes so encodeFilePath sees the UNC prefix;
+  // pre-converting to slashes would hide it and rebuild an empty host.
+  if (root.startsWith("\\\\") || root.startsWith("//")) {
+    return pathToFileUrl(`${root.replace(/[\\/]+$/, "").replace(/\//g, "\\")}\\${path}`)
+  }
+
+  return pathToFileUrl(`${root.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`)
+}
 
 export function resolveOpenInAppPath(root: string, path: string) {
   if (!path) return root

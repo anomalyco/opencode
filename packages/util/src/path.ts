@@ -70,8 +70,14 @@ export function sameDirectory(a: string, b: string) {
 }
 
 export function encodeFilePath(filepath: string): string {
+  // A UNC path (\\host\share\...) must not keep its leading double slash: the
+  // file:// prefix callers add would form an empty host (file:////host/...).
+  // Encode the host as the start instead, so the URI keeps it (file://host/...).
+  // Only the exact two-backslash form is touched; anything else (including
+  // \\?\ extended paths) keeps the previous behavior.
+  const unc = /^\\\\[^\\?]/.test(filepath) ? filepath.slice(2) : filepath
   // Normalize Windows paths: convert backslashes to forward slashes
-  const normalized = filepath.replace(/\\/g, "/")
+  const normalized = unc.replace(/\\/g, "/")
 
   // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
   const rooted = /^[A-Za-z]:/.test(normalized) ? "/" + normalized : normalized

@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { openInAppParentPath, resolveOpenInAppPath } from "./path"
+import { openInAppParentPath, resolveOpenInAppPath, workspaceFileUrl } from "./path"
+
+describe("workspaceFileUrl", () => {
+  test("keeps the host for UNC roots", () => {
+    expect(workspaceFileUrl("\\\\server\\share\\proj", "src/a.ts")).toBe("file://server/share/proj/src/a.ts")
+    expect(workspaceFileUrl("//server/share/proj", "src/a.ts")).toBe("file://server/share/proj/src/a.ts")
+  })
+
+  test("keeps previous output for posix and drive roots", () => {
+    expect(workspaceFileUrl("/repo", "src/a.ts")).toBe("file:///repo/src/a.ts")
+    expect(workspaceFileUrl("C:\\repo", "src\\a.ts")).toBe("file:///C:/repo/src/a.ts")
+  })
+})
 
 describe("resolveOpenInAppPath", () => {
   test("joins relative paths using the workspace separator", () => {

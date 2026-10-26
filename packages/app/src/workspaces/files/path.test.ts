@@ -11,6 +11,8 @@ describe("file path helpers", () => {
     ["C:\\repo", "C:/repo/src/app.ts", "src/app.ts"],
     ["C:\\repo", "file://C:/repo/src/app.ts", "src/app.ts"],
     ["C:\\repo", "c:\\repo\\src\\app.ts", "src\\app.ts"],
+    ["\\\\server\\share\\proj", "file://server/share/proj/src/a.ts", "src/a.ts"],
+    ["\\\\server\\share\\proj", "file://other/x/f.ts", "//other/x/f.ts"],
   ])("normalizes %p against the workspace root %p", (root, input, expected) => {
     expect(createPathHelpers(() => root).normalize(input)).toBe(expected)
   })
