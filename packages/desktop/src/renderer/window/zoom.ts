@@ -24,7 +24,7 @@ let requestedZoom = 1
 
 let pinchZoomEnabled = false
 
-let wheelPinch = undefined as
+let wheelPinch:
   | {
       active: boolean
       startZoom: number
