@@ -101,6 +101,9 @@ function switchReminder(
     if (event.data.agent !== plan) return undefined
     return enterReminder
   }
+  // A delivery-time switch lands at a turn boundary: the context hook below owns
+  // its reminder synchronously, and a synthetic here would race it and double.
+  if (event.data.source === "delivery") return undefined
   if (event.data.agent === event.data.previous) return undefined
   if (event.data.agent === plan) return enterReminder
   if (event.data.previous === plan) return leave

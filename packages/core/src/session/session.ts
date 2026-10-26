@@ -141,10 +141,33 @@ export const make = Effect.fn("Session.make")(function* () {
     (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.cancel),
     Effect.uninterruptible,
   )
+  // The agent a session effectively runs: the stored selection, or the configured
+  // default for sessions that never persisted one.
+  const effectiveAgent = Effect.fn("Session.effectiveAgent")(function* (session: SessionSchema.Info) {
+    if (session.agent !== undefined) return session.agent
+    const agents = yield* Agent.Service
+    const selected = yield* agents.select()
+    return selected.id
+  })
   const steerInbox = Effect.fn("Session.steerInbox")(function* (
     sessionID: SessionSchema.ID,
     inboxID: SessionMessage.ID,
   ) {
+    const session = yield* get(sessionID)
+    const pending = yield* admission.list(sessionID)
+    const item = pending.find((entry) => entry.id === inboxID)
+    // An agent-changing prompt must stay queued: steering it would promote the
+    // selection mid-turn and reconfigure the running turn. Fail like any other
+    // unsteerable item so clients can undo an optimistic move.
+    if (item?.type === "user" && item.payload.agent !== undefined) {
+      const effective = yield* (session.agent !== undefined
+        ? Effect.succeed(session.agent)
+        : effectiveAgent(session).pipe(
+            instances.provide(session),
+            Effect.orDie,
+          ))
+      if (item.payload.agent !== effective) return yield* new InboxConflictError({ sessionID, inboxID })
+    }
     yield* mutatePending(sessionID, inboxID, admission.steer)
     yield* execution.wake(sessionID)
   }, Effect.uninterruptible)
@@ -173,8 +196,7 @@ export const make = Effect.fn("Session.make")(function* () {
             // Queueing it defers the selection to the idle boundary where promotion applies it.
             // Sessions without a stored agent compare against the configured default, so SDK
             // sessions still steer prompts carrying that default.
-            const agents = yield* Agent.Service
-            const effective = session.agent ?? (yield* agents.select()).id
+            const effective = yield* effectiveAgent(session)
             const request =
               input.agent !== undefined && input.agent !== effective
                 ? { ...input, delivery: "queue" as const }

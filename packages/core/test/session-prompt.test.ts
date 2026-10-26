@@ -1556,7 +1556,7 @@ describe("Session.inbox", () => {
     }),
   )
 
-  it.effect("keeps an agent-changing prompt queued when it is steered", () =>
+  it.effect("refuses to steer an agent-changing prompt and keeps it queued", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
@@ -1568,10 +1568,11 @@ describe("Session.inbox", () => {
       })
       expect(queued).toMatchObject({ delivery: "queue" })
 
-      yield* session.steerInbox({ sessionID, inboxID: queued.id })
-
-      // Steered promotion would apply the selection mid-turn, so the row stays
-      // queued and its agent applies at the idle boundary instead.
+      // Steered promotion would apply the selection mid-turn, so the steer fails
+      // like any other unsteerable item and the row stays queued.
+      expect(
+        yield* session.steerInbox({ sessionID, inboxID: queued.id }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.InboxConflictError", sessionID, inboxID: queued.id })
       expect(yield* session.inbox(sessionID)).toMatchObject([{ id: queued.id, delivery: "queue" }])
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(0)
     }),

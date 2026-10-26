@@ -646,6 +646,7 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly agent: Agent.ID
             readonly previous?: Agent.ID | undefined
+            readonly source?: "delivery" | undefined
           }
         }
       | {

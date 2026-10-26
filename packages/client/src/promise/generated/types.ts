@@ -1105,7 +1105,7 @@ export type SessionAgentSelected = {
   type: "session.agent.selected"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; agent: AgentID; previous?: AgentID }
+  data: { sessionID: SessionID; agent: AgentID; previous?: AgentID; source?: "delivery" }
 }
 
 export type SessionModelSelected = {

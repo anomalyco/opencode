@@ -167,6 +167,24 @@ describe("plan plugin reminders", () => {
     }),
   )
 
+  it.effect("lets the context hook own the reminder for a delivery-time switch", () =>
+    Effect.gen(function* () {
+      const base = agentSelected(build, plan)
+      const delivery = { ...base, data: { ...base.data, source: "delivery" as const } }
+      const { persisted, contextHook } = yield* run([delivery])
+      yield* Effect.promise(() => Bun.sleep(10))
+      // The switch lands at a turn boundary; the subscriber must stay silent or a
+      // second reminder would race the context hook and steer an extra request.
+      expect(persisted).toEqual([])
+
+      const { enter } = yield* reminders
+      const messages = [Message.user(enter), Message.user("implement it")]
+      yield* contextHook(request(build, messages))
+      expect(persisted).toHaveLength(1)
+      expect(persisted[0]).toContain("NO LONGER in Plan mode")
+    }),
+  )
+
   it.effect("reconciles a missing enter reminder into the request and persists it", () =>
     Effect.gen(function* () {
       const { persisted, contextHook } = yield* run()

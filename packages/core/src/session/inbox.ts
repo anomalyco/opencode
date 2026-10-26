@@ -259,29 +259,16 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
-  const steer = Effect.fn("SessionInbox.steer")(function* (input: PendingRef) {
-    const row = yield* find(db, input.id)
-    if (row?.sessionID === input.sessionID && row.type === "user") {
-      const payload = decodeUser(row.payload)
-      const session = yield* db
-        .select({ agent: SessionTable.agent })
-        .from(SessionTable)
-        .where(eq(SessionTable.id, input.sessionID))
-        .get()
-        .pipe(Effect.orDie)
-      // An agent-changing prompt must stay queued: promoting it as a steer would
-      // apply the selection mid-turn and reconfigure the running turn.
-      if (payload.agent !== undefined && payload.agent !== (session?.agent ?? undefined)) return
-    }
-    yield* publishMutation(
+  const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
+    publishMutation(
       input,
       bus.publish(SessionEvent.InboxDeliveryChanged, {
         sessionID: input.sessionID,
         inboxID: input.id,
         delivery: "steer",
       }),
-    )
-  })
+    ),
+  )
 
   const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) =>
     publishMutation(
@@ -576,6 +563,10 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
                 sessionID,
                 agent: payload.agent,
                 previous: session.agent ?? undefined,
+                // The context hook owns the mode reminder for this switch: it runs
+                // synchronously with the new turn's preparation, while the plugin's
+                // event subscriber would race it and double the reminder.
+                source: "delivery",
               })
           }
         }
