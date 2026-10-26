@@ -346,7 +346,10 @@ describe("ModelsDev Service", () => {
               type: "image",
               modalities: { input: ["text", "image/png", "application/pdf"], output: ["image/png", "image/webp"] },
               api: {
-                "chat-completions": { base_url: "https://api.example.test/v1", sdk: { aisdk: "@acme/ai-sdk-provider" } },
+                "chat-completions": {
+                  base_url: "https://api.example.test/v1",
+                  sdk: { aisdk: "@acme/ai-sdk-provider" },
+                },
                 images: {
                   base_url: "https://api.example.test/v1",
                   sdk: { aisdk: "@acme/ai-sdk-provider", opencodeai: "@opencode/ai/protocols/openai-images" },
@@ -430,6 +433,103 @@ describe("ModelsDev Service", () => {
         tier,
       ])
       expect(acme?.models[1]?.body).toEqual({ service_tier: "priority" })
+    }),
+  )
+
+  it.live("reads a models.dev v1 catalog by converting it to v2", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.acme.test/v1",
+          models: {
+            "acme-1": {
+              id: "acme-1",
+              name: "Acme One",
+              release_date: "2026-01-01",
+              attachment: false,
+              reasoning: true,
+              reasoning_options: [{ type: "effort", values: [null, "low", "high"] }],
+              temperature: true,
+              tool_call: true,
+              interleaved: { field: "vendor_reasoning" },
+              cost: { input: 1, output: 2, tiers: [{ tier: { type: "context", size: 200000 }, input: 3, output: 4 }] },
+              limit: { context: 128000, output: 8192 },
+            },
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(acme?.info).toMatchObject({
+        package: "@opencode/ai/providers/openai-compatible",
+        settings: { baseURL: "https://api.acme.test/v1" },
+      })
+      expect(acme?.models[0]).toMatchObject({
+        type: "chat",
+        compatibility: { reasoningField: "vendor_reasoning" },
+        capabilities: { tools: true, input: ["text"], output: ["text"], temperature: true },
+      })
+      expect(acme?.models[0]?.variants.map((variant) => String(variant.id))).toEqual(["low", "high"])
+      expect(acme?.models[0]?.cost.map((item) => [item.tier?.size, item.input, item.output])).toEqual([
+        [undefined, 1, 2],
+        [200000, 3, 4],
+      ])
+    }),
+  )
+
+  it.live("falls back to /api.json when a custom mirror has no v2 catalog", () =>
+    Effect.gen(function* () {
+      const v1Catalog = {
+        beta: {
+          id: "beta",
+          name: "Beta",
+          env: ["BETA_API_KEY"],
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.beta.test/v1",
+          models: {
+            "beta-1": {
+              id: "beta-1",
+              name: "Beta One",
+              release_date: "2026-02-01",
+              tool_call: true,
+              limit: { context: 64000, output: 4096 },
+            },
+          },
+        },
+      }
+      const urls: string[] = []
+      const client = HttpClient.make((request) =>
+        Effect.sync(() => {
+          urls.push(request.url)
+          const v1 = request.url.endsWith("/api.json")
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(v1 ? JSON.stringify(v1Catalog) : null, { status: v1 ? 200 : 404 }),
+          )
+        }),
+      )
+      const layer = Layer.fresh(
+        AppNodeBuilder.build(ModelsDev.node, [
+          ModelsDev.node.replace(ModelsDev.configured({ url: "https://mirror.example", fetch: true, snapshot: false })),
+          LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, client)),
+          KV.node.replace(makeMockKV(makeCache())),
+        ]),
+      )
+      const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
+      expect(urls).toEqual([
+        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image",
+        "https://mirror.example/api.json",
+      ])
+      expect(beta?.models.map((model) => model.id)).toEqual([Model.ID.make("beta-1")])
     }),
   )
 
@@ -655,12 +755,14 @@ describe("ModelsDev Service", () => {
               Effect.flatMap((fiber) =>
                 Effect.gen(function* () {
                   yield* Effect.yieldNow
-                  yield* svc.refresh(true).pipe(
-                    Effect.provideService(
-                      Location.Service,
-                      Location.Service.of(location({ directory: AbsolutePath.make("/initial-location") })),
-                    ),
-                  )
+                  yield* svc
+                    .refresh(true)
+                    .pipe(
+                      Effect.provideService(
+                        Location.Service,
+                        Location.Service.of(location({ directory: AbsolutePath.make("/initial-location") })),
+                      ),
+                    )
                   return yield* Fiber.join(fiber)
                 }),
               ),

@@ -16,6 +16,7 @@ import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
 import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
+import { isV1, toV2 } from "./models-dev/v1.js"
 
 // Only the fields opencode reads are decoded. Unknown keys are ignored, and a model that
 // doesn't match is skipped rather than failing the whole catalog.
@@ -159,8 +160,8 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-function normalize(input: Record<string, unknown>): readonly Snapshot[] {
-  return Object.values(input).flatMap((value) => {
+function normalize(catalog: Record<string, unknown>): readonly Snapshot[] {
+  return Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
     if (!item) return []
     const providerID = Provider.ID.make(item.id)
@@ -240,7 +241,10 @@ function route(providerID: Provider.ID, model: SourceModel): Route | undefined {
 function mostCommon<T>(values: readonly T[]) {
   const counts = new Map<T, number>()
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1)
-  return [...counts].reduce<[T, number] | undefined>((best, entry) => (!best || entry[1] > best[1] ? entry : best), undefined)?.[0]
+  return [...counts].reduce<[T, number] | undefined>(
+    (best, entry) => (!best || entry[1] > best[1] ? entry : best),
+    undefined,
+  )?.[0]
 }
 
 function released(date: string) {
@@ -298,7 +302,8 @@ function cost(input: SourceCost | undefined): Model.Info["cost"] {
 
 // opencode has one cache write price: the first TTL listed, else the explicit cache's.
 function cacheWrite(cache: typeof CachePrices.Type | undefined) {
-  const first = (write: typeof CacheWrite.Type | undefined) => (typeof write === "object" ? Object.values(write)[0] : write)
+  const first = (write: typeof CacheWrite.Type | undefined) =>
+    typeof write === "object" ? Object.values(write)[0] : write
   return first(cache?.write) ?? first(cache?.explicit?.write)
 }
 
@@ -522,13 +527,23 @@ export const layer = (options?: Options) =>
         yield* kv.remove(metaKey)
       })
 
-      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* (etag?: string) {
-        return yield* HttpClientRequest.get(`${source}${catalogPath}`).pipe(
+      const fetchPath = (path: string, etag?: string) =>
+        HttpClientRequest.get(`${source}${path}`).pipe(
           HttpClientRequest.setHeader("User-Agent", userAgent),
           HttpClientRequest.setHeaders(etag ? { "If-None-Match": etag } : {}),
           http.execute,
           Effect.flatMap((res) => Effect.map(res.text, (text) => ({ text, etag: res.headers.etag }))),
           Effect.timeout("10 seconds"),
+        )
+
+      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* (etag?: string) {
+        return yield* fetchPath(catalogPath, etag).pipe(
+          // A custom mirror may only serve the v1 catalog, which is converted when decoded.
+          Effect.catchIf(
+            (error) =>
+              source !== defaultSource && HttpClientError.isHttpClientError(error) && error.response?.status === 404,
+            () => fetchPath("/api.json", etag),
+          ),
         )
       })
 
