@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/effect.js"
+import {
+  LLM,
+  LLMClient,
+  LLMEvent,
+  Media,
+  Message,
+  SystemPart,
+  isRetryable,
+  ToolDefinition,
+  ToolNamespace,
+} from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -17,6 +27,39 @@ test("Cohere exposes native and compatible endpoints without Core remapping", ()
       .route.defaults?.http,
   ).toMatchObject({ body: { temperature: 0 } })
 })
+
+it.effect("Cohere forces a namespaced tool using its flattened definition", () =>
+  Effect.gen(function* () {
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: cohere.model("command-a-03-2025"),
+        prompt: "Look up a customer.",
+        tools: [
+          ToolNamespace.make({
+            name: "crm",
+            tools: [
+              ToolDefinition.make({
+                name: "lookup",
+                description: "Look up a customer",
+                inputSchema: { type: "object" },
+              }),
+            ],
+          }),
+          ToolDefinition.make({ name: "other", description: "Another tool", inputSchema: { type: "object" } }),
+        ],
+        toolChoice: "crm.lookup",
+      }),
+    )
+
+    expect(prepared.body.tools).toEqual([
+      {
+        type: "function",
+        function: { name: "crm_lookup", description: "Look up a customer", parameters: { type: "object" } },
+      },
+    ])
+    expect(prepared.body.tool_choice).toBe("REQUIRED")
+  }),
+)
 
 it.effect("Cohere lowers native history, thinking, tools, and sampling", () =>
   Effect.gen(function* () {

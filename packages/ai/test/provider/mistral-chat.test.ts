@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LanguageModel, LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/effect.js"
+import {
+  LanguageModel,
+  LLM,
+  LLMEvent,
+  Message,
+  SystemPart,
+  ToolDefinition,
+  Media,
+  ToolNamespace,
+} from "../../src/effect.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -18,6 +27,28 @@ const chunk = (delta: object, finishReason: string | null = null, usage?: object
 })
 
 describe("Mistral Chat", () => {
+  it.effect("flattens a namespaced forced tool choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Look up a customer.",
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: { type: "tool", name: "crm.lookup", disableParallelToolUse: true },
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "crm_lookup" } }])
+      expect(prepared.body.parallel_tool_calls).toBe(false)
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm_lookup" } })
+    }),
+  )
+
   test("exposes native provider and protocol identities", async () => {
     const entrypoint = await import("@opencode/ai/providers/mistral")
 

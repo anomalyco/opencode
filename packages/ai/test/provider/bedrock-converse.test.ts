@@ -18,6 +18,7 @@ import {
   ToolChoice,
   ToolDefinition,
   ToolRuntime,
+  ToolNamespace,
 } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -153,6 +154,27 @@ const baseRequest = LLM.request({
 })
 
 describe("Bedrock Converse route", () => {
+  it.effect("flattens a namespaced forced tool choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(baseRequest, {
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: ToolChoice.named("crm.lookup"),
+        }),
+      )
+
+      expect(prepared.body.toolConfig).toMatchObject({
+        tools: [{ toolSpec: { name: "crm_lookup" } }],
+        toolChoice: { tool: { name: "crm_lookup" } },
+      })
+    }),
+  )
+
   it.effect("prepares Converse target with system, inference config, and messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(baseRequest)

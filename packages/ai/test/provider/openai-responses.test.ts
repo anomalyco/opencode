@@ -179,6 +179,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           model,
           prompt: "Find a customer and their orders.",
+          toolChoice: "crm.lookup",
           tools: [
             ToolNamespace.make({
               name: "crm",
@@ -192,6 +193,7 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
+      expect(prepared.body.tool_choice).toEqual({ type: "function", name: "crm.lookup" })
       expect(prepared.body.tools).toEqual([
         {
           type: "namespace",

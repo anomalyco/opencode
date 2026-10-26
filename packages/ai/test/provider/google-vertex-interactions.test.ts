@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, Message, ToolCallPart } from "../../src/effect.js"
-import { GoogleVertexInteractions } from "../../src/providers.js"
+import { LLM, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../../src/effect.js"
+import { Google, GoogleVertexInteractions } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { Auth } from "../../src/route/auth.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -11,6 +11,34 @@ import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 describe("Google Vertex Interactions", () => {
+  it.effect("flattens namespaced forced choices for Google and Vertex Interactions", () =>
+    Effect.gen(function* () {
+      for (const model of [
+        Google.configure({ apiKey: "fixture" }).interactions("gemini-3.8-flash"),
+        GoogleVertexInteractions.configure({ apiKey: "fixture" }).model("gemini-3.8-flash"),
+      ]) {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model,
+            prompt: "Look up a customer.",
+            tools: [
+              ToolNamespace.make({
+                name: "crm",
+                tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+              }),
+            ],
+            toolChoice: "crm.lookup",
+          }),
+        )
+
+        expect(prepared.body.tools).toMatchObject([{ type: "function", name: "crm_lookup" }])
+        expect(prepared.body.generation_config?.tool_choice).toEqual({
+          allowed_tools: { mode: "any", tools: ["crm_lookup"] },
+        })
+      }
+    }),
+  )
+
   it.effect("streams through the global project endpoint with OAuth and Vertex service tiers", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

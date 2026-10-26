@@ -180,6 +180,7 @@ describe("Open Responses-compatible route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
+          toolChoice: { type: "tool", name: "acme.billing.lookup", disableParallelToolUse: true },
           tools: [
             {
               type: "namespace",
@@ -197,6 +198,8 @@ describe("Open Responses-compatible route", () => {
         }),
       )
 
+      expect(prepared.body.parallel_tool_calls).toBe(false)
+      expect(prepared.body.tool_choice).toEqual({ type: "function", name: "acme_billing_lookup" })
       expect(prepared.body.tools).toEqual([
         {
           type: "function",

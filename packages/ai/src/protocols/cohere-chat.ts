@@ -210,7 +210,7 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
       tool_plan: plans.length ? plans.join("") : undefined,
     })
   }
-  const selected = request.toolChoice?.type === "tool" ? request.toolChoice.name : undefined
+  const selected = flattened.request.toolChoice?.type === "tool" ? flattened.request.toolChoice.name : undefined
   const tools = selected === undefined ? flattened.tools : flattened.tools.filter((tool) => tool.name === selected)
   if (selected !== undefined && tools.length === 0)
     return yield* ProviderShared.invalidRequest("Cohere Chat tool choice must name an available tool")

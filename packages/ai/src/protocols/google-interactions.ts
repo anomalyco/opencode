@@ -332,9 +332,9 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
       "Google Interactions does not support topK, frequencyPenalty, or presencePenalty",
     )
   const choice =
-    request.toolChoice === undefined
+    flattened.request.toolChoice === undefined
       ? undefined
-      : yield* ProviderShared.matchToolChoice(ADAPTER, request.toolChoice, {
+      : yield* ProviderShared.matchToolChoice(ADAPTER, flattened.request.toolChoice, {
           auto: () => "auto" as const,
           none: () => "none" as const,
           required: () => "any" as const,

@@ -501,7 +501,8 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
           },
         ]
       : undefined,
-    toolConfig: hasTools && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
+    toolConfig:
+      hasTools && flattened.request.toolChoice ? yield* lowerToolConfig(flattened.request.toolChoice) : undefined,
     generationConfig: Object.values(generationConfig).some((value) => value !== undefined)
       ? generationConfig
       : undefined,

@@ -11,6 +11,8 @@ import {
   ToolDefinition,
   Usage,
   Media,
+  ToolChoice,
+  ToolNamespace,
 } from "../../src/effect.js"
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -69,6 +71,25 @@ const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): Anthro
 }
 
 describe("Anthropic Messages route", () => {
+  it.effect("flattens a namespaced forced tool choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: ToolChoice.make({ type: "tool", name: "crm.lookup", disableParallelToolUse: true }),
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ name: "crm_lookup" }])
+      expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "crm_lookup", disable_parallel_tool_use: true })
+    }),
+  )
+
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
