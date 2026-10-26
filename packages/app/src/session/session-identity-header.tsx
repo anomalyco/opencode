@@ -81,9 +81,8 @@ export function SessionHeaderLayout(
           </span>
           {props.children}
         </div>
-        <Show when={props.actions}>
-          <div class="session-header-actions">{props.actions}</div>
-        </Show>
+        {/* Each read of a JSX prop renders it again, so the actions render once, from the condition's value. */}
+        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()}</div>}</Show>
       </div>
     </SessionHeaderCollapse.Provider>
   )
