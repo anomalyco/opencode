@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, same, withinStartupWindow } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -72,12 +72,13 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
+    const starting = info !== undefined && (pool.starting(info.pid) || withinStartupWindow(info, timing))
     if (registration.timedOut && info !== undefined) {
       timeouts = {
         info,
         count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
       }
-      if (timeouts.count >= 3) {
+      if (timeouts.count >= 3 && !starting) {
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
@@ -107,7 +108,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    if (!starting && pool.shouldRecruit(info !== undefined)) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }
@@ -144,6 +145,7 @@ export const Info = Schema.Struct({
   version: Schema.optional(Schema.String),
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
+  startedAt: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   password: Schema.optional(Schema.String),
 })
 

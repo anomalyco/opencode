@@ -52,6 +52,8 @@ export type Info = {
   readonly url: string
   /** Operating system process identifier. */
   readonly pid: number
+  /** Epoch milliseconds when the managed service began starting. */
+  readonly startedAt?: number
   /** Private service password, when authentication is enabled. */
   readonly password?: string
 }

@@ -1,7 +1,7 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
-import { defaultEnsureTiming } from "./service-timing.js"
+import { defaultEnsureTiming, type EnsureTiming } from "./service-timing.js"
 import { matchesVersion } from "./service-version.js"
 
 // Shared by the Effect and Promise clients. Keep this module free of Effect so the
@@ -43,6 +43,16 @@ export function fallback() {
 /** Whether two registrations describe the same service instance. */
 export function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
+}
+
+/** Keep a registered service's shared startup window open for every concurrent client. */
+export function withinStartupWindow(info: Info, timing: EnsureTiming) {
+  return (
+    info.startedAt !== undefined &&
+    Number.isSafeInteger(info.startedAt) &&
+    info.startedAt > 0 &&
+    Date.now() < info.startedAt + timing.promiseTimeout
+  )
 }
 
 /** Ask a registered owner for its health and classify the answer. */

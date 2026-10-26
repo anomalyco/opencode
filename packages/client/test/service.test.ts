@@ -303,7 +303,7 @@ test("waits for a slow winner while bounding lock probes", async () => {
     ensure({
       file: registration,
       version: "test",
-      command: fixture.command("coordinated"),
+      command: fixture.command("coordinated", "600"),
     }),
   )
   const info = await Bun.file(registration).json()
@@ -312,6 +312,25 @@ test("waits for a slow winner while bounding lock probes", async () => {
   expect(endpoint.url).toBe(info.url)
   expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: info.pid })
   expect((await Bun.file(registration + ".starts").text()).trim().split("\n")).toHaveLength(2)
+})
+
+test("does not evict a slow service started by another client", async () => {
+  await using fixture = await serviceFixture()
+  const first = run(
+    ensure({ file: fixture.registration, version: "test", command: fixture.command("coordinated", "600") }),
+  )
+  const second = run(
+    ensure({ file: fixture.registration, version: "test", command: fixture.command("coordinated", "600") }),
+  )
+
+  await fixture.waitForFile()
+  const owner = await Bun.file(fixture.registration).json()
+  const [firstEndpoint, secondEndpoint] = await Promise.all([first, second])
+
+  expect(firstEndpoint.url).toBe(owner.url)
+  expect(secondEndpoint.url).toBe(owner.url)
+  expect((await Bun.file(fixture.registration).json()).pid).toBe(owner.pid)
+  expect(() => process.kill(owner.pid, 0)).not.toThrow()
 })
 
 test("waits for a live contender when another contender fails", async () => {
@@ -398,20 +417,22 @@ test("accepts a surviving contender after a failure without recruiting replaceme
   expect(await fixture.starts()).toHaveLength(2)
 })
 
-test("recovers when an unresponsive contender is evicted after a prior failure", async () => {
+test("reports the prior failure at the startup deadline without killing a live contender", async () => {
   await using fixture = await serviceFixture()
-  const pending = run(ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }))
+  const pending = run(
+    ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }),
+  ).catch((error: unknown) => error)
   const [first, second] = await fixture.waitForStarts(2)
   await fixture.release(second, "hang")
   await fixture.waitForFile()
   await fixture.release(first, "fail")
-  const [, , third] = await fixture.waitForStarts(3)
-  await fixture.release(third, "ready")
-  const endpoint = await pending
-  fixture.track(third)
-
-  expect((await run(Service.discover({ file: fixture.registration, version: "test" })))?.url).toBe(endpoint.url)
-  expect((await Bun.file(fixture.registration).json()).pid).toBe(third)
+  const error = await pending
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("Server process exited with code 23")
+  expect(await fixture.starts()).toHaveLength(2)
+  expect((await Bun.file(fixture.registration).json()).pid).toBe(second)
+  expect(() => process.kill(second, 0)).not.toThrow()
 })
 
 test("reports a bounded contender stderr tail", async () => {

@@ -48,6 +48,7 @@ if (mode === "old" || mode === "handoff") version = "old"
 if (mode === "incompatible") version = "1.9.0"
 if (mode === "compatible" || mode === "delayed-compatible") version = "2.1.0-next.1"
 const id = crypto.randomUUID()
+const readyAt = Date.now() + Number(delay ?? 0)
 const handoff = {
   directory: registration + ".daemon",
   instanceID: crypto.randomUUID(),
@@ -79,6 +80,7 @@ const server = Bun.serve({
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
+    if (mode === "coordinated") await Bun.sleep(Math.max(0, readyAt - Date.now()))
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
@@ -116,11 +118,20 @@ await writeFile(
     version,
     url: server.url.toString(),
     pid: process.pid,
+    ...(mode === "coordinated" ? { startedAt: Date.now() } : {}),
     password: "private",
   }),
   { mode: 0o600 },
 )
-await rename(registration + ".tmp", registration)
+for (let attempt = 0; attempt < 20; attempt++) {
+  try {
+    await rename(registration + ".tmp", registration)
+    break
+  } catch (cause) {
+    if (attempt === 19) throw cause
+    await Bun.sleep(10)
+  }
+}
 
 async function shutdown(signal?: NodeJS.Signals) {
   if (signal !== undefined) await writeFile(registration + ".signal", signal)
