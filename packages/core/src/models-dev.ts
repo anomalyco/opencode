@@ -127,6 +127,9 @@ const SourceProvider = Schema.Struct({
   models: Schema.Record(Schema.String, Schema.Unknown),
 })
 
+// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request.
+const TYPES: readonly string[] = ["chat", "decision", "image"]
+
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownOption(SourceModel)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
@@ -167,7 +170,8 @@ function normalize(catalog: Record<string, unknown>): readonly Snapshot[] {
     const providerID = Provider.ID.make(item.id)
     const sources = Object.values(item.models).flatMap((value) => {
       const model = Option.getOrUndefined(decodeModel(value))
-      const target = model && route(providerID, model)
+      // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
+      const target = model && TYPES.includes(model.type) && route(providerID, model)
       return model && target ? [{ model, route: target }] : []
     })
     if (sources.length === 0) return []
@@ -451,7 +455,7 @@ const CacheMeta = Schema.Struct({
 const defaultSource = "https://models.opencode.ai"
 
 // The experimental v2 API, limited to the model types opencode keeps.
-export const catalogPath = "/experimental/v2.0/api.json?type=chat,decision,image"
+export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
 
 export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map(normalize))
 

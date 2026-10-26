@@ -436,6 +436,39 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("drops model types opencode doesn't keep", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const api = {
+        images: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "@opencode/ai/providers/openai" } },
+      }
+      const model = (id: string, type: string) => ({
+        id,
+        type,
+        name: id,
+        release_date: "2026-01-01",
+        modalities: { input: ["text"], output: ["image"] },
+        capabilities: { tools: { supported: false }, reasoning: { supported: false } },
+        api,
+      })
+      writeCache(cache, {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          models: { "acme-image": model("acme-image", "image"), "acme-video": model("acme-video", "video") },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(acme?.models.map((item) => item.id)).toEqual([Model.ID.make("acme-image")])
+    }),
+  )
+
   it.live("reads a models.dev v1 catalog by converting it to v2", () =>
     Effect.gen(function* () {
       const cache = makeCache()
