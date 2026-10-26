@@ -9,13 +9,13 @@ import type { Project } from "@opencode/schema/project"
 import type { RelativePath } from "@opencode/schema/schema"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
+import type { Form } from "@opencode/schema/form"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { AgentAttachment } from "@opencode/schema/prompt"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import type { Money } from "@opencode/schema/money"
-import type { Form } from "@opencode/schema/form"
 import type { DateTime } from "effect"
 import type { Skill } from "@opencode/schema/skill"
 import type { InstructionEntry } from "@opencode/schema/instruction-entry"
@@ -169,6 +169,15 @@ export type SessionActiveOperation<E = never> = () => Effect.Effect<SessionActiv
 export type SessionGetInput = { readonly sessionID: Session.ID }
 export type SessionGetOutput = Session.Info
 export type SessionGetOperation<E = never> = (input: SessionGetInput) => Effect.Effect<SessionGetOutput, E>
+
+export type SessionFamilyInput = { readonly sessionID: Session.ID }
+export type SessionFamilyOutput = {
+  readonly rootID: Session.ID
+  readonly sessions: ReadonlyArray<Session.Info>
+  readonly permissions: ReadonlyArray<Permission.Request>
+  readonly forms: ReadonlyArray<Form.Info>
+}
+export type SessionFamilyOperation<E = never> = (input: SessionFamilyInput) => Effect.Effect<SessionFamilyOutput, E>
 
 export type SessionRemoveInput = { readonly sessionID: Session.ID }
 export type SessionRemoveOutput = void
@@ -414,6 +423,7 @@ export interface SessionApi<E = never> {
   readonly create: SessionCreateOperation<E>
   readonly active: SessionActiveOperation<E>
   readonly get: SessionGetOperation<E>
+  readonly family: SessionFamilyOperation<E>
   readonly remove: SessionRemoveOperation<E>
   readonly fork: SessionForkOperation<E>
   readonly switchAgent: SessionSwitchAgentOperation<E>

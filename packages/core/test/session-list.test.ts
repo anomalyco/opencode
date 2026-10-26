@@ -7,9 +7,12 @@ import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
@@ -99,6 +102,65 @@ describe("Session.list", () => {
       const error = yield* session.list({ cursor: Schema.decodeSync(Session.ListCursor)("invalid") }).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Session.InvalidListCursorError)
+    }),
+  )
+})
+
+describe("Session.family", () => {
+  const update = (sessionID: Session.ID, values: Partial<typeof SessionTable.$inferInsert>) =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      yield* database.db.update(SessionTable).set(values).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+    })
+
+  it.effect("returns the root first, then every descendant by creation time and ID", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const root = yield* session.create({ location: project })
+      const first = yield* session.create({ parentID: root.id })
+      const second = yield* session.create({ parentID: root.id })
+      const grandchild = yield* session.create({ parentID: first.id })
+      const fork = yield* session.create({ location: project })
+      yield* session.create({ location: project })
+      yield* update(fork.id, {
+        fork_session_id: root.id,
+        fork_boundary: { type: "through", messageID: SessionMessage.ID.make("msg_root") },
+      })
+      yield* update(root.id, { time_created: 4 })
+      // IDs descend with creation, so grandchild.id < second.id < first.id: the tie leaves grandchild before first.
+      yield* update(grandchild.id, { time_created: 1 })
+      yield* update(first.id, { time_created: 1 })
+      yield* update(second.id, { time_created: 2 })
+      yield* session.archive(second.id)
+
+      const family = yield* session.family(grandchild.id)
+
+      expect(family.rootID).toBe(root.id)
+      expect(family.sessions.map((item) => [item.id, item.status])).toEqual([
+        [root.id, "idle"],
+        [grandchild.id, "idle"],
+        [first.id, "idle"],
+        [second.id, "idle"],
+      ])
+      expect((yield* session.family(root.id)).sessions.map((item) => item.id)).toEqual(
+        family.sessions.map((item) => item.id),
+      )
+    }),
+  )
+
+  it.effect("treats the topmost ancestor as root and ends on a parent cycle", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const root = yield* session.create({ location: project })
+      const child = yield* session.create({ parentID: root.id })
+      const missing = Session.ID.make("ses_missing")
+
+      yield* update(root.id, { parent_id: missing })
+      expect((yield* session.family(child.id)).rootID).toBe(root.id)
+
+      yield* update(root.id, { parent_id: child.id })
+      expect(yield* session.family(child.id).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
+      expect(yield* session.family(missing).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
     }),
   )
 })
