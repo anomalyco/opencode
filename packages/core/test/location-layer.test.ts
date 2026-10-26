@@ -419,6 +419,23 @@ describe("LocationServiceMap", () => {
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
 
+            const variants = [
+              `${directory}${path.sep}`,
+              `${directory}${path.sep}${path.sep}`,
+              `${path.dirname(directory)}${path.sep}${path.sep}${path.basename(directory)}`,
+              `${directory}${path.sep}.${path.sep}child${path.sep}..${path.sep}`,
+            ]
+            for (const variant of variants) {
+              const ref = Location.Ref.make({ directory: AbsolutePath.make(variant) })
+              expect(LocationServiceMap.canonical(ref).directory).toBe(directory)
+              expect(yield* locations.contextEffect(ref)).toBe(first)
+            }
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            const root = path.parse(directory).root
+            expect(
+              LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(root) })).directory,
+            ).toBe(AbsolutePath.make(root))
+
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
             expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
