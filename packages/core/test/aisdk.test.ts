@@ -22,7 +22,7 @@ import {
   isContextOverflowFailure,
 } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
-import { compileRequest } from "@opencode/ai/route/client"
+import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
