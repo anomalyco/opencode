@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { Match } from "effect"
 import { holdRoute, NO_PROVIDER, sessionHref } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { mockWorkspace } from "../utils/workspace"
@@ -47,11 +48,12 @@ async function open(
   await expectSessionTitle(page, title)
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
 
-  const panel = {
-    settings: page.getByTestId("settings-screen"),
-    popover: page.getByRole("group", { name: "MCP", exact: true }),
-    dialog: page.getByRole("dialog", { name: "MCPs", exact: true }),
-  }[input.surface]
+  const panel = Match.value(input.surface).pipe(
+    Match.when("settings", () => page.getByTestId("settings-screen")),
+    Match.when("popover", () => page.getByRole("group", { name: "MCP", exact: true })),
+    Match.when("dialog", () => page.getByRole("dialog", { name: "MCPs", exact: true })),
+    Match.exhaustive,
+  )
 
   const show = async () => {
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
@@ -77,6 +79,26 @@ async function open(
   ).toBeVisible()
 
   return { requests, panel, show, push: mock.push, toggle: panel.getByRole("switch") }
+}
+
+for (const surface of ["popover", "dialog"] as const) {
+  test(`idle MCP stays enabled and disconnects from the ${surface}`, async ({ page }) => {
+    const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
+
+    const view = await open(page, {
+      surface,
+      mcp: [{ name: "figma-desktop", status: { status: "idle" } }],
+      onMcpAction: (action) => void actions.push(action),
+    })
+
+    await expect(view.toggle).toBeChecked()
+    await expect(view.toggle).toBeEnabled()
+    await expect(view.toggle).toHaveAccessibleDescription("Idle")
+    await view.panel.locator('[data-slot="switch-control"]').click()
+    await expect(view.toggle).not.toBeChecked()
+    await expect(view.toggle).toBeEnabled()
+    expect(actions).toEqual([{ server: "figma-desktop", action: "disconnect", directory: workspace }])
+  })
 }
 
 test("settings shows and toggles the MCP of the session it was opened from", async ({ page }) => {

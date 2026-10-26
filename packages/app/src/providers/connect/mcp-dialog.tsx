@@ -235,6 +235,7 @@ export function McpDialog(props: {
               }
 
               // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
+
               const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID
 
               const busy = () => props.target === item().name
