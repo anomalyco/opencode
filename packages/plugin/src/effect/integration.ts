@@ -51,6 +51,8 @@ export type IntegrationOAuthAuthorization = {
   readonly url: string
   readonly instructions: string
   readonly expiresAt?: number
+  /** Replace this integration's existing credential only after authorization succeeds. */
+  readonly replaceCredentialID?: string
   readonly onComplete?: () => { readonly title: string; readonly url: string } | undefined
 } & (
   | {

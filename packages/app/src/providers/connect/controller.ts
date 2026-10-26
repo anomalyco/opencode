@@ -428,6 +428,7 @@ export function createProviderConnectionController(options: {
     }
 
     const merged = { ...providerFormDefaults(form), ...answer }
+    setStore("formAnswer", Object.keys(merged).length ? merged : undefined)
 
     if (selected.type === "key") {
       dispatch({ type: "auth.answer", answer: Object.keys(merged).length ? merged : undefined })

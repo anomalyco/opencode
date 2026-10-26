@@ -1,6 +1,6 @@
 import { intro, log, outro, select, spinner, text } from "@clack/prompts"
 import { Effect, Option } from "effect"
-import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
+import type { ConnectionInfo, FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
@@ -51,7 +51,27 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
   if (methods.length === 0) yield* Effect.fail(new Error(`${integration.name} has no interactive login methods`))
   const method = yield* chooseMethod(methods, input.method)
   const answer = yield* answerForm(method.type === "command" ? undefined : method.form, input.answer)
-  yield* authenticate(client, integration, method, answer)
+  const expired =
+    integration.id === "vercel" && method.type === "oauth" && method.id === "gateway-setup"
+      ? integration.connections.filter(
+          (connection): connection is Extract<ConnectionInfo, { type: "credential" }> =>
+            connection.type === "credential" && connection.method === "key" && !!connection.status,
+        )
+      : []
+  if (expired.length > 1) yield* requireInteractive("Select a Vercel connection to renew in an interactive terminal")
+  const credentialID =
+    expired.length > 1
+      ? yield* prompt<string>(() =>
+          select({
+            message: "Reconnect a Vercel connection",
+            options: expired.map((connection) => ({
+              value: connection.id,
+              label: connection.label,
+            })),
+          }),
+        )
+      : expired[0]?.id
+  yield* authenticate(client, integration, method, credentialID ? { ...answer, credentialID } : answer)
   outro("Done")
 })
 

@@ -18,6 +18,14 @@ References:
 - [Vercel scopes and permissions](https://vercel.com/docs/sign-in-with-vercel/scopes-and-permissions)
 - [Vercel CLI AI Gateway setup](https://github.com/vercel/vercel/blob/main/packages/cli/src/commands/ai-gateway/coding-agents-setup.ts)
 
+## Renewal
+
+New keys save their expiration, name, and expiration preset alongside the team and key ID. The provider watches the next expiration and reports **Key expired** on the existing connection. A Gateway `401` also offers reconnect, covering revoked keys and older saved keys without expiry metadata; billing (`402`) and permission (`403`) failures do not start renewal.
+
+In the app, open the Vercel connection and select **Reconnect Vercel**. The TUI exposes the same action on the affected account. CLI `auth login vercel` with the Gateway setup method renews the affected connection, asking which one if several need attention. Browser authorization is followed by the existing setup interview, prefilled with the previous team, key name, and expiration when available.
+
+Only successful, confirmed authorization replaces the saved credential. The connection's ID, label, active-account selection, and model preferences are preserved; cancellation or failed authorization leaves the old key untouched. Renewal does not retain Vercel OAuth tokens or create replacement keys silently in the background. Old remote keys are not deleted automatically.
+
 ## Shared integration behavior
 
 OAuth authorizers may use their second `prompt` argument to ask validated forms after sign-in. Each form has an ID, appears in the pending attempt's status, and is answered through `integration.oauth.complete` with `promptID` and `answer`. Replayed or stale form IDs are rejected. Existing code and automatic OAuth methods remain supported.

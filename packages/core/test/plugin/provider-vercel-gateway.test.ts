@@ -1,5 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schedule } from "effect"
+import { Clock, Effect, Schedule } from "effect"
+import { TestClock } from "effect/testing"
+import { Agent } from "@opencode/core/agent"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { drain } from "../lib/clock"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
@@ -8,12 +15,51 @@ import { make } from "@opencode/core/plugin/provider/vercel-gateway"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import { withEnv } from "../fixture/env"
+import type { Form } from "@opencode/schema/form"
 
 const it = testEffect(PluginTestLayer)
 const integrationID = Integration.ID.make("vercel")
 const methodID = Integration.MethodID.make("gateway-setup")
 
-const fixture = Effect.fn(function* (denied = false, clientID = "opencode-test-client") {
+const replace = Effect.fn(function* (integrations: Integration.Interface, id: Credential.ID, key: string) {
+  const methodID = Integration.MethodID.make("test-renew")
+  yield* integrations.transform((editor) =>
+    editor.method.update({
+      integrationID,
+      method: { id: methodID, type: "oauth", label: "Renew" },
+      authorize: () =>
+        Effect.succeed({
+          mode: "auto" as const,
+          url: "https://example.com",
+          instructions: "Sign in",
+          replaceCredentialID: id,
+          callback: Effect.succeed(Credential.Key.make({ type: "key", key })),
+        }),
+    }),
+  )
+  yield* integrations.oauth.connect({ integrationID, methodID })
+  yield* drain
+})
+
+const fixture = Effect.fn(function* (denied = false, clientID = "opencode-test-client", renew = false) {
+  const credentials = yield* Credential.Service
+  const previous = renew
+    ? yield* credentials.create({
+        integrationID,
+        label: "Laptop",
+        value: Credential.Key.make({
+          type: "key",
+          key: "expired-key",
+          metadata: { teamID: "team_work", name: "Laptop key", expiration: "30", expiresAt: 1 },
+        }),
+      })
+    : undefined
+  if (previous)
+    yield* credentials.create({
+      integrationID,
+      label: "Other",
+      value: Credential.Key.make({ type: "key", key: "other-key" }),
+    })
   const requests: Array<{ path: string; method: string; body?: unknown }> = []
   const server = yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -63,7 +109,11 @@ const fixture = Effect.fn(function* (denied = false, clientID = "opencode-test-c
   const host = yield* PluginHost.make(plugin)
   yield* make({ ...(clientID ? { clientID } : {}), issuer: server.url.origin, api: server.url.origin }).effect(host)
   const integrations = yield* Integration.Service
-  const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+  const attempt = yield* integrations.oauth.connect({
+    integrationID,
+    methodID,
+    ...(previous ? { answer: { credentialID: previous.id } } : {}),
+  })
   const input = { integrationID, attemptID: attempt.attemptID }
   const status = (ready: (value: Integration.AttemptStatus) => boolean) =>
     integrations.oauth
@@ -72,10 +122,127 @@ const fixture = Effect.fn(function* (denied = false, clientID = "opencode-test-c
         Effect.repeat({ while: (value) => !ready(value), schedule: Schedule.spaced("1 millis") }),
         Effect.timeout("5 seconds"),
       )
-  return { requests, integrations, attempt, input, status }
+  return { requests, integrations, attempt, input, status, previous }
 })
 
 describe("Vercel AI Gateway setup", () => {
+  it.live("keeps the old key and account selection when renewal is cancelled", () =>
+    Effect.gen(function* () {
+      const test = yield* fixture(false, "opencode-test-client", true)
+      const credentials = yield* Credential.Service
+      yield* test.status((value) => value.status === "pending" && !!value.prompt)
+      yield* test.integrations.oauth.cancel(test.input)
+      expect(yield* credentials.get(test.previous!.id)).toEqual(test.previous)
+      expect((yield* test.integrations.get(integrationID))?.connections[0]).toMatchObject({ label: "Other" })
+      expect(test.requests.some((request) => request.path.startsWith("/v1/api-keys"))).toBe(false)
+    }),
+  )
+  it.effect("marks a saved key expired when its deadline passes and clears the warning on replacement", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      const now = yield* Clock.currentTimeMillis
+      const saved = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "old-key", metadata: { expiresAt: now + 60_000 } }),
+      })
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* make().effect(host)
+      yield* drain
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status).toBeUndefined()
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status).toMatchObject({
+        status: "needs_auth",
+        message: expect.stringContaining("expired"),
+      })
+      yield* replace(integrations, saved.id, "new-key")
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status).toBeUndefined()
+    }),
+  )
+
+  it.effect("treats Gateway 401s as reconnectable without confusing billing or a stale request with key expiry", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      const hooks = yield* PluginHooks.Service
+      const saved = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "old-key" }),
+      })
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* make().effect(host)
+      const response = (status: number) =>
+        hooks.trigger("session", "http.response", {
+          sessionID: Session.ID.make("ses_gateway"),
+          agent: Agent.ID.make("build"),
+          model: Model.Ref.make({ providerID: Provider.ID.make("vercel"), id: Model.ID.make("test-model") }),
+          kind: "primary",
+          request: new Request("https://ai-gateway.vercel.sh/v1/chat/completions", {
+            headers: { Authorization: "Bearer old-key" },
+          }),
+          response: Response.json({ error: "failed" }, { status }),
+        })
+      yield* response(402)
+      yield* drain
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status).toBeUndefined()
+      yield* response(401)
+      yield* drain
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status?.message).toContain("Reconnect Vercel")
+      yield* replace(integrations, saved.id, "replacement-key")
+      yield* response(401)
+      yield* drain
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status).toBeUndefined()
+    }),
+  )
+
+  it.live(
+    "renews the selected connection in place, preserves its label and active selection, and saves the new expiry",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* fixture(false, "opencode-test-client", true)
+        const credentials = yield* Credential.Service
+        const steps: Array<{ key: string; answer: Form.Answer }> = [
+          { key: "team", answer: { team: "team_work" } },
+          { key: "name", answer: { name: "Laptop key", expiration: "30" } },
+          { key: "create", answer: { create: true } },
+        ]
+        for (const step of steps) {
+          const pending = yield* test.status(
+            (value) => value.status === "pending" && value.prompt?.fields[0]?.key === step.key,
+          )
+          if (pending.status !== "pending" || !pending.prompt) throw new Error("Missing renewal step")
+          if (step.key === "name") expect(pending.prompt.fields[0]).toMatchObject({ default: "Laptop key" })
+          yield* test.integrations.oauth.complete({ ...test.input, promptID: pending.prompt.id, answer: step.answer })
+        }
+        yield* test.status((value) => value.status === "complete")
+        const saved = yield* credentials.list(integrationID)
+        expect(saved).toHaveLength(2)
+        expect(saved.find((value) => value.id === test.previous?.id)).toMatchObject({
+          label: "Laptop",
+          value: { type: "key", key: "gateway-key", metadata: { expiration: "30", expiresAt: expect.any(Number) } },
+        })
+        expect((yield* test.integrations.connection.active(integrationID))?.type).toBe("credential")
+        expect((yield* test.integrations.get(integrationID))?.connections[0]).toMatchObject({ label: "Other" })
+        expect(
+          (yield* test.integrations.get(integrationID))?.connections.find(
+            (value) => value.type === "credential" && value.id === test.previous?.id,
+          )?.status,
+        ).toBeUndefined()
+      }),
+  )
+
+  it.live("keeps the old connection intact when renewal is denied", () =>
+    Effect.gen(function* () {
+      const test = yield* fixture(true, "opencode-test-client", true)
+      const credentials = yield* Credential.Service
+      yield* test.status((value) => value.status === "failed")
+      expect(yield* credentials.get(test.previous!.id)).toEqual(test.previous)
+      expect(test.requests.some((request) => request.path.startsWith("/v1/api-keys"))).toBe(false)
+    }),
+  )
   it.live("uses the temporary Vercel CLI client ID when no override is configured", () =>
     withEnv({ OPENCODE_VERCEL_CLIENT_ID: undefined }, () =>
       Effect.gen(function* () {

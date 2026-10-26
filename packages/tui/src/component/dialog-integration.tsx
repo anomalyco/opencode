@@ -218,12 +218,29 @@ function manageConnections(
                   ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
                   : connection.label,
                 value: connection.id,
-                footer: connection.status ? "Sign in required →" : undefined,
+                footer: connection.status
+                  ? integration.id === "vercel"
+                    ? "Reconnect Vercel →"
+                    : "Sign in required →"
+                  : undefined,
+                description: connection.status?.message,
                 footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: "Connected accounts",
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
                 fg: confirming ? theme.text.action.destructive.focused : undefined,
                 onSelect: () => {
+                  if (connection.status && integration.id === "vercel") {
+                    const method = methods.find((method) => method.type === "oauth" && method.id === "gateway-setup")
+                    if (method?.type === "oauth")
+                      return void beginOAuth(
+                        current() ?? integration,
+                        method,
+                        location,
+                        dialog,
+                        () => dialog.clear(),
+                        connection.id,
+                      )
+                  }
                   if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
                   if (connection.status)
                     return selectMethod(current() ?? integration, methods, location, dialog, onConnected)
@@ -587,9 +604,11 @@ async function beginOAuth(
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
+  credentialID?: string,
 ) {
-  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
-  if (answer === null) return
+  const fields = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
+  if (fields === null) return
+  const answer = credentialID ? { ...fields, credentialID } : fields
   dialog.replace(() => (
     <OAuthStarting
       integration={integration}

@@ -62,6 +62,8 @@ export type OAuthAuthorization = {
   readonly url: string
   readonly instructions: string
   readonly expiresAt?: number
+  /** Replace this integration's existing credential only after authorization succeeds. */
+  readonly replaceCredentialID?: string
   readonly onComplete?: () => { readonly title: string; readonly url: string } | undefined
 } & (
   | {
@@ -480,6 +482,25 @@ const layer = Layer.effect(
             .get()
             .integrations.get(attempt.integrationID)
             ?.implementations.get(attempt.methodID)
+          const replacementID = attempt.authorization.replaceCredentialID
+          if (replacementID)
+            return Effect.gen(function* () {
+              const id = Credential.ID.make(replacementID)
+              const existing = yield* credentials.get(id)
+              if (!existing || existing.integrationID !== attempt.integrationID)
+                return yield* new AuthorizationError({ cause: new Error("The connection to renew no longer exists") })
+              yield* credentials.update(id, { value: exit.value })
+              statuses.delete(
+                statusKey(attempt.integrationID, {
+                  type: "credential",
+                  id,
+                  label: existing.label,
+                  method: existing.value.type,
+                }),
+              )
+              yield* bus.publish(Integration.Event.Updated, {})
+              yield* bus.publish(Credential.Event.Updated, {}, { global: true })
+            })
           return createCredential({
             integrationID: attempt.integrationID,
             label: attempt.label ?? (exit.value.type === "oauth" ? implementation?.label?.(exit.value) : undefined),

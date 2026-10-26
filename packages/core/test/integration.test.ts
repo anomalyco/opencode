@@ -50,6 +50,39 @@ function eventually<A, E, R>(
 }
 
 describe("Integration", () => {
+  it.effect("does not replace a credential belonging to a different integration", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const original = yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.Key.make({ type: "key", key: "keep" }),
+      })
+      const integrationID = Integration.ID.make("vercel")
+      const methodID = Integration.MethodID.make("renew")
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "Renew" },
+          authorize: () =>
+            Effect.succeed({
+              mode: "auto" as const,
+              url: "https://example.com",
+              instructions: "Sign in",
+              replaceCredentialID: original.id,
+              callback: Effect.succeed(Credential.Key.make({ type: "key", key: "wrong" })),
+            }),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+      yield* Effect.yieldNow
+      expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toMatchObject({
+        status: "failed",
+      })
+      expect(yield* credentials.get(original.id)).toEqual(original)
+      expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
   it.effect("validates setup steps and stores a derived key only after confirmation", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

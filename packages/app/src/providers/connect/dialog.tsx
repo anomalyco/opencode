@@ -479,6 +479,7 @@ function ProviderConnection(props: {
     switching?: string
     activating?: string
     renaming?: string
+    renewing?: string
   }>({
     adding: false,
     direct: false,
@@ -512,6 +513,11 @@ function ProviderConnection(props: {
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
+      if (state.renewing) {
+        showToast({ variant: "success", icon: "circle-check", title: language.t("provider.connect.vercel.renewed") })
+        dialog.close()
+        return
+      }
       const method = controller.currentMethod()
       props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
       // The picker only lists the newest model per family by default, which hides most of
@@ -1095,7 +1101,7 @@ function ProviderConnection(props: {
   function goBack() {
     if (backToAccounts()) {
       controller.auth.reset()
-      setState({ adding: false, direct: false })
+      setState({ adding: false, direct: false, renewing: undefined })
 
       return
     }
@@ -1350,7 +1356,7 @@ function ProviderConnection(props: {
   }
 
   const addAccount = () => {
-    setState({ adding: true, direct: false, confirming: undefined })
+    setState({ adding: true, direct: false, confirming: undefined, renewing: undefined })
 
     // Like the TUI: a lone method starts directly, several show the method list.
     if (controller.methods().length !== 1) return
@@ -1386,6 +1392,14 @@ function ProviderConnection(props: {
 
     if (url) return void platform.openExternal(url)
 
+    if (account.status && props.provider === "vercel") {
+      const index = controller.methods().findIndex((method) => method.type === "oauth" && method.id === "gateway-setup")
+      if (index >= 0) {
+        setState({ adding: true, direct: true, confirming: undefined, renewing: account.id })
+        void controller.auth.select(index, { credentialID: account.id })
+        return
+      }
+    }
     if (account.status) return addAccount()
     void activateAccount(account)
   }
@@ -1393,6 +1407,16 @@ function ProviderConnection(props: {
   function AccountsView() {
     return (
       <div data-component="provider-accounts" class="flex flex-col">
+        <For each={props.provider === "vercel" ? accounts().filter((account) => account.status) : []}>
+          {(account) => (
+            <div role="alert" class="mx-3 mb-3 flex flex-col items-start gap-2 text-[13px] leading-5">
+              <p class="text-v2-text-text-muted">{account.status?.message}</p>
+              <Button variant="neutral" onClick={() => selectAccount(account)}>
+                {language.t("provider.connect.vercel.reconnect")}
+              </Button>
+            </div>
+          )}
+        </For>
         <div role="radiogroup" aria-label={language.t("dialog.provider.accounts.connected")} class="flex flex-col">
           <For each={accounts()}>
             {(account) => (
