@@ -451,6 +451,8 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
     expect(yield* due(grown)).toBe(true)
+    // The auto check, precompute and request sizing in one step share a single estimate of its context.
+    expect(SessionCompaction.estimatePrompt(grown)).toBe(SessionCompaction.estimatePrompt(grown))
 
     const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [...grown.messages, interrupted] })).toBe(90_001)

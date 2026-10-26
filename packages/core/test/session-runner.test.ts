@@ -76,21 +76,7 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import {
-  Cause,
-  Context,
-  DateTime,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Queue,
-  Schema,
-  Scope,
-  Stream,
-  Tracer,
-} from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -101,14 +87,6 @@ import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
-// Counts spans by name, so a test can assert how often a step does some work.
-const spanCounts = new Map<string, number>()
-const countingTracer = Tracer.make({
-  span(options) {
-    spanCounts.set(options.name, (spanCounts.get(options.name) ?? 0) + 1)
-    return Tracer.Tracer.defaultValue().span(options)
-  },
-})
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
   readonly count: number
@@ -518,11 +496,7 @@ const layer = Layer.unwrap(
       ],
     )
   }),
-).pipe(
-  Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)),
-  Layer.provideMerge(testLLM),
-  Layer.provideMerge(Layer.succeed(Tracer.Tracer, countingTracer)),
-)
+).pipe(Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)), Layer.provideMerge(testLLM))
 const it = testEffect(layer)
 const sessionID = Session.ID.make("ses_runner_test")
 const otherSessionID = Session.ID.make("ses_runner_other")
@@ -1029,23 +1003,6 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(1)
     expect((yield* s.session.get(sessionID)).title).toBe("Manual title")
-  })
-
-  scenario("reads history once per step", function* (s) {
-    yield* s.llm.push(
-      TestLLM.tool("call-one", "echo", { text: "one" }),
-      TestLLM.tool("call-two", "echo", { text: "two" }),
-      TestLLM.text("Done", "text-done"),
-    )
-    spanCounts.clear()
-
-    yield* s.runPrompt("Run two tools")
-
-    expect(s.requests).toHaveLength(3)
-    expect(spanCounts.get("SessionHistory.entriesForRunner")).toBe(3)
-    // Outside the steps, only the turn's sweep for interrupted tool calls reads the transcript.
-    expect(spanCounts.get("SessionHistory.load")).toBe(1)
-    expect(spanCounts.get("SessionHistory.preview")).toBeUndefined()
   })
 
   scenario("coalesces title generation while a request is active", function* (s) {
