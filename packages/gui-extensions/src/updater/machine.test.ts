@@ -256,6 +256,14 @@ describe("updater", () => {
     expect(app.state()).toEqual({ status: "download-required", version: "2.0.0" })
   })
 
+  // Check for Updates reports what this resolves to, so a staged update must come back as ready, not silently.
+  test("a manual check while an update is staged resolves to the staged version", async () => {
+    const app = await setup({ checks: ["2.0.0"] })
+    await app.start()
+
+    expect(await app.check()).toEqual({ status: "ready", version: "2.0.0" })
+  })
+
   test("concurrent checks share one platform check", async () => {
     const app = await setup()
 

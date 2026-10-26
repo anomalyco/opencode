@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM, LLMEvent } from "../../src/index.js"
+import { LLM, LLMEvent } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { LLMClient } from "../../src/route.js"

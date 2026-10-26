@@ -564,6 +564,20 @@ const prepareRequest = (request: LLMRequest) => {
 }
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+  const references = request.messages.flatMap((message) =>
+    message.content.flatMap((part) => {
+      if (part.type === "media") {
+        const source = part.media.source
+        return source.type === "url" ? [source.url] : source.type === "ref" ? [source.id] : []
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return []
+      return part.result.value.flatMap((item) => (item.type === "file" ? [item.uri] : []))
+    }),
+  )
+  if (references.some((reference) => /^\s*file:/i.test(reference)))
+    return yield* ProviderShared.invalidRequest(
+      "Local file references must be read with Media.file(path) before sending",
+    )
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 

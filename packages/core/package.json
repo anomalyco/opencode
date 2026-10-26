@@ -122,7 +122,7 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.19.0",
+    "gitlab-ai-provider": "6.23.1",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",
     "http-proxy-agent": "7.0.2",

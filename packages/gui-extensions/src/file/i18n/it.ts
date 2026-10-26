@@ -1,9 +1,5 @@
 export default {
   "tree.all": "Tutti i file",
-  "tree.empty": "Nessun file",
-  "tree.changes.one": "{{count}} file modificato",
-  "tree.changes.many": "{{count}} file modificati",
-  "tree.changes.other": "{{count}} file modificati",
   "tab.notFound": "File non trovato: {{name}}",
   "mobile.title": "File",
   "mobile.openTabs": "File aperti",

@@ -49,11 +49,17 @@ import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent } from "./ipc"
+import { pageShortcut } from "./keys"
 import { refusal } from "./policy"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
-  createEmbeds(input: { bridge: Bridge | undefined; zoom: () => number; dialog: () => boolean }): Embeds
+  createEmbeds(input: {
+    bridge: Bridge | undefined
+    zoom: () => number
+    dialog: () => boolean
+    moving: () => boolean
+  }): Embeds
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   UiI18nBridge: ParentComponent
   useLanguage(): { t(key: string): string }
@@ -72,6 +78,10 @@ type PaneFixtureState = {
   error: string | undefined
   layouts: Record<string, BridgeLayout | undefined>
   covered: boolean
+  /** A panel is in flight, as the host's panel motion reports it. */
+  moving: boolean
+  /** Whether a host dialog is open over the app. */
+  dialog: boolean
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
@@ -131,6 +141,8 @@ export function mountBrowserPane(input: PaneHost) {
       error: undefined,
       layouts: {},
       covered: false,
+      moving: false,
+      dialog: false,
       captures: 0,
       holdCapture: false,
       picker: {},
@@ -165,7 +177,15 @@ export function mountBrowserPane(input: PaneHost) {
 
     const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
 
-    const bridge: Pick<Bridge, "embed" | "capture"> = {
+    // Main's window focus reports, which focus moving into an embed does not end.
+    const windowFocus = new Set<Parameters<Bridge["on"]>[0]>()
+
+    const bridge: Pick<Bridge, "embed" | "capture" | "on"> = {
+      on: (listener) => {
+        windowFocus.add(listener)
+
+        return () => windowFocus.delete(listener)
+      },
       embed: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
         setStore("captures", (count) => count + 1)
@@ -183,8 +203,13 @@ export function mountBrowserPane(input: PaneHost) {
       },
     }
 
-    // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
-    const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
+    // SAFETY: the host embeds call only `embed`, `capture` and `on` on their bridge (`runtime/extension/embeds.tsx`).
+    const embeds = input.createEmbeds({
+      bridge: bridge as Bridge,
+      zoom: () => 1,
+      dialog: () => store.dialog,
+      moving: () => store.moving,
+    })
 
     const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
       (messages.get(key) ?? language.t(key)).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
@@ -356,7 +381,14 @@ export function mountBrowserPane(input: PaneHost) {
       uses: { pane: { load: () => live } },
       sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
       screen: { current: () => screen },
-      layout: { narrow: () => false, stored: () => [], state: () => "visible", open() {}, close() {} },
+      layout: {
+        narrow: () => false,
+        stored: () => [],
+        state: () => "visible",
+        open() {},
+        close() {},
+        side: { opened: () => true, toggle() {}, menu: () => [] },
+      },
       links: { open() {} },
       stores: {
         history: {
@@ -468,13 +500,19 @@ export function mountBrowserPane(input: PaneHost) {
             <button onClick={() => setStore("holdCapture", true)}>Hold capture</button>
             <button onClick={() => held.splice(0).forEach((resolve) => resolve())}>Release capture</button>
             <button onClick={() => setStore("covered", (covered) => !covered)}>Toggle popover</button>
+            <button onClick={() => setStore("moving", (moving) => !moving)}>Toggle panel motion</button>
+            <For each={[false, true]}>
+              {(focused) => (
+                <button onClick={() => windowFocus.forEach((listener) => listener({ type: "focus", focused }))}>
+                  {focused ? "Focus window" : "Blur window"}
+                </button>
+              )}
+            </For>
+            <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
             <button onClick={pick}>Pick element</button>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
               Page icon
-            </button>
-            <button onClick={() => emit(store.session, { type: "address", tabID: current().id })}>
-              Address shortcut
             </button>
           </nav>
           <p>Captures: {store.captures}</p>
@@ -553,6 +591,8 @@ export function mountBrowserPane(input: PaneHost) {
 }
 
 type StripTabs = {
+  /** The stored strip; the fixture keeps every tab in the side pane. */
+  tabs(): { all: string[]; active?: string }
   all(): string[]
   active(): string | undefined
   setAll(all: string[]): void
@@ -562,6 +602,20 @@ type StripTabs = {
 }
 
 type PaneClient = IpcClient<(typeof BrowserPane)["spec"]>
+
+/** Whether a key event belongs to the side region, and whether the user's focus last was there. */
+type SideFocus = ((event: Event) => boolean) & { focused: () => boolean }
+
+/** What the side region's shortcuts drive. */
+type SideShortcuts = {
+  keys: () => readonly string[]
+  active: () => string | undefined
+  select: (key: string) => void
+  close: (key: string) => void
+  focus: SideFocus
+  openNewTab: () => void
+  closeNewTab: () => boolean
+}
 
 /** The app's extension host and side region, passed in by `packages/app/component-tests/browser-pane-restore.spec.ts`. */
 type RegionHost = {
@@ -583,17 +637,37 @@ type RegionHost = {
     view: Accessor<MountedSession>
     screen: SessionScreen
     tabs: Accessor<StripTabs>
+    side: Accessor<{ opened(): boolean; toggle(): void }>
   }): {
     keys(): readonly string[]
     active(): string | undefined
+    toggle(): void
     entry(key: string): { readonly tab: PanelTab; readonly extension: string; readonly provider: Panel } | undefined
+    select(key: string): void
+    close(key: string): void
+    reopen(): void
+    focus: SideFocus
+    newTab(pane: "side"): boolean
+    openNewTab(): void
+    closeNewTab(): boolean
   }
   /** The real browser and file extensions. */
   definitions: readonly Definition[]
   /** Real shell command providers for shortcut cases. */
   Shell: ParentComponent
   /** Shell fallback and the real extension command adapter. */
-  Commands: Component<{ close: () => void }>
+  Commands: Component<{
+    close: () => void
+    review: () => void
+    newSession: () => void
+    reopenSession: () => void
+    reopenSide: () => void
+    switchSession: () => void
+    /** The side region, for its tab shortcuts. */
+    side: () => SideShortcuts | undefined
+    /** The shortcut the browser's + menu item shows, as the host formats it; empty when it shows none. */
+    shortcut: (shortcut: Accessor<string>) => void
+  }>
   /** The real host wrapper that renders an extension in its context. */
   Contribution: Component<{ extension: string; children: () => JSX.Element }>
 }
@@ -607,10 +681,24 @@ type RegionFixtureState = {
   away: boolean
   /** Whether the fixture's shell session was closed by its fallback shortcut. */
   closed: boolean
+  /** How many times the review side panel toggled from a shortcut. */
+  reviews: number
+  /** Whether the side region is open. The pane stays mounted either way, so a page keeps its shortcuts. */
+  opened: boolean
+  /** How many times the shell's new session shortcut ran. */
+  sessions: number
+  /** How many browser tabs the pane asked main to open. */
+  opens: number
+  /** How many page reloads the pane asked main for. */
+  reloads: number
+  reopens: number
+  switches: number
   /** The page main reports, blank or loaded. */
   blank: boolean
   /** Native browser tab close requests, by tab id. */
   closes: string[]
+  /** Native element picker requests, by tab id and state. */
+  inspects: { tabID: string; enabled: boolean }[]
 }
 
 // Component-test fixture: the real side region over the real browser and file extensions, with the host's
@@ -636,12 +724,20 @@ export function mountBrowserRegion(input: RegionHost) {
       registrations: [],
       away: false,
       closed: false,
+      reviews: 0,
+      opened: true,
+      sessions: 0,
+      opens: 0,
+      reloads: 0,
+      reopens: 0,
+      switches: 0,
       blank: false,
       closes: [],
+      inspects: [],
     })
 
-    // The file tree's state, Changes or All files, as the file extension stores it.
-    const [tree, setTree] = createSignal<object>()
+    const [shortcut, setShortcut] = createSignal<Accessor<string>>(() => "")
+    const [sideRegion, setSideRegion] = createSignal<ReturnType<RegionHost["createRegion"]>>()
     const strip = (session: string) => store.strips[session] ?? { all: [] }
     const setAll = (session: string, all: string[]) => setStore("strips", session, "all", all)
 
@@ -729,8 +825,10 @@ export function mountBrowserRegion(input: RegionHost) {
 
         if (options?.tab !== "append") setStore("strips", session.key, "active", key)
       },
-      close: (key, session) => close(session.key, key),
+      // As the host does, the routed session's strip closes it.
+      close: (key, session) => (session.key === view().key ? sideRegion()?.close(key) : close(session.key, key)),
       toggle() {},
+      hide() {},
       state(key, session) {
         if (strip(session.key).active === key) return "visible"
 
@@ -740,18 +838,17 @@ export function mountBrowserRegion(input: RegionHost) {
         strip(session.key).all.flatMap((key) =>
           key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [],
         ),
-      side: { opened: () => true, toggle() {} },
+      side: { opened: () => true, toggle() {}, menu: () => [] },
       sidebar: { opened: () => true },
-      dock: { opened: () => false, placement: () => "side" },
       scroll: { get: () => undefined, set() {} },
       settings() {},
       project() {},
+      draft() {},
+      command() {},
     })
 
     const keep = <T extends object>(key: string, initial: T) => {
       const [value, set] = createStore<T>(structuredClone(initial))
-
-      if (key === "file:tree") setTree(() => value)
 
       return {
         memory: [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const,
@@ -789,6 +886,17 @@ export function mountBrowserRegion(input: RegionHost) {
 
     const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
 
+    // The page main reports for a tab.
+    const tab = (id: Browser.TabID) => ({
+      id,
+      url: store.blank ? "about:blank" : "http://localhost:4173/",
+      title: store.blank ? "" : "Preview",
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      generation: 0,
+    })
+
     const pane: PaneClient = {
       register: async (value) => {
         setStore("registrations", (items) => [
@@ -798,16 +906,33 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       load: async () => undefined,
       command: async (value) => {
+        if (value.command.type === "tabs.open") setStore("opens", (count) => count + 1)
+
+        if (value.command.type === "reload") setStore("reloads", (count) => count + 1)
+
+        // As main answers a new tab beside a blank page: the new blank tab joins the inventory and is selected.
+        if (value.command.type === "tabs.open" && !value.command.url && store.blank) {
+          const opened = Browser.TabID.make(`tab_44444444-4444-4444-4444-${String(store.opens).padStart(12, "0")}`)
+          const state = { tabs: [tab(tabID), tab(opened)], focusedTabID: opened }
+          listeners.forEach((listener) => listener({ binding: value.binding, event: { type: "state", state } }))
+          listeners.forEach((listener) => listener({ binding: value.binding, event: { type: "focus", tabID: opened } }))
+        }
+
         if (value.command.type !== "tabs.close") return
 
-        const tabID = value.command.tabID
+        const closed = value.command.tabID
 
-        setStore("closes", (items) => [...items, tabID])
+        setStore("closes", (items) => [...items, closed])
         listeners.forEach((listener) =>
           listener({ binding: value.binding, event: { type: "state", state: { tabs: [], focusedTabID: null } } }),
         )
       },
-      inspect: async () => undefined,
+      inspect: async (value) => {
+        setStore("inspects", (items) => [...items, { tabID: value.tabID, enabled: value.enabled }])
+        listeners.forEach((listener) =>
+          listener({ binding: value.binding, event: { type: "inspect", tabID: value.tabID, active: value.enabled } }),
+        )
+      },
       highlight: async () => undefined,
       zoom: async () => undefined,
       site: async () => ({ cookies: 0 }),
@@ -848,18 +973,49 @@ export function mountBrowserRegion(input: RegionHost) {
 
       if (!binding) return
 
-      const tab = {
-        id: tabID,
-        url: store.blank ? "about:blank" : "http://localhost:4173/",
-        title: store.blank ? "" : "Preview",
-        loading: false,
-        canGoBack: false,
-        canGoForward: false,
-        generation: 0,
-      }
-
       listeners.forEach((listener) =>
-        listener({ binding, event: { type: "state", state: { tabs: [tab], focusedTabID: tabID } } }),
+        listener({ binding, event: { type: "state", state: { tabs: [tab(tabID)], focusedTabID: tabID } } }),
+      )
+    }
+
+    // Wires an embedded page with the same before-input-event shortcut interception as chromium.ts.
+    const wirePage = (frame: HTMLIFrameElement) => {
+      const win = frame.contentWindow
+
+      if (!win) return
+      const mac = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+      win.addEventListener(
+        "keydown",
+        (event) => {
+          const shortcut = pageShortcut(
+            {
+              key: event.key,
+              code: event.code,
+              control: event.ctrlKey,
+              meta: event.metaKey,
+              shift: event.shiftKey,
+              alt: event.altKey,
+            },
+            mac,
+          )
+
+          const binding = latest()?.binding
+
+          if (!shortcut || !binding) return
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          listeners.forEach((listener) => listener({ binding, event: { type: "shortcut", ...shortcut } }))
+        },
+        true,
+      )
+      // As chromium.ts reports the native page taking keyboard focus, which arrives over IPC after the click.
+      win.addEventListener("focus", () =>
+        setTimeout(() => {
+          const binding = latest()?.binding
+
+          if (binding) listeners.forEach((listener) => listener({ binding, event: { type: "focused", tabID } }))
+        }),
       )
     }
 
@@ -870,6 +1026,7 @@ export function mountBrowserRegion(input: RegionHost) {
         view,
         screen,
         tabs: () => ({
+          tabs: () => strip(view().key),
           all: () => strip(view().key).all,
           active: () => strip(view().key).active,
           setAll: (all) => setAll(view().key, all),
@@ -882,7 +1039,10 @@ export function mountBrowserRegion(input: RegionHost) {
             if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view().key, next)
           },
         }),
+        side: () => ({ opened: () => store.opened, toggle: () => setStore("opened", (opened) => !opened) }),
       })
+
+      setSideRegion(() => region)
 
       const browser = () => {
         const entry = region.entry(region.active() ?? "")
@@ -891,7 +1051,12 @@ export function mountBrowserRegion(input: RegionHost) {
       }
 
       return (
-        <>
+        <aside
+          id="review-panel"
+          tabIndex={-1}
+          aria-label="Side region"
+          data-focused={region.focus.focused() || undefined}
+        >
           {/* The host strip draws a trigger for each of these keys. */}
           <div role="tablist" aria-label="Side panel" style={{ display: "flex", gap: "8px", margin: "16px 0" }}>
             <For each={region.keys()}>
@@ -903,6 +1068,7 @@ export function mountBrowserRegion(input: RegionHost) {
             </For>
           </div>
           <p data-testid="selected">{region.active() ?? "none"}</p>
+          <p data-testid="side-new-tab">{region.newTab("side") ? "shown" : "none"}</p>
           <Show when={browser()}>
             {(entry) => (
               <PanelContext.Provider
@@ -932,7 +1098,7 @@ export function mountBrowserRegion(input: RegionHost) {
               </PanelContext.Provider>
             )}
           </Show>
-        </>
+        </aside>
       )
     }
 
@@ -956,11 +1122,30 @@ export function mountBrowserRegion(input: RegionHost) {
             }}
             ipc={(token) => (token.id === BrowserPane.id && !store.away ? pane : undefined)}
           >
-            <input.Commands close={() => setStore("closed", true)} />
+            <input.Commands
+              close={() => setStore("closed", true)}
+              review={() => {
+                setStore("reviews", (count) => count + 1)
+                sideRegion()?.toggle()
+              }}
+              newSession={() => setStore("sessions", (count) => count + 1)}
+              reopenSession={() => setStore("reopens", (count) => count + 1)}
+              reopenSide={() => sideRegion()?.reopen()}
+              switchSession={() => setStore("switches", (count) => count + 1)}
+              side={sideRegion}
+              shortcut={(next) => setShortcut(() => next)}
+            />
             <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>
             <nav style={{ display: "flex", gap: "12px", margin: "16px 0" }}>
               <button onClick={() => setStore({ session: beta, closed: false })}>Beta</button>
-              <button onClick={inventory}>First inventory</button>
+              <button
+                onClick={() => {
+                  setStore("blank", false)
+                  inventory()
+                }}
+              >
+                First inventory
+              </button>
               <button
                 onClick={() => {
                   setStore("blank", true)
@@ -972,11 +1157,26 @@ export function mountBrowserRegion(input: RegionHost) {
               <button onClick={() => setStore("away", true)}>Pane away</button>
               <button onClick={() => setStore("away", false)}>Pane back</button>
             </nav>
+            <iframe
+              title="Browser page"
+              srcdoc='<!doctype html><input aria-label="Editor page input" onkeydown="if ((event.ctrlKey || event.metaKey) &amp;&amp; /^[kw]$/i.test(event.key)) { event.preventDefault(); this.value = &apos;handled:&apos; + event.key.toLowerCase() }" />'
+              onLoad={(event) => wirePage(event.currentTarget)}
+              style={{ height: "48px" }}
+            />
             <p>Registrations: {store.registrations.length}</p>
             <p>Beta restores: {latest()?.restore ?? 0}</p>
-            <p data-testid="tree">{JSON.stringify(tree())}</p>
             <p data-testid="session-state">{store.closed ? "closed" : "open"}</p>
+            <p data-testid="review-toggles">{store.reviews}</p>
+            <p data-testid="side-state">{store.opened ? "open" : "closed"}</p>
+            <textarea aria-label="Composer" />
+            <p data-testid="new-sessions">{store.sessions}</p>
+            <p data-testid="browser-opens">{store.opens}</p>
+            <p data-testid="browser-reloads">{store.reloads}</p>
+            <p data-testid="session-reopens">{store.reopens}</p>
+            <p data-testid="session-switches">{store.switches}</p>
+            <p data-testid="add-shortcut">{shortcut()() || "none"}</p>
             <p data-testid="browser-closes">{JSON.stringify(store.closes)}</p>
+            <p data-testid="browser-inspects">{JSON.stringify(store.inspects)}</p>
             <Ready>
               <Strip />
             </Ready>

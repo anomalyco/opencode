@@ -48,6 +48,7 @@ export const groupNames = {
   "server.provider": "provider",
   "server.integration": "integration",
   "server.websearch": "websearch",
+  "server.usage": "usage",
   "server.credential": "credential",
   "server.form": "form",
   "server.permission": "permission",
@@ -71,6 +72,7 @@ export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.conne
 export const effectOmitEndpoints = new Set([
   "fs.read",
   "fs.write",
+  "media.get",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",

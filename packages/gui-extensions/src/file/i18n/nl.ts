@@ -1,8 +1,5 @@
 export default {
   "tree.all": "Alle bestanden",
-  "tree.empty": "Geen bestanden",
-  "tree.changes.one": "{{count}} bestand gewijzigd",
-  "tree.changes.other": "{{count}} bestanden gewijzigd",
   "tab.notFound": "Bestand niet gevonden: {{name}}",
   "mobile.title": "Bestanden",
   "mobile.openTabs": "Geopende bestanden",

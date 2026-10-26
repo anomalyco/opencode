@@ -13,7 +13,7 @@ import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
-import { createSessionRetention } from "./session-retention"
+import { createSessionRetention } from "@opencode/client/solid"
 import { createProgramStatus, type PendingSession } from "./program-status"
 import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {

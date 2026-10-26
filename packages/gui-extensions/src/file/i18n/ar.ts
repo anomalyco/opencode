@@ -1,12 +1,5 @@
 export default {
   "tree.all": "كل الملفات",
-  "tree.empty": "لا توجد ملفات",
-  "tree.changes.zero": "تم تغيير {{count}} ملف",
-  "tree.changes.one": "تم تغيير {{count}} ملف",
-  "tree.changes.two": "تم تغيير ملفين ({{count}})",
-  "tree.changes.few": "تم تغيير {{count}} ملفات",
-  "tree.changes.many": "تم تغيير {{count}} ملفًا",
-  "tree.changes.other": "تم تغيير {{count}} ملف",
   "tab.notFound": "الملف غير موجود: ⁨{{name}}⁩",
   "mobile.title": "الملفات",
   "mobile.openTabs": "الملفات المفتوحة",

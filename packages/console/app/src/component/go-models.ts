@@ -1,19 +1,37 @@
+type GoModel = {
+  id: string
+  name: string
+  requests: number
+  allowance: number
+  bonus?: number
+  featured?: boolean
+  fresh?: boolean
+  limitedTime?: boolean
+  regions?: boolean
+}
+
 // Requests are per 5 hours; allowances are monthly usage at official API prices.
-export const goModels = [
-  { id: "kimi-k3", name: "Kimi K3", requests: 110, allowance: 15, featured: true },
+export const goModels: GoModel[] = [
+  { id: "kimi-k3", name: "Kimi K3", requests: 110, allowance: 15 },
+  {
+    id: "kimi-k3.1-pro",
+    name: "Kimi K3.1 Pro",
+    requests: 147,
+    allowance: 15,
+    featured: true,
+    fresh: true,
+  },
   { id: "qwen3.8-max", name: "Qwen3.8 Max", requests: 160, allowance: 15 },
   { id: "grok-4.7", name: "Grok 4.7", requests: 169, allowance: 15 },
   { id: "glm-5.3", name: "GLM-5.3", requests: 220, allowance: 15 },
   { id: "step-5-preview", name: "Step 5 Preview", requests: 430, allowance: 15 },
   {
-    id: "gemini-4-argon-contributor",
-    name: "Gemini 4 Argon Contributor",
+    id: "gemini-4-argon",
+    name: "Gemini 4 Argon",
     requests: 440,
-    allowance: 60,
-    bonus: 2,
+    allowance: 30,
     featured: true,
     fresh: true,
-    limitedTime: true,
   },
   { id: "glm-5.2", name: "GLM-5.2", requests: 880, allowance: 60 },
   { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", requests: 1050, allowance: 15 },
@@ -62,16 +80,17 @@ export const goModels = [
     regions: true,
   },
   {
-    id: "longcat-2.5-preview-free",
-    name: "LongCat 2.5 Preview Free",
+    id: "beam-free",
+    name: "Beam Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
+    fresh: true,
     limitedTime: true,
   },
   {
-    id: "beam-free",
-    name: "Beam Free",
+    id: "iceman-contributor-free",
+    name: "Iceman Contributor Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
@@ -83,11 +102,12 @@ export const goModels = [
 // Go Plus limits are published per model in the Console, not a fixed multiplier of Go.
 const plusLimits: Record<string, [number, number]> = {
   "kimi-k3": [440, 60],
+  "kimi-k3.1-pro": [588, 60],
   "qwen3.8-max": [640, 60],
   "grok-4.7": [676, 60],
   "glm-5.3": [1760, 120],
   "step-5-preview": [1720, 60],
-  "gemini-4-argon-contributor": [1760, 240],
+  "gemini-4-argon": [1760, 120],
   "glm-5.2": [2640, 180],
   "deepseek-v4-pro": [4200, 60],
   "kimi-k2.7-code": [4050, 180],
@@ -109,14 +129,14 @@ const plusLimits: Record<string, [number, number]> = {
   "mimo-v2.5": [60200, 120],
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
-  "longcat-2.5-preview-free": [Infinity, Infinity],
   "beam-free": [Infinity, Infinity],
+  "iceman-contributor-free": [Infinity, Infinity],
 }
 
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.
 export const goPlanModels = goModels.map((model) => {
   const [plusRequests, plusAllowance] = plusLimits[model.id]!
-  const bonus = "bonus" in model ? model.bonus : undefined
+  const bonus = model.bonus
   return {
     ...model,
     plusRequests,

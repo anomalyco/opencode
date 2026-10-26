@@ -1,4 +1,4 @@
-import { expect, sourceURL, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -66,10 +66,88 @@ story("hides the native view immediately while the pane stays mounted", async ({
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
+story("paints a still of the page in place of the native view while a panel moves", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const motion = root.getByRole("button", { name: "Toggle panel motion", exact: true })
+  const pane = root.getByRole("button", { name: "Toggle Review tab", exact: true })
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+
+  // Read in the same task as the click: a native view left up for even one frame floats over the moving app.
+  const visible = await motion.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+    return document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+  })
+
+  expect(visible).toBe("false")
+  // A close: the page flies out as a still of itself rather than a blank box.
+  await expect(still).toBeVisible()
+  await pane.click()
+  await expect(still).toBeVisible()
+  await motion.click()
+  await expect(still).toHaveCount(0)
+
+  // An open shows the still the close left, until the flight lands and the page is back.
+  await motion.click()
+  await pane.click()
+  await expect(still).toBeVisible()
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await motion.click()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+})
+
+story("never flies a still of a page the tab has navigated away from", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const motion = root.getByRole("button", { name: "Toggle panel motion", exact: true })
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+  await motion.click()
+  await expect(still).toBeVisible()
+  await motion.click()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.fill("https://example.com/")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://example.com/")
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await motion.click()
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(still).toHaveCount(0)
+  // The new page's own still stands in once it arrives.
+  await root.getByRole("button", { name: "Release capture", exact: true }).click()
+  await expect(still).toBeVisible()
+})
+
+story("refreshes page stills by the window's focus, not the document's", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const captures = async () => Number((await root.getByText(/^Captures: \d+$/).textContent())?.split(": ")[1])
+  await page.clock.install()
+  await expect(root.getByText(/^Captures: [1-9]/)).toBeVisible()
+
+  // Main reports the window unfocused while this document keeps focus: stills follow the window, so they stop.
+  await root.getByRole("button", { name: "Blur window", exact: true }).click()
+  const paused = await captures()
+  await page.clock.runFor(120_000)
+  expect(await captures()).toBe(paused)
+
+  // Focus coming back to the window, even straight into the embed, which never focuses this document, takes a fresh
+  // still at once.
+  await root.getByRole("button", { name: "Focus window", exact: true }).click()
+  await page.clock.runFor(10)
+  await expect(root.getByText(`Captures: ${paused + 1}`, { exact: true })).toBeVisible()
+})
+
 story("keeps a still of the page under floating content that covers it", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
   const native = root.getByTestId("native-Alpha")
+  // Reduced motion lands panels at once, so the pane keeps no flight still and captures only for the cover.
+  await page.emulateMedia({ reducedMotion: "reduce" })
   await root.getByRole("button", { name: "Hold capture", exact: true }).click()
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
@@ -96,6 +174,35 @@ story("keeps a still of the page under floating content that covers it", async (
   expect(await order.jsonValue()).toEqual(["still presented", "page hidden"])
 
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+  await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+})
+
+story("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const still = root.locator("#browser-panel img")
+  const native = root.getByTestId("native-Alpha")
+  const toggle = root.getByRole("button", { name: "Toggle dialog", exact: true })
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+
+  // Read in the same task as the click: the page must not hide before its still exists.
+  const visible = await toggle.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
+    return document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+  })
+
+  expect(visible).toBe("true")
+  await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Release capture", exact: true }).click()
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(still).toBeVisible()
+
+  await toggle.click()
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
@@ -519,14 +626,6 @@ story("adds the whole page to the session and keeps the draft when the button is
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
 })
 
-story("focuses the address field when the page uses the address shortcut", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
-  await root.getByRole("button", { name: "Address shortcut", exact: true }).click()
-  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
-  await expect(address).toBeFocused()
-  await expect(address).toHaveJSProperty("selectionEnd", "https://alpha.example/".length)
-})
-
 story("shows the page's cookies in the site information and clears them", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Site information", exact: true }).click()
@@ -548,9 +647,6 @@ story("zooms the page from the browser options in view and keeps its zoom in the
 
   const zoom = root.getByRole("button", { name: "110%", exact: true })
   await expect(zoom).toBeVisible()
-  await options.click()
-  await expect(page.getByRole("menuitem", { name: /^Reset zoom/ })).toContainText("110%")
-  await page.keyboard.press("Escape")
   await zoom.click()
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()

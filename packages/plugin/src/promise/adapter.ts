@@ -610,6 +610,22 @@ export function fromPromise(plugin: Plugin) {
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            instructions: {
+              entry: {
+                list: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.list"],
+                  host.session.instructions.entry.list,
+                ),
+                put: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.put"],
+                  host.session.instructions.entry.put,
+                ),
+                remove: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.remove"],
+                  host.session.instructions.entry.remove,
+                ),
+              },
+            },
           },
           shell: {
             hook: (name, callback) =>

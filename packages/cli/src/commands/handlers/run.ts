@@ -7,10 +7,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
     const { runNonInteractive } = yield* Effect.promise(() => import("../../run/run"))
     const separator = process.argv.indexOf("--", 2)
-    const server = yield* ServerConnection.resolve({
-      server: Option.getOrUndefined(input.server),
-      standalone: input.standalone,
-    })
+    const server = yield* ServerConnection.resolve()
     yield* Effect.promise(() =>
       runNonInteractive({
         server,

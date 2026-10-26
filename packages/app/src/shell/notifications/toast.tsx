@@ -1,5 +1,5 @@
 import { Icon, type IconProps } from "@opencode/ui/icon"
-import { Toast, showToast, toaster, type ToastOptions } from "@opencode/ui/toast"
+import { Toast, showToast, type ToastOptions } from "@opencode/ui/toast"
 import type { JSX } from "solid-js"
 
 type AppToastOptions = Omit<ToastOptions, "icon"> & {
@@ -24,10 +24,6 @@ function showAppToast(options: AppToastOptions | string) {
 }
 
 export { showAppToast as showToast }
-
-export function dismissToast(toastId: number) {
-  return toaster.dismiss(toastId)
-}
 
 function resolveIcon(icon: IconProps["name"] | undefined, variant: ToastOptions["variant"]) {
   const name = icon ?? (variant === "success" ? "check" : undefined)

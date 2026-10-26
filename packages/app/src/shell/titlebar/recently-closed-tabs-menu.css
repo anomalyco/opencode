@@ -1,0 +1,25 @@
+.recently-closed-search > [data-component="text-input-v2"] {
+  width: 100%;
+  background: transparent;
+  box-shadow: none;
+}
+
+.recently-closed-search > [data-component="text-input-v2"]:is(:hover, :focus-within):not([data-disabled]),
+.recently-closed-search > [data-component="text-input-v2"]:has(input:not(:placeholder-shown)):not([data-disabled]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.recently-closed-search[data-empty="true"] [data-slot="text-input-v2-icon-button"] {
+  visibility: hidden;
+}
+
+.recently-closed-search [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+  color: var(--v2-icon-icon-faint);
+  cursor: default;
+}
+
+.recently-closed-search
+  [data-slot="text-input-v2-icon-button"][data-variant="clear"]:is(:hover, :active, :focus-visible):not(:disabled) {
+  background: transparent;
+  color: var(--v2-icon-icon-base);
+}

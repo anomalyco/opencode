@@ -87,11 +87,10 @@ export interface PanelFrame {
   readonly present: Accessor<boolean>
   /**
    * Where the render is placed.
-   * - `side`: the side region, or a dock beside the timeline.
-   * - `bottom`: a dock stacked below the timeline.
-   * - `mobile`: a narrow-screen view (`Panel.mobile`), or a dock embedded in one.
+   * - `side`: the side region.
+   * - `mobile`: a narrow-screen view (`Panel.mobile`).
    */
-  readonly placement: Accessor<"side" | "bottom" | "mobile">
+  readonly placement: Accessor<"side" | "mobile">
   /** Leave room at the end of a header for the host's region toggle. */
   readonly reserve: Accessor<boolean>
   /** Plays size animations; false while the user drags a region edge. */

@@ -39,7 +39,7 @@
 .session-summary-row,
 .session-service-row,
 .session-service-config,
-[data-component="switch"].session-mcp-row {
+.session-mcp-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -70,6 +70,7 @@
 
 .session-summary-row:focus-visible,
 .session-service-config:focus-visible,
+button.session-service-row:focus-visible,
 .session-mcp-row:focus-within {
   outline: none;
   background: var(--v2-overlay-simple-overlay-hover);
@@ -78,6 +79,7 @@
 @media (hover: hover) {
   button.session-summary-row:hover,
   .session-service-config:not(:disabled):hover,
+  button.session-service-row:hover,
   .session-summary-move:has(> .session-summary-dismiss:hover) > .session-summary-row,
   .session-mcp-row:not([data-disabled]):hover {
     background: var(--v2-overlay-simple-overlay-hover);
@@ -89,7 +91,7 @@
 }
 
 .session-summary-heading {
-  color: var(--v2-text-text-muted);
+  color: var(--v2-text-text-faint);
   font-weight: 530;
 }
 
@@ -101,53 +103,167 @@
   white-space: nowrap;
   text-align: start;
 }
-.session-summary-heading .session-summary-label {
-  flex: 0 1 auto;
-}
-.session-summary-disclosure {
-  flex-shrink: 0;
-  color: var(--v2-icon-icon-muted);
-}
-.session-summary-heading[aria-expanded="false"] .session-summary-disclosure {
-  transform: rotate(-90deg);
-}
-.session-summary-heading[aria-expanded="false"]:dir(rtl) .session-summary-disclosure {
-  transform: rotate(90deg);
-}
-
-.session-service-menu {
+/* One flyout beside the Extensions card. It glides to the hovered row and clips to the list on show. */
+.session-service-flyout {
+  /* A .25s, bounce 0 spring, sampled over its .3s settle. */
+  --spring-snap: linear(
+    0,
+    0.04,
+    0.131,
+    0.243,
+    0.358,
+    0.466,
+    0.562,
+    0.645,
+    0.715,
+    0.774,
+    0.821,
+    0.859,
+    0.89,
+    0.914,
+    0.934,
+    0.949,
+    0.96,
+    0.97,
+    0.977,
+    0.982,
+    0.986,
+    0.99,
+    0.992,
+    0.994,
+    1
+  );
+  position: absolute;
   z-index: 60;
+  top: 0;
+  inset-inline-end: 100%;
   width: 280px;
   max-width: calc(100vw - 32px);
-  max-height: min(480px, calc(100dvh - 32px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    transform 0.3s var(--spring-snap),
+    visibility 0s linear 0.11s;
+
+  &[data-open] {
+    pointer-events: auto;
+    visibility: visible;
+    transition:
+      transform 0.3s var(--spring-snap),
+      visibility 0s;
+  }
+}
+
+.session-service-flyout-body {
+  /* The shadow follows the clipped surface, so it is a filter rather than a box shadow. */
+  filter: drop-shadow(0 8px 8px var(--v2-alpha-dark-4)) drop-shadow(0 4px 4px var(--v2-alpha-dark-8))
+    drop-shadow(0 0 0.5px var(--v2-alpha-dark-12));
+  opacity: 0;
+  scale: 0.96;
+  translate: 4px 0;
+  transform-origin: right top;
+  transition:
+    opacity 0.11s cubic-bezier(0.4, 0, 1, 1),
+    scale 0.11s cubic-bezier(0.4, 0, 1, 1),
+    translate 0.11s cubic-bezier(0.4, 0, 1, 1);
+
+  &:dir(rtl) {
+    translate: -4px 0;
+    transform-origin: left top;
+  }
+
+  .session-service-flyout[data-open] & {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+    transition:
+      opacity 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      scale 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      translate 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+[data-color-scheme="dark"] .session-service-flyout-body {
+  filter: drop-shadow(0 8px 8px var(--v2-alpha-dark-30)) drop-shadow(0 4px 4px var(--v2-alpha-dark-30))
+    drop-shadow(0 0 0.5px var(--v2-alpha-light-16));
+}
+
+.session-service-flyout-surface {
+  display: grid;
   padding: 2px;
   border-radius: 6px;
   background: var(--v2-background-bg-layer-01);
-  box-shadow: var(--v2-elevation-floating);
-  outline: none;
   color: var(--v2-text-text-base);
   font-size: 13px;
   font-weight: 440;
   line-height: var(--line-height-compact);
-  transform-origin: var(--kb-popover-content-transform-origin);
-  animation: menu-v2-in 120ms ease-out;
+  clip-path: inset(0 0 calc(100% - var(--flyout-height)) 0 round 6px);
+  transition: clip-path 0.3s var(--spring-snap);
+}
 
-  &[data-empty] {
-    width: 232px;
+.session-service-pane {
+  grid-area: 1 / 1;
+  align-self: start;
+  max-height: min(480px, calc(100dvh - 36px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+
+  /* Lists swap at once; only the box glides and resizes, so two lists never show together. */
+  &:not([data-active]) {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* A list taller than the viewport scrolls under soft edges. */
+  &[data-overflow] {
+    mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 16px), transparent);
+
+    > .session-service-pane-content {
+      padding-block: 12px 16px;
+    }
   }
 }
 
-:is(.session-service-menu, .session-service-drawer) .session-summary-row,
-:is(.session-service-menu, .session-service-drawer) .session-service-row,
-:is(.session-service-menu, .session-service-drawer) .session-service-config,
-:is(.session-service-menu, .session-service-drawer) [data-component="switch"].session-mcp-row {
+.session-service-pane [data-slot="truncated-text-label"] {
+  text-overflow: clip;
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+
+  &:dir(rtl) {
+    mask-image: linear-gradient(to left, #000 calc(100% - 20px), transparent);
+  }
+}
+
+.session-service-trigger {
+  .session-service-dot {
+    width: 6px;
+  }
+}
+
+.session-service-count {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-service-chevron:dir(rtl) {
+  scale: -1 1;
+}
+
+.session-service-error {
+  overflow-wrap: anywhere;
+}
+
+:is(.session-service-pane, .session-service-drawer) .session-summary-row,
+:is(.session-service-pane, .session-service-drawer) .session-service-row,
+:is(.session-service-pane, .session-service-drawer) .session-service-config,
+:is(.session-service-pane, .session-service-drawer) .session-mcp-row {
   font-size: inherit;
   line-height: inherit;
 }
 
-:is(.session-service-menu, .session-service-drawer)
+:is(.session-service-pane-content, .session-service-drawer)
   > :is(.session-service-row, .session-mcp-row)
   + :is(.session-service-row, .session-mcp-row) {
   margin-block-start: 2px;
@@ -157,17 +273,6 @@
   color: var(--v2-text-text-base);
   font-size: 13px;
   line-height: var(--line-height-compact);
-}
-
-.session-service-title {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  color: var(--v2-text-text-faint);
-  font-size: inherit;
-  font-weight: 530;
-  letter-spacing: 0.05px;
 }
 
 .session-service-empty {
@@ -192,7 +297,7 @@
   color: var(--v2-text-text-faint);
   overflow-wrap: anywhere;
 }
-:is(.session-service-menu, .session-service-drawer) > .session-service-footer {
+:is(.session-service-pane-content, .session-service-drawer) > .session-service-footer {
   padding-block-start: 6px;
 }
 .session-service-config-separator {
@@ -211,15 +316,6 @@
   text-align: start;
   text-decoration: none;
   cursor: pointer;
-
-  .session-service-config-arrow {
-    opacity: 0;
-    transition: opacity 150ms ease-out;
-  }
-
-  &:is(:hover, :focus-visible) .session-service-config-arrow {
-    opacity: 1;
-  }
 
   &:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
@@ -253,25 +349,95 @@
 .session-service-dot[data-status="needs_auth"] {
   color: var(--icon-warning-base);
 }
+.session-service-dot[data-status="disabled"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.session-service-dot[data-status="pending"]::before {
+  animation: session-service-pulse 1s ease-in-out infinite;
+}
+@keyframes session-service-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+button.session-service-dot {
+  position: relative;
+  border-radius: 4px;
+  cursor: pointer;
 
-[data-component="switch"].session-mcp-row [data-slot="switch-label"] {
+  /* A 16px target around the dot, so a failed one is easy to hover. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
+  }
+}
+.session-service-dot-tip {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-shrink: 0;
+}
+:is(.session-mcp-row, .session-service-row)[data-status="disabled"] .session-summary-label {
+  color: var(--v2-text-text-muted);
+}
+
+.session-mcp-name {
+  display: flex;
   flex: 1;
   min-width: 0;
-  height: auto;
-  align-self: stretch;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
+  align-items: center;
+  gap: 8px;
 }
-.session-service-status {
+
+.session-mcp-name .session-service-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.session-mcp-trailing {
+  display: flex;
   flex-shrink: 0;
-  font-size: inherit;
-  line-height: var(--line-height-compact);
-  color: var(--v2-text-text-faint);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-inline-start: 8px;
+  white-space: nowrap;
 }
+
+/* A quiet ghost action in the switch's place, as in the MCPs dialog. */
+.session-mcp-sign-in[data-component="button-v2"][data-size="small"] {
+  height: 20px;
+  margin-inline-end: -5px;
+  padding-inline: 5px;
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 16px;
+  letter-spacing: 0.05px;
+}
+
+div.session-mcp-row {
+  cursor: pointer;
+}
+
+@media (max-width: 639px), (hover: none) {
+  .session-mcp-row {
+    min-height: 44px;
+    padding-block: 8px;
+  }
+}
+
+.session-mcp-error-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
 .session-mcp-row[aria-disabled="true"] [data-slot="switch-control"] {
   opacity: 0.5;
 }
@@ -306,21 +472,36 @@
 
 @media (max-width: 767px) {
   [data-component="session-summary-panel"] .session-summary-row,
-  .session-service-menu .session-service-title,
-  .session-service-menu .session-service-row,
-  .session-service-menu .session-service-config,
-  .session-service-menu .session-mcp-row {
+  .session-service-pane .session-service-row,
+  .session-service-pane .session-service-config,
+  .session-service-pane .session-mcp-row {
     min-height: 44px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .session-summary-popover,
-  .session-service-menu {
+  .session-service-dot::before {
     animation: none;
   }
 
-  .session-service-config .session-service-config-arrow {
+  /* No travel: the flyout and its lists only fade. */
+  .session-service-flyout {
+    transition: visibility 0s linear 0.15s;
+  }
+
+  .session-service-flyout[data-open] {
+    transition: visibility 0s;
+  }
+
+  .session-service-flyout-surface {
     transition: none;
+  }
+
+  .session-service-flyout-body,
+  .session-service-flyout[data-open] .session-service-flyout-body {
+    scale: none;
+    translate: none;
+    transition: opacity 0.15s ease-out;
   }
 }

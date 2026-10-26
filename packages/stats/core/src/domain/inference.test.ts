@@ -127,9 +127,11 @@ describe("inference stat normalization", () => {
     expect(statModel("x-preview-f", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha-free", "")).toBe("glm-5.3-flash")
-    expect(statModel("cat-jam-free", "")).toBe("beam")
-    expect(statModel("beam-free", "")).toBe("beam")
+    expect(statModel("cat-jam-free", "")).toBe("beam-1.0-501b-a23b")
+    expect(statModel("beam-free", "")).toBe("beam-1.0-501b-a23b")
+    expect(statModel("beam-1.0-501b-a23b", "")).toBe("beam-1.0-501b-a23b")
     expect(RETIRED_STAT_MODELS).toContain("cat-jam")
+    expect(RETIRED_STAT_MODELS).toContain("beam")
     expect(statProvider("cat-jam-free", "", "unknown")).toBe("reflection")
     expect(statProvider("beam-free", "", "unknown")).toBe("reflection")
     expect(statModel("ll-alpha-free", "")).toBe("flint-40b")
@@ -292,7 +294,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -365,7 +367,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

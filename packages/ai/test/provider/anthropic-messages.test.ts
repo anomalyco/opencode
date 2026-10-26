@@ -11,11 +11,11 @@ import {
   ToolDefinition,
   Usage,
   Media,
-} from "../../src/index.js"
+} from "../../src/effect.js"
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
-import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
-import { GoogleVertexMessages } from "../../src/providers.js"
+import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
+import { GoogleVertexMessages, Meta } from "../../src/providers.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -240,6 +240,17 @@ describe("Anthropic Messages route", () => {
         cache_control: { type: "ephemeral" },
         output_config: { effort: "low" },
       })
+    }),
+  )
+
+  it.effect("sends fast mode speed with its beta header", () =>
+    Effect.gen(function* () {
+      const fast = LLMRequest.update(request, { providerOptions: { speed: "fast" } })
+      const compiled = yield* compileRequest(fast)
+      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, fast)
+
+      expect(compiled.body.speed).toBe("fast")
+      expect(prepared.request.headers["anthropic-beta"]).toBe("interleaved-thinking-2025-05-14,fast-mode-2026-02-01")
     }),
   )
 
@@ -860,6 +871,107 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  const video = { type: "video", source: { type: "base64", media_type: "video/mp4", data: "AAECAw==" } }
+  const videoFile = { type: "file" as const, uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" }
+  const customModel = AnthropicMessages.route.with({ provider: "custom" }).model({ id: "video-model" })
+
+  it.effect("serializes Messages video inputs", () =>
+    Effect.gen(function* () {
+      const user = LLM.request({
+        model: customModel,
+        prompt: [
+          Message.media(Media.base64("AAECAw==", "video/mp4"), { cache: new CacheHint({ type: "ephemeral" }) }),
+          Message.media(Media.ref("custom", "file_clip", "video/mp4")),
+        ],
+        cache: "none",
+      })
+      const prompt = yield* compileRequest(user)
+      expect(prompt.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { ...video, cache_control: { type: "ephemeral" } },
+            { type: "video", source: { type: "file", file_id: "file_clip" } },
+          ],
+        },
+      ])
+
+      const nested = yield* compileRequest(
+        LLMRequest.update(user, {
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "clip", name: "read", input: {} })]),
+            Message.tool({
+              id: "clip",
+              name: "read",
+              resultType: "content",
+              result: [videoFile, { type: "file", uri: "storage://clip", mime: "video/mp4" }],
+            }),
+          ],
+        }),
+      )
+      expect(expectToolResult(nested.body).content).toEqual([
+        video,
+        { type: "video", source: { type: "url", url: "storage://clip" } },
+      ])
+
+      const foreign = yield* compileRequest(LLMRequest.update(user, { model })).pipe(Effect.flip)
+      expect(foreign.message).toContain("got custom:file_clip")
+
+      const native = yield* compileRequest(
+        LLM.request({
+          model: AnthropicMessages.route.model({ id: "video-model" }),
+          prompt: Message.media(Media.base64("AAECAw==", "video/mp4")),
+          cache: "none",
+        }),
+      )
+      expect(native.body.messages).toEqual([{ role: "user", content: [video] }])
+    }),
+  )
+
+  it.effect("moves Meta tool result videos after consecutive results", () =>
+    Effect.gen(function* () {
+      const meta = LLM.request({
+        model: Meta.configure({ apiKey: "test" }).messages("video-model"),
+        messages: [
+          Message.assistant([
+            ToolCallPart.make({ id: "first", name: "read", input: {} }),
+            ToolCallPart.make({ id: "second", name: "read", input: {} }),
+          ]),
+          Message.tool({ id: "first", name: "read", resultType: "content", result: [videoFile] }),
+          Message.tool({ id: "second", name: "read", resultType: "content", result: [videoFile] }),
+          Message.assistant("Observed."),
+        ],
+        cache: "none",
+      })
+      const hoisted = yield* compileRequest(meta)
+      expect(hoisted.body.messages).toMatchObject([
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "first" },
+            { type: "tool_use", id: "second" },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "first", content: [] },
+            { type: "tool_result", tool_use_id: "second", content: [] },
+            video,
+            video,
+          ],
+        },
+        { role: "assistant", content: [{ type: "text", text: "Observed." }] },
+      ])
+
+      const generic = yield* compileRequest(LLMRequest.update(meta, { model: customModel }))
+      expect(generic.body.messages[1]?.content).toEqual([
+        { type: "tool_result", tool_use_id: "first", content: [video] },
+        { type: "tool_result", tool_use_id: "second", content: [video] },
+      ])
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1195,6 +1307,28 @@ describe("Anthropic Messages route", () => {
         reason: { normalized: "stop", raw: "end_turn" },
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
+    }),
+  )
+
+  it.effect("reports the cost the endpoint billed", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: { output_tokens: 2, cost: 0, opencode: { allowance: 0.0042 } },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0 })
     }),
   )
 
@@ -2296,12 +2430,12 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("maps ttlSeconds >= 3600 to cache_control ttl: '1h'", () =>
+  it.effect("sends the hint ttl on cache_control", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
           prompt: "hi",
         }),
       )

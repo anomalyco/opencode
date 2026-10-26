@@ -4,8 +4,6 @@ import { SettingsPage } from "@opencode/gui-extensions/sdk"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useExtensionHost } from "./host"
 
-export type SettingsPageItem = ReturnType<ReturnType<typeof createSettingsPages>["items"]>[number]
-
 /** Extension settings pages that apply to this platform and viewport. */
 export function createSettingsPages() {
   const host = useExtensionHost()

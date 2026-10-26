@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { GenerationOptions, LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
+import {
+  GenerationOptions,
+  LLMClient,
+  LLMEvent,
+  LanguageModel,
+  ToolDefinition,
+  type LLMRequest,
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -9,12 +16,15 @@ import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import type { SessionContext } from "@opencode/core/session/context"
+import { MessageDecodeError } from "@opencode/core/session/error"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Session } from "@opencode/core/session"
@@ -30,7 +40,7 @@ import { Money } from "@opencode/schema/money"
 import { Skill } from "@opencode/schema/skill"
 import { Shell } from "@opencode/schema/shell"
 import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { asc, eq } from "drizzle-orm"
+import { asc, eq, inArray, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -244,6 +254,87 @@ it.effect("ignores non-message keepID strings when loading history or forking", 
   }),
 )
 
+it.effect("history from the latest completed compaction matches the full transcript cut there", () =>
+  Effect.gen(function* () {
+    const store = yield* SessionStore.Service
+    const db = (yield* Database.Service).db
+    const failed = SessionMessage.CompactionFailed.make({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "failed",
+      reason: "auto",
+      error: { type: "unknown", message: "failed" },
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+    const scenarios = {
+      none: [textUser("a"), textUser("b")],
+      one: [textUser("a"), completedSummary("one"), textUser("b")],
+      several: [textUser("a"), completedSummary("one"), textUser("b"), completedSummary("two"), textUser("c")],
+      failed: [textUser("a"), completedSummary("one"), textUser("b"), failed, textUser("c")],
+    }
+    for (const [name, messages] of Object.entries(scenarios)) {
+      const id = Session.ID.make(`ses_history_bound_${name}`)
+      yield* insertSession(id)
+      yield* storeMessages(id, messages)
+      const all = yield* store.messages({ sessionID: id, order: "asc" })
+      const start = Math.max(
+        0,
+        all.findLastIndex((message) => message.type === "compaction" && message.status === "completed"),
+      )
+      const history = yield* SessionHistory.load(db, id, resolved.ref)
+      expect(toLLMMessages(history, resolved.ref)).toEqual(toLLMMessages(all.slice(start), resolved.ref))
+    }
+  }),
+)
+
+it.effect("history never decodes rows before the latest compaction or its kept tail", () =>
+  Effect.gen(function* () {
+    const id = Session.ID.make("ses_history_bound_kept")
+    yield* insertSession(id)
+    const kept = textUser("Kept question")
+    const compaction = SessionMessage.CompactionCompleted.make({
+      ...completedSummary("two"),
+      metadata: { keepID: kept.id },
+    })
+    const tail = textUser("After")
+    const earlier = [textUser("old 1"), completedSummary("one"), textUser("old 2")]
+    yield* storeMessages(id, [...earlier, kept, compaction, tail])
+    const db = (yield* Database.Service).db
+    // Rows the model no longer sees, made undecodable: reading any of them would fail the load.
+    yield* db
+      .update(SessionMessageTable)
+      .set({ data: sql`json('{}')` })
+      .where(
+        inArray(
+          SessionMessageTable.id,
+          earlier.map((message) => message.id),
+        ),
+      )
+      .run()
+      .pipe(Effect.orDie)
+    const store = yield* SessionStore.Service
+    expect(yield* store.messages({ sessionID: id }).pipe(Effect.flip)).toBeInstanceOf(MessageDecodeError)
+
+    const history = yield* SessionHistory.load(db, id, resolved.ref)
+    expect(toLLMMessages(history, resolved.ref)).toEqual(
+      toLLMMessages(
+        [{ ...compaction, metadata: { keepID: kept.id, recent: "[User]: Kept question" } }, tail],
+        resolved.ref,
+      ),
+    )
+  }),
+)
+
+const completedSummary = (summary: string) =>
+  SessionMessage.CompactionCompleted.make({
+    id: SessionMessage.ID.create(),
+    type: "compaction",
+    status: "completed",
+    reason: "auto",
+    summary,
+    time: { created: DateTime.makeUnsafe(0) },
+  })
+
 const textUser = (text: string) =>
   SessionMessage.User.make({
     id: SessionMessage.ID.create(),
@@ -315,8 +406,10 @@ it.effect("auto compaction estimates current content against the buffered prompt
       },
     })
     // An automatic compaction that is not due is skipped.
-    const due = (context: SessionContext.Loaded) =>
-      compaction.compact({ reason: "auto", context }).pipe(Effect.map((outcome) => outcome.status !== "skipped"))
+    const due = (context: SessionContext.Loaded, estimate?: SessionCompaction.Estimate) =>
+      compaction
+        .compact({ reason: "auto", context, estimate })
+        .pipe(Effect.map((outcome) => outcome.status !== "skipped"))
 
     // 85% of the input limit, which takes precedence over the context window.
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
@@ -360,6 +453,9 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
     expect(yield* due(grown)).toBe(true)
+    // A step estimates its prompt once and passes it; compaction decides on that instead of estimating again.
+    expect(yield* due(grown, { measured: 0, estimated: 0 })).toBe(false)
+    expect(yield* due(input(1_000, contextLimited), { measured: 84_000, estimated: 0 })).toBe(true)
 
     const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [...grown.messages, interrupted] })).toBe(90_001)

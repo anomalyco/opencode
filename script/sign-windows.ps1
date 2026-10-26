@@ -36,6 +36,10 @@ if (-not $module) {
     Write-Host "NuGet package provider install skipped: $($_.Exception.Message)"
   }
 
+  if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+    Register-PSRepository -Default
+  }
+
   Install-Module -Name TrustedSigning -RequiredVersion $moduleVersion -Force -Repository PSGallery -Scope CurrentUser
 }
 
