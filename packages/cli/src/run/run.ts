@@ -5,6 +5,7 @@ import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
+import { workingDirectory } from "../util/process"
 import { ServerConnection } from "../services/server-connection"
 import { parseSessionTargetModel, resolveSessionTarget } from "../session-target"
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
@@ -71,7 +72,7 @@ export function runNonInteractiveWithOptions(input: RunCommandInput, options: Ex
 
 async function run(input: RunCommandInput, options: ExecutionOptions) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
-  const root = options.root ?? process.env.PWD ?? process.cwd()
+  const root = options.root ?? workingDirectory()
   const local = localDirectory(root)
   const directory = options.useServerDirectory ? undefined : (options.directory ?? local)
   const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await readStdin())

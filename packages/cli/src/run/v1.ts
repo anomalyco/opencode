@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import path from "node:path"
 import { Standalone } from "../services/standalone"
 import { errorMessage } from "../util/error"
+import { workingDirectory } from "../util/process"
 import { reportRunError, runNonInteractiveWithOptions, type RunCommandInput } from "./run"
 
 export type V1RunCommandInput = {
@@ -26,7 +27,7 @@ export type V1RunCommandInput = {
 }
 
 export function runV1Bridge(input: V1RunCommandInput) {
-  const root = process.env.PWD ?? process.cwd()
+  const root = workingDirectory()
   const attached = input.server !== undefined
   const local = !attached && input.directory ? path.resolve(root, input.directory) : root
   try {

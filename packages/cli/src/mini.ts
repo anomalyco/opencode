@@ -4,6 +4,7 @@ import type { MiniFrontendInput } from "@opencode/tui/mini"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
+import { workingDirectory } from "./util/process"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
 import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
 import { Env } from "./env"
@@ -202,7 +203,7 @@ function validate(input: MiniCommandInput) {
 }
 
 function localDirectory(): string {
-  const root = process.env.PWD ?? process.cwd()
+  const root = workingDirectory()
   try {
     process.chdir(root)
     return process.cwd()

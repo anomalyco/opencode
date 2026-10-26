@@ -1,4 +1,31 @@
+import { realpathSync } from "node:fs"
 import path from "node:path"
+
+/**
+ * The directory the CLI was invoked in.
+ *
+ * `process.cwd()` resolves symlinks, so a user who typed `cd /tmp/project` on
+ * macOS sees `/private/tmp/project`. `$PWD` preserves the path they actually
+ * typed, which is why it is preferred.
+ *
+ * But `$PWD` is a shell convention: shells set it on `cd`, and every child
+ * process then inherits it verbatim. A parent that spawns the CLI with a
+ * different working directory — CI, a test harness, an editor integration,
+ * another agent — leaves a stale `$PWD` behind. Trusting it blindly roots the
+ * session in the parent's project rather than the requested one, silently.
+ *
+ * So honor `$PWD` only while it still names the directory we are in.
+ */
+export function workingDirectory() {
+  const cwd = process.cwd()
+  const pwd = process.env.PWD
+  if (!pwd) return cwd
+  try {
+    return realpathSync(pwd) === realpathSync(cwd) ? pwd : cwd
+  } catch {
+    return cwd
+  }
+}
 
 const entrypoint = process.argv[1] ? path.resolve(process.argv[1]) : undefined
 
