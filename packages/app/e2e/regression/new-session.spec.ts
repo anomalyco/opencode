@@ -154,6 +154,7 @@ test("branch search keeps results on screen while a query is pending", async ({ 
     const observer = new MutationObserver(() => {
       if (!list.querySelector('[role="option"]')) list.setAttribute("data-emptied", "")
     })
+
     observer.observe(list, { childList: true, subtree: true })
   })
 

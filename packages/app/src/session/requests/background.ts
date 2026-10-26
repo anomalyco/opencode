@@ -96,6 +96,7 @@ export function createSessionBackground(input: {
     const descends = (sessionID: string) => {
       const seen = new Set<string>()
       let parentID = parents.get(sessionID)
+
       while (parentID && !seen.has(parentID)) {
         if (parentID === id) return true
         seen.add(parentID)
@@ -107,6 +108,7 @@ export function createSessionBackground(input: {
 
     // A call names its child once the child exists; until the call reports it, the child's title is its description.
     const calls = current.blocking.flatMap((item) => (item.type === "subagent" ? [item] : []))
+
     const child = (item: (typeof calls)[number], info: SessionInfo) =>
       item.id ? info.id === item.id : !!item.label && info.parentID === id && info.title === item.label
 

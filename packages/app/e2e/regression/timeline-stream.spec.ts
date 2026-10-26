@@ -617,7 +617,10 @@ test("shows a background subagent's outcome as its own row where it finished", a
     }),
     inboxDelivered({ sessionID, inboxID: "msg_outcome" }),
     stepStarted(after),
-    ...partUpdated({ ...toolPart("call_read_after", "read", "completed", { filePath: "AGENTS.md" }), messageID: after.id }),
+    ...partUpdated({
+      ...toolPart("call_read_after", "read", "completed", { filePath: "AGENTS.md" }),
+      messageID: after.id,
+    }),
     messageUpdated(completedAssistantInfo(after)),
   ])
 
@@ -666,6 +669,7 @@ test("holds undelivered input still while live status above it comes and goes", 
   const working = page.locator('[data-component="session-working"]')
   const activity = page.locator('[data-timeline-key="activity"]')
   const lane = async () => (await activity.boundingBox())?.height
+
   const outcome = (id: string, description: string) =>
     inboxEnqueued({
       sessionID,
@@ -682,6 +686,7 @@ test("holds undelivered input still while live status above it comes and goes", 
     })
 
   const first = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: "Audit constraints" })
+
   const gap = async () => {
     const [above, below] = await Promise.all([answer.boundingBox(), first.boundingBox()])
 
@@ -908,7 +913,9 @@ test.describe("Working", () => {
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "running", { path: "src/four.ts" })))
-    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("one.ts, two.ts, three.ts, four.ts")
+    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(
+      "one.ts, two.ts, three.ts, four.ts",
+    )
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "completed", { path: "src/four.ts" })))
@@ -1143,6 +1150,7 @@ test.describe("background shortcut", () => {
         .poll(async () => {
           const panel = (await list.boundingBox())!
           const anchor = (await capsule.boundingBox())!
+
           const end = await list
             .getByRole("menuitem")
             .locator('[data-slot="session-activity-elapsed"]')
@@ -1194,6 +1202,7 @@ test.describe("background shortcut", () => {
       ],
       sessions: [session(), session({ id: childID, parentID: sessionID, title: "Stale task", agent: "explore" })],
     })
+
     const capsule = page.locator('[data-slot="session-activity-chip"]')
 
     await expect(page.locator('[data-timeline-part-id="call_stale"]')).toContainText("Stale task (background)")
@@ -1638,9 +1647,7 @@ test.describe("compaction", () => {
     await expect(compaction).not.toContainText("Partial automatic summary.")
     await expect(compaction).not.toContainText("Session compaction started")
 
-    await timeline.send(
-      compactionEnded({ sessionID, reason: "auto", text: "## Checkpoint\n\nAutomatic details." }),
-    )
+    await timeline.send(compactionEnded({ sessionID, reason: "auto", text: "## Checkpoint\n\nAutomatic details." }))
     await expect(divider).toHaveAttribute("data-state", "done")
     await expect(divider).toHaveAccessibleName("Compacted")
     await expect(compaction).not.toContainText("Automatic details.")

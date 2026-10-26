@@ -32,6 +32,7 @@ test("recently closed shows ten sessions and searches older closures in close or
     id: `ses_closed_${index}`,
     title: `Closed session ${index}`,
   }))
+
   await mockWorkspace(page, {
     name: "ClosedTabs",
     sessions,
@@ -86,6 +87,7 @@ test("recently closed fills remaining slots in Home order without open or duplic
     title: `Other session ${index}`,
     time: { created: 1700000000000, updated: 1700000000000 + (12 - index) * 1000 },
   }))
+
   await mockWorkspace(page, {
     name: "OtherTabs",
     sessions: [
