@@ -12,6 +12,7 @@ export async function buildLocalWslCli(input: { version: string; script: string;
   const root = join(dirname(input.script), "../../..")
 
   const build = async () => {
+    // SAFETY: the repository root package.json always pins packageManager.
     const packageManager = (
       JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { packageManager: string }
     ).packageManager
@@ -24,15 +25,12 @@ export async function buildLocalWslCli(input: { version: string; script: string;
     })
     await execFileAsync(
       "bunx",
-      [
-        packageManager,
-        input.script,
-        `--target=opencode-${target}`,
-        "--skip-install",
-        "--skip-web-ui",
-        `--outdir=${directory}`,
-      ],
-      { cwd: root, env: { ...process.env, OPENCODE_VERSION: input.version }, windowsHide: true },
+      [packageManager, input.script, "--skip-install", "--skip-web-ui", `--outdir=${directory}`],
+      {
+        cwd: root,
+        env: { ...process.env, OPENCODE_VERSION: input.version, OPENCODE_TARGET: target },
+        windowsHide: true,
+      },
     )
     await copyFile(join(directory, `cli-${target}`, "bin", "opencode"), input.output)
 

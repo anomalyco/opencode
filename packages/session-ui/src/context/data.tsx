@@ -1,8 +1,6 @@
 import type {
   FileDiffInfo,
-  JsonValue,
   SessionInfo,
-  SessionMessageUser,
   SessionStatus,
   ShellOutputInput,
   ShellOutputOutput,
@@ -66,10 +64,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     turnDiff?: TurnDiffSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
-    /** Sends a prompt as the user, e.g. a reply from an agent-rendered surface. Absent where the user cannot reply. */
-    onPrompt?: (input: { sessionID: string; text: string; metadata?: { [key: string]: JsonValue } }) => Promise<void>
-    /** The metadata of the session's user prompts, including ones not delivered yet. */
-    promptMetadata?: (sessionID: string) => readonly SessionMessageUser["metadata"][]
     /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
     backgroundCompaction?: boolean
   }) => {
@@ -94,8 +88,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
       turnDiff: props.turnDiff,
-      prompt: props.onPrompt,
-      promptMetadata: props.promptMetadata,
     }
   },
 })

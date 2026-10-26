@@ -95,7 +95,6 @@ describe("settings schema", () => {
         showTurnDiffs: false,
         backgroundActivity: "left",
         timelineWidth: "comfortable",
-        generatedUI: true,
         newIcons: false,
         newModelPicker: false,
         mobileTitlebarPosition: "top",

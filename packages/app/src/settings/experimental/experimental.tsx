@@ -29,17 +29,6 @@ export const SettingsExperimental: Component = () => {
         <div class="settings-section">
           <SettingsList>
             <SettingsRow
-              title={language.t("settings.experimental.row.generatedUI.title")}
-              description={language.t("settings.experimental.row.generatedUI.description")}
-            >
-              <div data-action="settings-generated-ui">
-                <Switch
-                  checked={settings.general.generatedUI()}
-                  onChange={(checked) => settings.general.setGeneratedUI(checked)}
-                />
-              </div>
-            </SettingsRow>
-            <SettingsRow
               title={language.t("settings.experimental.row.newIcons.title")}
               description={language.t("settings.experimental.row.newIcons.description")}
             >

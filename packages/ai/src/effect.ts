@@ -2,16 +2,109 @@ export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
-export { Provider } from "./provider.js"
 export { ProviderPackage } from "./provider-package.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
+export type { Interface as LLMClientShape, LLMClientService } from "./route/client.js"
+export {
+  ProtocolID,
+  RouteID,
+  ModelID,
+  ProviderID,
+  ResponseID,
+  ContentBlockID,
+  ToolCallID,
+  JsonSchema,
+  ProviderOptions,
+  ProviderMetadata,
+  HttpTimeout,
+  RequestEncoding,
+  HttpOptions,
+  GenerationOptions,
+  LanguageModelDefaults,
+  ReasoningEfforts,
+  ReasoningEffort,
+  LanguageModelCompatibility,
+  LanguageModel,
+  LanguageModelSchema,
+  CacheTTL,
+  CacheHint,
+  CachePolicyObject,
+  CachePolicy,
+  MessageRole,
+  SystemPart,
+  TextPart,
+  MediaPart,
+  ToolResultValue,
+  ToolOutput,
+  ToolCallPart,
+  ToolResultPart,
+  ReasoningPart,
+  CompactionPart,
+  EffortPart,
+  ContentPart,
+  Message,
+  ToolDefinition,
+  ToolNamespace,
+  ToolEntry,
+  ToolChoice,
+  LLMRequest,
+  FinishReason,
+  Usage,
+  MediaUsage,
+  CompactionResponse,
+  CompactionCheckpointResponse,
+  StepStart,
+  TextStart,
+  TextDelta,
+  TextEnd,
+  ReasoningStart,
+  ReasoningDelta,
+  ReasoningEnd,
+  ToolInputStart,
+  ToolInputDelta,
+  ToolInputEnd,
+  ToolInputError,
+  ToolCall,
+  ToolResult,
+  ToolError,
+  FinishReasonDetails,
+  StepFinish,
+  Finish,
+  MediaEvent,
+  ProviderErrorEvent,
+  LLMEvent,
+  LLMResponse,
+  HttpContext,
+  HttpRateLimitDetails,
+  InvalidRequestError,
+  UnsupportedOperationError,
+  ProviderConfigurationError,
+  NoRouteError,
+  AuthenticationError,
+  RateLimitError,
+  QuotaExceededError,
+  ContentPolicyError,
+  ProviderInternalError,
+  TransportType,
+  TransportOperation,
+  TransportError,
+  InvalidProviderOutputError,
+  UnknownProviderError,
+  TimeoutError,
+  AIErrorReason,
+  AIError,
+} from "./schema/index.js"
 export type {
-  RouteLanguageModelInput,
-  RouteRoutedLanguageModelInput,
-  Interface as LLMClientShape,
-  LLMClientService,
-} from "./route/client.js"
-export * from "./schema/index.js"
+  GenerationOptionsFields,
+  GenerationOptionsInput,
+  LanguageModelInput,
+  LanguageModelProviderOptions,
+  ToolDefinitionInput,
+  ToolNamespaceInput,
+  ToolNamespaceEntryInput,
+  ToolEntryInput,
+  UsageInput,
+} from "./schema/index.js"
 export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
 export type {
   ImageModelOptions,
@@ -125,7 +218,7 @@ export type {
   Snapshot as GenerationSnapshot,
   Status as GenerationStatus,
 } from "./generation.js"
-export { Tool, ToolFailure, toDefinitions } from "./tool.js"
+export { Tool, ToolFailure, emptyInputJsonSchema, toDefinitions } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"
 export type {
@@ -142,11 +235,6 @@ export type {
   ToolToModelOutput,
 } from "./tool.js"
 export * as LLM from "./llm.js"
-export type {
-  Definition as ProviderDefinition,
-  LanguageModelFactory as ProviderLanguageModelFactory,
-  LanguageModelOptions as ProviderLanguageModelOptions,
-} from "./provider.js"
 export type {
   Definition as ProviderPackageDefinition,
   Settings as ProviderPackageSettings,

@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
-import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
+import type { DesktopMenuAction, DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import type { DraftStore } from "@/runtime/persistence/drafts"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
@@ -84,6 +84,12 @@ type PlatformBase = {
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
+
+  /** Saved interface zoom level; a pinch can move `webviewZoom` off it (desktop only) */
+  zoomLevel?: Accessor<DesktopZoomLevel>
+
+  /** Save an interface zoom level and apply it to every window (desktop only) */
+  setZoomLevel?(level: DesktopZoomLevel): Promise<void>
 
   /** Whether the native desktop window is fullscreen */
   windowFullscreen?: Accessor<boolean>

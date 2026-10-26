@@ -46,16 +46,32 @@ export type Compaction = typeof Compaction.Type
 export const Transport = Schema.Literals(["http", "websocket"]).annotate({ identifier: "Provider.Transport" })
 export type Transport = typeof Transport.Type
 
+/** Prompt-cache lifetime such as "5m", "30m", "1h" or "24h", in models.dev's duration format. */
+export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals(["ms", "s", "m", "h", "d"])])
+  .check(Schema.isPattern(/^\d+(ms|s|m|h|d)$/))
+  .annotate({ identifier: "Provider.CacheTTL" })
+export type CacheTTL = typeof CacheTTL.Type
+
+/** Prompt-cache settings. `ttl` is sent to the provider as given; each provider accepts its own set. */
+export const Cache = Schema.Struct({
+  ttl: CacheTTL.pipe(optional),
+}).annotate({ identifier: "Provider.Cache" })
+export type Cache = typeof Cache.Type
+
 /** HTTP request body compression; only endpoints known to decode it should enable it. */
 export const Encoding = Schema.Literals(["zstd", "gzip", "none"]).annotate({ identifier: "Provider.Encoding" })
 export type Encoding = typeof Encoding.Type
 
+const Timeout = Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional)
+
+// The named fields are the settings OpenCode reads itself; every other key is a provider option for the provider package.
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
-    timeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    headerTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
+    timeout: Timeout,
+    headerTimeout: Timeout,
+    chunkTimeout: Timeout,
     compaction: Compaction.pipe(optional),
+    cache: Cache.pipe(optional),
     transport: Transport.pipe(optional),
     encoding: Encoding.pipe(optional),
   }),

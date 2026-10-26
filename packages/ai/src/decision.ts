@@ -155,10 +155,11 @@ export interface DecisionModelRoute<Options extends DecisionOptions = DecisionOp
 export class DecisionModelCompatibility extends Schema.Class<DecisionModelCompatibility>("Decision.ModelCompatibility")(
   {
     /**
-     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.image_input`:
-     * `assets` (TypeSafe's assets map), `images` (top-level lists) or `state` (items inside a state list).
+     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.media_input`, named after
+     * where the media goes in the body: `assets` (TypeSafe's assets map, referenced from the state), `state` (items
+     * inside a state list) or `root` (one top-level list per kind: `images`, `audio`, `videos`).
      */
-    imageInput: Schema.optional(Schema.Literals(["assets", "images", "state"])),
+    mediaInput: Schema.optional(Schema.Literals(["assets", "state", "root"])),
   },
 ) {}
 
@@ -176,6 +177,8 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
   readonly route: DecisionModelRoute<Options>
   readonly http?: HttpOptions
   readonly compatibility?: DecisionModelCompatibility
+  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
+  readonly providerOptions?: ProviderOptions
 
   constructor(input: DecisionModel.Input<Options>) {
     this.id = input.id
@@ -183,6 +186,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
     this.route = input.route
     this.http = input.http
     this.compatibility = input.compatibility
+    this.providerOptions = input.providerOptions
   }
 
   static make<Options extends DecisionOptions = DecisionOptions>(input: DecisionModel.MakeInput<Options>) {
@@ -201,6 +205,7 @@ export namespace DecisionModel {
     readonly route: DecisionModelRoute<Options>
     readonly http?: HttpOptions
     readonly compatibility?: DecisionModelCompatibility
+    readonly providerOptions?: ProviderOptions
   }
 
   export interface MakeInput<Options extends DecisionOptions = DecisionOptions>

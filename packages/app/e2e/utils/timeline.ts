@@ -362,14 +362,6 @@ export function inboxDelivered(data: Extract<OpenCodeEvent, { type: "session.inb
   return makeEvent("session.inbox.delivered", data)
 }
 
-export function revertStaged(data: Extract<OpenCodeEvent, { type: "session.revert.staged" }>["data"]) {
-  return makeEvent("session.revert.staged", data)
-}
-
-export function revertCommitted(data: Extract<OpenCodeEvent, { type: "session.revert.committed" }>["data"]) {
-  return makeEvent("session.revert.committed", data)
-}
-
 export function compactionStarted(data: Extract<OpenCodeEvent, { type: "session.compaction.started" }>["data"]) {
   return makeEvent("session.compaction.started", data)
 }

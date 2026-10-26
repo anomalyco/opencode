@@ -32,6 +32,7 @@ test("recently closed shows ten sessions and searches older closures in close or
     id: `ses_closed_${index}`,
     title: `Closed session ${index}`,
   }))
+
   await mockWorkspace(page, {
     name: "ClosedTabs",
     sessions,
@@ -86,6 +87,7 @@ test("recently closed fills remaining slots in Home order without open or duplic
     title: `Other session ${index}`,
     time: { created: 1700000000000, updated: 1700000000000 + (12 - index) * 1000 },
   }))
+
   await mockWorkspace(page, {
     name: "OtherTabs",
     sessions: [
@@ -222,6 +224,21 @@ test("inactive session attention dots share the close control without marking th
   await close.click()
   await expect(tabB).toHaveCount(0)
   await expectPath(page, sessionHref(a.id))
+})
+
+test("the browser title names the open session and resets after leaving it", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  await expect(page).toHaveTitle(`${a.title} · OpenCode`)
+
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  await tabB.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(page).toHaveTitle(`${b.title} · OpenCode`)
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(page).toHaveTitle("OpenCode")
 })
 
 for (const tabLayout of ["horizontal", "vertical"] as const) {
@@ -843,9 +860,7 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
 })
 
-test("switching between busy sessions keeps the busy indicators and the activity capsule at rest @quarantine", async ({
-  page,
-}) => {
+test("switching between busy sessions keeps the busy indicators and the activity capsule at rest", async ({ page }) => {
   const children = [
     { id: "ses_tab_a_child", title: "Map the orchard", parentID: a.id },
     { id: "ses_tab_b_child", title: "Chart the harbor", parentID: b.id },
@@ -867,11 +882,12 @@ test("switching between busy sessions keeps the busy indicators and the activity
   await expect(capsule).toHaveText("1 subagent")
   await expect(capsule).toHaveCSS("opacity", "1")
 
-  // Record any capsule animation or any moment without a capsule, and mark the indicators to compare them later.
+  // Record any capsule animation or any moment without a capsule, and mark the indicators to compare them later. The
+  // capsule's spinner always runs its own phase-synced loop, so only an animation of the capsule itself counts.
   await page.evaluate(() => {
     const record = document.documentElement
     document.addEventListener("animationstart", (event) => {
-      if (event.target instanceof Element && event.target.closest('[data-slot="session-activity-chip"]'))
+      if (event.target instanceof Element && event.target.matches('[data-slot="session-activity-chip"]'))
         record.setAttribute("data-test-capsule-animated", "")
     })
     new MutationObserver(() => {

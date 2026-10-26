@@ -334,7 +334,7 @@ test("recovers from a failed cold history load when another session is selected"
   await expect(page.getByRole("heading", { name: "Something went wrong", exact: true })).toHaveCount(0)
 })
 
-test("focuses Find in the selected cached timeline @quarantine", async ({ page }) => {
+test("focuses Find in the selected cached timeline", async ({ page }) => {
   await openTabs(page, { pageMessages: placeholderHistory })
   await page.goto(sessionHref(fixture.sourceID))
   await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
@@ -355,7 +355,7 @@ test("focuses Find in the selected cached timeline @quarantine", async ({ page }
   await expect(search).toHaveCount(0)
 })
 
-test("disposes the old workspace's shell while destination history is loading @quarantine", async ({ page }) => {
+test("disposes the old workspace's shell while destination history is loading", async ({ page }) => {
   const destination = "C:/OpenCode/OtherProject"
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
@@ -426,7 +426,7 @@ test("disposes the old workspace's shell while destination history is loading @q
   try {
     await tab(page, fixture.targetID).click()
     await requested.promise
-    await expect(page.locator("[data-session-title]")).toHaveText(fixture.expected.targetTitle)
+    await expect(page.locator("[data-session-title] h1")).toHaveText(fixture.expected.targetTitle)
     output.text += "Output after returning\n"
     await tab(page, fixture.sourceID).click()
     await expect(shell.locator('[data-slot="bash-result"]')).toContainText("Output after returning")
@@ -759,9 +759,7 @@ async function sampleTabPaint(page: Page, sessionID: string) {
   return {
     async firstPaint() {
       await expect.poll(read).toBeDefined()
-      await expect
-        .poll(() => page.evaluate(() => window.__tabPaint!.settled))
-        .toBe(true)
+      await expect.poll(() => page.evaluate(() => window.__tabPaint!.settled)).toBe(true)
 
       return (await read())!
     },

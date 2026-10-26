@@ -6,6 +6,7 @@ import { Server as ServerFlag, Standalone as StandaloneFlag } from "../commands/
 import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
 import { Standalone } from "./standalone"
+import { errorMessage } from "../util/error"
 
 export type Args = {
   readonly server?: string
@@ -30,7 +31,9 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     const password = yield* Env.password
     const endpoint = {
       url: server,
-      auth: password ? { type: "basic" as const, username: "opencode", password: Redacted.value(password) } : undefined,
+      auth: password
+        ? { type: "basic" as const, username: yield* Env.username, password: Redacted.value(password) }
+        : undefined,
     } satisfies Endpoint
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const health = yield* Effect.tryPromise({
@@ -93,13 +96,16 @@ function connectError(endpoint: Endpoint, cause: unknown) {
     return new Error(
       endpoint.auth === undefined
         ? `Server at ${endpoint.url} requires a password; set OPENCODE_PASSWORD`
-        : `Server at ${endpoint.url} rejected the password`,
+        : `Server at ${endpoint.url} rejected the username or password`,
       { cause },
     )
   }
   if (cause instanceof ClientError && cause.reason === "Transport")
-    return new Error(`Could not reach server at ${endpoint.url}`, { cause })
-  return new Error(`Server at ${endpoint.url} did not provide a compatible V2 health response`, { cause })
+    return new Error(`Could not reach server at ${endpoint.url}: ${errorMessage(cause.cause ?? cause)}`, { cause })
+  return new Error(
+    `Server at ${endpoint.url} did not provide a compatible V2 health response: ${errorMessage(cause)}`,
+    { cause },
+  )
 }
 
 export * as ServerConnection from "./server-connection"

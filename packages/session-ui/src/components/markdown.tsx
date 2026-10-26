@@ -332,7 +332,7 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
-// Tables scroll inside a rounded frame, matching generated UI tables.
+// Tables scroll inside a rounded frame.
 function wrapTables(root: HTMLDivElement) {
   root.querySelectorAll("table").forEach((table) => {
     const wrapper = document.createElement("div")

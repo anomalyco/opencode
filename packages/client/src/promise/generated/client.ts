@@ -203,6 +203,7 @@ import type {
   SkillListOutput,
   RpcCallInput,
   RpcCallOutput,
+  EventSubscribeInput,
   EventSubscribeOutput,
   PtyListInput,
   PtyListOutput,
@@ -234,6 +235,8 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalMediaGetInput,
+  ExperimentalMediaGetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1138,7 +1141,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/model`,
-            query: { location: input?.["location"] },
+            query: { location: input?.["location"], types: input?.["types"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 503],
             empty: false,
@@ -1809,9 +1812,16 @@ export function make(options: ClientOptions) {
         ),
     },
     event: {
-      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
+      subscribe: (input?: EventSubscribeInput, requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
         sse<EventSubscribeOutput>(
-          { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          {
+            method: "GET",
+            path: `/api/event`,
+            query: { types: input?.["types"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
           requestOptions,
         ),
     },
@@ -2023,6 +2033,20 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      media: {
+        get: (input: ExperimentalMediaGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMediaGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
       },
     },
     shell: {

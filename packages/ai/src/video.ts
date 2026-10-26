@@ -38,6 +38,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
+      providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as VideoRoute,
     })
   }

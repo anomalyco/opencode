@@ -3,9 +3,11 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type OpenString } from "../schema/index.js"
+import { ProviderID, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
+import { OpenAIImages } from "../protocols/openai-images.js"
+import { MediaRoute } from "../route/media.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
@@ -194,20 +196,29 @@ const configuredRoute = (input: LanguageModelOptions) => {
 
 export const configure = (input: LanguageModelOptions = {}) => {
   const route = configuredRoute(input)
+  const auth = AuthOptions.bearer(input, "OPENROUTER_API_KEY")
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "openrouter",
     endpoint: { baseURL: input.baseURL ?? baseURL },
-    auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
+    auth,
     headers: input.headers,
     http: input.http,
   })
-  const decision = (modelID: string | ModelID) =>
-    decisionRoute.model<OpenRouterDecisionOptions>({ id: modelID, compatibility: { imageInput: "state" } })
+  const media = MediaRoute.deployment({ ...input, baseURL: input.baseURL ?? baseURL }, auth)
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model<OpenRouterDecisionOptions>({
+      id: modelID,
+      compatibility: { mediaInput: "state" },
+      providerOptions,
+    })
   return {
     id,
     model: (modelID: string | ModelID) =>
       route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+    image,
     decision,
     configure,
   }
@@ -215,14 +226,26 @@ export const configure = (input: LanguageModelOptions = {}) => {
 
 export const provider = configure()
 export const decision = provider.decision
+export const image = provider.image
 export const model: ProviderPackage.Definition<Settings, OpenRouterProviderOptionsInput>["model"] = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
+  settings,
+) => configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
+
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  }
+}

@@ -8,7 +8,8 @@
     "test": "bun test --only-failures",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "pack": "bun run script/pack.ts"
   },
   "exports": {
     ".": "./src/promise/index.ts",
@@ -39,8 +40,8 @@
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
-    "@opentui/core": ">=0.6.8",
-    "@opentui/solid": ">=0.6.8",
+    "@opentui/core": "0.7.0",
+    "@opentui/solid": "0.7.0",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

@@ -1,3 +1,4 @@
+import { desktopZoomLevels } from "@opencode/app/desktop-menu"
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 import { ExtensionInstalled, ExtensionMenubarItem, ExtensionPayload } from "./extensions"
@@ -23,8 +24,10 @@ export class WindowPinchZoomChanged extends Schema.TaggedClass<WindowPinchZoomCh
   enabled: Schema.Boolean,
 }) {}
 
+// `factor` is the window's live zoom, which a pinch can move off `level`, the saved setting.
 export class WindowZoomChanged extends Schema.TaggedClass<WindowZoomChanged>()("WindowZoomChanged", {
   factor: Schema.Number,
+  level: Schema.Literals(desktopZoomLevels),
 }) {}
 
 // Another window wrote to a storage namespace; recipients refresh their in-memory copy.

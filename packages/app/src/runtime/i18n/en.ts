@@ -761,8 +761,6 @@ export const dict = {
   "settings.tab.extensions": "Extensions",
   "settings.tab.experimental": "Experimental",
   "settings.experimental.description": "Try experimental features",
-  "settings.experimental.row.generatedUI.title": "Generated UI",
-  "settings.experimental.row.generatedUI.description": "Let agents show dashboards, charts and forms in the timeline",
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.newModelPicker.title": "New model picker",
@@ -821,6 +819,8 @@ export const dict = {
   "settings.general.row.interfaceMode.inbox.description":
     "Every session across your servers, sorted by what needs you next.",
   "settings.general.row.interfaceMode.experimental": "Experimental",
+  "settings.appearance.row.zoom.title": "Zoom",
+  "settings.appearance.row.zoom.description": "Make text and controls larger across the app",
   "settings.appearance.row.reduceMotion.title": "Reduce motion",
   "settings.appearance.row.reduceMotion.description": "Reduce animations or match your system",
   "settings.appearance.row.reduceMotion.system": "System",

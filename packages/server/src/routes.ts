@@ -89,7 +89,7 @@ export function createRoutes(
 ) {
   return makeRoutes(
     options.password
-      ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
+      ? ServerAuth.Config.configLayer({ password: Option.some(options.password), username: options.username })
       : ServerAuth.Config.layer,
     options,
     serviceURLs,

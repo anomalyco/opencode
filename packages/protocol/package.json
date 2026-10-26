@@ -21,6 +21,7 @@
   },
   "scripts": {
     "build": "bun run script/build.ts",
+    "pack": "bun run script/pack.ts",
     "generate": "bun run script/generate-openapi.ts",
     "check:generated": "bun run script/generate-openapi.ts --check",
     "test": "bun test --only-failures",

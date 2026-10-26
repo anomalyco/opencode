@@ -263,19 +263,22 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
-    const search = options?.search?.trim().replace(/[*?[\]\\]/g, "\\$&")
+    const search = options?.search?.trim().toLowerCase()
+    // `refname:short` collapses `refs/remotes/<remote>/HEAD` to the bare remote name, so strip the namespace
+    // instead. Search and limit apply here because ref globs cannot cross `/` and `--count` precedes the filter.
     return (yield* lines(
       [
         "for-each-ref",
-        "--ignore-case",
         "--sort=refname",
         "--sort=-committerdate",
-        "--format=%(refname:short)",
-        ...(options?.limit ? [`--count=${options.limit}`] : []),
-        ...(search ? [`refs/heads/*${search}*`, `refs/remotes/*${search}*`] : ["refs/heads", "refs/remotes"]),
+        "--format=%(refname:lstrip=2)",
+        "refs/heads",
+        "refs/remotes",
       ],
       { cwd },
-    )).filter((item) => !item.endsWith("/HEAD")) satisfies BranchList
+    ))
+      .filter((item) => !item.endsWith("/HEAD") && (!search || item.toLowerCase().includes(search)))
+      .slice(0, options?.limit) satisfies BranchList
   })
 
   const defaultBranch = Effect.fn("VcsGit.defaultBranch")(function* (cwd: string) {
@@ -292,7 +295,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
       }
     }
 
-    const list = yield* lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"], { cwd })
+    const list = yield* lines(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"], { cwd })
     const next = yield* configured(cwd, list)
     if (next) return next
     if (list.includes("main")) return { name: "main", ref: "main" }

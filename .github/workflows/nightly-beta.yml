@@ -19,5 +19,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run test.yml --repo "$GITHUB_REPOSITORY" --ref beta
-          gh workflow run test.yml --repo "$GITHUB_REPOSITORY" --ref beta -f quarantine=true
+          gh workflow run check-test.yml --repo "$GITHUB_REPOSITORY" --ref beta
+          gh workflow run check-test.yml --repo "$GITHUB_REPOSITORY" --ref beta -f quarantine=true

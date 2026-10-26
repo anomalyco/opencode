@@ -10,7 +10,6 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspace
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useSettings } from "@/settings/model"
 import { useExtensionHost } from "@/runtime/extension/host"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -60,7 +59,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
-  const settings = useSettings()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
   const prompt = adapter.state
@@ -316,7 +314,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
-    genui: settings.general.generatedUI,
     notify: {
       missingSelection: () =>
         showToast({

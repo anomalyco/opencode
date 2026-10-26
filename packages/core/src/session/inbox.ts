@@ -9,6 +9,9 @@ import {
   Delivery,
   Info,
   Item,
+  MediaInfo,
+  MediaUser,
+  MediaUserPayload,
   Move,
   MovePayload,
   Synthetic,
@@ -35,6 +38,9 @@ export {
   Delivery,
   Info,
   Item,
+  MediaInfo,
+  MediaUser,
+  MediaUserPayload,
   Move,
   MovePayload,
   Synthetic,
@@ -51,8 +57,9 @@ export {
 export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
+const decodeMediaUser = Schema.decodeUnknownSync(MediaUserPayload)
 const decodeStoredUser = Schema.decodeUnknownSync(SessionStored.UserPayload)
-const encodeUser = Schema.encodeSync(UserPayload)
+const encodeStoredUser = Schema.encodeSync(SessionStored.UserPayload)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticPayload)
 const encodeSynthetic = Schema.encodeSync(SyntheticPayload)
 const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
@@ -306,20 +313,21 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  const payload =
+    request.item.type === "user"
+      ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, request.item.payload))
+      : request.item.type === "synthetic"
+        ? encodeSynthetic(request.item.payload)
+        : request.item.type === "compaction"
+          ? encodeCompaction(request.item.payload)
+          : encodeMove(request.item.payload)
   const stored = yield* db
     .insert(SessionInboxTable)
     .values({
       id: request.id,
       session_id: request.sessionID,
       type: request.item.type,
-      payload:
-        request.item.type === "user"
-          ? encodeUser(request.item.payload)
-          : request.item.type === "synthetic"
-            ? encodeSynthetic(request.item.payload)
-            : request.item.type === "compaction"
-              ? encodeCompaction(request.item.payload)
-              : encodeMove(request.item.payload),
+      payload,
       delivery: request.item.delivery,
       enqueued_seq: request.enqueuedSeq,
       time_created: request.timeCreated,
@@ -329,6 +337,11 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (!stored) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  yield* SessionBlob.recordRefs(
+    db,
+    { sessionID: request.sessionID, messageID: request.id, seq: request.enqueuedSeq },
+    payload,
+  )
 })
 
 /**
@@ -379,6 +392,7 @@ export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(funct
     .get()
     .pipe(Effect.orDie)
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  yield* SessionBlob.releaseMessage(db, input.sessionID, input.id)
 })
 
 const projectDelivery = Effect.fn("SessionInbox.projectDelivery")(function* (
@@ -410,15 +424,37 @@ export const projectDeliveryChanged = Effect.fn("SessionInbox.projectDeliveryCha
     }),
 )
 
-export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const rows = yield* db
+const listRows = (db: DatabaseService, sessionID: SessionSchema.ID) =>
+  db
     .select()
     .from(SessionInboxTable)
     .where(eq(SessionInboxTable.session_id, sessionID))
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
     .pipe(Effect.orDie)
-  return (yield* SessionBlob.hydrateInbox(db, rows)).map(fromRow)
+
+export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  return (yield* SessionBlob.hydrateInbox(db, yield* listRows(db, sessionID))).map(fromRow)
+})
+
+/** {@link list} for clients that fetch media themselves: files stored in `blob` stay `media:` refs. */
+export const listWithRefs = Effect.fn("SessionInbox.listWithRefs")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const kept = yield* SessionBlob.keepInboxRefs(db, yield* listRows(db, sessionID))
+  return kept.rows.map((row): MediaInfo => {
+    if (row.type !== "user") return fromRow(row)
+    const payload = decodeMediaUser(row.payload)
+    return MediaUser.make({
+      id: row.id,
+      sessionID: row.session_id,
+      time: { created: DateTime.makeUnsafe(row.time_created) },
+      type: "user",
+      payload: payload.files ? { ...payload, files: SessionBlob.describe(payload.files, kept.meta) } : payload,
+      delivery: row.delivery,
+    })
+  })
 })
 
 export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
@@ -453,7 +489,12 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
 /** What a boundary decides on: prompts are promoted by id, so only a move's payload is read. */
 export type Promotion =
   | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic" | "compaction"; readonly delivery: Delivery }
-  | { readonly id: SessionMessage.ID; readonly type: "move"; readonly delivery: Delivery; readonly payload: MovePayload }
+  | {
+      readonly id: SessionMessage.ID
+      readonly type: "move"
+      readonly delivery: Delivery
+      readonly payload: MovePayload
+    }
 
 const promotion = (row: typeof SessionInboxTable.$inferSelect): Promotion =>
   row.type === "move"

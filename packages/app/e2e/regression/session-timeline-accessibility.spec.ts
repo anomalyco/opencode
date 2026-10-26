@@ -75,7 +75,7 @@ function lines(count: number) {
 }
 
 for (const visible of [false, true]) {
-  test(`${visible ? "shows" : "omits"} the agent name in message meta when agents are ${visible ? "on @quarantine" : "off"}`, async ({
+  test(`${visible ? "shows" : "omits"} the agent name in message meta when agents are ${visible ? "on" : "off"}`, async ({
     page,
   }, testInfo) => {
     await setupTimeline(page, {
@@ -93,7 +93,8 @@ for (const visible of [false, true]) {
     const meta = [user.locator('[data-slot="user-message-meta"]'), assistant.locator('[data-slot="text-part-meta"]')]
 
     for (const item of meta) {
-      if (visible) await expect(item).toContainText(/^Build\s·\s/)
+      // A delivered message keeps its hidden Pending label in the DOM, so read only the rendered text.
+      if (visible) await expect(item).toContainText(/^Build\s*·/, { useInnerText: true })
       else await expect(item).not.toContainText("Build")
     }
   })

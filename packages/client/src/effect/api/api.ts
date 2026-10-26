@@ -1399,7 +1399,10 @@ export interface MessageApi<E = never> {
   readonly list: MessageListOperation<E>
 }
 
-export type ModelListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ModelListInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly types?: ReadonlyArray<Model.Type> | undefined
+}
 export type ModelListOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Model.Info> }
 export type ModelListOperation<E = never> = (input?: ModelListInput) => Effect.Effect<ModelListOutput, E>
 
@@ -1891,8 +1894,109 @@ export interface RpcApi<E = never> {
   readonly call: RpcCallOperation<E>
 }
 
+export type EventSubscribeInput = {
+  readonly types?:
+    | ReadonlyArray<
+        | "location.shutdown"
+        | "models-dev.refreshed"
+        | "credential.updated"
+        | "credential.switched"
+        | "integration.updated"
+        | "provider.updated"
+        | "model.updated"
+        | "agent.updated"
+        | "session.created"
+        | "session.agent.selected"
+        | "session.model.selected"
+        | "session.moved"
+        | "session.renamed"
+        | "session.metadata.updated"
+        | "session.permissions"
+        | "session.viewed"
+        | "session.archived"
+        | "session.unarchived"
+        | "session.usage.updated"
+        | "session.deleted"
+        | "session.forked"
+        | "session.inbox.delivered"
+        | "session.inbox.enqueued"
+        | "session.inbox.cancelled"
+        | "session.inbox.delivery.changed"
+        | "session.execution.started"
+        | "session.execution.succeeded"
+        | "session.execution.failed"
+        | "session.execution.interrupted"
+        | "session.instructions.updated"
+        | "session.synthetic"
+        | "session.skill.activated"
+        | "session.shell.started"
+        | "session.shell.ended"
+        | "session.step.started"
+        | "session.step.streamed"
+        | "session.step.ended"
+        | "session.step.failed"
+        | "session.text.started"
+        | "session.text.delta"
+        | "session.text.ended"
+        | "session.reasoning.started"
+        | "session.reasoning.delta"
+        | "session.reasoning.ended"
+        | "session.tool.input.started"
+        | "session.tool.input.delta"
+        | "session.tool.input.ended"
+        | "session.tool.called"
+        | "session.tool.progress"
+        | "session.tool.success"
+        | "session.tool.failed"
+        | "session.retry.scheduled"
+        | "session.compaction.started"
+        | "session.compaction.delta"
+        | "session.compaction.ended"
+        | "session.compaction.failed"
+        | "session.revert.staged"
+        | "session.revert.cleared"
+        | "session.revert.committed"
+        | "filesystem.changed"
+        | "reference.updated"
+        | "permission.asked"
+        | "permission.replied"
+        | "plugin.updated"
+        | "project.updated"
+        | "worktree.updated"
+        | "worktree.resolved"
+        | "command.updated"
+        | "config.updated"
+        | "skill.updated"
+        | "pty.created"
+        | "pty.updated"
+        | "pty.exited"
+        | "pty.deleted"
+        | "persistent-pty.added"
+        | "persistent-pty.removed"
+        | "shell.created"
+        | "shell.exited"
+        | "shell.deleted"
+        | "form.created"
+        | "form.replied"
+        | "form.cancelled"
+        | "websearch.updated"
+        | "session.status"
+        | "session.idle"
+        | "tui.prompt.append"
+        | "tui.command.execute"
+        | "tui.toast.show"
+        | "tui.session.select"
+        | "installation.updated"
+        | "installation.update-available"
+        | "vcs.branch.updated"
+        | "mcp.status.changed"
+        | "mcp.resources.changed"
+        | `${"rpc."}${string}`
+      >
+    | undefined
+}
 export type EventSubscribeOutput = OpenCodeEvent
-export type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+export type EventSubscribeOperation<E = never> = (input?: EventSubscribeInput) => Stream.Stream<EventSubscribeOutput, E>
 
 export interface EventApi<E = never> {
   readonly subscribe: EventSubscribeOperation<E>

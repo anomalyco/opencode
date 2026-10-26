@@ -92,7 +92,6 @@ function submitInput(
     commands,
     clientCommand,
     delivery: () => delivery,
-    genui: () => true,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -243,7 +242,6 @@ describe("Composer submission", () => {
       displayText: "ship it",
       agent: "build",
       model: { providerID: "provider-1", modelID: "model-1", variant: "balanced" },
-      genui: true,
     })
     // A file chip goes with this prompt only, like the TUI's mentionless files.
     expect(request.files).toMatchObject([{ name: "notes.md", description: "the failing version" }])

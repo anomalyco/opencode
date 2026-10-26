@@ -1,6 +1,7 @@
 import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
-import type { RpcCallOptions, RpcEventPayload } from "@opencode/client/promise/api"
+import type { OpenCodeEvent } from "@opencode/client"
+import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
@@ -14,7 +15,6 @@ import type { RpcDomain, RpcHandlers } from "./rpc.js"
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
 type PromiseContext = Parameters<Plugin["setup"]>[0]
-type PromiseEvent = ReturnType<PromiseContext["event"]["subscribe"]> extends AsyncIterable<infer Event> ? Event : never
 type HostRpc = Parameters<Parameters<typeof define>[0]["effect"]>[0]["rpc"]
 type StreamAdapter = <A, E>(
   stream: Stream.Stream<A, E>,
@@ -329,11 +329,13 @@ export function fromPromise(plugin: Plugin) {
             activate: adaptApiMethod(CredentialEndpoints["credential.activate"], host.credential.activate),
           },
           event: {
-            subscribe: (options) =>
+            subscribe: <Type extends Exclude<OpenCodeEvent["type"], "server.connected">>(
+              options?: SubscribeOptions<Type>,
+            ) =>
               streams(
-                host.event.subscribe().pipe(
+                host.event.subscribe({ types: options?.types }).pipe(
                   Stream.mapEffect((event) => encodeOpenCodeEvent(event)),
-                  Stream.map((event) => event as PromiseEvent),
+                  Stream.map((event) => event as SelectedEvent<OpenCodeEvent, Type>),
                 ),
                 options,
               ),

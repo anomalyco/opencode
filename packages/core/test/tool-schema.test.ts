@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
 import { z } from "zod"
-import { emptyInputJsonSchema } from "@opencode/ai/tool"
+import { emptyInputJsonSchema } from "@opencode/ai/effect"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"

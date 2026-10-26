@@ -18,8 +18,7 @@ import {
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
-import { compileRequest } from "@opencode/ai/route/client"
-import { TestLLM } from "@opencode/ai/testing"
+import { TestLLM, compileRequest } from "@opencode/ai/testing"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -86,7 +85,6 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
-import GenUIPlugin from "@opencode/plugin-genui"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -96,17 +94,26 @@ type ToolBarrier = {
   active: number
   maxActive: number
 }
-const testLLM = TestLLM.layer({
-  fallback: [],
-  transformRequest: (request) =>
-    LLMRequest.update(request, {
-      system: request.system.map((part) => ({
-        ...part,
-        text: part.text.replace(emptyCodeMode, ""),
-      })),
-      tools: request.tools.filter((tool) => tool.name !== "execute"),
-    }),
-})
+class LLMRequests extends Context.Service<LLMRequests, LLMRequest[]>()("test/LLMRequests") {}
+const testLLM = Layer.unwrap(
+  Effect.sync(() => {
+    const requests: LLMRequest[] = []
+    return TestLLM.testLayer({
+      fallback: [],
+      transformRequest: (request) => {
+        const transformed = LLMRequest.update(request, {
+          system: request.system.map((part) => ({
+            ...part,
+            text: part.text.replace(emptyCodeMode, ""),
+          })),
+          tools: request.tools.filter((tool) => tool.name !== "execute"),
+        })
+        requests.push(transformed)
+        return transformed
+      },
+    }).pipe(Layer.merge(Layer.succeed(LLMRequests, requests)))
+  }),
+)
 type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
 const defaultModelLimit = { context: 200_000, output: 32_000 }
 const modelLimits = new Map<string, ModelLimit>()
@@ -414,7 +421,7 @@ const layer = Layer.unwrap(
     })
     const replacements: LayerNode.Replacements = [
       Snapshot.node.replace(Snapshot.noopLayer),
-      LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
+      LayerNodePlatform.llmClient.replace(testLLM),
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(systemContext),
       InstructionDiscovery.node.replace(instructionContext),
@@ -557,7 +564,8 @@ const setup = Effect.gen(function* () {
   yield* insertSession(sessionID)
   const state = yield* RunnerState
   const session = yield* Session.Service
-  const llm = yield* TestLLM.Service
+  const llm = yield* TestLLM.Test
+  const requests = yield* LLMRequests
   const admit = (text: string) => session.prompt({ sessionID, text, resume: false })
   const resume = session.resume(sessionID)
   return Object.assign(state, {
@@ -566,7 +574,7 @@ const setup = Effect.gen(function* () {
     sessionInbox,
     session,
     llm,
-    requests: llm.requests,
+    requests,
     admit,
     resume,
     context: session.context(sessionID),
@@ -579,7 +587,7 @@ const setup = Effect.gen(function* () {
     }),
     // Pause coordinated Session.resume at its first model request, not a direct runner drain.
     resumePaused: Effect.gen(function* () {
-      const gate = yield* llm.gate
+      const gate = yield* llm.gate()
       const run = yield* resume.pipe(Effect.forkChild)
       yield* gate.started
       return { finish: gate.release.pipe(Effect.andThen(Fiber.join(run))) }
@@ -1205,87 +1213,6 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.messages).toMatchObject([{ id: message.id, type: "user", text: "Run automatically" }])
   })
 
-  scenario(
-    "toggles GenUI through instruction entries without extra turns or changing the cached request prefix",
-    function* (s) {
-      const hooks = yield* PluginHooks.Service
-      const tools = yield* Tool.Service
-      const entries = yield* InstructionEntry.Service
-      const registered = Effect.succeed({ dispose: Effect.void })
-      yield* GenUIPlugin.effect(
-        host({
-          session: {
-            hook: (name, callback) => hooks.register("session", name, callback),
-            instructions: {
-              entry: {
-                list: (input) => entries.list(input.sessionID),
-                put: entries.put,
-                remove: entries.remove,
-              },
-            },
-          },
-          tool: { ...host().tool, transform: tools.transform },
-          skill: { ...host().skill, transform: () => registered },
-        }),
-      )
-
-      yield* s.session.prompt({ sessionID, text: "Show me the build", metadata: { genui: true } })
-      yield* s.session.wait(sessionID)
-
-      expect(s.requests).toHaveLength(1)
-      expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("genui_render")
-      expect(s.requests[0]?.system.map((part) => part.text)).toContainEqual(
-        expect.stringContaining('<context key="genui">'),
-      )
-      expect(messageRoles(s.requests[0]!)).toEqual(["user"])
-      expect(userTexts(s.requests[0]!)).toEqual(["Show me the build"])
-
-      yield* s.session.prompt({ sessionID, text: "Text only now", metadata: { genui: false } })
-      yield* s.session.wait(sessionID)
-
-      expect(s.requests).toHaveLength(2)
-      for (const field of ["tools", "system"] as const) expect(s.requests[1]?.[field]).toEqual(s.requests[0]?.[field])
-      expect(s.requests[1]?.messages.slice(0, 1)).toEqual([...s.requests[0]!.messages])
-      expect(messageRoles(s.requests[1]!)).toEqual(["user", "system", "user"])
-      expect(s.requests[1]?.messages[1]).toEqual(
-        Message.system(
-          [
-            'The context under "genui" changed and supersedes the previous value:',
-            '<context key="genui">',
-            "genui_render is no longer available in this session, because the user is not in the OpenCode app or turned generated UI off. Answer in text.",
-            "</context>",
-          ].join("\n"),
-        ),
-      )
-
-      yield* s.session.prompt({ sessionID, text: "Still text" })
-      yield* s.session.wait(sessionID)
-
-      expect(s.requests).toHaveLength(3)
-      for (const field of ["tools", "system"] as const) expect(s.requests[2]?.[field]).toEqual(s.requests[0]?.[field])
-      expect(s.requests[2]?.messages.slice(0, 3)).toEqual([...s.requests[1]!.messages])
-      expect(messageRoles(s.requests[2]!)).toEqual(["user", "system", "user", "user"])
-
-      yield* s.session.prompt({ sessionID, text: "Back in app", metadata: { genui: true } })
-      yield* s.session.wait(sessionID)
-
-      expect(s.requests).toHaveLength(4)
-      for (const field of ["tools", "system"] as const) expect(s.requests[3]?.[field]).toEqual(s.requests[0]?.[field])
-      expect(s.requests[3]?.messages.slice(0, 4)).toEqual([...s.requests[2]!.messages])
-      expect(messageRoles(s.requests[3]!)).toEqual(["user", "system", "user", "user", "system", "user"])
-      expect(s.requests[3]?.messages[4]).toEqual(
-        Message.system(
-          [
-            'The context under "genui" changed and supersedes the previous value:',
-            '<context key="genui">',
-            "The user is viewing this session in the OpenCode app. For the occasional answer that is clearly better seen or clicked than read, such as a dashboard, a chart of real data or a form, genui_render draws interactive UI while you write it; load the genui skill first. Answer everything else in text as usual. When the in-app browser is connected, its tools are in your tool list and the browser skill explains them.",
-            "</context>",
-          ].join("\n"),
-        ),
-      )
-    },
-  )
-
   scenario("runs a follow-up when synthetic input arrives during an active continuation", function* (s) {
     const secondStarted = yield* Deferred.make<void>()
     const releaseSecond = yield* Deferred.make<void>()
@@ -1554,7 +1481,7 @@ describe("SessionRunnerLLM", () => {
       TestLLM.text("## Objective\n- Entry summary", "entry-summary"),
       TestLLM.text("Continued", "entry-continuation"),
     )
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
     const compaction = yield* s.sessionInbox.admitCompaction({
@@ -2359,7 +2286,7 @@ describe("SessionRunnerLLM", () => {
     const first = yield* s.admit("STEER_A")
     const second = yield* s.admit("STEER_B")
     yield* s.llm.push(TestLLM.text("## Objective\n- Interrupted checkpoint", "summary"))
-    const summary = yield* s.llm.gate
+    const summary = yield* s.llm.gate()
     const compact = yield* s.session.compact({ sessionID })
     yield* summary.started
     expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
@@ -3474,14 +3401,14 @@ describe("SessionRunnerLLM", () => {
       TestLLM.stop(),
       TestLLM.stop(),
     )
-    const first = yield* s.llm.gate
+    const first = yield* s.llm.gate()
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* first.started
     expect(reads).toBe(1)
     expect(resolutions).toBe(1)
     expect(s.requests[0]?.model).toBe(recoveryModel)
 
-    const summary = yield* s.llm.gate
+    const summary = yield* s.llm.gate()
     yield* first.release
     yield* summary.started
     s.systemBaseline = "Changed during compaction"
@@ -3496,7 +3423,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
     const steered = yield* s.admit("Steered during compaction")
-    const retry = yield* s.llm.gate
+    const retry = yield* s.llm.gate()
     yield* summary.release
     yield* retry.started
 
@@ -3715,12 +3642,12 @@ describe("SessionRunnerLLM", () => {
       [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
       TestLLM.text("## Objective\n- Interrupted", "text-summary"),
     )
-    const first = yield* s.llm.gate
+    const first = yield* s.llm.gate()
     yield* s.admit("Continue")
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* first.started
 
-    const summary = yield* s.llm.gate
+    const summary = yield* s.llm.gate()
     yield* first.release
     yield* summary.started
 
@@ -3898,7 +3825,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("consumes the full provider stream before recording its boundary and settling local tools", function* (s) {
     yield* s.admit("Echo this")
-    const request = yield* s.llm.gate
+    const request = yield* s.llm.gate()
     const tail = yield* Deferred.make<void>()
     const complete = yield* Deferred.make<void>()
     const finished = yield* Deferred.make<void>()
@@ -4243,7 +4170,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Run once")
 
     yield* s.llm.push(TestLLM.text("Once", "text-once"))
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4301,7 +4228,7 @@ describe("SessionRunnerLLM", () => {
     const runner = yield* SessionRunner.Service
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
 
@@ -4325,7 +4252,7 @@ describe("SessionRunnerLLM", () => {
     const location = Location.Ref.make({ directory: AbsolutePath.make("/moved") })
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
 
@@ -4359,7 +4286,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Interrupt current work")
 
     yield* s.llm.push([], TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4386,7 +4313,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Interrupt current work")
 
     yield* s.llm.push([], TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4499,13 +4426,13 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Start working")
 
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
-    const firstStream = yield* s.llm.gate
+    const firstStream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* firstStream.started
     yield* s.session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
     yield* s.session.prompt({ sessionID, text: "Queue second", delivery: "queue" })
-    const secondStream = yield* s.llm.gate
+    const secondStream = yield* s.llm.gate()
     yield* firstStream.release
     yield* secondStream.started
     yield* s.session.prompt({ sessionID, text: "Steer before next queued input" })
@@ -4634,7 +4561,7 @@ describe("SessionRunnerLLM", () => {
       inputID: previous,
     })
     yield* s.llm.push(TestLLM.text("## Objective\n- New checkpoint", "new-summary"))
-    const gate = yield* s.llm.gate
+    const gate = yield* s.llm.gate()
     const next = yield* s.session.compact({ sessionID })
     yield* gate.started
     expect((yield* s.messages).filter((message) => message.type === "compaction").toReversed()).toMatchObject([
@@ -4844,7 +4771,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
 
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     yield* execution.wake(sessionID)
     yield* stream.started
     yield* stream.release
@@ -4865,7 +4792,7 @@ describe("SessionRunnerLLM", () => {
     s.requests.length = 0
     yield* s.llm.push(TestLLM.stop())
 
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     yield* execution.wake(sessionID)
     yield* stream.started
     yield* stream.release
@@ -4928,7 +4855,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
 
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4971,7 +4898,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Retry after failure")
 
     yield* s.llm.push(Stream.fail(invalidRequest()))
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -5353,7 +5280,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("interrupts a blocked step without local tool execution", function* (s) {
     yield* s.admit("Interrupt provider")
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started

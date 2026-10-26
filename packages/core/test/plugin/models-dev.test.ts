@@ -706,15 +706,12 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("omits realtime, embedding, and reranking models even when they list text input and output", () =>
+  it.effect("lists non-chat models only by type, so sessions never see them", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
       const modelState = yield* Model.Service
       const providerID = Provider.ID.make("acme")
-      const ids = ["gpt-5.5", "gpt-audio", "jev-1.13", "gpt-realtime-2.1", "text-embedding-3-large", "rerank-v3.5"].map(
-        (id) => Model.ID.make(id),
-      )
       const model = {
         providerID,
         capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -725,6 +722,8 @@ describe("ModelsDevPlugin", () => {
         enabled: true,
         limit: { context: 128_000, output: 32_000 },
       } satisfies Omit<Model.Info, "id" | "modelID" | "name">
+      // An unset type means chat; image and decision models list text too, but only chat is offered.
+      const types = { "gpt-5.5": undefined, "gpt-audio": "chat", "jev-1.13": "decision", "gpt-image-2": "image" }
       const snapshot = {
         info: {
           id: providerID,
@@ -733,15 +732,13 @@ describe("ModelsDevPlugin", () => {
           package: "@opencode/ai/providers/openai-compatible",
         },
         environment: [],
-        models: ids.map((id) => ({ ...model, id, modelID: id, name: id })),
-        // gpt-5.5 has no type, which models.dev treats as chat.
-        types: new Map<Model.ID, ModelsDev.CatalogModelType>([
-          [Model.ID.make("gpt-audio"), "chat"],
-          [Model.ID.make("jev-1.13"), "decision"],
-          [Model.ID.make("gpt-realtime-2.1"), "realtime"],
-          [Model.ID.make("text-embedding-3-large"), "embedding"],
-          [Model.ID.make("rerank-v3.5"), "reranking"],
-        ]),
+        models: Object.entries(types).map(([id, type]) => ({
+          ...model,
+          id: Model.ID.make(id),
+          modelID: Model.ID.make(id),
+          name: id,
+          type,
+        })),
       } satisfies ModelsDev.Snapshot
 
       yield* ModelsDevPlugin.effect(
@@ -757,10 +754,16 @@ describe("ModelsDevPlugin", () => {
       )
 
       yield* activate(providers)
-      const listed = yield* Effect.forEach(ids, (id) => modelState.get(providerID, id))
-      expect(listed.flatMap((item) => item?.id ?? [])).toEqual(
-        ["gpt-5.5", "gpt-audio", "jev-1.13"].map((id) => Model.ID.make(id)),
+      const ids = (models: readonly Model.Info[]) => models.map((item) => item.id).sort()
+      expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
+      expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
+      expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
+      expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
+        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
       )
+      expect(yield* modelState.available(["embedding"])).toEqual([])
     }),
   )
 

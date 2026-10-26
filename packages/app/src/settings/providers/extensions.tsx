@@ -29,6 +29,7 @@ interface PluginRowItem {
 }
 
 export const SettingsExtensions: Component<{
+  directory?: string
   subtab?: SettingsView["subtab"]
   onSubtab: (value: SettingsView["subtab"]) => void
   headerAction?: JSX.Element
@@ -37,17 +38,26 @@ export const SettingsExtensions: Component<{
   const serverSdk = useServerSDK()
   const data = useData()
   const dialog = useDialog()
-  const toggleMcp = useMcpToggle()
+  // MCP connections are per Location, so read and toggle them where the active session runs, as the TUI does. The
+  // names come from the default Location so this page lists only the servers available to all projects.
+  const location = () => (props.directory ? { directory: props.directory } : data.location.default())
+  const toggleMcp = useMcpToggle(() => props.directory)
 
-  // The synced list follows mcp.status.changed, so a finished sign-in shows up without a refetch.
+  // The synced lists follow mcp.status.changed, so a finished sign-in shows up without a refetch.
   createEffect(() => {
     if (serverSdk.connection.status() !== "connected") return
     void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
+
+    if (props.directory) void data.location.mcp.server.sync(location()).catch(() => undefined)
   })
 
-  const mcps = createMemo(() =>
-    (data.location.mcp.server.list(data.location.default()) ?? []).toSorted((a, b) => a.name.localeCompare(b.name)),
-  )
+  const mcps = createMemo(() => {
+    const active = data.location.mcp.server.list(location())
+
+    return (data.location.mcp.server.list(data.location.default()) ?? [])
+      .map((server) => active?.find((item) => item.name === server.name) ?? server)
+      .toSorted((a, b) => a.name.localeCompare(b.name))
+  })
 
   const toggle = (name: string) => {
     if (toggleMcp.isPending) return
@@ -138,9 +148,7 @@ export const SettingsExtensions: Component<{
                               class="mcp-status-action"
                               aria-label={language.t("dialog.mcp.error.viewLabel", { name: item.name })}
                               onClick={() =>
-                                dialog.show(() => (
-                                  <DialogMcp directory={data.location.default().directory} server={item.name} />
-                                ))
+                                dialog.show(() => <DialogMcp directory={location().directory} server={item.name} />)
                               }
                             >
                               {language.t("dialog.mcp.error.view")}

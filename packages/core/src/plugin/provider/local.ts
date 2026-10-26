@@ -142,11 +142,9 @@ export function createLocalProviderPlugin<Discovered>(input: {
           yield* ctx.provider.reload()
           yield* refresh().pipe(Effect.ignore)
         })
-        yield* ctx.event.subscribe().pipe(
-          Stream.filter((event) => event.type === "config.updated"),
-          Stream.runForEach(reload),
-          Effect.forkScoped({ startImmediately: true }),
-        )
+        yield* ctx.event
+          .subscribe({ types: ["config.updated"] })
+          .pipe(Stream.runForEach(reload), Effect.forkScoped({ startImmediately: true }))
       }),
     } satisfies PluginInternal.InternalPlugin)
   }

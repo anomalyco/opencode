@@ -9,7 +9,6 @@ import type {
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { GenUI } from "@opencode/plugin-genui/genui"
 import {
   currentContentDefaultOpen,
   currentToolFailed,
@@ -1007,9 +1006,6 @@ function toolGroupType(
   hasContextGroup: boolean,
   detail?: TimelineDetail,
 ) {
-  // Agent-rendered surfaces are content, not activity: they always render inline.
-  if (content.name === GenUI.RENDER_TOOL && !currentToolFailed(content)) return undefined
-
   if (detail) {
     if (content.name === "question" && !currentToolFailed(content)) return undefined
     const category = timelineCategory(content)!

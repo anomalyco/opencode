@@ -12,6 +12,7 @@ import {
   ProcessId,
   type ChildProcessHandle,
 } from "effect/process/ChildProcessSpawner"
+// ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"

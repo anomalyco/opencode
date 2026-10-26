@@ -12,7 +12,6 @@ import {
   LLM,
   LLMClient,
   Media,
-  Provider,
   Speech,
   SpeechClient,
   SpeechEvent,
@@ -21,7 +20,6 @@ import {
   VideoClient,
 } from "@opencode/ai/effect"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
-import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
   Alibaba,
   AssemblyAI,
@@ -51,6 +49,7 @@ import {
   ZAI,
 } from "@opencode/ai/providers"
 import {
+  AnthropicMessages,
   OpenAIChat,
   OpenAICompatibleChat,
   OpenAICompatibleResponses,
@@ -58,7 +57,6 @@ import {
   OpenResponses,
   OpenResponsesChannel,
 } from "@opencode/ai/protocols"
-import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode/ai/testing"
 
 describe("public exports", () => {
@@ -91,9 +89,6 @@ describe("public exports", () => {
     expect(SpeechClient.layer).toBeDefined()
     expect(SpeechEvent.is.audioDelta).toBeFunction()
     expect(Generation).toBeFunction()
-    expect(Provider.make).toBeFunction()
-    expect(ProviderSubpath.make).toBe(Provider.make)
-    expect(TestLLM.layer).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
     expect(Decision.generate).toBeFunction()

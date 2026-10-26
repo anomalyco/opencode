@@ -339,12 +339,13 @@
     visibility: hidden;
     margin-inline-end: calc(-1 * var(--user-message-transition-gap));
 
-    /* Labels and actions slide in as they arrive and leave at once, like the Pending label on delivery. */
+    /* Labels and actions slide in as they arrive and leave at once, like the Pending label on delivery. Active ones
+       inherit visibility, so a folded message's hidden footer also hides them. */
     &[data-active="true"] {
       grid-template-columns: 1fr;
       margin-inline-end: 0;
       opacity: 1;
-      visibility: visible;
+      visibility: inherit;
       transition:
         grid-template-columns 200ms ease-out,
         margin-inline-end 200ms ease-out,
@@ -407,8 +408,7 @@
     }
   }
 
-  &[data-run-meta-hidden] [data-slot="user-message-copy-wrapper"],
-  &[data-run-meta-hidden] [data-slot="user-message-meta-tail"] {
+  &[data-run-meta-hidden] [data-slot="user-message-copy-wrapper"] {
     visibility: hidden;
   }
 

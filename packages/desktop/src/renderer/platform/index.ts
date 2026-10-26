@@ -1,6 +1,6 @@
 import type { Platform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
-import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
+import { setPinchZoomEnabled, setZoomLevel, webviewZoom, zoomLevel } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
 import { createExtensionBridge } from "../extensions"
@@ -35,6 +35,8 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
       return fetch(input, init)
     },
     webviewZoom,
+    zoomLevel,
+    setZoomLevel,
     windowFullscreen,
     requestMicrophone: () => api.requestMicrophone(),
     setVoiceCallActive: (active) => api.setVoiceCallActive(active),

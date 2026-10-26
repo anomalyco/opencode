@@ -13,7 +13,6 @@ import { useTabs, type Tab } from "@/shell/tabs/tabs"
 import { readLocalImage } from "@/runtime/server/image"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
-import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "@/session/session-domain"
 import { createTurnDiffCache } from "@/session/timeline/turn-diffs"
 import { useSettings } from "@/settings/model"
 
@@ -144,21 +143,6 @@ export function SessionUIProvider(
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
         backgroundCompaction={backgroundCompaction()}
-        onPrompt={async (input) => {
-          // Like the composer, a staged revert commits first; its committed echo would otherwise drop this reply.
-          if (data.session.get(input.sessionID)?.revert)
-            await serverSDK.api.session.revert.commit({ sessionID: input.sessionID })
-          await data.session.prompt({
-            ...input,
-            metadata: { ...input.metadata, genui: settings.general.generatedUI() },
-          })
-        }}
-        promptMetadata={(sessionID) =>
-          selectVisibleSessionUserMessages(
-            selectSessionUserMessages(data.session.message.list(sessionID)),
-            data.session.get(sessionID)?.revert?.messageID,
-          ).map((message) => message.metadata)
-        }
       >
         <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
           {props.children}

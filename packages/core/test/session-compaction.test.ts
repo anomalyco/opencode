@@ -406,8 +406,10 @@ it.effect("auto compaction estimates current content against the buffered prompt
       },
     })
     // An automatic compaction that is not due is skipped.
-    const due = (context: SessionContext.Loaded) =>
-      compaction.compact({ reason: "auto", context }).pipe(Effect.map((outcome) => outcome.status !== "skipped"))
+    const due = (context: SessionContext.Loaded, estimate?: SessionCompaction.Estimate) =>
+      compaction
+        .compact({ reason: "auto", context, estimate })
+        .pipe(Effect.map((outcome) => outcome.status !== "skipped"))
 
     // 85% of the input limit, which takes precedence over the context window.
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
@@ -451,6 +453,9 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
     expect(yield* due(grown)).toBe(true)
+    // A step estimates its prompt once and passes it; compaction decides on that instead of estimating again.
+    expect(yield* due(grown, { measured: 0, estimated: 0 })).toBe(false)
+    expect(yield* due(input(1_000, contextLimited), { measured: 84_000, estimated: 0 })).toBe(true)
 
     const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [...grown.messages, interrupted] })).toBe(90_001)

@@ -262,8 +262,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     showComposer: () => true,
   } satisfies SessionComposerRegionViewController
 
+  // Contain the composer region's z-index as the app's session chat panel does, so portaled menus open above it.
   return (
-    <div class="mx-auto h-screen min-h-[640px] w-full max-w-[1440px]">
+    <div class="mx-auto h-screen min-h-[640px] w-full max-w-[1440px] isolate">
       <SessionRouteFrame padded>
         <SessionPanelFrame raised>
           <main class="flex min-h-0 flex-1 flex-col">

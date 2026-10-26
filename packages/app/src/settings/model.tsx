@@ -127,8 +127,6 @@ const generalSchema = Persistence.struct({
   showTurnDiffs: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
-  // Lets agents render generated UI in the timeline; an experiment users can turn off.
-  generatedUI: Schema.Boolean,
   // The "New icons" design experiment, off until it ships.
   newIcons: Schema.Boolean,
   // The "New model picker" design experiment, off until it ships.
@@ -300,7 +298,6 @@ export const defaultSettings: Settings = {
     showTurnDiffs: false,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
-    generatedUI: true,
     newIcons: false,
     newModelPicker: false,
     mobileTitlebarPosition: "top",
@@ -406,10 +403,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         timelineWidth,
         setTimelineWidth(value: TimelineWidth) {
           setStore("general", "timelineWidth", value)
-        },
-        generatedUI: withFallback(() => store.general?.generatedUI, defaultSettings.general.generatedUI),
-        setGeneratedUI(value: boolean) {
-          setStore("general", "generatedUI", value)
         },
         newIcons,
         setNewIcons(value: boolean) {

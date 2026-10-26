@@ -129,12 +129,12 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
         expect(
           await ctx.session.instructions.entry.put({
             sessionID: created.id,
-            key: "genui.guidelines",
-            value: "Use GenUI components when appropriate.",
+            key: "team.guidelines",
+            value: "Prefer small, focused changes.",
           }),
         ).toBeUndefined()
         expect(await ctx.session.instructions.entry.list({ sessionID: created.id })).toEqual([
-          { key: "genui.guidelines", value: "Use GenUI components when appropriate." },
+          { key: "team.guidelines", value: "Prefer small, focused changes." },
         ])
         const missing = Session.ID.create()
         await expect(ctx.session.instructions.entry.list({ sessionID: missing })).rejects.toMatchObject({
@@ -169,7 +169,7 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
 
     const first = yield* prepareRequest(created.id)
     expect(first.initial).toBe(
-      ['<context key="genui.guidelines">', "Use GenUI components when appropriate.", "</context>"].join("\n"),
+      ['<context key="team.guidelines">', "Prefer small, focused changes.", "</context>"].join("\n"),
     )
     expect(yield* sessions.inbox(created.id)).toEqual([])
 
@@ -179,7 +179,7 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
         expect(
           await ctx.session.instructions.entry.remove({
             sessionID: created.id,
-            key: "genui.guidelines",
+            key: "team.guidelines",
           }),
         ).toBeUndefined()
         expect(await ctx.session.instructions.entry.list({ sessionID: created.id })).toEqual([])
@@ -189,7 +189,7 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
     const second = yield* prepareRequest(created.id)
     expect(second.entries.at(-1)?.message).toMatchObject({
       type: "system",
-      text: 'The context under "genui.guidelines" no longer applies. Disregard it.',
+      text: 'The context under "team.guidelines" no longer applies. Disregard it.',
     })
     expect(yield* sessions.inbox(created.id)).toEqual([])
   }),

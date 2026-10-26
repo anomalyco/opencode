@@ -401,6 +401,7 @@ function RootSettings() {
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
               <SettingsExtensions
+                directory={activeDirectory()}
                 subtab={surface.view().subtab}
                 headerAction={<SettingsServerSwitcher />}
                 onSubtab={(value) => surface.subtab(value)}

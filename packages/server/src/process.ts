@@ -66,7 +66,11 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   }
   const urls = () => [...localURLs(), ...(remoteURLs?.() ?? [])]
   const application = yield* Ref.make(Option.none<App>())
-  const app = dispatch(password, status, application, options.app?.version ?? "unknown", urls, Global.Path.tmp)
+  const auth = ServerAuth.Config.of({
+    password: Option.some(password),
+    username: options.username ?? ServerAuth.DEFAULT_USERNAME,
+  })
+  const app = dispatch(auth, status, application, options.app?.version ?? "unknown", urls, Global.Path.tmp)
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
@@ -172,14 +176,13 @@ function addressInUse(error: unknown) {
 }
 
 function dispatch(
-  password: string,
+  auth: ServerAuth.Info,
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   version: string,
   urls: () => ReadonlyArray<string>,
   tmp: string,
 ): App {
-  const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
