@@ -43,6 +43,12 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTransfer") {}
 
+// Bun's SQLite driver rejects statements that bind more than 65536 parameters, and
+// SessionMessageTable binds one per column (currently 7). Batch the import like the
+// fork projection and instruction entry inserts do.
+// See https://github.com/anomalyco/opencode/issues/55433.
+const InsertBatchSize = 500
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -110,7 +116,14 @@ const layer = Layer.effect(
               commit: (seq) =>
                 Effect.gen(function* () {
                   if (messages.length > 0) {
-                    yield* db.insert(SessionMessageTable).values(messages).run().pipe(Effect.orDie)
+                    const batches = Array.from(
+                      { length: Math.ceil(messages.length / InsertBatchSize) },
+                      (_, index) => messages.slice(index * InsertBatchSize, (index + 1) * InsertBatchSize),
+                    )
+                    yield* Effect.forEach(
+                      batches,
+                      (batch) => db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie),
+                    )
                     yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
                   }
                   yield* db
