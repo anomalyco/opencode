@@ -111,13 +111,14 @@ export function createBrowserPane(input: {
         fileRoots: [],
       }
 
+      const partition = electron.session.fromPartition(entry.partition)
+      // Sites that parse the user agent treat an Electron token as an unsupported browser; Medium refuses its editor.
+      partition.setUserAgent(partition.getUserAgent().replace(/ Electron\/\S+/, ""))
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
       // file: URLs outside the roots. One listener per partition covers every page in this attachment.
-      electron.session
-        .fromPartition(entry.partition)
-        .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
-          callback({ cancel: !fileURLWithin(details.url, entry.fileRoots) }),
-        )
+      partition.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
+        callback({ cancel: !fileURLWithin(details.url, entry.fileRoots) }),
+      )
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
       let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
       let attached = false
