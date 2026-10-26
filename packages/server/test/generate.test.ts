@@ -24,6 +24,8 @@ const generate = makeLocationNode({
               }),
             ),
           ),
+        image: () => Effect.die("unused"),
+        decisions: () => Effect.die("unused"),
       })
     }),
   ),
@@ -70,7 +72,7 @@ it.live("uses base configuration without depending on process.cwd()", () =>
   }),
 )
 
-it.live("rejects image and decision generation until they are implemented", () =>
+it.live("rejects unknown image and decision models and duplicate question names", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-generate-media-")))
     const handler = yield* ServerFetch.make({
@@ -79,42 +81,27 @@ it.live("rejects image and decision generation until they are implemented", () =
       fs: { filewatcher: false },
       models: { fetch: false },
     })
-    const model = { providerID: "openai", id: "gpt-image-2" }
-    const cases = [
-      { path: "image", body: { model, prompt: "a red square" } },
-      {
-        path: "decisions",
-        body: {
-          model,
-          input: [{ type: "text", text: "I was charged twice." }],
-          questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
-        },
-      },
-    ]
-    for (const item of cases) {
-      const response = yield* Effect.promise(() =>
+    const model = { providerID: "nowhere", id: "nothing" }
+    const question = { type: "predicate", name: "refund", instructions: "Is this a refund request?" }
+    const post = (path: string, body: unknown) =>
+      Effect.promise(() =>
         handler(
-          new Request(`http://opencode.local/api/experimental/generate/${item.path}`, {
+          new Request(`http://opencode.local/api/experimental/generate/${path}`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(item.body),
+            body: JSON.stringify(body),
           }),
         ),
       )
-      expect(response.status).toBe(501)
-      expect(yield* Effect.promise(() => response.json())).toMatchObject({ _tag: "NotImplementedError" })
+    for (const [path, body] of [
+      ["image", { model, prompt: "a red square" }],
+      ["decisions", { model, input: [{ type: "text", text: "I was charged twice." }], questions: [question] }],
+    ] as const) {
+      const response = yield* post(path, body)
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toMatchObject({ _tag: "ModelNotFoundError" })
     }
-
-    const question = { type: "predicate", name: "refund", instructions: "Is this a refund request?" }
-    const duplicate = yield* Effect.promise(() =>
-      handler(
-        new Request("http://opencode.local/api/experimental/generate/decisions", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model, input: [], questions: [question, question] }),
-        }),
-      ),
-    )
+    const duplicate = yield* post("decisions", { model, input: [], questions: [question, question] })
     expect(duplicate.status).toBe(400)
   }),
 )

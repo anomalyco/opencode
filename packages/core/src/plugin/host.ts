@@ -285,6 +285,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     generate: {
       text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
+      image: generate.image,
+      decisions: generate.decisions,
     },
     integration: {
       list: () => response(integration.list()),

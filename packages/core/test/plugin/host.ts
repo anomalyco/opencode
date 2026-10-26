@@ -75,6 +75,8 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     generate: overrides.generate ?? {
       text: () => Effect.die("unused generate.text"),
+      image: () => Effect.die("unused generate.image"),
+      decisions: () => Effect.die("unused generate.decisions"),
     },
     integration: overrides.integration ?? {
       list: () => Effect.die("unused integration.list"),

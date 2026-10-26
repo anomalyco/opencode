@@ -5509,16 +5509,6 @@
               }
             }
           },
-          "501": {
-            "description": "NotImplementedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotImplementedErrorEncoded"
-                }
-              }
-            }
-          },
           "502": {
             "description": "ProviderRequestError",
             "content": {
@@ -5540,7 +5530,7 @@
             }
           }
         },
-        "description": "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored. Not implemented yet; always fails with NotImplementedError.",
+        "description": "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
         "summary": "Generate images",
         "requestBody": {
           "content": {
@@ -5621,16 +5611,6 @@
               }
             }
           },
-          "501": {
-            "description": "NotImplementedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotImplementedErrorEncoded"
-                }
-              }
-            }
-          },
           "502": {
             "description": "ProviderRequestError",
             "content": {
@@ -5652,7 +5632,7 @@
             }
           }
         },
-        "description": "Ask a decision model typed predicate, choice and score questions about the input and return one probability-bearing answer per question, in question order. Stateless: nothing is stored. Not implemented yet; always fails with NotImplementedError.",
+        "description": "Ask a decision model typed predicate, choice and score questions about the input and return one probability-bearing answer per question, in question order. Stateless: nothing is stored.",
         "summary": "Generate decisions",
         "requestBody": {
           "content": {
@@ -19076,20 +19056,6 @@
       },
       "Money.USDPerMillionTokens": {
         "type": "number"
-      },
-      "NotImplementedErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["NotImplementedError"]
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
-        "additionalProperties": false
       },
       "PairingCode": {
         "type": "object",

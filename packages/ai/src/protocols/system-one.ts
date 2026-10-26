@@ -42,6 +42,7 @@ const NativeUsage = Schema.StructWithRest(
   Schema.Struct({
     input_tokens: Schema.optional(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
+    cost: Schema.optional(Schema.Number),
   }),
   [JsonObject],
 )
@@ -215,6 +216,7 @@ export const toResponse = (
               inputTokens: data.usage.input_tokens,
               outputTokens: data.usage.output_tokens,
               totalTokens: ProviderShared.totalTokens(data.usage.input_tokens, data.usage.output_tokens, undefined),
+              cost: data.usage.cost,
               providerMetadata: { [providerMetadataKey]: data.usage },
             }),
       providerMetadata: {

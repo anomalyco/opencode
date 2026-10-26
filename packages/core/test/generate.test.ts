@@ -1,4 +1,4 @@
-import { expect } from "bun:test"
+import { describe, expect } from "bun:test"
 import {
   AIError,
   AuthenticationError,
@@ -18,8 +18,10 @@ import { AISDK } from "@opencode/core/aisdk"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { ModelResolver } from "@opencode/core/model-resolver"
-import { ID, Info, Model, Ref } from "@opencode/core/model"
+import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Variant } from "@opencode/core/variant"
+import { Money } from "@opencode/schema/money"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
@@ -77,9 +79,12 @@ const aisdk = Layer.mock(AISDK.Service, {
 const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
 const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
-const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
+const generateDeps = Layer.mergeAll(models, RequestExecutor.fetchLayer)
+const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.mergeAll(resolver, client, generateDeps))))
 const resolverIt = testEffect(resolver)
-const retryIt = testEffect(Generate.layer.pipe(Layer.provideMerge(Layer.merge(resolver, TestLLM.testLayer()))))
+const retryIt = testEffect(
+  Generate.layer.pipe(Layer.provideMerge(Layer.mergeAll(resolver, TestLLM.testLayer(), generateDeps))),
+)
 
 it.effect("loads dynamic AI SDK models", () =>
   Effect.gen(function* () {
@@ -228,7 +233,8 @@ testEffect(Layer.empty).effect("attributes each stateless completion without cre
         }),
       ),
     )
-    const native = LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer.pipe(Layer.provide(http))))
+    const executor = RequestExecutor.layer.pipe(Layer.provide(http))
+    const native = LLMClient.layer.pipe(Layer.provide(executor))
     yield* Effect.gen(function* () {
       const generate = yield* Generate.Service
       for (let index = 0; index < 2; index++) {
@@ -239,9 +245,192 @@ testEffect(Layer.empty).effect("attributes each stateless completion without cre
           }),
         ).toBe("OK")
       }
-    }).pipe(Effect.provide(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, native)))))
+    }).pipe(Effect.provide(Generate.layer.pipe(Layer.provide(Layer.mergeAll(resolver, native, models, executor)))))
     expect(sessions).toHaveLength(2)
     expect(sessions[0]).toStartWith("ses_")
     expect(sessions[1]).not.toBe(sessions[0])
   }),
 )
+
+describe("image and decision generation", () => {
+  const catalog = [
+    Info.make({
+      ...Info.default(Provider.ID.openai, ID.make("gpt-image-1-mini")),
+      type: "image",
+      package: "@opencode/ai/providers/openai/images",
+    }),
+    Info.make({
+      ...Info.default(Provider.ID.openai, ID.make("gpt-5")),
+      package: "@opencode/ai/providers/openai/responses",
+    }),
+    Info.make({
+      ...Info.default(Provider.ID.make("openrouter"), ID.make("typesafe/jev-1.13")),
+      type: "decision",
+      package: "@opencode/ai/providers/openrouter/decisions",
+    }),
+  ].concat(
+    (() => {
+      const gemini = Info.make({
+        ...Info.default(Provider.ID.make("google"), ID.make("gemini-3.1-flash-image")),
+        type: "image",
+        package: "@opencode/ai/providers/google/images",
+      })
+      return [{ ...gemini, variants: Variant.resolve(gemini, Variant.supports({ supported: true, effort: ["high"] })) }]
+    })(),
+  )
+  const mediaProviders = Layer.mock(Provider.Service, {
+    get: (providerID) =>
+      Effect.succeed(
+        Provider.Info.make({
+          ...Provider.Info.empty(providerID),
+          activation: "enabled",
+          settings: { apiKey: `${providerID}-key` },
+        }),
+      ),
+  })
+  const mediaModels = Layer.mock(Model.Service, {
+    available: (types) => Effect.succeed(catalog.filter((model) => (types ?? ["chat"]).includes(model.type ?? "chat"))),
+  })
+  const requests: { url: string; headers: Record<string, string>; body: unknown }[] = []
+  const http = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.gen(function* () {
+        const text = request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : ""
+        requests.push({ url: request.url, headers: request.headers, body: text ? JSON.parse(text) : undefined })
+        if (request.url === "https://api.openai.com/v1/images/generations")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              data: [{ b64_json: "aW1hZ2U=" }],
+              output_format: "png",
+              usage: { input_tokens: 9, output_tokens: 272 },
+            }),
+          )
+        if (request.url === "https://openrouter.ai/api/v1/systemone")
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(DECISION_RESPONSE, { headers: { "content-type": "application/json" } }),
+          )
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json({ error: { message: "Bad request" } }, { status: 400 }),
+        )
+      }),
+    ),
+  )
+  const executor = RequestExecutor.layer.pipe(Layer.provide(http))
+  const mediaResolver = ModelResolver.layer.pipe(
+    Layer.provide(Layer.mergeAll(mediaProviders, mediaModels, integrations, npm, aisdk)),
+  )
+  const mediaIt = testEffect(
+    Generate.layer.pipe(Layer.provide(Layer.mergeAll(mediaResolver, client, mediaModels, executor))),
+  )
+  const ref = (providerID: string, id: string, variant?: string) =>
+    Ref.make({
+      providerID: Provider.ID.make(providerID),
+      id: ID.make(id),
+      ...(variant ? { variant: VariantID.make(variant) } : {}),
+    })
+
+  mediaIt.effect("generates images through the model's image entrypoint with the provider key", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const result = yield* generate.image({ model: ref("openai", "gpt-image-1-mini"), prompt: "A black circle" })
+      expect(requests[0]).toMatchObject({
+        url: "https://api.openai.com/v1/images/generations",
+        headers: { authorization: "Bearer openai-key" },
+        body: { model: "gpt-image-1-mini", prompt: "A black circle" },
+      })
+      expect(result).toMatchObject({
+        images: [{ type: "image", data: "aW1hZ2U=", mime: "image/png" }],
+        tokens: { input: 9, output: 272 },
+      })
+    }),
+  )
+
+  mediaIt.effect("answers decision questions and reports the provider's cost", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const result = yield* generate.decisions({
+        model: ref("openrouter", "typesafe/jev-1.13"),
+        input: [
+          {
+            type: "text",
+            text: "I was charged twice for the same invoice. Please refund the duplicate payment today.",
+          },
+        ],
+        questions: [
+          {
+            type: "choice",
+            name: "department",
+            instructions: "Which team should handle this support request?",
+            choices: [
+              { value: "billing", description: "Payments, invoices, refunds, or failed charges" },
+              { value: "technical", description: "Bugs, outages, or integrations" },
+              { value: "sales", description: "Pricing, upgrades, or new accounts" },
+            ],
+          },
+          {
+            type: "score",
+            name: "urgency",
+            instructions: "How urgent is this support request?",
+            levels: [
+              { label: "Can wait for normal support" },
+              { label: "Needs prompt attention" },
+              { label: "Actively blocking revenue" },
+            ],
+          },
+          { type: "predicate", name: "refund", instructions: "Is the customer asking for a refund?" },
+        ],
+      })
+      expect(requests[0]).toMatchObject({
+        url: "https://openrouter.ai/api/v1/systemone",
+        headers: { authorization: "Bearer openrouter-key" },
+      })
+      expect(result.answers.map((answer) => [answer.name, answer.type])).toEqual([
+        ["department", "choice"],
+        ["urgency", "score"],
+        ["refund", "predicate"],
+      ])
+      expect(result.answers[0]).toMatchObject({ choice: "billing" })
+      expect(result.cost).toBe(Money.USD.make(0.000017724))
+      expect(result.tokens).toEqual({ input: 422, output: 69 })
+    }),
+  )
+
+  mediaIt.effect("sends a variant's reasoning setting and maps provider rejections", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const error = yield* generate
+        .image({ model: ref("google", "gemini-3.1-flash-image", "high"), prompt: "A black circle" })
+        .pipe(Effect.flip)
+      expect(JSON.stringify(requests[0]?.body)).toContain("thinkingLevel")
+      expect(error).toMatchObject({ _tag: "Generate.ProviderRequestError", reason: "invalid_request", status: 400 })
+    }),
+  )
+
+  mediaIt.effect("rejects models of another type and unknown models", () =>
+    Effect.gen(function* () {
+      const generate = yield* Generate.Service
+      const chat = yield* generate.image({ model: ref("openai", "gpt-5"), prompt: "x" }).pipe(Effect.flip)
+      expect(chat._tag).toBe("Generate.UnsupportedModelError")
+      const image = yield* generate
+        .decisions({
+          model: ref("openai", "gpt-image-1-mini"),
+          input: [],
+          questions: [{ type: "predicate", name: "a", instructions: "?" }],
+        })
+        .pipe(Effect.flip)
+      expect(image._tag).toBe("Generate.UnsupportedModelError")
+      const unknown = yield* generate.image({ model: ref("openai", "nope"), prompt: "x" }).pipe(Effect.flip)
+      expect(unknown._tag).toBe("Generate.ModelNotFoundError")
+    }),
+  )
+})
+
+const DECISION_RESPONSE =
+  '{"model":"typesafe/jev-1.13-20260917","answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"sales":0,"technical":0},"confidence":1},"urgency":{"type":"score","score":1.02,"legend":{"0":"Can wait for normal support","1":"Needs prompt attention","2":"Actively blocking revenue"},"probabilities":{"0":0.01,"1":0.96,"2":0.03},"confidence":0.95},"refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":422,"output_tokens":69,"cost":0.000017724},"id":"gen-dec-1790088886-JRlffOLUwQdx4Lltu2se","provider":"TypeSafe"}'

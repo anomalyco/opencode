@@ -347,6 +347,8 @@ export function fromPromise(plugin: Plugin) {
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
+            image: adaptApiMethod(GenerateEndpoints["generate.image"], host.generate.image),
+            decisions: adaptApiMethod(GenerateEndpoints["generate.decisions"], host.generate.decisions),
           },
           model: {
             list: adaptApiMethod(ModelEndpoints["model.list"], host.model.list),

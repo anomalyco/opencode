@@ -38,7 +38,7 @@ export interface Context {
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: Pick<GenerateApi, "text">
+  readonly generate: GenerateApi
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi, "list">
   readonly provider: ProviderDomain

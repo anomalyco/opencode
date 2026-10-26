@@ -2935,10 +2935,6 @@ export type UnsupportedModelError = {
 export const isUnsupportedModelError = (value: unknown): value is UnsupportedModelError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnsupportedModelError"
 
-export type NotImplementedError = { readonly _tag: "NotImplementedError"; readonly message: string }
-export const isNotImplementedError = (value: unknown): value is NotImplementedError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "NotImplementedError"
-
 export type ProviderRequestError = {
   readonly _tag: "ProviderRequestError"
   readonly providerID: string

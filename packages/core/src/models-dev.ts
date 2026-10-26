@@ -153,10 +153,15 @@ type Route = {
 const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
   "@opencode/ai/providers/azure/chat",
+  "@opencode/ai/providers/azure/images",
   "@opencode/ai/providers/azure/responses",
   "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
   "@opencode/ai/providers/cloudflare-workers-ai",
+  "@opencode/ai/providers/cloudflare-workers-ai/decisions",
+  "@opencode/ai/providers/cloudflare-workers-ai/images",
   "@opencode/ai/providers/google-vertex/gemini",
+  "@opencode/ai/providers/google-vertex/images",
   "@opencode/ai/providers/google-vertex/messages",
   "aisdk:@jerome-benoit/sap-ai-provider-v2",
   "aisdk:watsonx-ai-provider",
@@ -229,11 +234,14 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
 
 function route(providerID: Provider.ID, model: SourceModel): Route | undefined {
   // A chat model uses its first API with a package. Other types (image, decision…) only run through
-  // opencode's own packages, so they use their first API that has one, and are skipped without one.
+  // opencode's own packages: they prefer the entrypoint for their type (`providers/<P>/images`) over a chat
+  // API listed first, then fall back to their first API with an opencode package, and are skipped without one.
+  const apis = entries(model.api, decodeApi)
   const [protocol, api] =
-    entries(model.api, decodeApi).find(([, entry]) =>
-      model.type === "chat" ? entry.sdk?.opencodeai || entry.sdk?.aisdk : entry.sdk?.opencodeai,
-    ) ?? []
+    (model.type === "chat"
+      ? apis.find(([, entry]) => entry.sdk?.opencodeai || entry.sdk?.aisdk)
+      : (apis.find(([, entry]) => entry.sdk?.opencodeai?.endsWith(`/${model.type}s`)) ??
+        apis.find(([, entry]) => entry.sdk?.opencodeai))) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
   const packageName =

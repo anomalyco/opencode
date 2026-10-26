@@ -1,7 +1,15 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpOptions, LanguageModel, ProviderConfigurationError } from "@opencode/ai/effect"
+import {
+  DecisionModel,
+  DecisionModelSchema,
+  HttpOptions,
+  ImageModel,
+  ImageModelSchema,
+  LanguageModel,
+  ProviderConfigurationError,
+} from "@opencode/ai/effect"
 import { Auth, mergeHttpOptions } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -128,9 +136,27 @@ export interface Resolved {
   readonly chunkTimeout?: number | false
 }
 
+/** An image or decision model ready to run, with the catalog entry it came from. */
+export interface ResolvedMedia<Runtime> {
+  readonly model: Runtime
+  readonly info: Info
+}
+
+export type MediaError =
+  | VariantUnavailableError
+  | UnsupportedPackageError
+  | ModelConfigurationError
+  | ModelInitializationError
+  | UnresolvedProviderVariablesError
+  | Integration.AuthorizationError
+
 export interface Interface {
   readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
+  /** An enabled image model by ref, or undefined when no image model has that ref. */
+  readonly resolveImage: (ref: Ref) => Effect.Effect<ResolvedMedia<ImageModel> | undefined, MediaError>
+  /** An enabled decision model by ref, or undefined when no decision model has that ref. */
+  readonly resolveDecision: (ref: Ref) => Effect.Effect<ResolvedMedia<DecisionModel> | undefined, MediaError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
@@ -200,9 +226,8 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const resolved = prepareRuntimeModel(model)
-  const configured = { ...resolved.settings, ...credential?.metadata }
-  if (Provider.isAISDK(resolved.package)) {
+  if (Provider.isAISDK(model.package)) {
+    const resolved = prepareRuntimeModel(model)
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
     const settings = yield* prepareProviderSettings(
@@ -216,19 +241,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       Effect.mapError((error) => initialization(resolved, "init", error.cause)),
     )
   }
-  const specifier = Provider.packageName(resolved.package)
-  if (!specifier) return yield* unsupported(resolved)
-  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(configured))
-  const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
-    Effect.mapError((error) => initialization(resolved, "load", error.cause)),
-  )
-  const settings = {
-    ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
-    ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
-    ...nativeCredentialSettings(resolved, specifier, credential),
-    headers: resolved.headers,
-    body: resolved.body,
-  }
+  const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
   return yield* Effect.try({
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
@@ -258,6 +271,60 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         : initialization(resolved, "construct", cause),
   })
 })
+
+/** Settings and package loading shared by every model type: credentials, variables, canonical provider, overlays. */
+const loadCatalogPackage = Effect.fn("ModelResolver.loadCatalogPackage")(function* (
+  model: RuntimeInfo,
+  credential?: Credential.Value,
+  dependencies?: Dependencies,
+) {
+  const resolved = prepareRuntimeModel(model)
+  const configured = { ...resolved.settings, ...credential?.metadata }
+  const specifier = Provider.packageName(resolved.package)
+  if (!specifier || Provider.isAISDK(specifier)) return yield* unsupported(resolved)
+  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(configured))
+  const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
+    Effect.mapError((error) => initialization(resolved, "load", error.cause)),
+  )
+  const settings = {
+    ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
+    ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
+    ...nativeCredentialSettings(resolved, specifier, credential),
+    headers: resolved.headers,
+    body: resolved.body,
+  }
+  return { resolved, configured, module, settings }
+})
+
+/**
+ * Builds an image or decision model from its catalog package. The entrypoint (`providers/<P>/images`) exports the
+ * same `model(modelID, settings)` as chat; a package that returns another kind of model cannot serve this type.
+ */
+export const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <Runtime>(
+  model: RuntimeInfo,
+  is: (value: unknown) => value is Runtime,
+  credential?: Credential.Value,
+  dependencies?: Dependencies,
+) {
+  const { resolved, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const runtime: unknown = yield* Effect.try({
+    try: () => module.model(resolved.modelID ?? resolved.id, settings),
+    catch: (cause) =>
+      cause instanceof ProviderConfigurationError
+        ? new ModelConfigurationError({
+            providerID: resolved.providerID,
+            modelID: resolved.id,
+            package: resolved.package ?? "unknown",
+            detail: cause.message,
+          })
+        : initialization(resolved, "construct", cause),
+  })
+  if (!is(runtime)) return yield* unsupported(resolved)
+  return runtime
+})
+
+const isImageModel = Schema.is(ImageModelSchema)
+const isDecisionModel = Schema.is(DecisionModelSchema)
 
 function prepareRuntimeModel(model: RuntimeInfo) {
   if (model.settings?.apiKey !== "") return model
@@ -295,7 +362,8 @@ function prepareProviderURL(
   const prepared = baseURL.replace(
     /\$\{([^}]+)\}/g,
     (placeholder, name: string) =>
-      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ??
+      placeholder,
   )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
@@ -377,7 +445,11 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
-    const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
+    const dependencies: Dependencies = {
+      loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
+      loadAISDK: (model) => aisdk.model(model),
+    }
+    const prepare = Effect.fn("ModelResolver.prepare")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* providers.get(selected.providerID)
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
@@ -388,10 +460,11 @@ export const layer = Layer.effect(
         ...selectedVariant,
         settings: Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
       }
-      const model = yield* fromCatalogModel(runtimeInfo, credential, {
-        loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
-        loadAISDK: (model) => aisdk.model(model),
-      })
+      return { provider, credential, runtimeInfo }
+    })
+    const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
+      const { provider, credential, runtimeInfo } = yield* prepare(selected, variant)
+      const model = yield* fromCatalogModel(runtimeInfo, credential, dependencies)
       const runtime =
         provider?.activation === "enabled" &&
         credential === undefined &&
@@ -415,6 +488,18 @@ export const layer = Layer.effect(
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })
+    const loadMedia = Effect.fnUntraced(function* <Runtime>(
+      ref: Ref,
+      type: Model.Type,
+      is: (value: unknown) => value is Runtime,
+    ) {
+      const info = (yield* models.available([type])).find(
+        (model) => model.providerID === ref.providerID && model.id === ref.id,
+      )
+      if (!info) return undefined
+      const { credential, runtimeInfo } = yield* prepare(info, ref.variant)
+      return { model: yield* fromCatalogMedia(runtimeInfo, is, credential, dependencies), info }
+    })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
         const selected = requested
@@ -434,6 +519,12 @@ export const layer = Layer.effect(
         return yield* load(selected, requested?.variant)
       }),
       resolveModel: load,
+      resolveImage: Effect.fn("ModelResolver.resolveImage")(function* (ref) {
+        return yield* loadMedia(ref, "image", isImageModel)
+      }),
+      resolveDecision: Effect.fn("ModelResolver.resolveDecision")(function* (ref) {
+        return yield* loadMedia(ref, "decision", isDecisionModel)
+      }),
     })
   }),
 )

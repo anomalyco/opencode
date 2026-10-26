@@ -6,7 +6,6 @@ import {
   InvalidRequestError,
   LocationNotFoundError,
   ModelNotFoundError,
-  NotImplementedError,
   ProviderNotFoundError,
   ProviderRequestError,
   ServiceUnavailableError,
@@ -20,7 +19,6 @@ const mediaErrors = [
   UnsupportedModelError,
   ProviderRequestError,
   ServiceUnavailableError,
-  NotImplementedError,
   LocationNotFoundError,
 ]
 
@@ -67,7 +65,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.image",
         summary: "Generate images",
         description:
-          "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored. Not implemented yet; always fails with NotImplementedError.",
+          "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
       }),
     ),
   )
@@ -81,7 +79,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.decisions",
         summary: "Generate decisions",
         description:
-          "Ask a decision model typed predicate, choice and score questions about the input and return one probability-bearing answer per question, in question order. Stateless: nothing is stored. Not implemented yet; always fails with NotImplementedError.",
+          "Ask a decision model typed predicate, choice and score questions about the input and return one probability-bearing answer per question, in question order. Stateless: nothing is stored.",
       }),
     ),
   )
