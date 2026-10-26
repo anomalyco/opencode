@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
+import { sql } from "drizzle-orm"
 import { Effect } from "effect"
+import { Database } from "@opencode/core/database/database"
 import { KV } from "@opencode/core/kv"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(LayerNode.compile(KV.node))
+const it = testEffect(LayerNode.compile(LayerNode.group([KV.node, Database.node])))
 
 describe("KV", () => {
   it.effect("stores, replaces, and removes JSON values", () =>
@@ -21,6 +23,20 @@ describe("KV", () => {
       yield* kv.remove("wellknown:sources")
       yield* kv.remove("wellknown:sources")
       expect(yield* kv.get("wellknown:sources")).toBeUndefined()
+    }),
+  )
+
+  it.effect("reads a malformed stored value as missing", () =>
+    Effect.gen(function* () {
+      const kv = yield* KV.Service
+      const db = (yield* Database.Service).db
+      yield* db.run(
+        sql`insert into kv (key, value, time_created, time_updated) values ('broken', '{"digest":"\\&"}', 0, 0)`,
+      )
+      expect(yield* kv.get("broken")).toBeUndefined()
+
+      yield* kv.set("broken", { ok: true })
+      expect(yield* kv.get("broken")).toEqual({ ok: true })
     }),
   )
 

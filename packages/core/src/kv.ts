@@ -1,7 +1,7 @@
 export * as KV from "./kv.js"
 
-import { and, asc, eq, gt, gte, lt } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { and, asc, eq, gt, gte, lt, sql } from "drizzle-orm"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Database } from "./database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KVTable } from "./kv/sql.js"
@@ -33,18 +33,22 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/KV") {}
 
+// The json column mode parses during the row read, so one malformed row would throw for every reader.
+// Read the raw text and decode it here instead, treating an undecodable value as missing.
+const raw = sql<string>`${KVTable.value}`
+const decode = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     return Service.of({
       get: Effect.fn("KV.get")(function* (key) {
-        return (yield* db
-          .select({ value: KVTable.value })
-          .from(KVTable)
-          .where(eq(KVTable.key, key))
-          .get()
-          .pipe(Effect.orDie))?.value
+        const row = yield* db.select({ value: raw }).from(KVTable).where(eq(KVTable.key, key)).get().pipe(Effect.orDie)
+        if (!row) return
+        const value = decode(row.value)
+        if (Option.isSome(value)) return value.value
+        yield* Effect.logWarning("Ignoring malformed KV value", { key })
       }),
       set: Effect.fn("KV.set")(function* (key, value) {
         yield* db
