@@ -229,6 +229,57 @@ describe("LocationServiceMap", () => {
     )
   }
 
+  // Guard for #51003: reload boots a fresh location graph, so the prior entry's
+  // scope (which owns its stdio MCP fleet) must close or those processes leak.
+  // The entry scope closes eagerly for an idle graph and once borrowers release
+  // for a borrowed one. If either path stops closing, reload leaks a full fleet.
+  for (const held of ["idle", "borrowed"] as const) {
+    it.live(`reaps the reloaded ${held} graph's scope`, () =>
+      Effect.gen(function* () {
+        const builds = { started: 0 }
+        const finalized: number[] = []
+        const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationWatcher.node.replace(
+            LocationWatcher.node.mapLayer((layer) =>
+              layer.pipe(
+                Layer.tap(() =>
+                  Effect.gen(function* () {
+                    const build = ++builds.started
+                    yield* Effect.addFinalizer(() => Effect.sync(() => finalized.push(build)))
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ])
+        yield* Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const locations = yield* LocationServiceMap.Service
+          // For "borrowed", hold a borrow that outlives the reload (refCount > 0).
+          // For "idle", boot and release so the reload sees an unheld entry.
+          const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void))
+          yield* locations.contextEffect(ref).pipe(Scope.provide(scope))
+          expect(builds.started).toBe(1)
+          if (held === "idle") yield* Scope.close(scope, Exit.void)
+
+          yield* LocationServiceMap.reload()
+          // Reload detached the old entry and booted a replacement.
+          expect(builds.started).toBe(2)
+
+          // An idle entry reaps eagerly; a borrowed one reaps on final release.
+          if (held === "borrowed") {
+            expect(finalized).not.toContain(1)
+            yield* Scope.close(scope, Exit.void)
+          }
+          expect(finalized).toContain(1)
+        }).pipe(Effect.provide(layer))
+      }),
+    )
+  }
+
   itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
