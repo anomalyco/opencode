@@ -100,16 +100,43 @@ jobs:
       release: ${{ steps.version.outputs.release || steps.beta.outputs.release }}
       tag: ${{ steps.version.outputs.tag || steps.beta.outputs.tag }}
 
+  models-catalog:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Fetch models.dev catalog
+        run: bun packages/core/script/update-models-snapshot.ts .cache/models-catalog/api.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: models-catalog
+          path: .cache/models-catalog/api.json
+          if-no-files-found: error
+
   build-cli:
-    needs: version
+    needs:
+      - version
+      - models-catalog
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     # Beta builds only the CLIs its desktop app bundles, in build-cli-beta.
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    env:
+      OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
           fetch-tags: true
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: models-catalog
+          path: .cache/models-catalog
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -142,6 +169,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
 
+      - name: Verify bundled models catalog
+        run: bun packages/cli/script/catalog-smoke.ts packages/cli/dist/cli-linux-x64/bin/opencode
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.ref_name != 'dev' && github.ref_name != 'beta'
         with:
@@ -167,10 +197,14 @@ jobs:
   # Beta publishes only the desktop app, so it builds just the 6 CLIs the desktop bundles, each in its own job and
   # artifact. Desktop jobs start alongside and wait for their CLI only when they need it.
   build-cli-beta:
-    needs: version
+    needs:
+      - version
+      - models-catalog
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     if: github.repository == 'anomalyco/opencode' && github.ref_name == 'beta'
+    env:
+      OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
     strategy:
       fail-fast: false
       matrix:
@@ -189,6 +223,11 @@ jobs:
         with:
           bun-version: 1.4.4
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: models-catalog
+          path: .cache/models-catalog
+
       - name: Build CLI
         run: ./packages/cli/script/build.ts --target=opencode-${{ matrix.target }}
         env:
@@ -197,6 +236,10 @@ jobs:
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+
+      - name: Verify bundled models catalog
+        if: matrix.target == 'linux-x64-baseline'
+        run: bun packages/cli/script/catalog-smoke.ts packages/cli/dist/cli-linux-x64-baseline/bin/opencode
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -286,6 +329,7 @@ jobs:
   build-node-cli:
     needs:
       - version
+      - models-catalog
       - build-node-app-archive
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta' && !(github.ref_name == 'dev' && (inputs.bump || inputs.version))
     strategy:
@@ -304,6 +348,8 @@ jobs:
           - target: windows-x64
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
+    env:
+      OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
     defaults:
       run:
         shell: bash
@@ -323,6 +369,11 @@ jobs:
           name: opencode-node-app-archive
           path: packages/cli/.cache
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: models-catalog
+          path: .cache/models-catalog
+
       - name: Build
         run: bun packages/cli/script/build-node.ts --target=${{ matrix.settings.target }} --skip-install --outdir=dist/node --app-archive=.cache/app-archive.bin
         env:
@@ -334,6 +385,10 @@ jobs:
         if: matrix.settings.target != 'windows-arm64'
         working-directory: packages/cli
         run: bun run script/service-smoke.ts --node
+
+      - name: Verify bundled models catalog
+        if: matrix.settings.target != 'windows-arm64'
+        run: bun packages/cli/script/catalog-smoke.ts packages/cli/dist/node/cli-node-${{ matrix.settings.target }}/bin/opencode2-node${{ startsWith(matrix.settings.target, 'windows') && '.exe' || '' }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -693,6 +748,7 @@ jobs:
   publish:
     needs:
       - version
+      - models-catalog
       - build-cli
       - build-cli-beta
       - sign-cli-macos
@@ -704,10 +760,17 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     # Versioned and beta releases wait for approval in the release environment; dev previews do not.
     environment: ${{ needs.version.outputs.release && 'release' || '' }}
+    env:
+      OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - uses: ./.github/actions/setup-bun
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: models-catalog
+          path: .cache/models-catalog
 
       # Beta only records the desktop release, so it skips the Docker, git and AUR setup.
       - name: Login to GitHub Container Registry
