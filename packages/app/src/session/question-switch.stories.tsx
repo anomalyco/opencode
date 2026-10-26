@@ -89,3 +89,68 @@ export const QuestionSeries = {
     />
   ),
 }
+
+// A pick-any question with more answers than the dock has room for, then a short one.
+export const LongList = {
+  render: () => (
+    <SessionPreview
+      title="Polish the docs site"
+      description="opencode · docs"
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          fields: [
+            {
+              key: "details",
+              type: "multiselect",
+              title: "Details",
+              description: "Which should the builder add next? Pick any.",
+              options: [
+                {
+                  value: "typography",
+                  label: "All typography (Recommended)",
+                  description:
+                    "Hanging punctuation, tabular figures, typesetting fixes, one label style, accent selection",
+                },
+                { value: "links", label: "Heading links", description: "Hover shows #, click copies the section link" },
+                {
+                  value: "contents",
+                  label: "Sticky contents list",
+                  description: "Section list in the margin on wide screens, highlights where you are",
+                },
+                { value: "sidenotes", label: "Sidenotes", description: "Margin notes on desktop, inline on phone" },
+                { value: "glossary", label: "Glossary terms", description: "Dotted underline, definition on hover" },
+                { value: "fade", label: "Scroll fade", description: "Fade the edge of anything that scrolls sideways" },
+                { value: "code", label: "Highlighted code lines", description: "Tint the lines that matter" },
+                { value: "verdict", label: "Verdict line", description: "Answer or decision first, in the header" },
+                {
+                  value: "checked",
+                  label: "Checked / not checked",
+                  description: "Marker for verified vs unverified claims",
+                },
+                {
+                  value: "diagram",
+                  label: "Diagram interaction",
+                  description: "Hover highlights connections, click enlarges",
+                },
+                { value: "footer", label: "Footer", description: "Source path to copy, plus the date it was made" },
+              ],
+            },
+            {
+              key: "ship",
+              type: "string",
+              title: "Ship",
+              description: "Ship them in one pull request?",
+              options: [
+                { value: "one", label: "One pull request" },
+                { value: "split", label: "One per detail" },
+              ],
+            },
+          ],
+        },
+      }}
+    />
+  ),
+}

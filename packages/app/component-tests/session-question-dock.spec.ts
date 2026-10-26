@@ -836,13 +836,16 @@ story("switches questions, folds and submits on the same frame with the dock's m
       return frames
     }, label)
 
+  // The last question's answers may be cut to the dock's height, so they come back to the height they rest at.
+  const resting = await question
+    .locator('[data-slot="question-options"]')
+    .evaluate((el) => Math.round(el.getBoundingClientRect().height))
+
   const folded = await fold("Minimize question")
   expect(folded.every((frame) => frame.height === 0 && frame.hidden && frame.animations === 0)).toBe(true)
   const restored = await fold("Restore question")
   expect(
-    restored.every(
-      (frame) => frame.height > 0 && frame.height === frame.list && !frame.hidden && frame.animations === 0,
-    ),
+    restored.every((frame) => frame.height > 0 && frame.height === resting && !frame.hidden && frame.animations === 0),
   ).toBe(true)
 
   // Submitting swaps the dock for the composer on one frame, with no closing flight.
@@ -1065,4 +1068,209 @@ story("toggles a lone many-answer question and sends it with Enter", async ({ mo
   await expect(terminal.locator('[data-slot="question-option-key"]')).toHaveAttribute("data-picked", "true")
   await page.keyboard.press("Enter")
   await expect(question).toBeHidden()
+})
+
+const longList = async (mount: (id: string) => Promise<Locator>) => {
+  const component = await mount("session-question-switch--long-list")
+  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+  await expect(question.getByRole("checkbox").first()).toBeFocused()
+  // The answers box has opened to its first height once it stops changing.
+  const box = () => question.evaluate((root) => Math.round(root.getBoundingClientRect().height))
+  await expect.poll(async () => (await box()) === (await box())).toBe(true)
+
+  return question
+}
+
+const fit = (question: Locator) =>
+  question.evaluate((root) => {
+    const options = root.querySelector<HTMLElement>('[data-slot="question-options"]')!
+
+    const timeline = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
+    const box = root.getBoundingClientRect()
+
+    return {
+      height: box.height,
+      // The whole dock, footer included, sits between the top of the timeline and the foot of the window.
+      within: box.top >= (timeline?.getBoundingClientRect().top ?? 0) - 0.5 && box.bottom <= innerHeight + 0.5,
+      scrolls: options.scrollHeight > options.clientHeight + 1,
+      top: options.scrollTop,
+    }
+  })
+
+// Whether the whole of an answer's row shows, clear of the feathered edges.
+const clear = (row: Locator) =>
+  row.evaluate((input) => {
+    const row = input.closest<HTMLElement>('[data-slot="question-option"]')!
+    const box = input.closest<HTMLElement>('[data-slot="question-options"]')!.getBoundingClientRect()
+    const at = row.getBoundingClientRect()
+
+    return at.top >= box.top + 20 - 0.5 && at.bottom <= box.bottom - 20 + 0.5
+  })
+
+const feathered = (question: Locator) =>
+  question.locator('[data-slot="question-options"]').evaluate((options) => {
+    const mask = options.style.maskImage
+
+    // A gradient down the list may be written without its direction, which is the default.
+    return { top: /linear-gradient\((to bottom, )?transparent/.test(mask), bottom: mask.includes("to top") }
+  })
+
+story("caps a long list of answers to the panel and scrolls them inside it", async ({ mount }) => {
+  const question = await longList(mount)
+  const rest = await fit(question)
+  expect(rest.within).toBe(true)
+  expect(rest.scrolls).toBe(true)
+  await expect(question.getByRole("checkbox", { name: /Footer/ })).not.toBeInViewport()
+})
+
+story("scrolls the highlighted answer into view with the keys", async ({ mount, page }) => {
+  const question = await longList(mount)
+  const footer = question.getByRole("checkbox", { name: /Footer/ })
+
+  await page.keyboard.press("End")
+  await page.keyboard.press("ArrowUp")
+  await expect(footer).toBeFocused()
+  expect(await clear(footer)).toBe(true)
+
+  await page.keyboard.press("Home")
+  await expect(question.getByRole("checkbox").first()).toBeFocused()
+  expect((await fit(question)).top).toBe(0)
+})
+
+story("feathers only the edges of the answers with more past them", async ({ mount }) => {
+  const question = await longList(mount)
+
+  // Scrolls to a share of the way down the list.
+  const edges = (share: number) =>
+    question.evaluate(async (root, share) => {
+      const options = root.querySelector<HTMLElement>('[data-slot="question-options"]')!
+      options.scrollTop = Math.round((options.scrollHeight - options.clientHeight) * share)
+      await new Promise((done) => options.addEventListener("scroll", done, { once: true }))
+      const mask = options.style.maskImage
+
+      // A gradient down the list may be written without its direction, which is the default.
+      return { top: /linear-gradient\((to bottom, )?transparent/.test(mask), bottom: mask.includes("to top") }
+    }, share)
+
+  expect(await edges(0.5)).toEqual({ top: true, bottom: true })
+  expect(await edges(1)).toEqual({ top: true, bottom: false })
+  expect(await edges(0)).toEqual({ top: false, bottom: true })
+})
+
+story("leaves a list that fits without feathered edges", async ({ mount }) => {
+  const component = await mount("session-question-switch--question-series")
+  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+  await expect(question.getByRole("radio").first()).toBeFocused()
+  await expect
+    .poll(() => question.locator('[data-slot="question-options"]').evaluate((el) => el.style.maskImage))
+    .toBe("")
+})
+
+story(
+  "caps a long list to the panel in the app's layout, where the dock overflows a zero-height row",
+  async ({ mount }) => {
+    const question = await longList(mount)
+    // As in the session screen, the composer region moves into a zero-height row at the foot of the panel and overflows
+    // it upward, over the timeline.
+    await question.evaluate((root) => {
+      const dock = root.closest('[data-component="session-composer-dock"]')!
+      const row = document.createElement("div")
+      row.style.cssText =
+        "position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 0"
+      row.style.flexShrink = "0"
+      dock.replaceWith(row)
+      row.append(dock)
+      dispatchEvent(new Event("resize"))
+    })
+
+    // Measured against the empty row, the cap would fall to its 240px minimum.
+    await expect.poll(async () => (await fit(question)).height).toBeGreaterThan(400)
+    const rest = await fit(question)
+    expect(rest.within).toBe(true)
+    expect(rest.scrolls).toBe(true)
+  },
+)
+
+story("brings the picked answer back into view after switching questions", async ({ mount, page }) => {
+  const question = await longList(mount)
+  const footer = question.getByRole("checkbox", { name: /Footer/ })
+  const title = question.locator('[data-slot="question-header-title"]')
+
+  await page.keyboard.press("End")
+  await page.keyboard.press("ArrowUp")
+  await page.keyboard.press(" ")
+  await expect(footer).toBeChecked()
+
+  await page.keyboard.press("ArrowRight")
+  await expect(title).toHaveText("2 of 2 questions")
+  await page.keyboard.press("ArrowLeft")
+  await expect(title).toHaveText("1 of 2 questions")
+  await expect(footer).toBeFocused()
+  expect(await clear(footer)).toBe(true)
+})
+
+story("sizes the answers box to each question with the dock's motion off", async ({ mount, page }) => {
+  const question = await longList(mount)
+  const options = question.locator('[data-slot="question-options"]')
+  const rest = await fit(question)
+  expect(rest.scrolls).toBe(true)
+  expect(await feathered(question)).toEqual({ top: false, bottom: true })
+
+  await page.keyboard.press("ArrowRight")
+  await expect(question.getByRole("radio").first()).toBeFocused()
+  await expect.poll(() => feathered(question)).toEqual({ top: false, bottom: false })
+  expect(await options.evaluate((el) => el.style.height)).toBe("")
+  expect((await fit(question)).scrolls).toBe(false)
+
+  await page.keyboard.press("ArrowLeft")
+  await expect(question.getByRole("checkbox").first()).toBeFocused()
+  await expect.poll(() => feathered(question)).toEqual({ top: false, bottom: true })
+  expect((await fit(question)).height).toBeCloseTo(rest.height, 0)
+})
+
+story.describe("a long list with the question dock's motion on", () => {
+  story.beforeEach(({ page }) =>
+    page.addInitScript(() => localStorage.setItem("opencode.motion.v2", JSON.stringify({ "question.motion": 1 }))),
+  )
+
+  story("restores a long list without growing past where it rests", async ({ mount }) => {
+    const question = await longList(mount)
+    const rest = await fit(question)
+    await question.getByRole("button", { name: "Minimize question" }).click()
+    await expect(question.getByRole("button", { name: "Restore question" })).toBeVisible()
+    await expect
+      .poll(() =>
+        question.locator('[data-slot="question-options"]').evaluate((el) => el.getBoundingClientRect().height),
+      )
+      .toBe(0)
+
+    const frames = await question.evaluate(async (root) => {
+      const options = root.querySelector<HTMLElement>('[data-slot="question-options"]')!
+      root.querySelector<HTMLElement>('[data-slot="question-header-actions"] > button:last-of-type')!.click()
+
+      return Array.from({ length: 45 }).reduce<Promise<{ height: number; asked: number; given: number }[]>>(
+        async (list) => {
+          const frames = await list
+          await new Promise((done) => requestAnimationFrame(done))
+
+          return [
+            ...frames,
+            {
+              height: root.getBoundingClientRect().height,
+              asked: parseFloat(options.style.height) || 0,
+              given: options.getBoundingClientRect().height,
+            },
+          ]
+        },
+        Promise.resolve([]),
+      )
+    })
+
+    const heights = frames.map((frame) => frame.height)
+    expect(heights.every((height, i) => i === 0 || height >= heights[i - 1]! - 0.5)).toBe(true)
+    expect(Math.max(...heights)).toBeLessThanOrEqual(rest.height + 0.5)
+    expect(heights.at(-1)).toBeCloseTo(rest.height, 0)
+    // The answers box is never asked to open past the room it is given, which is what made it snap back at the end.
+    expect(frames.every((frame) => frame.asked <= frame.given + 0.5)).toBe(true)
+  })
 })
