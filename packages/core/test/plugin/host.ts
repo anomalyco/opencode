@@ -361,18 +361,20 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
-                  authorize: (answer) =>
-                    input.authorize(answer).pipe(
+                  authorize: (answer, prompt) =>
+                    input.authorize(answer, prompt).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {
                             ...authorization,
                             callback: authorization.callback.pipe(
                               Effect.map((credential) =>
-                                Credential.OAuth.make({
-                                  ...credential,
-                                  methodID: Integration.MethodID.make(credential.methodID),
-                                }),
+                                credential.type === "key"
+                                  ? credential
+                                  : Credential.OAuth.make({
+                                      ...credential,
+                                      methodID: Integration.MethodID.make(credential.methodID),
+                                    }),
                               ),
                             ),
                           }
@@ -382,10 +384,12 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                           callback: (code: string) =>
                             authorization.callback(code).pipe(
                               Effect.map((credential) =>
-                                Credential.OAuth.make({
-                                  ...credential,
-                                  methodID: Integration.MethodID.make(credential.methodID),
-                                }),
+                                credential.type === "key"
+                                  ? credential
+                                  : Credential.OAuth.make({
+                                      ...credential,
+                                      methodID: Integration.MethodID.make(credential.methodID),
+                                    }),
                               ),
                             ),
                         }

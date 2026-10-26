@@ -703,11 +703,73 @@ function OAuthAuto(props: {
       .then((result) => {
         const status = result.data
         if (status.status === "pending") {
+          if (status.prompt) {
+            // Ownership moves to the form until the next polling view mounts.
+            settled = true
+            const prompt = status.prompt
+            void formAnswer(dialog, prompt.title, prompt.fields)
+              .then(async (answer) => {
+                if (answer === null) {
+                  await client.api.integration.oauth.cancel({
+                    integrationID: props.integration.id,
+                    attemptID: props.attempt.attemptID,
+                    location: locationQuery(props.location),
+                  })
+                  return
+                }
+                await client.api.integration.oauth.complete({
+                  integrationID: props.integration.id,
+                  attemptID: props.attempt.attemptID,
+                  location: locationQuery(props.location),
+                  promptID: prompt.id,
+                  answer,
+                })
+                dialog.replace(() => <OAuthAuto {...props} />)
+              })
+              .catch((cause) => {
+                toast.show({ variant: "error", message: errorMessage(cause) })
+                void client.api.integration.oauth.cancel({
+                  integrationID: props.integration.id,
+                  attemptID: props.attempt.attemptID,
+                  location: locationQuery(props.location),
+                })
+                dialog.clear()
+              })
+            return
+          }
           timer = setTimeout(poll, 500)
           return
         }
         settled = true
         if (status.status === "complete") {
+          if (status.next) {
+            const next = status.next
+            data.location.integration.invalidate(props.location)
+            data.location.model.invalidate(props.location)
+            data.location.provider.invalidate(props.location)
+            void Promise.all([
+              data.location.integration.sync(props.location),
+              data.location.model.sync(props.location),
+              data.location.provider.sync(props.location),
+            ]).catch(toast.error)
+            dialog.replace(() => (
+              <DialogSelect
+                title={`Connected ${props.integration.name}`}
+                options={[
+                  { title: "Continue", value: "continue" },
+                  { title: next.title, value: "manage", description: next.url },
+                ]}
+                onSelect={(option) => {
+                  if (option.value === "manage") {
+                    void openUrl(next.url).catch(toast.error)
+                    return
+                  }
+                  void connected(props.integration, props.location, data, dialog, toast, props.onConnected)
+                }}
+              />
+            ))
+            return
+          }
           void connected(props.integration, props.location, data, dialog, toast, props.onConnected)
           return
         }
@@ -922,14 +984,24 @@ async function selectAnswer(
         }))
   return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
-      () => (
-        <DialogSelect<FormValue | undefined>
-          title={formLabel(field) || title}
-          options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
-          current={field.type === "string" ? field.default : undefined}
-          onSelect={(option) => resolve(option.value)}
-        />
-      ),
+      () => {
+        const theme = useTheme().surface("dialog")
+        return (
+          <DialogSelect<FormValue | undefined>
+            title={formLabel(field) || title}
+            footer={
+              field.description ? (
+                <text fg={theme.text.base} wrapMode="word">
+                  {field.description}
+                </text>
+              ) : undefined
+            }
+            options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
+            current={field.type === "string" ? field.default : undefined}
+            onSelect={(option) => resolve(option.value)}
+          />
+        )
+      },
       () => resolve(CANCELLED),
     )
   })

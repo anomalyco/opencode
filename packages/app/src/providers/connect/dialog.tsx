@@ -682,6 +682,8 @@ function ProviderConnection(props: {
         ),
       )
 
+    if (controller.prompt()) return props.onTitle(controller.prompt()!.title)
+
     if (props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max"))
       return props.onTitle(language.t("provider.connect.title.anthropicProMax"))
 
@@ -695,7 +697,7 @@ function ProviderConnection(props: {
   // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
   function AuthFormView() {
     const method = controller.currentMethod()
-    const fields = method && method.type !== "command" ? (method.form ?? []) : []
+    const fields = controller.prompt()?.fields ?? (method && method.type !== "command" ? (method.form ?? []) : [])
     const hidden = providerFormDefaults(fields)
 
     const [formStore, setFormStore] = createStore<{
@@ -757,7 +759,8 @@ function ProviderConnection(props: {
       const index = fields.findIndex((item, i) => i > formStore.index && asked(item) && active(item, merged))
 
       if (index === -1) {
-        void controller.auth.select(controller.methodIndex()!, answer)
+        if (controller.prompt()) void controller.auth.completePrompt(answer)
+        else void controller.auth.select(controller.methodIndex()!, answer)
 
         return
       }
@@ -1724,6 +1727,15 @@ function ProviderConnection(props: {
           </Match>
           <Match when={controller.methodIndex() === undefined}>
             <MethodSelection />
+          </Match>
+          <Match when={controller.auth.state() === "receipt"}>
+            <div class="px-3 flex flex-col gap-4">
+              <p>{language.t("provider.connect.toast.connected.title", { provider: provider().name })}</p>
+              <a href={controller.receipt()?.url} target="_blank" rel="noopener noreferrer">
+                {controller.receipt()?.title}
+              </a>
+              <Button onClick={() => void controller.auth.refresh()}>{language.t("common.continue")}</Button>
+            </div>
           </Match>
           <Match when={controller.auth.state() === "form"}>
             <AuthFormView />

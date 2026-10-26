@@ -50,6 +50,93 @@ function eventually<A, E, R>(
 }
 
 describe("Integration", () => {
+  it.effect("validates setup steps and stores a derived key only after confirmation", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("vercel")
+      const methodID = Integration.MethodID.make("setup")
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "Setup" },
+          authorize: (_answer, prompt) =>
+            Effect.succeed({
+              mode: "auto" as const,
+              url: "https://example.com/login",
+              instructions: "Sign in",
+              onComplete: () => ({ title: "Manage budget", url: "https://example.com/budget" }),
+              callback: Effect.gen(function* () {
+                const answer = yield* prompt({
+                  title: "Team",
+                  fields: [
+                    { type: "string", key: "team", required: true, options: [{ value: "team_1", label: "Work" }] },
+                  ],
+                })
+                expect(answer.team).toBe("team_1")
+                return Credential.Key.make({ type: "key", key: "derived-gateway-key" })
+              }),
+            }),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+      const input = { integrationID, attemptID: attempt.attemptID }
+      const pending = yield* integrations.oauth.status(input)
+      expect(pending.status).toBe("pending")
+      if (pending.status !== "pending" || !pending.prompt) throw new Error("Expected setup prompt")
+      expect(JSON.stringify(pending)).not.toContain("derived-gateway-key")
+      expect(yield* credentials.list(integrationID)).toEqual([])
+      expect(
+        Exit.isFailure(
+          yield* integrations.oauth
+            .complete({ ...input, promptID: pending.prompt.id, answer: { team: "other" } })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      yield* integrations.oauth.complete({ ...input, promptID: pending.prompt.id, answer: { team: "team_1" } })
+      yield* Effect.yieldNow
+      expect(yield* integrations.oauth.status(input)).toEqual({
+        status: "complete",
+        time: attempt.time,
+        next: { title: "Manage budget", url: "https://example.com/budget" },
+      })
+      expect((yield* credentials.list(integrationID))[0]?.value).toEqual({ type: "key", key: "derived-gateway-key" })
+      expect(
+        Exit.isFailure(
+          yield* integrations.oauth
+            .complete({ ...input, promptID: pending.prompt.id, answer: { team: "team_1" } })
+            .pipe(Effect.exit),
+        ),
+      ).toBe(true)
+    }),
+  )
+
+  it.effect("cancels a setup interview before it creates a credential", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("vercel")
+      const methodID = Integration.MethodID.make("setup")
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "Setup" },
+          authorize: (_answer, prompt) =>
+            Effect.succeed({
+              mode: "auto" as const,
+              url: "https://example.com/login",
+              instructions: "Sign in",
+              callback: prompt({ title: "Confirm", fields: [{ type: "boolean", key: "create", required: true }] }).pipe(
+                Effect.as(Credential.Key.make({ type: "key", key: "unused" })),
+              ),
+            }),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+      yield* integrations.oauth.cancel({ integrationID, attemptID: attempt.attemptID })
+      expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
   it.effect("registers integrations through the editor", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

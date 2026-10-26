@@ -1,0 +1,33 @@
+# Vercel AI Gateway setup
+
+The Vercel integration offers a native setup wizard alongside manual API-key entry. The wizard uses Vercel device authorization, lists the teams the user can access, asks for a key name and optional expiration, and previews the key before creating it. Only the resulting AI Gateway key is saved in OpenCode's credential store. The Vercel sign-in access token is kept in memory for the interview and is not persisted.
+
+Budget configuration is not part of the required interview. After connecting, users can continue immediately or open **Set a spending limit (optional)**. This opens the selected team's AI Gateway API-key settings, where they can manage the newly named key.
+
+## App registration
+
+Set `OPENCODE_VERCEL_CLIENT_ID` in the **OpenCode server's environment** to the public client ID of an OpenCode-owned Vercel OAuth app. The app must support the device authorization grant as a public client, without a client secret. Do not substitute Vercel CLI's client ID or ship a client secret in OpenCode.
+
+Configure the app with **Team: Read Only** and **AI Gateway API Keys: Read and Write** permissions. Vercel currently documents API permissions as a private beta; confirm that the OpenCode app is eligible for these permissions and the device authorization grant before enabling this in a release. Budget write access is unnecessary because budget management opens Vercel's dashboard.
+
+References:
+
+- [Vercel CLI OAuth implementation](https://github.com/vercel/vercel/blob/main/packages/cli/src/util/oauth.ts)
+- [Vercel scopes and permissions](https://vercel.com/docs/sign-in-with-vercel/scopes-and-permissions)
+- [Vercel CLI AI Gateway setup](https://github.com/vercel/vercel/blob/main/packages/cli/src/commands/ai-gateway/coding-agents-setup.ts)
+
+## Shared integration behavior
+
+OAuth authorizers may use their second `prompt` argument to ask validated forms after sign-in. Each form has an ID, appears in the pending attempt's status, and is answered through `integration.oauth.complete` with `promptID` and `answer`. Replayed or stale form IDs are rejected. Existing code and automatic OAuth methods remain supported.
+
+Authorization callbacks may return an OAuth credential or a derived API-key credential. An optional `onComplete` produces a public next-step link only after credential persistence succeeds. TUI, CLI, and app clients support these prompts and next-step links. Cancelling or expiring an interview interrupts the pending callback; no key is created before the user confirms the review.
+
+## Verification
+
+From `packages/core`:
+
+```sh
+bun run script/test.ts test/integration.test.ts test/plugin/provider-vercel-gateway.test.ts test/plugin/provider-vercel.test.ts
+```
+
+These tests exercise a local HTTP server, the real integration state machine, validation, cancellation, denied authorization, the key-creation payload, credential persistence, and the optional budget link. They do not authenticate to Vercel or create real keys. Live verification requires the registered client ID and its permissions.

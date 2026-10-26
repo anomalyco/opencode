@@ -162,6 +162,8 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
               integrationID: ctx.params.integrationID,
               attemptID: ctx.params.attemptID,
               code: ctx.payload.code,
+              promptID: ctx.payload.promptID,
+              answer: ctx.payload.answer,
             })
             .pipe(
               Effect.mapError((error) => {

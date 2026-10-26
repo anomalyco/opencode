@@ -5,6 +5,7 @@ import type {
   IntegrationInfo,
   IntegrationMethod,
   IntegrationOauthConnectOutput,
+  IntegrationPrompt,
 } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -122,9 +123,11 @@ export function createProviderConnectionController(options: {
     authorization?: Authorization
     command?: { attempt: CommandAttempt; output: string }
     formAnswer?: FormAnswer
+    prompt?: IntegrationPrompt
+    receipt?: { title: string; url: string }
     // Nothing is in flight until a method is selected; `busy()` reads this, so a truthy initial
     // value would keep multi-method providers on the spinner instead of the method list.
-    state?: "pending" | "waiting" | "refreshing" | "ready" | "error" | "form"
+    state?: "pending" | "waiting" | "refreshing" | "ready" | "error" | "form" | "receipt"
     error?: string
     auto: boolean
     connected: boolean
@@ -172,6 +175,8 @@ export function createProviderConnectionController(options: {
           draft.authorization = undefined
           draft.command = undefined
           draft.formAnswer = undefined
+          draft.prompt = undefined
+          draft.receipt = undefined
           draft.state = undefined
           draft.error = undefined
           draft.connected = false
@@ -308,8 +313,18 @@ export function createProviderConnectionController(options: {
     }
 
     if (result.status.status === "complete") {
+      if (result.status.next) {
+        polling.attempt = undefined
+        setStore({ receipt: result.status.next, state: "receipt" })
+        return
+      }
       await finish()
 
+      return
+    }
+
+    if (result.status.status === "pending" && result.status.prompt) {
+      setStore({ prompt: result.status.prompt, state: "form" })
       return
     }
 
@@ -531,6 +546,11 @@ export function createProviderConnectionController(options: {
     if (store.connected) return finish()
     const authorization = store.authorization
 
+    if (store.prompt && authorization) {
+      setStore({ state: "form", error: undefined })
+      return
+    }
+
     if (store.statusFailed && authorization) {
       polling.attempt = { type: "oauth", attemptID: authorization.attemptID }
       setStore({ state: "waiting", error: undefined, statusFailed: false })
@@ -559,6 +579,30 @@ export function createProviderConnectionController(options: {
       answer: store.formAnswer,
     })
     await finish()
+  }
+
+  const completePrompt = async (answer: FormAnswer) => {
+    const authorization = store.authorization
+    const prompt = store.prompt
+    if (!authorization || !prompt) return
+    const generation = polling.generation
+    const result = await serverSDK.api.integration.oauth
+      .complete({
+        integrationID: options.provider(),
+        attemptID: authorization.attemptID,
+        location: location(),
+        promptID: prompt.id,
+        answer,
+      })
+      .then(() => ({ ok: true as const }))
+      .catch((error) => ({ ok: false as const, error }))
+    if (polling.disposed || generation !== polling.generation) return
+    if (!result.ok) {
+      dispatch({ type: "auth.error", error: formatServerError(result.error, language.t) })
+      return
+    }
+    setStore({ prompt: undefined, state: "waiting" })
+    void poll(authorization, generation)
   }
 
   const completeCode = async (code: string) => {
@@ -603,6 +647,8 @@ export function createProviderConnectionController(options: {
     currentMethod,
     methodIndex: () => store.methodIndex,
     authorization: () => store.authorization,
+    prompt: () => store.prompt,
+    receipt: () => store.receipt,
     command: () => store.command,
     browserFailed: () => store.browserFailed,
     // True while nothing useful can be shown yet: the integration is loading, a method is
@@ -623,6 +669,7 @@ export function createProviderConnectionController(options: {
       refresh: finish,
       connectKey,
       completeCode,
+      completePrompt,
     },
   }
 }

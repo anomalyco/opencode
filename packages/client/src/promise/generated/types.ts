@@ -204,12 +204,6 @@ export type ConnectionStatus = { status: "needs_auth"; message: string; url?: st
 
 export type IntegrationAttemptID = string
 
-export type IntegrationAttemptStatus =
-  | { status: "pending"; time: { created: number; expires: number } }
-  | { status: "complete"; time: { created: number; expires: number } }
-  | { status: "failed"; message: string; time: { created: number; expires: number } }
-  | { status: "expired"; time: { created: number; expires: number } }
-
 export type IntegrationCommandAttemptStatus =
   | {
       status: "pending"
@@ -2505,6 +2499,8 @@ export type FormDetail = {
   state: FormState
 }
 
+export type IntegrationPrompt = { id: FormID; title: string; fields: FormFields }
+
 export type IntegrationOAuthMethod = { id: IntegrationMethodID; type: "oauth"; label: string; form?: FormFields }
 
 export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
@@ -2535,6 +2531,27 @@ export type SessionMessageContentUpdated = {
   location?: LocationRef
   data: { sessionID: SessionID; messageID: SessionMessageID; content: Array<SessionMessageAssistantContentEncoded> }
 }
+
+export type IntegrationAttemptStatus =
+  | {
+      status: "pending"
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+      prompt?: IntegrationPrompt
+    }
+  | {
+      status: "complete"
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+      next?: { title: string; url: string }
+    }
+  | {
+      status: "failed"
+      message: string
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+    }
+  | {
+      status: "expired"
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+    }
 
 export type IntegrationMethod =
   | IntegrationOAuthMethod
@@ -3718,6 +3735,8 @@ export type IntegrationOauthCompleteInput = {
   readonly attemptID: string
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly code?: string | undefined
+  readonly promptID?: string | undefined
+  readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
 }
 
 export type IntegrationOauthCompleteOutput = void

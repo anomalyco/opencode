@@ -686,8 +686,8 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (answer) =>
-        input.authorize(answer).pipe(
+      authorize: (answer, prompt) =>
+        input.authorize(answer, prompt).pipe(
           Effect.map((authorization) => {
             if (authorization.mode === "auto") {
               return {
@@ -701,7 +701,9 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
             }
           }),
         ),
-      ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(credential)) } : {}),
+      ...(refresh
+        ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map((value) => credential(value))) }
+        : {}),
       ...(input.label ? { label: input.label } : {}),
     }
   }
@@ -729,6 +731,10 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   }
 }
 
-function credential(value: Credential.OAuth) {
+function credential(value: Credential.OAuth): Credential.OAuth
+function credential(value: Credential.Key): Credential.Key
+function credential(value: Credential.OAuth | Credential.Key): Credential.OAuth | Credential.Key
+function credential(value: Credential.OAuth | Credential.Key) {
+  if (value.type === "key") return value
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
