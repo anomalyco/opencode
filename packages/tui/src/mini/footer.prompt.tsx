@@ -68,6 +68,7 @@ import type {
   RunTuiConfig,
 } from "./types"
 import { EmptyBorder } from "../ui/border"
+import { screenReader } from "./screen-reader"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 
@@ -309,29 +310,36 @@ export function RunPromptBody(props: {
             </Show>
           </box>
         </Show>
-        <textarea
-          width="100%"
-          minHeight={TEXTAREA_MIN_ROWS}
-          maxHeight={props.layout().textarea}
-          wrapMode="word"
-          placeholder={props.placeholder()}
-          placeholderColor={props.theme().muted}
-          textColor={props.theme().text}
-          focusedTextColor={props.theme().text}
-          backgroundColor={props.background()}
-          focusedBackgroundColor={props.background()}
-          cursorColor={props.theme().text}
-          cursorStyle={props.cursorStyle}
-          onSubmit={props.onSubmit}
-          onKeyDown={props.onKeyDown}
-          onPaste={(event) => {
-            void props.onPaste(event).finally(refreshPasteLayout)
-          }}
-          onContentChange={props.onContentChange}
-          ref={(next) => {
-            area = next
-          }}
-        />
+        <box flexDirection="row" width="100%">
+          <Show when={screenReader.enabled}>
+            <text fg={props.theme().muted} flexShrink={0}>
+              ${" "}
+            </text>
+          </Show>
+          <textarea
+            width="100%"
+            minHeight={TEXTAREA_MIN_ROWS}
+            maxHeight={props.layout().textarea}
+            wrapMode="word"
+            placeholder={props.placeholder()}
+            placeholderColor={props.theme().muted}
+            textColor={props.theme().text}
+            focusedTextColor={props.theme().text}
+            backgroundColor={props.background()}
+            focusedBackgroundColor={props.background()}
+            cursorColor={props.theme().text}
+            cursorStyle={props.cursorStyle}
+            onSubmit={props.onSubmit}
+            onKeyDown={props.onKeyDown}
+            onPaste={(event) => {
+              void props.onPaste(event).finally(refreshPasteLayout)
+            }}
+            onContentChange={props.onContentChange}
+            ref={(next) => {
+              area = next
+            }}
+          />
+        </box>
       </box>
     </box>
   )
