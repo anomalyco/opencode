@@ -390,7 +390,11 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                                 data-slot="provider-status"
                                 class="ml-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
                               >
-                                {language.t("dialog.provider.signInRequired")}
+                                {language.t(
+                                  provider.id === "vercel"
+                                    ? "provider.connect.vercel.keyNeedsReplacement"
+                                    : "dialog.provider.signInRequired",
+                                )}
                               </span>
                             </Match>
                             <Match when={connections().length > 0}>
@@ -1412,7 +1416,7 @@ function ProviderConnection(props: {
             <div role="alert" class="mx-3 mb-3 flex flex-col items-start gap-2 text-[13px] leading-5">
               <p class="text-v2-text-text-muted">{account.status?.message}</p>
               <Button variant="neutral" onClick={() => selectAccount(account)}>
-                {language.t("provider.connect.vercel.reconnect")}
+                {language.t("provider.connect.vercel.replaceKey")}
               </Button>
             </div>
           )}
@@ -1471,7 +1475,11 @@ function ProviderConnection(props: {
                             title={status().message}
                             class="ms-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
                           >
-                            {language.t("dialog.provider.signInRequired")}
+                            {language.t(
+                              props.provider === "vercel"
+                                ? "provider.connect.vercel.keyNeedsReplacement"
+                                : "dialog.provider.signInRequired",
+                            )}
                           </span>
                         )}
                       </Show>

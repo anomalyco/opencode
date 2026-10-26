@@ -135,7 +135,11 @@ export function DialogIntegration(
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
+        footer: status
+          ? integration.id === "vercel"
+            ? "Key needs replacement →"
+            : "Sign in required →"
+          : connectionSummary(integration) || undefined,
         footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
@@ -220,7 +224,7 @@ function manageConnections(
                 value: connection.id,
                 footer: connection.status
                   ? integration.id === "vercel"
-                    ? "Reconnect Vercel →"
+                    ? "Replace key →"
                     : "Sign in required →"
                   : undefined,
                 description: connection.status?.message,

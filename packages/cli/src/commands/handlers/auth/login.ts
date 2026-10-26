@@ -63,7 +63,7 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
     expired.length > 1
       ? yield* prompt<string>(() =>
           select({
-            message: "Reconnect a Vercel connection",
+            message: "Replace a Vercel key",
             options: expired.map((connection) => ({
               value: connection.id,
               label: connection.label,

@@ -34,8 +34,8 @@ const Metadata = Schema.Struct({
   expiresAt: Schema.optional(Schema.Number),
 })
 const metadata = Schema.decodeUnknownOption(Metadata)
-const expiredMessage = "Your Vercel AI Gateway key has expired. Reconnect Vercel to create a replacement."
-const rejectedMessage = "Your Vercel AI Gateway key is no longer valid. Reconnect Vercel to create a replacement."
+const expiredMessage = "Your Vercel AI Gateway key has expired. Sign in to Vercel to create a replacement."
+const rejectedMessage = "Your Vercel AI Gateway key is no longer valid. Sign in to Vercel to create a replacement."
 
 /** A dedicated OAuth application can override the temporary Vercel CLI client ID. */
 export function make(options: { clientID?: string; issuer?: string; api?: string } = {}) {

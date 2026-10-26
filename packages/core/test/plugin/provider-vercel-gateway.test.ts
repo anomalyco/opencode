@@ -190,7 +190,7 @@ describe("Vercel AI Gateway setup", () => {
       expect((yield* integrations.get(integrationID))?.connections[0]?.status).toBeUndefined()
       yield* response(401)
       yield* drain
-      expect((yield* integrations.get(integrationID))?.connections[0]?.status?.message).toContain("Reconnect Vercel")
+      expect((yield* integrations.get(integrationID))?.connections[0]?.status?.message).toContain("Sign in to Vercel to create a replacement")
       yield* replace(integrations, saved.id, "replacement-key")
       yield* response(401)
       yield* drain

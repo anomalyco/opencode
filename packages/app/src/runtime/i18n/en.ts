@@ -256,8 +256,9 @@ export const dict = {
     "Your browser opens so you can sign in to {{provider}}. Paste the authorization code it gives you below.",
   "provider.connect.oauth.openBrowser": "Open browser",
   "provider.connect.oauth.expired": "Authorization expired",
-  "provider.connect.vercel.reconnect": "Reconnect Vercel",
-  "provider.connect.vercel.renewed": "Vercel AI Gateway key renewed",
+  "provider.connect.vercel.replaceKey": "Replace key",
+  "provider.connect.vercel.keyNeedsReplacement": "Key needs replacement",
+  "provider.connect.vercel.renewed": "Vercel AI Gateway key replaced",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
