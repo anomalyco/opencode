@@ -219,4 +219,88 @@ for (const sample of [
     await fs.rm(root, { recursive: true, force: true })
   }
 }
+
+// Control the publication race with protocol fixtures and real process IDs.
+const concurrentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-nix-concurrent-"))
+const concurrentEnv = environment(concurrentRoot)
+const participants: Bun.Subprocess[] = []
+try {
+  const fixture = path.resolve("packages/client/test/fixture/service.ts")
+  const previousFile = path.join(concurrentRoot, "previous.json")
+  const currentFile = path.join(concurrentRoot, "current.json")
+  const previous = Bun.spawn([process.execPath, fixture, previousFile, "protocol"], {
+    env: concurrentEnv,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "inherit",
+  })
+  participants.push(previous)
+  const current = Bun.spawn([process.execPath, fixture, currentFile, "probe-gated"], {
+    env: concurrentEnv,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "inherit",
+  })
+  participants.push(current)
+  await Promise.all([waitForFile(previousFile), waitForFile(currentFile)])
+  const observed = await Bun.file(previousFile).json()
+  const elected = await Bun.file(currentFile).json()
+  assert.equal(observed.version, elected.version)
+  const registration = path.join(concurrentRoot, "state", "opencode", "service.json")
+  const ticket = JSON.stringify({
+    source: { id: observed.id, pid: observed.pid, url: observed.url },
+    handoff: null,
+    expiresAt: Date.now() + 30_000,
+  })
+  await Bun.write(path.join(concurrentRoot, "state", "opencode", "service-prod.json"), JSON.stringify(observed))
+  await Bun.write(
+    path.join(concurrentRoot, "config", "opencode", "service.json"),
+    JSON.stringify({ port: Number(new URL(elected.url).port), password: elected.password }),
+  )
+  const contender = Bun.spawn([binary, "serve", "--service"], {
+    env: concurrentEnv,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "pipe",
+    signal: AbortSignal.timeout(60_000),
+  })
+  participants.push(contender)
+  const stderr = new Response(contender.stderr).text()
+  await waitForFile(currentFile + ".first-request")
+  assert.equal((await Bun.file(registration).json()).pid, observed.pid)
+  await fs.writeFile(registration + ".replacement", JSON.stringify(elected), { mode: 0o600 })
+  await fs.rename(registration + ".replacement", registration)
+  await Bun.write(registration + ".pty-handoff", ticket)
+  await Bun.write(currentFile + ".release", "")
+  const exit = await Promise.race([
+    contender.exited,
+    current.exited.then(() => {
+      throw new Error("Legacy contender stopped the concurrently elected owner")
+    }),
+  ])
+  assert.equal(exit, 0, await stderr)
+  assert.equal(current.exitCode, null)
+  assert.deepEqual(await Bun.file(registration).json(), elected)
+  assert.equal(await Bun.file(registration + ".pty-handoff").text(), ticket)
+  assert.equal(await Bun.file(currentFile + ".handoff-request").exists(), false)
+  assert.equal(await Bun.file(currentFile + ".signal").exists(), false)
+  const health = await fetch(new URL("/api/info", elected.url), {
+    signal: AbortSignal.timeout(5_000),
+  }).then((response) => response.json())
+  assert.equal(health.pid, current.pid)
+  console.log("Concurrent legacy contender preserves the elected owner, pending handoff and endpoint")
+} finally {
+  participants.forEach((participant) => participant.kill())
+  await Promise.all(participants.map((participant) => participant.exited))
+  await fs.rm(concurrentRoot, { recursive: true, force: true })
+}
+
 await fs.rm(transpiler, { recursive: true, force: true })
+
+async function waitForFile(file: string) {
+  const deadline = Date.now() + 15_000
+  while (!(await Bun.file(file).exists())) {
+    assert.ok(Date.now() < deadline, `Timed out waiting for ${file}`)
+    await Bun.sleep(5)
+  }
+}

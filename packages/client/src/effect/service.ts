@@ -39,7 +39,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
   const found = (yield* Effect.promise(() => probeResult({ ...info, url: options.url }))).service
   if (!found?.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
-  return { endpoint: found.endpoint, state: found.state }
+  return { info, endpoint: found.endpoint, state: found.state }
 })
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
@@ -99,7 +99,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* announce("version-mismatch", service.version)
         if (service.state !== "ready")
           yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
-        yield* stop({ file: options.file, pty: decision.pty }).pipe(Effect.ignore)
+        yield* stop({ file: options.file, expected: service.info, pty: decision.pty }).pipe(Effect.ignore)
         pool.evict(service.info.pid)
       }
       return Option.none()
@@ -129,6 +129,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const info = yield* read(options.file)
+  if (options.expected !== undefined && (info === undefined || !same(info, options.expected))) return
   // Terminal handoff is best-effort; it must never keep the old service running.
   yield* Effect.tryPromise(() =>
     options.pty === "handoff" && info !== undefined

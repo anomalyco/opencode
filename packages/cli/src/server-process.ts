@@ -81,7 +81,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         )
           return
         // Read the ticket after stopping its owner, then continue in this process.
-        yield* Service.stop({ file: serviceOptions.file, pty: legacy.state === "ready" ? "handoff" : "clear" })
+        yield* Service.stop({
+          file: serviceOptions.file,
+          expected: legacy.info,
+          pty: legacy.state === "ready" ? "handoff" : "clear",
+        })
         inherited = (yield* Effect.tryPromise(() => PtyHandoff.environment(serviceOptions.file))).OPENCODE_PTY_HANDOFF
       }
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return

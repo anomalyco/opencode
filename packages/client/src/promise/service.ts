@@ -81,7 +81,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
+          await stop({ file: options.file, expected: service.info, pty: decision.pty }).catch(() => undefined)
           pool.evict(service.info.pid)
         }
       } else {
@@ -102,6 +102,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
+  if (options.expected !== undefined && (info === undefined || !same(info, options.expected))) return
   // Terminal handoff is best-effort; it must never keep the old service running.
   await (
     options.pty === "handoff" && info !== undefined

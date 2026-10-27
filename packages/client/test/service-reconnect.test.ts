@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
+import { renameSync, writeFileSync } from "node:fs"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
 import type { EnsureOptions, EnsureReason, StopOptions } from "../src/service"
@@ -90,5 +91,106 @@ for (const client of clients) {
     expect(await owner.exited).toBe(stoppedExitCode)
     expect(await fixture.signal()).toBe(stopSignal)
     expect(await Bun.file(fixture.registration).exists()).toBe(false)
+  })
+
+  test(`${client.name} conditional stop preserves a different same-version owner and pending handoff`, async () => {
+    await using previous = await serviceFixture()
+    await using current = await serviceFixture()
+    previous.spawn("protocol")
+    const owner = current.spawn("protocol")
+    await Promise.all([previous.waitForFile(), current.waitForFile()])
+    const expected = await Bun.file(previous.registration).json()
+    const registered = await Bun.file(current.registration).json()
+    const pending = JSON.stringify({
+      source: { id: expected.id, pid: expected.pid, url: expected.url },
+      handoff: null,
+      expiresAt: Date.now() + 30_000,
+    })
+    await Bun.write(previous.registration, JSON.stringify(registered))
+    await Bun.write(previous.registration + ".pty-handoff", pending)
+
+    await client.stop({ file: previous.registration, expected, pty: "handoff" })
+
+    expect(owner.exitCode).toBe(null)
+    expect(await Bun.file(previous.registration).json()).toEqual(registered)
+    expect(await Bun.file(previous.registration + ".pty-handoff").text()).toBe(pending)
+    expect(await Bun.file(current.registration + ".handoff-request").exists()).toBe(false)
+    expect(await current.signal()).toBeUndefined()
+    expect(await fetch(new URL("/api/info", registered.url)).then((response) => response.json())).toMatchObject({
+      pid: owner.pid,
+    })
+  })
+
+  test(`${client.name} conditional stop preserves a pending handoff without a registration`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("protocol")
+    await fixture.waitForFile()
+    const expected = await Bun.file(fixture.registration).json()
+    const pending = JSON.stringify({
+      source: { id: expected.id, pid: expected.pid, url: expected.url },
+      handoff: null,
+      expiresAt: Date.now() + 30_000,
+    })
+    await Bun.write(fixture.registration + ".pty-handoff", pending)
+    await Bun.file(fixture.registration).delete()
+
+    await client.stop({ file: fixture.registration, expected })
+
+    expect(owner.exitCode).toBe(null)
+    expect(await fixture.signal()).toBeUndefined()
+    expect(await Bun.file(fixture.registration + ".pty-handoff").text()).toBe(pending)
+    expect(await Bun.file(fixture.registration).exists()).toBe(false)
+  })
+
+  test(`${client.name} conditional stop hands off and stops its observed owner`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("protocol")
+    await fixture.waitForFile()
+    const expected = await Bun.file(fixture.registration).json()
+
+    await client.stop({ file: fixture.registration, expected, pty: "handoff" })
+
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(await fixture.signal()).toBe(stopSignal)
+    expect(await Bun.file(fixture.registration + ".handoff-request").exists()).toBe(true)
+    expect(await Bun.file(fixture.registration).exists()).toBe(false)
+  })
+
+  test(`${client.name} replacement preserves a compatible owner published after its decision`, async () => {
+    await using previous = await serviceFixture()
+    await using current = await serviceFixture()
+    previous.spawn("handoff")
+    const owner = current.spawn("protocol")
+    await Promise.all([previous.waitForFile(), current.waitForFile()])
+    const registered = await Bun.file(current.registration).json()
+    const pending = JSON.stringify({
+      source: { id: registered.id, pid: registered.pid, url: registered.url },
+      handoff: null,
+      expiresAt: Date.now() + 30_000,
+    })
+    await Bun.write(previous.registration + ".pty-handoff", pending)
+    const starts: EnsureReason[] = []
+
+    const endpoint = await client.ensure({
+      file: previous.registration,
+      version: "test",
+      command: [],
+      onStart: (reason) => {
+        starts.push(reason)
+        writeFileSync(previous.registration + ".replacement", JSON.stringify(registered))
+        renameSync(previous.registration + ".replacement", previous.registration)
+      },
+    })
+
+    expect(starts).toEqual(["version-mismatch"])
+    expect(endpoint.url).toBe(registered.url)
+    expect(owner.exitCode).toBe(null)
+    expect(await Bun.file(previous.registration).json()).toEqual(registered)
+    expect(await Bun.file(previous.registration + ".pty-handoff").text()).toBe(pending)
+    expect(await Bun.file(current.registration + ".handoff-request").exists()).toBe(false)
+    expect(await current.signal()).toBeUndefined()
+    expect(await fetch(new URL("/api/info", endpoint.url)).then((response) => response.json())).toMatchObject({
+      pid: owner.pid,
+    })
   })
 }

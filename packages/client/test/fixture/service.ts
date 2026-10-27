@@ -58,7 +58,7 @@ const server = Bun.serve({
   port: 0,
   async fetch(request): Promise<Response> {
     const pathname = new URL(request.url).pathname
-    if (mode === "protocol" && pathname === "/api/experimental/persistent-pty/handoff") {
+    if ((mode === "protocol" || mode === "probe-gated") && pathname === "/api/experimental/persistent-pty/handoff") {
       await writeFile(registration + ".handoff-request", "")
       return Response.json({ handoff: null })
     }
@@ -83,6 +83,15 @@ const server = Bun.serve({
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
       return new Response(null, { status: 503 })
+    }
+    if (mode === "probe-gated" && requests === 1) {
+      await writeFile(registration + ".first-request", "")
+      const release = Bun.file(registration + ".release")
+      const deadline = Date.now() + 15_000
+      while (!(await release.exists())) {
+        if (Date.now() >= deadline) throw new Error("Timed out waiting for probe release")
+        await Bun.sleep(5)
+      }
     }
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
       return Response.json(

@@ -38,6 +38,8 @@ export type EnsureOptions = DiscoverOptions & {
 export type StopOptions = {
   /** Absolute registration file path. Defaults to the XDG state directory. */
   readonly file?: string
+  /** Stop only while this observed service instance still owns the registration. */
+  readonly expected?: Info
   /** How to handle persistent terminals before stopping the service. */
   readonly pty?: "clear" | "handoff"
 }

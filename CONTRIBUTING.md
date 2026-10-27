@@ -79,6 +79,8 @@ Nix uses archive URLs and integrity hashes from `bun.lock`. Bun installs workspa
 
 The lock reader supports Bun lockfile v1 registry, GitHub and HTTP sources with recorded integrity. HTTP cache entries use the format required by the selected Bun version.
 
+Legacy service replacement validates the observed registration before preparing terminal handoff.
+
 Released TUI storage imports missing JSON files from `prod/tui` into `latest/tui` once. Existing destination files take precedence; source files remain unchanged. Failed imports are logged and retried on later starts.
 
 Build the packages and run the cache and runtime checks:
