@@ -737,6 +737,25 @@ describe("Bus", () => {
     }),
   )
 
+  it.effect("replays compaction events stored before v2.1 with recent, reading them without it", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const old = Session.ID.create()
+      const event = {
+        id: Event.ID.create(),
+        created: 1,
+        type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1),
+        seq: 0,
+        aggregateID: old,
+        data: { sessionID: old, reason: "auto", text: "summary", recent: "[User]: kept" },
+      }
+      yield* bus.replay(event)
+      yield* bus.replay(event)
+      const logged = Array.from(yield* bus.log({ aggregateID: old }).pipe(Stream.runCollect))
+      expect(logged.find((item) => item.type === SessionEvent.Compaction.Ended.type)).not.toHaveProperty("data.recent")
+    }),
+  )
+
   it.effect("replay inserts external event rows", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service

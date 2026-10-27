@@ -186,7 +186,7 @@ describe("public event manifest", () => {
       assistantMessageID,
       ordinal: 0,
       text: "thought",
-      state: { signature: "sig" },
+      native: { signature: "sig" },
     })
     const tool = SessionEvent.Tool.Called.data.make({
       sessionID,
@@ -194,7 +194,7 @@ describe("public event manifest", () => {
       id: "call_test",
       input: {},
       executed: true,
-      state: { itemId: "item_test" },
+      native: { itemId: "item_test" },
     })
 
     expect(text).not.toHaveProperty("textID")

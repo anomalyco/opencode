@@ -30,7 +30,7 @@
       display: block;
       flex-grow: 1;
       height: 100%;
-      border-bottom: 1px solid var(--border-weak-base);
+      border-bottom: 1px solid var(--v2-border-border-base);
       background-color: var(--background-base);
     }
 
@@ -55,8 +55,8 @@
     white-space: nowrap;
     flex-shrink: 0;
     max-width: 280px;
-    border-bottom: 1px solid var(--border-weak-base);
-    border-inline-end: 1px solid var(--border-weak-base);
+    border-bottom: 1px solid var(--v2-border-border-base);
+    border-inline-end: 1px solid var(--v2-border-border-base);
     background-color: var(--background-base);
 
     [data-slot="tabs-trigger"] {
@@ -141,6 +141,7 @@
   }
 
   #review-panel &[data-variant="normal"][data-orientation="horizontal"],
+  #bottom-panel &[data-variant="normal"][data-orientation="horizontal"],
   #terminal-panel &[data-variant="normal"][data-orientation="horizontal"] {
     background-color: var(--background-stronger);
 
@@ -152,7 +153,7 @@
       --tabs-review-fade: 16px;
       gap: var(--tabs-review-gap);
       background-color: var(--background-stronger);
-      border-bottom: 1px solid var(--border-weaker-base);
+      border-bottom: 1px solid var(--v2-border-border-base);
 
       &::after {
         display: none;
@@ -227,7 +228,7 @@
       &:has([data-selected]) {
         color: var(--text-strong);
         background-color: var(--surface-base-active);
-        border-color: var(--border-weak-base);
+        border-color: var(--v2-border-border-base);
 
         &::after {
           opacity: 1;
@@ -301,7 +302,7 @@
     }
 
     [data-slot="terminal-tab-title"] {
-      font-family: Inter, sans-serif;
+      font-family: var(--font-family-sans);
       font-style: normal;
       font-weight: 440;
       font-size: 13px;
@@ -318,7 +319,7 @@
       padding-left: 24px;
       padding-right: 24px;
       gap: 12px;
-      border-bottom: 1px solid var(--border-weak-base);
+      border-bottom: 1px solid var(--v2-border-border-base);
       background-color: transparent;
 
       &::after {
@@ -419,39 +420,6 @@
       }
     }
   }
-
-  &[data-variant="pill"][data-orientation="horizontal"][data-scope="filetree"] {
-    [data-slot="tabs-list"] {
-      height: 48px;
-      padding-inline: 12px;
-      gap: 8px;
-      align-items: center;
-      background-color: var(--background-stronger);
-      box-sizing: border-box;
-      border-bottom: 1px solid var(--border-weak-base);
-    }
-
-    [data-slot="tabs-trigger-wrapper"] {
-      height: var(--tabs-compact-pill-height);
-      border-radius: var(--tabs-compact-pill-radius);
-      color: var(--text-weak);
-      box-sizing: border-box;
-      border: 1px solid transparent;
-      transition:
-        color 120ms ease,
-        background-color 120ms ease,
-        border-color 120ms ease;
-
-      &:not(:has([data-selected])):hover:not(:disabled) {
-        color: var(--text-base);
-      }
-
-      &:has([data-selected]) {
-        color: var(--text-strong);
-        border-color: var(--border-weak-base);
-      }
-    }
-  }
 }
 
 [data-component="tabs-drag-preview"] {
@@ -473,7 +441,7 @@
   right: 0;
   top: calc((var(--tabs-bar-height, 48px) - var(--tabs-compact-pill-height, 24px)) / 2);
   height: var(--tabs-compact-pill-height, 24px);
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--v2-border-border-base);
   border-radius: var(--tabs-compact-pill-radius, 6px);
   background-color: var(--surface-base-active);
 }
@@ -492,9 +460,12 @@
   position: relative;
 }
 
-:root body #review-panel [data-component="tabs"],
+:root body :is(#review-panel, #bottom-panel) [data-component="tabs"],
 :root body #terminal-panel [data-component="tabs"],
-:root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"],
+:root
+  body
+  :is(#review-panel, #bottom-panel)
+  [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"],
 :root body #terminal-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] {
   background-color: var(--v2-background-bg-base);
 
@@ -515,7 +486,10 @@
   }
 }
 
-:root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] {
+:root
+  body
+  :is(#review-panel, #bottom-panel)
+  [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] {
   [data-slot="tabs-list"] {
     height: 52px;
     padding-inline-end: 12px;
@@ -538,12 +512,9 @@
       padding: 0 !important;
     }
 
+    /* The 20px close button sits 4px from the tab's end, as from its top and bottom. */
     &:has([data-slot="tabs-trigger-close-button"]) {
-      padding-inline-end: 8px;
-
-      [data-slot="tabs-trigger-close-button"] {
-        margin-inline-start: 2px;
-      }
+      padding-inline-end: 4px;
     }
 
     &:has([data-selected]) {
@@ -553,7 +524,7 @@
   }
 
   [data-slot="tabs-trigger"] {
-    font-family: Inter, sans-serif;
+    font-family: var(--font-family-sans);
     font-style: normal;
     font-weight: 440;
     font-size: 13px;
@@ -562,6 +533,11 @@
     color: var(--v2-text-text-muted);
     font-variation-settings: "slnt" 0;
     font-variant-numeric: tabular-nums;
+    transition: color 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
 
     &[data-selected] {
       color: var(--v2-text-text-base);
@@ -575,19 +551,35 @@
   }
 }
 
-:root body #review-panel [data-component="tabs"] .session-review-v2-tabs-bar {
+/* While the keyboard belongs to the main column, the side panel's selected tab rests at the strip's muted color; its
+   fill still marks the selection. */
+:root
+  body
+  #review-panel:not([data-focused])
+  [data-component="tabs"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-trigger"][data-selected] {
+  color: var(--v2-text-text-muted);
+}
+
+:root body :is(#review-panel, #bottom-panel) [data-component="tabs"] .session-review-v2-tabs-bar {
   width: 100%;
   min-width: 0;
   gap: 8px;
   box-sizing: border-box;
-  border-bottom: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
+  border-bottom: 0.5px solid var(--v2-border-border-base);
   background-color: var(--v2-background-bg-base);
 }
 
-:root body #review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"],
 :root
   body
-  #review-panel
+  :is(#review-panel, #bottom-panel)
+  [data-component="tabs"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-list"],
+:root
+  body
+  :is(#review-panel, #bottom-panel)
   [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"]
   .session-review-v2-tabs-bar
   [data-slot="tabs-list"] {
@@ -597,17 +589,46 @@
   height: var(--tabs-bar-height);
   padding-inline-end: 0;
   border-bottom: none;
+  /* Tabs fade out at each edge with more of them past it. The tab strip's scroll handler sets the fade widths and the
+     width of the sticky "+", which the second layer keeps unmasked. */
+  mask-image:
+    linear-gradient(
+      to right,
+      transparent,
+      #000 var(--tab-strip-fade-start, 0px),
+      #000 calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-fade-end, 0px)),
+      transparent calc(100% - var(--tab-strip-add, 0px))
+    ),
+    linear-gradient(to left, #000 var(--tab-strip-add, 0px), transparent var(--tab-strip-add, 0px));
+
+  &:dir(rtl) {
+    mask-image:
+      linear-gradient(
+        to left,
+        transparent,
+        #000 var(--tab-strip-fade-start, 0px),
+        #000 calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-fade-end, 0px)),
+        transparent calc(100% - var(--tab-strip-add, 0px))
+      ),
+      linear-gradient(to right, #000 var(--tab-strip-add, 0px), transparent var(--tab-strip-add, 0px));
+  }
 }
 
-/* The end gap lives inside the sticky "+" box. Sticky offsets respect the strip's padding, so padding there
-   would leave a gap after the "+" where scrolled tabs show through. */
-:root body #review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"] > .sticky {
-  padding-inline-end: 12px;
+/* The "+" sits flush with the strip's end, so it keeps the tabs' 8px gap both from the last tab and from the
+   controls after the strip. The strip's mask fades the tabs under it. */
+:root
+  body
+  :is(#review-panel, #bottom-panel)
+  [data-component="tabs"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-list"]
+  > .sticky::before {
+  display: none;
 }
 
 :root
   body
-  #review-panel
+  :is(#review-panel, #bottom-panel)
   [data-component="tabs"]
   .session-review-v2-tabs-bar
   [data-slot="tabs-list"]
@@ -617,11 +638,11 @@
   inset-inline-end: 0;
 }
 
-:root body #review-panel [data-component="tabs"] .session-review-v2-open-in-app-slot {
+:root body :is(#review-panel, #bottom-panel) [data-component="tabs"] .session-review-v2-open-in-app-slot {
   flex-shrink: 0;
   margin-inline-start: auto;
 }
 
-:root body #review-panel [data-component="tabs"] .session-review-v2-open-in-app {
+:root body :is(#review-panel, #bottom-panel) [data-component="tabs"] .session-review-v2-open-in-app {
   flex-shrink: 0;
 }

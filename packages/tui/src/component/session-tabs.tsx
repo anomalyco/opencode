@@ -49,12 +49,10 @@ import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { Keymap } from "../context/keymap"
-import { registerOpencodeSpinner } from "./register-spinner"
+import "./spinner-renderable"
 import { SPINNER_FRAMES } from "./spinner-frames"
 import { SessionTabsRailControls, SessionTabHalfRow } from "./session-tabs-rail"
 import "./title-shimmer"
-
-registerOpencodeSpinner()
 
 export const TAB_SPINNERS = {
   dots: { frames: SPINNER_FRAMES, interval: 80 },

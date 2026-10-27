@@ -24,40 +24,27 @@ export type ID = typeof ID.Type
 export const Source = Permission.Source
 export type Source = typeof Source.Type
 
-const RequestFields = {
-  sessionID: Permission.Request.fields.sessionID,
-  action: Permission.Request.fields.action,
-  resources: Permission.Request.fields.resources,
-  save: Permission.Request.fields.save,
-  metadata: Permission.Request.fields.metadata,
-  source: Permission.Request.fields.source,
-}
-
 export const Request = Permission.Request
 export type Request = typeof Request.Type
 
 export const Reply = Permission.Reply
 export type Reply = typeof Reply.Type
 
-export const AssertInput = Schema.Struct({
-  id: ID.pipe(Schema.optional),
-  ...RequestFields,
-  agent: Agent.ID.pipe(Schema.optional),
-}).annotate({ identifier: "Permission.AssertInput" })
-export type AssertInput = typeof AssertInput.Type
+export interface AssertInput extends Omit<Request, "id" | "message"> {
+  readonly id?: ID
+  readonly agent?: Agent.ID
+}
 
-export const ReplyInput = Schema.Struct({
-  requestID: ID,
-  reply: Reply,
-  message: Schema.String.pipe(Schema.optional),
-}).annotate({ identifier: "Permission.ReplyInput" })
-export type ReplyInput = typeof ReplyInput.Type
+export interface ReplyInput {
+  readonly requestID: ID
+  readonly reply: Reply
+  readonly message?: string
+}
 
-export const AskResult = Schema.Struct({
-  id: ID,
-  effect: Permission.Effect,
-}).annotate({ identifier: "Permission.AskResult" })
-export type AskResult = typeof AskResult.Type
+export interface AskResult {
+  readonly id: ID
+  readonly effect: Permission.Effect
+}
 
 export { Event } from "@opencode/schema/permission"
 
@@ -104,6 +91,8 @@ export interface Interface {
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
+  /** Fails only when the rules deny the request; never asks the user. */
+  readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
@@ -195,7 +184,11 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
+        // fail the HttpApi response encoder when clients list pending requests.
+        metadata:
+          input.metadata &&
+          Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
         source: input.source,
         message,
       }
@@ -261,6 +254,17 @@ const layer = Layer.effect(
         )
       }),
     )
+
+    const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (input: AssertInput) {
+      const result = yield* evaluateInput(input)
+      if (result.effect !== "deny") return
+      return yield* new BlockedError({
+        rules: relevant(input, result.rules),
+        permission: input.action,
+        resources: input.resources,
+        reason: result.message,
+      })
+    })
 
     const reply = Effect.fn("Permission.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
@@ -336,7 +340,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, reply, get, forSession, list, close })
+    return Service.of({ ask, assert, assertNotDenied, reply, get, forSession, list, close })
   }),
 )
 

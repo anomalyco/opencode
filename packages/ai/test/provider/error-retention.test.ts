@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { Anthropic, Google, OpenAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"

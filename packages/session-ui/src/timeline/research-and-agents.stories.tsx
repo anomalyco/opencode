@@ -14,6 +14,7 @@ import {
   webResearchDocument,
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
+import { timelinePresets } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -72,6 +73,51 @@ export const DelegateFocusedTasks = {
       document={subagentDocument}
       width="760px"
     />
+  ),
+}
+
+const delegationDocument = storyDocument([
+  storyTool("tool_delegation_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
+  storyTool("tool_delegation_grep", "grep", "completed", { pattern: "timelineDetail" }),
+  storyTool("tool_delegation_read", "read", "completed", { path: "src/timeline/projection.ts" }),
+  storyTool(
+    "tool_delegation_explore",
+    "subagent",
+    "completed",
+    { agent: "explore", description: "Map the timeline grouping rules", prompt: "Find where tool rows are grouped." },
+    { output: "Grouping lives in the timeline projection.", metadata: { sessionID: "session_child_explore" } },
+  ),
+  storyTool(
+    "tool_delegation_review",
+    "subagent",
+    "completed",
+    { agent: "review", description: "Review the detail presets", prompt: "Check each timeline preset." },
+    { output: "Every preset is consistent.", metadata: { sessionID: "session_child_review" } },
+  ),
+  storyTool("tool_delegation_read_tests", "read", "completed", { path: "src/timeline/rows-current.test.ts" }),
+  storyTool("tool_delegation_grep_tests", "grep", "completed", { pattern: "subagent" }),
+  storyTool(
+    "tool_delegation_general",
+    "subagent",
+    "completed",
+    { agent: "general", description: "Run the focused timeline tests", prompt: "Run the timeline tests." },
+    { output: "All timeline tests pass.", metadata: { sessionID: "session_child_general" } },
+  ),
+  { type: "text", text: "Each delegated task keeps its own row while the reads and searches between them stay grouped." },
+])
+
+export const DelegateBetweenTools = {
+  args: { subagents: "separate" },
+  argTypes: { subagents: { control: { type: "inline-radio" }, options: ["separate", "grouped"] } },
+  render: (args: { subagents: "separate" | "grouped" }) => (
+    <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
+      <CurrentSessionProviders document={delegationDocument}>
+        <SessionTimeline
+          document={delegationDocument}
+          timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: args.subagents } }}
+        />
+      </CurrentSessionProviders>
+    </section>
   ),
 }
 

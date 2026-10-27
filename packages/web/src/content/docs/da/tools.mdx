@@ -18,7 +18,7 @@ Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tilla
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -45,7 +45,7 @@ Her er alle de innebygde verktøyene som er tilgængelige i OpenCode.
 
 ---
 
-### shell
+### bash
 
 Utfør shellkommandoer i prosjektmiljøet ditt.
 
@@ -53,7 +53,7 @@ Utfør shellkommandoer i prosjektmiljøet ditt.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

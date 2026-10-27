@@ -110,7 +110,6 @@ export const configure = (input: Config = {}) => {
       id: modelID,
       compatibility: {
         maxTokensField: "max_tokens",
-        supportsStore: false,
         supportsStrictMode: false,
         supportsPromptCacheKey: true,
         sanitizer: "moonshot",

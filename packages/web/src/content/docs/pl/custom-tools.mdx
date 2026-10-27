@@ -3,7 +3,7 @@ title: Narzędzia specjalistyczne
 description: Twórz narzędzi, które LLM mogą być uruchamiane w otwartym kodzie.
 ---
 
-Narzędzia specjalistyczne to funkcje, które tworzysz i które LLM może wywoływać podczas rozmów. Współpracują one z [wbudowanymi narzędziami](/docs/tools) opencode, takimi jak `read`, `write` i `shell`.
+Narzędzia specjalistyczne to funkcje, które tworzysz i które LLM może wywoływać podczas rozmów. Współpracują one z [wbudowanymi narzędziami](/docs/tools) opencode, takimi jak `read`, `write` i `bash`.
 
 ---
 
@@ -83,13 +83,13 @@ Tworzy to dwa narzędzia: `math_add` i `math_multiply`.
 
 Niestandardowe narzędzia są identyfikowane według nazwy narzędzia. Jeśli niestandardowe narzędzie używa tej samej nazwy co wbudowane narzędzie, niestandardowe narzędzie ma pierwszeństwo.
 
-Na przykład ten plik zastępuje wbudowane narzędzie `shell`:
+Na przykład ten plik zastępuje wbudowane narzędzie `bash`:
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },

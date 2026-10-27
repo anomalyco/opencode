@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, LLM, Message } from "@opencode/ai"
+import { AIError, LLM, Message } from "@opencode/ai/effect"
 import {
   LLMClient,
   RequestExecutor,

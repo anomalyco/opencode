@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { GoogleVertexResponses } from "../../src/providers.js"
 
 const model = GoogleVertexResponses.configure({ accessToken: "test", project: "project" }).model("gemini")

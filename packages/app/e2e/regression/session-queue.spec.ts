@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -65,6 +65,8 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   const compactions: SessionInboxInfo[] = []
   const changes: { inboxID: string; action: "cancel" | "steer" | "queue" }[] = []
   const log: string[] = []
+  // Live background shell commands (`GET /api/shell`).
+  const shells: ShellInfo[] = []
   let sequence = 0
 
   const emit = <Type extends OpenCodeEvent["type"]>(
@@ -89,6 +91,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     changes,
     log,
     messages,
+    shells,
     emit,
     events: () => events.splice(0),
     onPrompt: (input: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]) => {
@@ -130,6 +133,9 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         delivery: "steer",
       })
     },
+    onBackground: () => {
+      log.push("background")
+    },
     onInboxChange: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => {
       changes.push({ inboxID: input.inboxID, action: input.action })
       log.push(`${input.action}:${input.inboxID}`)
@@ -161,9 +167,8 @@ async function openQueue(
   followUpBehavior?: "queue" | "steer",
   revert?: string,
   status: "idle" | "running" = "running",
+  model = { id: "queue-model", name: "Queue Model" },
 ) {
-  const model = { id: "queue-model", name: "Queue Model" }
-
   const options: Parameters<typeof openSession>[1] = {
     name: "SessionQueueRegression",
     sessions: [
@@ -181,6 +186,8 @@ async function openQueue(
     onPrompt: mock.onPrompt,
     onCompact: mock.onCompact,
     onInboxChange: mock.onInboxChange,
+    onBackground: mock.onBackground,
+    shellCommands: () => mock.shells,
     events: mock.events,
   }
 
@@ -224,7 +231,7 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
-test("a steer shows as pending in the timeline as the composer clears, before its selection commits", async ({
+test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {
   // The running execution has delivered input, so a new steer waits behind its work.
@@ -234,7 +241,7 @@ test("a steer shows as pending in the timeline as the composer clears, before it
   )
 
   const view = await openQueue(page, mock, "steer")
-  const commit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/model`, { method: "POST" })
+  const commit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/prompt`, { method: "POST" })
 
   const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
     hasText: "steer while the model commits",
@@ -291,41 +298,125 @@ test("a steer into an idle session leaves the finished turn finished until deliv
   await expect(finished).toHaveCount(1)
 })
 
-test("dragging reorders queued prompts", async ({ page }) => {
-  const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
-  mock.rows[0].payload.files = [
-    { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
-  ]
-  const view = await openQueue(page, mock)
-  await expect(view.rows).toHaveCount(3)
+for (const count of [2, 6]) {
+  test(`dragging reorders ${count} queued prompts without bouncing`, async ({ page }) => {
+    const order = Array.from({ length: count }, (_, index) => `queued prompt ${index + 1}`)
+    const mock = createQueueMock(order)
+    mock.rows[0].payload.files = [
+      { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
+    ]
+    const view = await openQueue(page, mock)
+    await expect(view.rows).toHaveCount(count)
+    const texts = view.rows.locator('[data-action="session-queue-edit"]')
+    const panel = page.locator('[data-component="session-queue-panel"]')
+    const height = await panel.evaluate((el) => el.getBoundingClientRect().height)
 
+    const geometry = await panel.evaluateHandle((el) => {
+      const heights = [el.getBoundingClientRect().height]
+      const observer = new ResizeObserver(() => heights.push(el.getBoundingClientRect().height))
+      observer.observe(el)
+
+      return { heights, stop: () => observer.disconnect() }
+    })
+
+    const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+    const cancellation = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox/[^/?]+(\\?|$)`), {
+      method: "DELETE",
+    })
+
+    const first = view.rows.filter({ hasText: order[0] })
+    const targetIndex = Math.min(2, count - 1)
+    const destination = view.rows.filter({ hasText: order[targetIndex] })
+    await first.getByRole("button", { name: "Reorder queued prompt" }).hover()
+    await page.mouse.down()
+    const target = await destination.boundingBox()
+
+    if (!target) throw new Error("The target queue row is not visible")
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
+    await page.mouse.up()
+
+    const reordered = [...order.slice(1, targetIndex + 1), order[0], ...order.slice(targetIndex + 1)]
+    await admission.arrived
+    await expect(texts).toHaveText(reordered)
+    await expect(view.rows).toHaveCount(count)
+    admission.release()
+
+    // All replacements are admitted while the originals still exist. Neither copies nor extra height may leak out.
+    await cancellation.arrived
+    await expect(texts).toHaveText(reordered)
+    await expect(view.rows).toHaveCount(count)
+
+    const reconciliation = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox(\\?|$)`), {
+      method: "GET",
+    })
+
+    cancellation.release()
+    await reconciliation.arrived
+    await expect(texts).toHaveText(reordered)
+    await expect(view.rows).toHaveCount(count)
+    reconciliation.release()
+    await expect(
+      view.rows.filter({ hasText: order[1] }).getByRole("button", { name: "Remove", exact: true }),
+    ).toBeEnabled()
+    await expect(texts).toHaveText(reordered)
+    expect(
+      await geometry.evaluate((value) => {
+        value.stop()
+
+        return Math.max(...value.heights) - Math.min(...value.heights)
+      }),
+    ).toBeLessThanOrEqual(1)
+    expect(await panel.evaluate((el) => el.getBoundingClientRect().height)).toBeCloseTo(height, 0)
+    await geometry.dispose()
+    expect(mock.prompts.map((prompt) => prompt.text)).toEqual(reordered)
+    // A re-admitted file keeps the URI it came from instead of becoming an inline snapshot.
+    expect(mock.prompts[targetIndex].files).toMatchObject([{ uri: "file:///repo/main.ts", name: "main.ts" }])
+    expect(mock.changes).toEqual(order.map((_, index) => ({ inboxID: `inb_seed_${index + 1}`, action: "cancel" })))
+    // The handoff must leave actions targeting the new inbox IDs, not the optimistic row keys.
+    await view.rows.getByText(order[0], { exact: true }).click()
+    await expect(view.input).toHaveText(order[0])
+  })
+}
+
+test("a partially cancelled reorder reconciles the server's queue instead of restoring stale rows", async ({
+  page,
+}) => {
+  const mock = createQueueMock(["first queued prompt", "second queued prompt"])
+  const change = mock.onInboxChange
+  mock.onInboxChange = (input) => {
+    if (input.inboxID === "inb_seed_2") throw new Error("Cancellation failed")
+    change(input)
+  }
+
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(2)
+  const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
   const first = view.rows.filter({ hasText: "first queued prompt" })
-  const third = view.rows.filter({ hasText: "third queued prompt" })
+  const second = view.rows.filter({ hasText: "second queued prompt" })
   await first.getByRole("button", { name: "Reorder queued prompt" }).hover()
   await page.mouse.down()
-  const target = await third.boundingBox()
+  const target = await second.boundingBox()
 
   if (!target) throw new Error("The target queue row is not visible")
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
   await page.mouse.up()
-
+  await admission.arrived
   await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
     "second queued prompt",
-    "third queued prompt",
     "first queued prompt",
   ])
-  expect(mock.prompts.map((prompt) => prompt.text)).toEqual([
+  admission.release()
+
+  // One original survived alongside the replacements: do not pretend the failed rewrite was rolled back.
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
     "second queued prompt",
-    "third queued prompt",
+    "second queued prompt",
     "first queued prompt",
   ])
-  // A re-admitted file keeps the URI it came from instead of becoming an inline snapshot.
-  expect(mock.prompts[2].files).toMatchObject([{ uri: "file:///repo/main.ts", name: "main.ts" }])
-  expect(mock.changes).toEqual([
-    { inboxID: "inb_seed_1", action: "cancel" },
-    { inboxID: "inb_seed_2", action: "cancel" },
-    { inboxID: "inb_seed_3", action: "cancel" },
-  ])
+  await expect(first.getByRole("button", { name: "Remove", exact: true })).toBeEnabled()
+  await first.getByRole("button", { name: "Remove", exact: true }).click()
+  await expect.poll(() => mock.changes.at(-1)).toEqual({ inboxID: mock.prompts[1].id, action: "cancel" })
 })
 
 for (const change of ["reorder", "edit"] as const) {
@@ -372,6 +463,9 @@ for (const change of ["reorder", "edit"] as const) {
     )
     await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
     expect(mock.rows.map((row) => row.payload.text)).toEqual(order)
+    await expect(
+      view.rows.filter({ hasText: order[0] }).getByRole("button", { name: "Remove", exact: true }),
+    ).toBeEnabled()
 
     // A failed edit keeps its draft in the composer so nothing typed is lost.
     if (change === "edit") await expect(view.input).toHaveText("second queued prompt, edited")
@@ -406,6 +500,8 @@ test("editing restores the existing draft and replaces only the original queue p
     "third queued prompt",
   ])
   await expect(view.input).toHaveText("my in-progress draft")
+  // The strip shows the edit before the server confirms it; wait for the rewrite to finish.
+  await expect.poll(() => mock.changes.length).toBe(2)
   // One rewrite from the edited position: the replacement, then the prompts after it.
   expect(mock.prompts.map((prompt) => prompt.text)).toEqual([
     "tighten the error copy and add a retry hint",
@@ -413,8 +509,8 @@ test("editing restores the existing draft and replaces only the original queue p
   ])
   expect(mock.prompts.every((prompt) => prompt.delivery === "queue" && prompt.resume === false)).toBe(true)
   expect(mock.changes).toEqual([
-    { inboxID: "inb_seed_2", action: "cancel" },
     { inboxID: "inb_seed_3", action: "cancel" },
+    { inboxID: "inb_seed_2", action: "cancel" },
   ])
   expect(mock.log[0]).toBe("prompt:queue")
 })
@@ -467,6 +563,79 @@ for (const change of ["reorder", "edit"] as const) {
     await expect(view.input).toHaveText("")
     expect(mock.prompts).toEqual([])
     expect(mock.changes).toEqual([])
+  })
+}
+
+for (const delivery of ["steer", "queue"] as const) {
+  test(`an edit sent as a ${delivery} stays interactive while the server is slow to confirm it`, async ({ page }) => {
+    const mock = createQueueMock(["first queued prompt", "second queued prompt"])
+    mock.rows[1].payload.files = [
+      {
+        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
+        mime: "image/png",
+        source: { type: "inline" },
+        name: "shot.png",
+      },
+    ]
+    const view = await openQueue(page, mock)
+    // A loaded server answers admissions and cancellations late; hold both until the strip is checked.
+    const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+    const cancellation = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox/[^/?]+(\\?|$)`), {
+      method: "DELETE",
+    })
+
+    const texts = view.rows.locator('[data-action="session-queue-edit"]')
+
+    await view.rows.getByText("second queued prompt", { exact: true }).click()
+    await expect(view.input).toHaveText("second queued prompt")
+    await expect(view.composer.getByRole("img", { name: "shot.png" })).toBeVisible()
+    await expect(view.input).toBeFocused()
+    await view.input.press("End")
+    await view.input.pressSequentially(", edited")
+    await view.input.press(delivery === "queue" ? "Enter" : "ControlOrMeta+Enter")
+    await admission.arrived
+
+    // The composer is free at once and the strip shows the edit, pending, in the original's place.
+    const edited = view.rows.filter({ hasText: "second queued prompt, edited" })
+    await expect(view.input).toHaveText("")
+    await expect(texts).toHaveText(["first queued prompt", "second queued prompt, edited"])
+    await expect(edited).toHaveAttribute("aria-busy", "true")
+
+    // Clicking the pending row is ignored; another row still opens, and its edit waits its turn.
+    await edited.locator('[data-action="session-queue-edit"]').click({ force: true })
+    await expect(view.input).toHaveText("")
+    await view.rows.getByText("first queued prompt", { exact: true }).click()
+    await expect(view.input).toHaveText("first queued prompt")
+    await expect(view.input).toBeFocused()
+    await view.input.press("End")
+    await view.input.pressSequentially(", edited too")
+    await view.input.press("Enter")
+    await expect(view.input).toHaveText("")
+    // Until the server answers, a steered edit also waits in the strip.
+    await expect(texts).toHaveText(["first queued prompt, edited too", "second queued prompt, edited"])
+
+    const final =
+      delivery === "queue"
+        ? ["first queued prompt, edited too", "second queued prompt, edited"]
+        : ["first queued prompt, edited too"]
+
+    admission.release()
+    await cancellation.arrived
+    cancellation.release()
+
+    await expect(texts).toHaveText(final)
+    await expect(view.rows.and(page.locator('[aria-busy="true"]'))).toHaveCount(0)
+    // The steered or queued edit was admitted once, with its attachment, and no original is left.
+    expect(mock.prompts[0]).toMatchObject({ text: "second queued prompt, edited", delivery })
+    expect(mock.prompts[0].files?.map((file) => file.uri.startsWith("data:image/png;"))).toEqual([true])
+    await expect
+      .poll(() => mock.rows.filter((row) => row.delivery === "queue").map((row) => row.payload.text))
+      .toEqual(final)
+    expect(mock.rows.filter((row) => row.delivery === "steer").map((row) => row.payload.text)).toEqual(
+      delivery === "steer" ? ["second queued prompt, edited"] : [],
+    )
+    await expect(view.input).toHaveText("")
   })
 }
 
@@ -709,7 +878,7 @@ test("reverting to another prompt replaces the file chips of an earlier restore"
     const row = userRow(page, id)
 
     await row.hover()
-    await row.getByRole("button", { name: "Revert message" }).click()
+    await row.getByRole("button", { name: "Rewind to here" }).click()
     await expect(view.input).toHaveText(text)
     await expect(chip).toHaveCount(chips)
   }
@@ -756,7 +925,7 @@ test("reverting a delivered prompt leaves queued prompts alone, as in the TUI", 
   )
 
   await delivered.hover()
-  await delivered.getByRole("button", { name: "Revert message" }).click()
+  await delivered.getByRole("button", { name: "Rewind to here" }).click()
   expect((await staged).ok()).toBe(true)
 
   await expect(view.input).toHaveText("First prompt")
@@ -830,7 +999,7 @@ for (const [action, status] of [
     if (status === "steering") await expect(message).toHaveAttribute("data-pending", "true")
     else await expect(message).not.toHaveAttribute("data-pending")
     await pending.hover()
-    await expect(pending.getByRole("button", { name: "Revert message" })).toHaveCount(0)
+    await expect(pending.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
     await pending.getByRole("button", { name: action }).click()
 
     await expect(pending).toHaveCount(0)
@@ -842,6 +1011,31 @@ for (const [action, status] of [
     if (action === "Move to queue") await expect(view.rows).toContainText("U2: Also check the retry path.")
   })
 }
+
+test("waiting steers group under one Pending line, each keeping its own actions beside its bubble", async ({
+  page,
+}) => {
+  const mock = createQueueMock(
+    ["U2: Also check the retry path.", "U3: And rebase on beta first."],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  mock.rows.forEach((row) => (row.delivery = "steer"))
+  await openQueue(page, mock)
+  const first = userRow(page, mock.rows[0].id)
+  const last = userRow(page, mock.rows[1].id)
+  await expect(last).toContainText("U3: And rebase on beta first.")
+  await expect(first.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
+
+  // The run's last steer carries the one Pending line; the first folds its line away.
+  await expect(last.locator('[data-slot="user-message-meta"]')).toContainText("Pending", { useInnerText: true })
+  await expect(first.locator('[data-slot="user-message-meta"]')).toBeHidden()
+
+  await first.locator('[data-slot="user-message-text"]').hover()
+  await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
+  await first.getByRole("button", { name: "Move to queue" }).click()
+  await expect.poll(() => mock.changes).toEqual([{ inboxID: mock.rows[0].id, action: "queue" }])
+})
 
 test("/undo returns a pending steer's review comment to the composer", async ({ page }) => {
   const display = "tighten this"
@@ -955,8 +1149,8 @@ for (const delivery of ["steer", "queue"] as const) {
               })),
             pending: await bubble.evaluate((element) => {
               const probe = document.createElement("span")
-              probe.style.backgroundColor = "var(--v2-background-bg-layer-02)"
-              probe.style.color = "var(--v2-text-text-base)"
+              probe.style.backgroundColor = "var(--v2-background-bg-layer-01)"
+              probe.style.color = "var(--v2-text-text-muted)"
               element.appendChild(probe)
 
               const colors = {
@@ -972,12 +1166,15 @@ for (const delivery of ["steer", "queue"] as const) {
         : undefined
 
     if (colors) {
+      // A pending steer is grey, switches to it without a transition, and keeps its Pending row in view without hover.
       await expect(bubble).toHaveCSS("background-color", colors.pending.background)
       await expect(bubble).toHaveCSS("color", colors.pending.text)
-      await pending.hover()
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
-        /^Pending\s*·\s*Build\s*·\s*Queue Model$/,
-      )
+      await expect(bubble).toHaveCSS("transition-duration", "0s")
+      await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
+      // Pending stands in for the time of a steer that has not been sent.
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/, {
+        useInnerText: true,
+      })
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 
@@ -1059,9 +1256,12 @@ for (const delivery of ["steer", "queue"] as const) {
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Build\s*·\s*Queue Model$/)
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model\s*·\s*Just now$/, {
+        useInnerText: true,
+      })
       await expect(bubble).toHaveCSS("background-color", colors.delivered.background)
       await expect(bubble).toHaveCSS("color", colors.delivered.text)
+      // Only delivery animates the colour; reduced motion switches instantly.
       await expect(bubble).toHaveCSS("transition-property", "background-color, color")
       await transcript.screenshot({ path: testInfo.outputPath("delivered-steer.png") })
       await page.emulateMedia({ reducedMotion: "reduce" })
@@ -1092,3 +1292,105 @@ for (const delivery of ["steer", "queue"] as const) {
     ])
   })
 }
+
+test("a steer moves a blocking shell to the background after its admission, so the next step reads it", async ({
+  page,
+}, testInfo) => {
+  const model = { id: "alpha", providerID: "opencode" }
+  const assistantID = "msg_steer_background_assistant"
+  const shell = { sessionID, assistantMessageID: assistantID, id: "prt_steer_background_shell" }
+  const steer = "Skip the slow suites and run only the queue tests."
+
+  const mock = createQueueMock(
+    [],
+    [
+      {
+        id: "msg_steer_background_user",
+        type: "user",
+        text: "Run the full test suite.",
+        time: { created: 1700000000000 },
+      },
+      {
+        id: assistantID,
+        type: "assistant",
+        agent: "build",
+        model,
+        content: [
+          {
+            type: "tool",
+            id: shell.id,
+            name: "shell",
+            state: {
+              status: "running",
+              input: { command: "bun test --timeout 600000", description: "Run the full test suite" },
+              metadata: { shellID: "sh_steer_background" },
+            },
+            time: { created: 1700000000002 },
+          },
+        ],
+        time: { created: 1700000000001 },
+      },
+    ],
+  )
+
+  // The command is live from its start; its blocking call keeps it out of the background until the move.
+  mock.shells.push({
+    id: "sh_steer_background",
+    status: "running",
+    command: "bun test --timeout 600000",
+    cwd: "C:/OpenCode/SessionQueueRegression",
+    shell: "bash",
+    file: "/tmp/steer-background.out",
+    metadata: { sessionID },
+    time: { started: 1700000000002 },
+  })
+  const view = await openQueue(page, mock, "steer", undefined, "running", { id: "alpha", name: "Alpha" })
+  const transcript = page.locator("[data-timeline-virtual-content]")
+  const hint = page.getByRole("button", { name: /move running work to the background/i })
+  await expect(hint).toBeVisible()
+  await transcript.screenshot({ path: testInfo.outputPath("before-steer.png") })
+
+  await view.input.fill(steer)
+  await view.input.press("Enter")
+  // Admission comes first: the steer already waits in the inbox when the moved shell ends the step.
+  await expect.poll(() => mock.log).toEqual(["prompt:steer", "background"])
+
+  const inboxID = mock.rows[0].id
+  const pending = transcript.locator(`[data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`)
+  await expect(pending.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
+
+  // As the server does, the moved shell's call completes while the command keeps running.
+  mock.emit("session.tool.success", {
+    ...shell,
+    content: [{ type: "text", text: "Command moved to the background (shell ID: sh_steer_background)." }],
+    metadata: { status: "running", shellID: "sh_steer_background" },
+    executed: true,
+  })
+  await expect(hint).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "1 shell", exact: true })).toBeVisible()
+  await transcript.screenshot({ path: testInfo.outputPath("moved-to-background.png") })
+
+  mock.emit("session.step.ended", {
+    sessionID,
+    assistantMessageID: assistantID,
+    finish: "tool-calls",
+    cost: 0,
+    tokens: { input: 100, output: 20, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+  mock.rows.splice(0, 1)
+  mock.emit("session.inbox.delivered", { sessionID, inboxID })
+
+  const next = { sessionID, assistantMessageID: "msg_steer_background_next" }
+  mock.emit("session.step.started", { ...next, agent: "build", model, started: Date.now() })
+  mock.emit("session.text.started", { ...next, ordinal: 0 })
+  mock.emit("session.text.ended", { ...next, ordinal: 0, text: "Running only the queue tests now." })
+
+  const response = transcript
+    .locator('[data-timeline-row="AssistantPart"]')
+    .filter({ hasText: "Running only the queue tests now." })
+
+  await expect(response).toHaveAttribute("data-message-id", inboxID)
+  await expect(pending.locator('[data-component="user-message"]')).not.toHaveAttribute("data-pending", "true")
+  expect(mock.log).toEqual(["prompt:steer", "background"])
+  await transcript.screenshot({ path: testInfo.outputPath("steer-delivered.png") })
+})

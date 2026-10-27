@@ -36,6 +36,26 @@ const error = async (code: string) => {
 }
 
 describe("Number and Math", () => {
+  test("Number.toString truncates the radix before checking its range", async () => {
+    expect(
+      await value(`return [36.1, 36.9, "36.9", { valueOf() { return 36.9 } }].map(radix => (35).toString(radix))`),
+    ).toEqual(["z", "z", "z", "z"])
+  })
+
+  test("Number.toString keeps invalid radixes catchable as RangeError", async () => {
+    expect(
+      await value(`return [0, 1.9, 37, NaN, Infinity, -Infinity].map(radix => {
+        try { return (35).toString(radix) }
+        catch (error) { return error instanceof RangeError }
+      })`),
+    ).toEqual([true, true, true, true, true, true])
+    expect(await value(`return [(35).toString(), (35).toString(undefined), (35).toString(2.9)]`)).toEqual([
+      "35",
+      "35",
+      "100011",
+    ])
+  })
+
   test("Math.random returns a number in [0, 1)", async () => {
     expect(await value(`const n = Math.random(); return typeof n === "number" && n >= 0 && n < 1`)).toBe(true)
   })
@@ -1003,6 +1023,36 @@ describe("Set", () => {
 })
 
 describe("Uint8Array", () => {
+  test("from maps the original values with thisArg, after consuming the source", async () => {
+    expect(
+      await value(`
+        const events = []
+        function* source() {
+          events.push("start")
+          yield 300
+          events.push("end")
+        }
+        return [
+          [...Uint8Array.from([300, 2], (value, index) => value / 2 + index)],
+          [...Uint8Array.from(new Uint8Array([2, 3]), (value, index) => value + 255 + index)],
+          [...Uint8Array.from([1, 2], function (value, index) { return value + index + this.offset }, { offset: 5 })],
+          [...Uint8Array.from(atob("aGk="), (c) => c.charCodeAt(0))],
+          [...Uint8Array.from([300, 2], undefined)],
+          [...Uint8Array.from(source(), (value) => { events.push("map"); return value })],
+          events,
+        ]
+      `),
+    ).toEqual([[150, 2], [1, 3], [6, 8], [104, 105], [44, 2], [44], ["start", "end", "map"]])
+  })
+
+  test("from rejects a non-callable mapper even for an empty source", async () => {
+    for (const mapper of ["42", "null", "{}"]) {
+      expect((await error(`return Uint8Array.from([], ${mapper}).length`)).message).toContain(
+        "TypeError: Uint8Array.from expects a function callback",
+      )
+    }
+  })
+
   test("constructs from a length, an array, an iterable, or another Uint8Array", async () => {
     expect(
       await value(`
@@ -1927,6 +1977,30 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
 })
 
 describe("Uint8Array callback methods", () => {
+  test.each(["'1'", "true", "false", "null", "{}", "undefined", "NaN"])(
+    "typed-array searches do not coerce %s into a byte",
+    async (search) => {
+      expect(
+        await value(`
+          const bytes = new Uint8Array([0, 1, 2, 1])
+          return [bytes.indexOf(${search}), bytes.lastIndexOf(${search}), bytes.includes(${search})]
+        `),
+      ).toEqual([-1, -1, false])
+    },
+  )
+
+  test("typed-array searches keep numeric matching and start-index coercion", async () => {
+    expect(
+      await value(`
+        const bytes = new Uint8Array([0, 1, 2, 1])
+        return [
+          bytes.indexOf(1, "2"), bytes.lastIndexOf(1, "2"), bytes.includes(2, "3"),
+          bytes.indexOf(-0), bytes.includes(257), bytes.indexOf(1, -1)
+        ]
+      `),
+    ).toEqual([3, 1, false, 0, false, 3])
+  })
+
   test("map and filter return new Uint8Arrays with clamped bytes", async () => {
     expect(
       await value(`

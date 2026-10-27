@@ -14,7 +14,7 @@ OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -34,7 +34,7 @@ Konfiguracijski fajlovi se **spajaju**, ne zamjenjuju.
 
 Konfiguracijski fajlovi se spajaju, ne zamjenjuju. Kombiniraju se postavke sa sljedećih konfiguracijskih lokacija. Kasnije konfiguracije poništavaju prethodne samo za konfliktne ključeve. Nekonfliktne postavke iz svih konfiguracija su sačuvane.
 
-Na primjer, ako vaša globalna konfiguracija postavlja `autoupdate: true`, a vaša projektna konfiguracija postavlja `model: "anthropic/claude-sonnet-4-5"`, konačna konfiguracija će uključivati ​​obje postavke.
+Na primjer, ako vaša globalna konfiguracija postavlja `autoupdate: true`, a vaša projektna konfiguracija postavlja `model: "anthropic/claude-sonnet-5-5"`, konačna konfiguracija će uključivati ​​obje postavke.
 
 ---
 
@@ -216,7 +216,7 @@ Možete upravljati alatima koje LLM može koristiti putem opcije `tools`.
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": false,
-    "shell": false
+    "bash": false
   }
 }
 ```
@@ -233,8 +233,8 @@ Možete konfigurirati dobavljače i modele koje želite koristiti u svojoj OpenC
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -323,7 +323,7 @@ Možete konfigurirati specijalizirane agente za određene zadatke putem opcije `
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -368,7 +368,7 @@ Možete konfigurirati prilagođene naredbe za ponavljanje zadataka putem opcije 
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -443,14 +443,14 @@ Možete konfigurirati formatere koda putem opcije `formatter`.
 
 Prema zadanim postavkama, OpenCode **dopušta sve operacije** bez potrebe za eksplicitnim dopuštenjem. Ovo možete promijeniti koristeći opciju `permission`.
 
-Na primjer, da osigurate da alati `edit` i `shell` zahtijevaju odobrenje korisnika:
+Na primjer, da osigurate da alati `edit` i `bash` zahtijevaju odobrenje korisnika:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "ask",
-    "shell": "ask"
+    "bash": "ask"
   }
 }
 ```

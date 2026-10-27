@@ -3,7 +3,7 @@ title: 自訂工具
 description: 建立 LLM 可在 OpenCode 中呼叫的工具。
 ---
 
-自訂工具是您建立的函式，LLM 可以在對話過程中呼叫它們。它們與 OpenCode 的[內建工具](/docs/tools)（如 `read`、`write` 和 `shell`）協同工作。
+自訂工具是您建立的函式，LLM 可以在對話過程中呼叫它們。它們與 OpenCode 的[內建工具](/docs/tools)（如 `read`、`write` 和 `bash`）協同工作。
 
 ---
 
@@ -83,13 +83,13 @@ export const multiply = tool({
 
 自訂工具以工具名稱作為鍵值。如果自訂工具使用與內建工具相同的名稱，則自訂工具具有優先權。
 
-例如，此檔案將替換內建的 `shell` 工具：
+例如，此檔案將替換內建的 `bash` 工具：
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },

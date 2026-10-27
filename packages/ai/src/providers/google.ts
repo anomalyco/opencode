@@ -3,7 +3,7 @@ import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { GoogleImages } from "../protocols/google-images.js"
@@ -60,7 +60,8 @@ export const configure = (input: Config = {}) => {
     model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
     interactions: (modelID: string | ModelID) =>
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
-    image: (modelID: string | ModelID) => GoogleImages.model({ ...media, id: modelID }),
+    image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      GoogleImages.model({ ...media, id: modelID, providerOptions }),
     video: (modelID: string | ModelID) => GoogleVideo.model({ ...media, id: modelID }),
     speech: (modelID: string | ModelID) => GoogleSpeech.model({ ...media, id: modelID }),
     transcription: (modelID: string | ModelID) => GoogleTranscription.model({ ...media, id: modelID }),
@@ -69,17 +70,22 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
+export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (modelID, settings) =>
+  configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  }
+}
 
 export const image = provider.image
 export const interactions = provider.interactions

@@ -1,9 +1,33 @@
-import type { SessionInfo, SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
+import type {
+  JsonValue,
+  SessionInfo,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  ShellInfo,
+} from "@opencode/client/promise"
+import { Option, Schema } from "effect"
 import { createMemo } from "solid-js"
 
+// `started` is when the work began running: the latest call's run time, the child session's creation, or the shell's
+// start. A subagent's `partID` names the call that still blocks the run.
+type Subagent = {
+  id: string
+  type: "subagent"
+  sessionID: string | undefined
+  partID: string | undefined
+  label: string | undefined
+  agent?: string
+  started: number
+}
+
 type Task =
-  | { id: string; type: "subagent"; label: string; agent?: string }
-  | { id: string; type: "shell"; label: string }
+  | (Omit<Subagent, "label"> & { label: string })
+  | { id: string; type: "shell"; label: string; started: number }
+
+const decodeString = Schema.decodeUnknownOption(Schema.String)
+
+// Tool input and metadata are open JSON, so a field of the wrong type reads as absent.
+const text = (value: JsonValue | undefined) => Option.getOrUndefined(decodeString(value))
 
 export function createSessionBackground(input: {
   sessionID: () => string | undefined
@@ -13,56 +37,21 @@ export function createSessionBackground(input: {
   shells: () => ShellInfo[]
 }) {
   const history = createMemo(() => {
-    const completed = new Set<string>()
-    const subagents: { id: string; type: "subagent"; label: string; agent: string | undefined }[] = []
-    const shells: { partID: string; task: { id: string; type: "shell"; label: string } }[] = []
+    // The latest call for each child names it; calls never decide whether it still runs.
+    const calls = new Map<string, { label: string | undefined; agent: string | undefined; started: number }>()
     const id = input.sessionID()
 
     const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
-      if (message.type === "synthetic") {
-        if (message.metadata?.source === "subagent" && typeof message.metadata.childID === "string")
-          completed.add(message.metadata.childID)
-
-        if (message.metadata?.source === "shell") {
-          if (typeof message.metadata.shellID === "string") completed.add(message.metadata.shellID)
-
-          if (typeof message.metadata.jobID === "string") completed.add(message.metadata.jobID)
-        }
-
-        return latest
-      }
-
       if (message.type !== "assistant") return latest
       message.content.forEach((part) => {
-        if (part.type !== "tool" || (part.name !== "subagent" && part.name !== "shell")) return
+        if (part.type !== "tool" || part.name !== "subagent" || part.state.status === "streaming") return
+        const sessionID = text(part.state.metadata?.sessionID)
 
-        if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return
-
-        if (part.name === "subagent") {
-          const sessionID = part.state.metadata.sessionID
-
-          if (typeof sessionID !== "string") return
-          const description = part.state.input.description
-          const agent = part.state.input.agent
-          subagents.push({
-            id: sessionID,
-            type: "subagent",
-            label: typeof description === "string" ? description : sessionID,
-            agent: typeof agent === "string" ? agent : undefined,
-          })
-
-          return
-        }
-
-        const shellID = part.state.metadata.shellID
-        const command = part.state.input.command
-        shells.push({
-          partID: part.id,
-          task: {
-            id: typeof shellID === "string" ? shellID : part.id,
-            type: "shell",
-            label: typeof command === "string" ? command : part.id,
-          },
+        if (!sessionID) return
+        calls.set(sessionID, {
+          label: text(part.state.input.description),
+          agent: text(part.state.input.agent),
+          started: part.time.ran ?? part.time.created,
         })
       })
 
@@ -70,25 +59,22 @@ export function createSessionBackground(input: {
     }, undefined)
 
     return {
-      // Completion notices can identify the shell or its original tool call.
-      subagents: subagents.filter((task) => !completed.has(task.id)),
-      shells: shells
-        .filter((item) => !completed.has(item.partID) && !completed.has(item.task.id))
-        .map((item) => item.task),
+      calls,
       blocking:
         assistant?.content.flatMap((part) => {
           if (part.type !== "tool" || part.state.status !== "running") return []
 
           if (part.name !== "shell" && part.name !== "subagent") return []
-          const value = part.name === "shell" ? part.state.metadata.shellID : part.state.metadata.sessionID
-          const label = part.name === "shell" ? part.state.input.command : part.state.input.description
+          const shell = part.name === "shell"
 
           return [
             {
-              type: part.name as "shell" | "subagent",
+              type: shell ? ("shell" as const) : ("subagent" as const),
               partID: part.id,
-              id: typeof value === "string" ? value : undefined,
-              label: typeof label === "string" ? label : undefined,
+              id: text(shell ? part.state.metadata.shellID : part.state.metadata.sessionID),
+              label: text(shell ? part.state.input.command : part.state.input.description),
+              agent: shell ? undefined : text(part.state.input.agent),
+              started: part.time.ran ?? part.time.created,
             },
           ]
         }) ?? [],
@@ -97,28 +83,81 @@ export function createSessionBackground(input: {
 
   const blocking = createMemo(() => history().blocking)
 
-  const tasks = createMemo(() => {
+  // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. A blocking call
+  // stands in only until its child session is known.
+  const subagents = createMemo(() => {
+    const id = input.sessionID()
+
+    if (!id) return []
+    const current = history()
+    const sessions = input.sessions()
+    const parents = new Map(sessions.map((info) => [info.id, info.parentID]))
+
+    const descends = (sessionID: string) => {
+      const seen = new Set<string>()
+      let parentID = parents.get(sessionID)
+
+      while (parentID && !seen.has(parentID)) {
+        if (parentID === id) return true
+        seen.add(parentID)
+        parentID = parents.get(parentID)
+      }
+
+      return false
+    }
+
+    // A call names its child once the child exists; until the call reports it, the child's title is its description.
+    const calls = current.blocking.flatMap((item) => (item.type === "subagent" ? [item] : []))
+
+    const child = (item: (typeof calls)[number], info: SessionInfo) =>
+      item.id ? info.id === item.id : !!item.label && info.parentID === id && info.title === item.label
+
+    const running = sessions.flatMap((info): Subagent[] => {
+      if (input.status(info.id) !== "running" || !descends(info.id)) return []
+      const latest = current.calls.get(info.id)
+
+      return [
+        {
+          id: info.id,
+          type: "subagent",
+          sessionID: info.id,
+          partID: calls.find((item) => child(item, info))?.partID,
+          label: latest?.label ?? info.title ?? info.id,
+          agent: latest?.agent,
+          started: latest?.started ?? info.time.created,
+        },
+      ]
+    })
+
+    const pending = calls.flatMap((item): Subagent[] =>
+      sessions.some((info) => child(item, info))
+        ? []
+        : [
+            {
+              id: item.id ?? item.partID,
+              type: "subagent",
+              sessionID: item.id,
+              partID: item.partID,
+              label: item.label,
+              agent: item.agent,
+              started: item.started,
+            },
+          ],
+    )
+
+    // Work that blocks the run comes before work already in the background.
+    return [...pending, ...running.filter((task) => task.partID), ...running.filter((task) => !task.partID)]
+  })
+
+  // Background work: running subagents whose call no longer blocks the run, and the session's live shells outside
+  // its blocking calls.
+  const tasks = createMemo((): Task[] => {
     const id = input.sessionID()
 
     if (!id) return []
     const current = history()
 
-    const active = input.sessions().flatMap((info) => {
-      if (info?.parentID !== id) return []
-
-      if (input.status(info.id) === "idle") return []
-
-      if (
-        current.blocking.some(
-          (item) => item.type === "subagent" && (item.id === info.id || (!!item.label && info.title === item.label)),
-        )
-      )
-        return []
-
-      return [{ id: info.id, type: "subagent" as const, label: info.title ?? info.id }]
-    })
-
-    const running = input.shells().flatMap((shell) => {
+    const shells = input.shells().flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
 
       if (
@@ -128,15 +167,14 @@ export function createSessionBackground(input: {
       )
         return []
 
-      return [{ id: shell.id, type: "shell" as const, label: shell.command }]
+      return [{ id: shell.id, type: "shell" as const, label: shell.command, started: shell.time.started }]
     })
 
     return [
-      ...new Map<string, Task>(
-        [...current.subagents, ...active, ...current.shells, ...running].map((task) => [task.id, task]),
-      ).values(),
+      ...subagents().flatMap((task) => (task.partID ? [] : [{ ...task, label: task.label ?? task.id }])),
+      ...shells,
     ]
   })
 
-  return { blocking, tasks }
+  return { blocking, subagents, tasks }
 }

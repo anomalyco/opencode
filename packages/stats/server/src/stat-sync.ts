@@ -3,6 +3,7 @@ import { ModelStatRepo } from "@opencode/stats-core/domain/model"
 import { R2Sql } from "@opencode/stats-core/r2-sql"
 import { layer as statsLayer } from "@opencode/stats-core/runtime"
 import { syncStats } from "@opencode/stats-core/stat-sync"
+import { syncRange } from "@opencode/stats-core/sync-range"
 import { Cause, Duration, Effect, Layer, Schedule } from "effect"
 
 const SYNC_INTERVAL = "1 hour"
@@ -14,38 +15,51 @@ const daemon = Effect.gen(function* () {
   yield* Effect.logInfo("stats sync daemon started")
   yield* initialDelay()
 
-  // One full pass per UTC day (including the first pass after boot) refreshes the
-  // whole display window; every other pass only recomputes the current ISO week.
-  let lastFullDay = ""
-  const pass = Effect.gen(function* () {
-    const today = new Date().toISOString().slice(0, 10)
-    if (lastFullDay !== today) {
-      const completed = yield* syncStats({ full: true }).pipe(
-        Effect.as(true),
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`full stats sync failed; falling back to incremental sync ${Cause.pretty(cause)}`).pipe(
-            Effect.as(false),
-          ),
-        ),
-      )
-      lastFullDay = today
-      if (completed) return
-    }
-    yield* syncStats({ full: false })
-  }).pipe(
+  // Every pass recomputes the current ISO week. Once per UTC day, including after
+  // boot, it also starts a history pass for the rest of the display window. That
+  // pass takes over an hour, so it runs in the background instead of holding back
+  // the next hourly pass.
+  let lastHistoryDay = ""
+  let historyRunning = false
+  const history = syncStats({ history: true }).pipe(
     Effect.catchCause((cause) =>
+      Effect.logWarning(`stats history sync failed ${JSON.stringify({ cause: Cause.pretty(cause) })}`),
+    ),
+    Effect.ensuring(
+      Effect.sync(() => {
+        historyRunning = false
+      }),
+    ),
+  )
+  const pass = Effect.gen(function* () {
+    yield* syncStats()
+    const today = new Date().toISOString().slice(0, 10)
+    // A history pass still running past midnight defers the next day's until it ends.
+    if (lastHistoryDay === today || historyRunning) return
+    lastHistoryDay = today
+    historyRunning = true
+    yield* Effect.forkChild(history)
+  }).pipe(
+    Effect.tapCause((cause) =>
       Effect.logWarning(`stats sync failed ${JSON.stringify({ cause: Cause.pretty(cause) })}`),
     ),
+    // Without a retry, one transient R2 SQL failure leaves the site stale until the
+    // next hourly pass. Two retries cap the extra query spend per interval.
+    Effect.retry({ times: 2, schedule: Schedule.spaced("10 minutes") }),
+    Effect.ignoreCause,
   )
   yield* pass.pipe(Effect.repeat(Schedule.fixed(SYNC_INTERVAL)))
 }).pipe(Effect.forkScoped)
 
 // A restarted daemon must not immediately re-run the R2 SQL pass; resume the
 // hourly cadence from the last completed sync instead. This caps the query spend
-// of a crash loop at one pass per interval.
+// of a crash loop at one pass per interval. Only hourly passes write the current
+// week, so a history pass that rewrote older periods cannot push this back.
 const initialDelay = Effect.fnUntraced(function* () {
   const modelStats = yield* ModelStatRepo
-  const lastSynced = yield* modelStats.lastSyncedAt().pipe(Effect.catchCause(() => Effect.succeed(null)))
+  const lastSynced = yield* modelStats
+    .lastSyncedAt(syncRange(new Date()).periodStart)
+    .pipe(Effect.catchCause(() => Effect.succeed(null)))
   if (!lastSynced) return
   const delayMs = Math.min(SYNC_INTERVAL_MS - (Date.now() - lastSynced.getTime()), SYNC_INTERVAL_MS)
   if (delayMs <= 0) return

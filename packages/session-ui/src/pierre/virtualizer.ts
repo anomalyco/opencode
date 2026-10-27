@@ -13,6 +13,10 @@ type Entry = {
 
 const cache = new WeakMap<Document | HTMLElement, Entry>()
 
+// Pierre keeps the viewport plus 1,000px of overscan on each side (about 100 rows) mounted; measured, windowing
+// breaks even on main-thread render time near 200 lines and wins on DOM size and render time beyond it.
+export const virtualizeLineThreshold = 200
+
 export const virtualMetrics: Partial<VirtualFileMetrics> = {
   lineHeight: 24,
   hunkSeparatorHeight: 24,

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"

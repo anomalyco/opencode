@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClientRequest } from "effect/http"
-import { Media, Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/index.js"
+import { Media, Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/effect.js"
 import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
@@ -612,13 +612,7 @@ describe("Transcription", () => {
 
       expect(truncated.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
       expect(partial.text).toBe("Hello")
-      expect(partial.notices).toEqual([
-        {
-          type: "other",
-          message: "Google Transcription finished with MAX_TOKENS",
-          providerMetadata: { google: { finishReason: "MAX_TOKENS" } },
-        },
-      ])
+      expect(partial.providerMetadata?.google).toMatchObject({ finishReason: "MAX_TOKENS" })
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
     }),
   )

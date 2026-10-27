@@ -241,7 +241,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(немає відповіді)",
   "ui.question.review.notAnswered": "(не відповіли)",
   "ui.question.multiHint": "Виберіть усі відповідні варіанти",
-  "ui.question.singleHint": "Виберіть одну відповідь",
   "ui.question.custom.placeholder": "Введіть свою відповідь…",
   "ui.messagePart.context.match.one": "({{count}} збіг)",
   "ui.messagePart.context.match.other": "({{count}} збігу)",
