@@ -59,10 +59,30 @@ function normalizeKey(key: string) {
   return key.toLowerCase()
 }
 
+// macOS composes Option + punctuation into a different character, so the physical key has to be
+// recovered for those keys too. Values are the key names used in keybind strings.
+const ALT_PUNCTUATION: Record<string, string> = {
+  Backquote: "`",
+  Minus: "-",
+  Equal: "=",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Backslash: "\\",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+}
+
 export function keyFromKeyboardEvent(event: KeyboardEvent) {
   const key = normalizeKey(bracketKey(event))
 
   if (!event.altKey || /^[a-z0-9]$/.test(key)) return key
+
+  const punctuation = ALT_PUNCTUATION[event.code]
+
+  if (punctuation !== undefined) return normalizeKey(punctuation)
 
   if (!event.code.startsWith("Key") || event.code.length !== 4) return key
 
