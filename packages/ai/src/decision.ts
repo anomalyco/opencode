@@ -177,6 +177,8 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
   readonly route: DecisionModelRoute<Options>
   readonly http?: HttpOptions
   readonly compatibility?: DecisionModelCompatibility
+  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
+  readonly providerOptions?: ProviderOptions
 
   constructor(input: DecisionModel.Input<Options>) {
     this.id = input.id
@@ -184,6 +186,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
     this.route = input.route
     this.http = input.http
     this.compatibility = input.compatibility
+    this.providerOptions = input.providerOptions
   }
 
   static make<Options extends DecisionOptions = DecisionOptions>(input: DecisionModel.MakeInput<Options>) {
@@ -202,6 +205,7 @@ export namespace DecisionModel {
     readonly route: DecisionModelRoute<Options>
     readonly http?: HttpOptions
     readonly compatibility?: DecisionModelCompatibility
+    readonly providerOptions?: ProviderOptions
   }
 
   export interface MakeInput<Options extends DecisionOptions = DecisionOptions>

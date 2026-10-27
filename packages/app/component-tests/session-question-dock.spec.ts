@@ -1,5 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
 import type { Locator } from "@playwright/test"
+import type { MotionKnob } from "@opencode/ui/motion-tuning"
+import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 story("resizes the dock to fit different answer counts", async ({ mount }) => {
   const component = await mount("app-current-session-surface--question-answer-counts")
@@ -638,6 +639,42 @@ story.describe("with the question dock's motion on", () => {
     expect(leave.some((frame) => frame.hit)).toBe(false)
     expect(leave.at(-1)).toMatchObject({ next: 1, submit: 0, footer: false })
     await expect(back).toHaveAttribute("inert", "")
+  })
+
+  story("stops a switch where it is when the knob turns off", async ({ mount }) => {
+    const component = await mount("session-question-switch--question-series")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    await expect(question.getByRole("radio").first()).toBeFocused()
+
+    const frames = await question.evaluate(
+      async (root, tuning) => {
+        const { motionTuning } = await import(tuning)
+        const knob = motionTuning.list().find((item: MotionKnob) => item.id === "question.motion")
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+        const sample = () => ({
+          animations: document.getAnimations().length,
+          heights: [...root.querySelectorAll<HTMLElement>("*")].filter((el) => el.style.height).length,
+          ghosts: root.querySelectorAll("[data-ghost]").length,
+        })
+
+        document.activeElement!.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
+        )
+        await frame()
+        await frame()
+        const moving = sample()
+        motionTuning.set(knob, false)
+        await frame()
+        await frame()
+
+        return { moving, after: sample() }
+      },
+      sourceURL(new URL("../../ui/src/motion-tuning.ts", import.meta.url)),
+    )
+
+    expect(frames.moving.heights + frames.moving.ghosts).toBeGreaterThan(0)
+    expect(frames.after).toEqual({ animations: 0, heights: 0, ghosts: 0 })
   })
 })
 
