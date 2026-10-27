@@ -169,6 +169,48 @@ describe("Image", () => {
     }),
   )
 
+  describe("OpenAI-style url results", () => {
+    const generate = (data: unknown) =>
+      Image.generate({
+        model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("dall-e-3"),
+        prompt: "A lighthouse",
+      }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { data })))))
+
+    it.effect("keeps an http url as a URL asset", () =>
+      Effect.gen(function* () {
+        const response = yield* generate([{ url: "https://cdn.image.test/result.png" }])
+        expect(response.image.source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
+      }),
+    )
+
+    it.effect("decodes a data url inline with its media type", () =>
+      Effect.gen(function* () {
+        const response = yield* generate([{ url: "data:image/png;base64,iVBORw==" }])
+        expect(response.image.source).toEqual({ type: "base64", data: "iVBORw==", mediaType: "image/png" })
+        expect(response.image.mediaType).toBe("image/png")
+      }),
+    )
+
+    it.effect("prefers b64_json when url is null", () =>
+      Effect.gen(function* () {
+        const response = yield* generate([{ b64_json: "/9j/4AAQ", url: null }])
+        expect(response.image.source).toEqual({
+          type: "bytes",
+          data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+          mediaType: "image/jpeg",
+        })
+      }),
+    )
+
+    it.effect("rejects an item with neither b64_json nor url", () =>
+      Effect.gen(function* () {
+        const error = yield* generate([{}]).pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidProviderOutput")
+        expect(error.message).toContain("has neither image data nor a URL")
+      }),
+    )
+  })
+
   it.effect("classifies an OpenAI stream moderation error event as a content policy rejection", () =>
     Effect.gen(function* () {
       const error = yield* Image.stream({

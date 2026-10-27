@@ -13,7 +13,7 @@ import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { AIError, mergeJsonRecords, ProviderID, type MediaUsage, type OpenString } from "../schema/index.js"
-import { ProviderShared } from "./shared.js"
+import { optionalNull, ProviderShared } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -64,7 +64,8 @@ const Settings = {
 }
 
 const OpenAIImageResponse = Schema.Struct({
-  data: Schema.Array(Schema.Struct({ b64_json: Schema.String })),
+  // `response_format` picks `b64_json` or `url`; DALL·E and many compatible hosts default to `url`.
+  data: Schema.Array(Schema.Struct({ b64_json: optionalNull(Schema.String), url: optionalNull(Schema.String) })),
   ...Settings,
   usage: Schema.optional(Usage),
 })
@@ -307,7 +308,7 @@ const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
   const format = decoded.output_format
   const mediaType = format === undefined ? undefined : `image/${format}`
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
-    MediaInput.decodedAsset(invalid, `${route.name} result ${index}`, item.b64_json, mediaType, {
+    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
       info: info(format, decoded.size),
     }),
   )
