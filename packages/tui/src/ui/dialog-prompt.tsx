@@ -84,6 +84,23 @@ export function DialogPrompt(props: DialogPromptProps) {
 
   Keymap.createLayer(() => ({
     mode: "modal",
+    enabled: props.busy,
+    // Busy prompts blur their input, so consume cancellation before the dialog-wide close handler.
+    priority: 1,
+    commands: [
+      {
+        bind: "ctrl+c",
+        title: "Close dialog",
+        group: "Dialog",
+        run: () => {
+          if (renderer.getSelection()) renderer.clearSelection()
+        },
+      },
+    ],
+  }))
+
+  Keymap.createLayer(() => ({
+    mode: "modal",
     enabled: props.onCancel !== undefined,
     priority: 1,
     commands: [
