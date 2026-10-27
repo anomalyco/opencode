@@ -1,0 +1,39 @@
+{
+  "name": "@opencode-ai/pty",
+  "version": "0.3.1",
+  "description": "Persistent PTY service for OpenCode",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode-pty.git"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "opencode-pty": "./bin/opencode-pty.js"
+  },
+  "files": [
+    "bin",
+    "index.d.ts",
+    "index.js"
+  ],
+  "optionalDependencies": {
+    "@opencode-ai/pty-darwin-arm64": "0.3.1",
+    "@opencode-ai/pty-darwin-x64": "0.3.1",
+    "@opencode-ai/pty-linux-arm64-gnu": "0.3.1",
+    "@opencode-ai/pty-linux-arm64-musl": "0.3.1",
+    "@opencode-ai/pty-linux-x64-gnu": "0.3.1",
+    "@opencode-ai/pty-linux-x64-musl": "0.3.1",
+    "@opencode-ai/pty-win32-arm64": "0.3.1",
+    "@opencode-ai/pty-win32-x64": "0.3.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
