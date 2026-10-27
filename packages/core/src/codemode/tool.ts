@@ -80,6 +80,8 @@ const description = [
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
+  // Approves each `fetch` the program makes; a failure denies that call and throws inside the program.
+  assertFetch: (request: ReturnType<typeof CodeModeWeb.display>, context: ToolContext) => Effect.Effect<void, unknown>,
 ) => {
   return {
     name: "execute",
@@ -115,7 +117,7 @@ export const create = (
                   const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                   return text === "" ? null : text
                 }),
-              hooks: progressHooks(record),
+              hooks: progressHooks(record, (request) => assertFetch(request, context)),
             }),
           )
         const toolCalls = yield* Ref.get(calls)
@@ -152,7 +154,10 @@ export const create = (
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+function progressHooks(
+  record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>,
+  assertFetch: (request: ReturnType<typeof CodeModeWeb.display>) => Effect.Effect<void, unknown>,
+) {
   const rows = new WeakMap<object, number>()
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
@@ -177,8 +182,14 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     // Only listed extension functions get a row; anything else stays out of the TUI.
     "extension.before": (call) => {
       switch (call.name) {
-        case "fetch":
-          return start(call, { tool: call.name, status: "running", input: CodeModeWeb.display(call.args) })
+        case "fetch": {
+          const request = CodeModeWeb.display(call.args)
+          // A failing before hook skips the after hook, so settle the row here when the fetch is denied.
+          return start(call, { tool: call.name, status: "running", input: request }).pipe(
+            Effect.andThen(assertFetch(request)),
+            Effect.tapError((error) => settle(call, { status: "failure", error })),
+          )
+        }
         default:
           return Effect.void
       }

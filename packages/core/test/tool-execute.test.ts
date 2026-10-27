@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Image } from "@opencode/core/image"
+import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
@@ -7,6 +10,10 @@ import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
 import { Effect, Schema } from "effect"
+import { testEffect } from "./lib/effect"
+import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
+import { executeTool, toolIdentity } from "./lib/tool"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -17,7 +24,31 @@ const context = {
 }
 
 const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context))
+  CodeModeTool.create(
+    { tools },
+    (_, tool, input, context) => execute(tool, input, context),
+    () => Effect.void,
+  )
+
+const assertions: Permission.AssertInput[] = []
+let rules: Permission.Ruleset = []
+const registry = testEffect(
+  AppNodeBuilder.build(Tool.node, [
+    Permission.node.replace(
+      permissionLayer({
+        assert: (input) =>
+          Effect.sync(() => assertions.push(input)).pipe(
+            Effect.andThen(
+              input.resources.some((resource) => Permission.evaluate(input.action, resource, rules).effect === "deny")
+                ? new Permission.BlockedError({ rules, permission: input.action, resources: input.resources })
+                : Effect.void,
+            ),
+          ),
+      }),
+    ),
+    Image.node.replace(imagePassthrough),
+  ]),
+)
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -40,6 +71,52 @@ test("execute rejects filesystem fetches", async () => {
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
 })
+
+registry.live("execute asks the webfetch permission for each fetch and throws when it is denied", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() => Bun.serve({ port: 0, fetch: () => new Response("fetched") })),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+    const allowed = new URL("/allowed", server.url).href
+    const denied = new URL("/denied", server.url).href
+    assertions.length = 0
+    rules = [
+      { action: "webfetch", resource: "*", effect: "allow" },
+      { action: "webfetch", resource: denied, effect: "deny" },
+    ]
+    const tools = yield* Tool.Service
+    const run = (url: string) =>
+      executeTool(tools, {
+        sessionID: context.sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: `call_${url}`,
+          name: "execute",
+          input: { code: `return await (await fetch(${JSON.stringify(url)}, { method: "post" })).text()` },
+        },
+      })
+
+    const ok = yield* run(allowed)
+    expect(ok.output.output).toBe("fetched")
+    expect(ok.metadata).toEqual({
+      toolCalls: [{ tool: "fetch", status: "completed", input: { method: "POST", url: allowed } }],
+    })
+
+    const blocked = yield* run(denied)
+    expect(blocked.output.error).toBe(true)
+    expect(blocked.output.output).toContain("Permission denied: webfetch")
+    expect(blocked.metadata).toEqual({
+      error: true,
+      toolCalls: [{ tool: "fetch", status: "error", input: { method: "POST", url: denied } }],
+    })
+    expect(assertions.map((input) => ({ action: input.action, resources: input.resources }))).toEqual([
+      { action: "webfetch", resources: [allowed] },
+      { action: "webfetch", resources: [denied] },
+    ])
+  }),
+)
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
   const declared: Info = {
@@ -177,10 +254,18 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
-  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context))
+  const codeMode = CodeModeTool.create(
+    inventory,
+    (_, tool, input, context) => execute(tool, input, context),
+    () => Effect.void,
+  )
   const run = (id: string) => {
     const progress: Array<Tool.Metadata> = []
-    return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context))
+    return CodeModeTool.create(
+      inventory,
+      (_, tool, input, context) => execute(tool, input, context),
+      () => Effect.void,
+    )
       .execute(
         { code: `return await tools.echo({ value: "${id}" })` },
         { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
