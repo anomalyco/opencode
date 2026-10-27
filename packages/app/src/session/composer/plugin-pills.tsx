@@ -1,6 +1,8 @@
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
-import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { Popover } from "@kobalte/core/popover"
+import { createMemo, For, Match, Show, Switch, untrack, type Accessor, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   ComposerPill,
   type ComposerPillProps,
@@ -72,12 +74,12 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
   const alignment = props.alignment
   const view = createMemo(() => props.pill.show(props.input))
   const placement = () => (({ center: "top", start: "top-start", end: "top-end" }) as const)[alignment()]
+  const [state, setState] = createStore({ open: false })
 
   return (
     <Show when={view()}>
       {(current) => (
-        <Show
-          when={current().rows || current().actions}
+        <Switch
           fallback={
             <button
               type="button"
@@ -90,58 +92,93 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
             </button>
           }
         >
-          <Menu gutter={8} placement={placement()}>
-            <Menu.Trigger
-              as="button"
-              type="button"
-              data-slot="session-plugin-pill"
-              aria-label={current().title}
-              class={capsule}
-            >
-              <Content view={current()} />
-            </Menu.Trigger>
-            <Menu.Portal>
-              <Menu.Content data-slot="session-plugin-pill-menu" aria-label={current().title ?? current().label}>
-                <Menu.Group>
-                  <Menu.GroupLabel class="!h-auto max-w-80 !py-1.5">
-                    <span dir="auto" class="line-clamp-3 break-words">
-                      {current().title ?? current().label}
-                    </span>
-                  </Menu.GroupLabel>
-                  <For each={current().rows}>
-                    {(row) => (
-                      <Menu.Item
-                        data-slot="session-plugin-pill-row"
-                        disabled={!row.run}
-                        onSelect={() => row.run?.()}
-                        badge={row.detail}
-                      >
-                        <PillIcon name={row.icon} tone={row.tone} />
-                        <span dir="auto" class="min-w-0 flex-1 truncate">
-                          {row.label}
-                        </span>
-                      </Menu.Item>
+          <Match when={props.pill.menu}>
+            {(menu) => (
+              <Popover
+                open={state.open}
+                onOpenChange={(open) => setState("open", open)}
+                placement={placement()}
+                gutter={8}
+              >
+                <Popover.Trigger
+                  as="button"
+                  type="button"
+                  data-slot="session-plugin-pill"
+                  aria-label={current().title}
+                  class={capsule}
+                >
+                  <Content view={current()} />
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    data-slot="session-plugin-pill-popover"
+                    aria-label={current().title ?? current().label}
+                    class="w-80 max-w-[calc(100vw-56px)] rounded-[10px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 p-1 shadow-[var(--v2-elevation-floating)] outline-none"
+                  >
+                    <div class="px-2 pt-1 pb-1.5 text-[11px] font-[530] tracking-[0.05px] leading-[var(--line-height-tight)] text-v2-text-text-faint">
+                      <span dir="auto" class="line-clamp-3 break-words">
+                        {current().title ?? current().label}
+                      </span>
+                    </div>
+                    {/* Untracked: the content renders once per open; its own reactivity updates it in place. */}
+                    {untrack(() =>
+                      menu()({
+                        get session() {
+                          return props.input.session
+                        },
+                        get screen() {
+                          return props.input.screen
+                        },
+                        close: () => setState("open", false),
+                      }),
                     )}
-                  </For>
-                </Menu.Group>
-                <Show when={current().actions?.length}>
-                  <div data-slot="session-plugin-pill-actions" class="flex justify-end gap-1 px-1 pt-1">
-                    <For each={current().actions}>
-                      {(action) => (
-                        <Menu.Item data-slot="session-plugin-pill-action" class="!px-2" onSelect={() => action.run()}>
-                          <PillIcon name={action.icon} />
-                          <span dir="auto" class="whitespace-nowrap">
-                            {action.label}
-                          </span>
-                        </Menu.Item>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-              </Menu.Content>
-            </Menu.Portal>
-          </Menu>
-        </Show>
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover>
+            )}
+          </Match>
+          <Match when={current().rows}>
+            {(rows) => (
+              <Menu gutter={8} placement={placement()}>
+                <Menu.Trigger
+                  as="button"
+                  type="button"
+                  data-slot="session-plugin-pill"
+                  aria-label={current().title}
+                  class={capsule}
+                >
+                  <Content view={current()} />
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content data-slot="session-plugin-pill-menu" aria-label={current().title ?? current().label}>
+                    <Menu.Group>
+                      <Menu.GroupLabel class="!h-auto max-w-80 !py-1.5">
+                        <span dir="auto" class="line-clamp-3 break-words">
+                          {current().title ?? current().label}
+                        </span>
+                      </Menu.GroupLabel>
+                      <For each={rows()}>
+                        {(row) => (
+                          <Menu.Item
+                            data-slot="session-plugin-pill-row"
+                            disabled={!row.run}
+                            onSelect={() => row.run?.()}
+                            badge={row.detail}
+                          >
+                            <PillIcon name={row.icon} tone={row.tone} />
+                            <span dir="auto" class="min-w-0 flex-1 truncate">
+                              {row.label}
+                            </span>
+                          </Menu.Item>
+                        )}
+                      </For>
+                    </Menu.Group>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
+            )}
+          </Match>
+        </Switch>
       )}
     </Show>
   )

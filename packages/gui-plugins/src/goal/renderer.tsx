@@ -1,6 +1,8 @@
-import { ComposerPill, type ComposerPillAction, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
+import { ComposerPill, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
 import { SessionGoal } from "@opencode/schema/session-goal"
+import { Button } from "@opencode/ui/button"
 import { showToast } from "@opencode/ui/toast"
+import { Show } from "solid-js"
 import type Goal from "./index"
 
 const status = {
@@ -10,10 +12,18 @@ const status = {
 } as const
 
 /**
- * The session's `/goal` above its composer: the status as a pill, and a menu headed by the objective with the actions
- * that apply. The server's goal plugin keeps the goal in the session's metadata; a bare `/goal` shows the last reason.
+ * The session's `/goal` above its composer: the status as a pill, and a popover headed by the objective with the
+ * actions that apply. The server's goal plugin keeps the goal in the session's metadata; a bare `/goal` shows the last
+ * reason.
  */
 const setup: Plugin.Setup<typeof Goal> = (ctx) => {
+  // A goal copied from the parent belongs to the parent, so only the session's own goal shows.
+  const goal = (input: ComposerPillProps) => {
+    const session = input.session.server.data.session.get(input.session.id)
+
+    return session && SessionGoal.fromMetadata(session.id, session.metadata)
+  }
+
   const command = (input: ComposerPillProps, text: "pause" | "resume" | "clear") =>
     void input.session.server.client.session
       .command({ sessionID: input.session.id, name: "goal", text })
@@ -28,24 +38,37 @@ const setup: Plugin.Setup<typeof Goal> = (ctx) => {
   ctx.add(ComposerPill, {
     id: "goal",
     show: (input) => {
-      const session = input.session.server.data.session.get(input.session.id)
-      // A goal copied from the parent belongs to the parent, so only the session's own goal shows.
-      const goal = session && SessionGoal.fromMetadata(session.id, session.metadata)
+      const current = goal(input)
 
-      if (!goal) return
+      if (!current) return
 
-      const view = status[goal.status]
-      const actions: ComposerPillAction[] = []
+      const view = status[current.status]
 
-      if (goal.status === "active")
-        actions.push({ id: "pause", label: ctx.t("pause"), icon: "stop", run: () => command(input, "pause") })
+      return { label: ctx.t(view.label), icon: view.icon, tone: view.tone, title: current.objective }
+    },
+    menu: (input) => {
+      const run = (text: "pause" | "resume" | "clear") => {
+        input.close()
+        command(input, text)
+      }
 
-      if (goal.status === "paused")
-        actions.push({ id: "resume", label: ctx.t("resume"), icon: "refresh", run: () => command(input, "resume") })
-
-      actions.push({ id: "clear", label: ctx.t("clear"), icon: "outline-trash", run: () => command(input, "clear") })
-
-      return { label: ctx.t(view.label), icon: view.icon, tone: view.tone, title: goal.objective, actions }
+      return (
+        <div class="flex justify-end gap-1 px-1 pt-1">
+          <Show when={goal(input)?.status === "active"}>
+            <Button size="small" variant="ghost" icon="stop" onClick={() => run("pause")}>
+              {ctx.t("pause")}
+            </Button>
+          </Show>
+          <Show when={goal(input)?.status === "paused"}>
+            <Button size="small" variant="ghost" icon="refresh" onClick={() => run("resume")}>
+              {ctx.t("resume")}
+            </Button>
+          </Show>
+          <Button size="small" variant="ghost" icon="outline-trash" onClick={() => run("clear")}>
+            {ctx.t("clear")}
+          </Button>
+        </div>
+      )
     },
   })
 }

@@ -619,16 +619,10 @@ export interface ComposerPillRow {
   run?(): void
 }
 
-/** A button in the row at the bottom of the menu a composer pill opens. */
-export interface ComposerPillAction {
-  /** The button's id, unique within the pill. */
-  readonly id: string
-  /** The button's text. */
-  readonly label: string
-  /** The button's icon. Omit it for none. */
-  readonly icon?: IconName
-  /** Runs when the user clicks the button; the menu then closes. */
-  run(): void
+/** What a composer pill's `menu` receives: the pill's session and a way to close the popover. Do not destructure. */
+export interface ComposerPillMenuProps extends ComposerPillProps {
+  /** Closes the popover, for example after the user picks an action in it. Does nothing once it is closed. */
+  close(): void
 }
 
 /** What a composer pill shows above one session's composer. */
@@ -640,18 +634,13 @@ export interface ComposerPillView {
   /** Colors the capsule's icon. */
   readonly tone?: ComposerPillTone
   /**
-   * Accessible name, and the heading of the menu the pill opens, when it differs from `label`. The heading wraps to at
-   * most three lines, then truncates.
+   * Accessible name, and the heading of the menu or popover the pill opens, when it differs from `label`. The heading
+   * wraps to at most three lines, then truncates.
    */
   readonly title?: string
-  /** The rows of the menu the pill opens. Omit them, and `actions`, for a pill that runs `run` instead. */
+  /** The menu the pill opens. Omit it for a pill that runs `run` instead. Unused when the pill has a `menu`. */
   readonly rows?: readonly ComposerPillRow[]
-  /**
-   * Buttons in one row at the bottom of the menu the pill opens, for actions on what the pill shows, such as pause and
-   * clear. The pill opens its menu when it has rows or actions.
-   */
-  readonly actions?: readonly ComposerPillAction[]
-  /** Runs when the user clicks a pill without `rows` or `actions`. */
+  /** Runs when the user clicks a pill without `rows` or a `menu`. */
   run?(): void
 }
 
@@ -672,6 +661,16 @@ export interface ComposerPill {
    * @param input - The session and its screen. Do not destructure.
    */
   show(input: ComposerPillProps): ComposerPillView | undefined
+  /**
+   * Your content for the popover the pill opens, for a pill that needs more than `rows`, such as status text and
+   * buttons. The host owns the capsule and the popover around this content: its placement, focus, dismissal, and the
+   * heading (`title`, else `label`). When set, clicking the pill opens the popover, and the view's `rows` and `run` are
+   * unused. Renders each time the popover opens; its own reactivity updates it while open, also when another session is
+   * routed. A render that throws renders nothing and records the error.
+   *
+   * @param input - The session, its screen, and `close`. Do not destructure.
+   */
+  menu?(input: ComposerPillMenuProps): JSX.Element
 }
 
 /** The places a `Slot` renders, with the input each passes to `render`. */
