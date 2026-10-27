@@ -12,6 +12,18 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const DIRECTORY_FLAGS: Record<string, string[]> = {
+  git: ["-C", "--git-dir", "--work-tree"],
+  make: ["-C", "--directory"],
+  gmake: ["-C", "--directory"],
+  npm: ["--prefix", "-C"],
+  pnpm: ["-C", "--dir"],
+  yarn: ["--cwd"],
+  bun: ["--cwd"],
+  go: ["-C", "--C"],
+  uv: ["--directory", "--project"],
+  cargo: ["-C", "--manifest-path"],
+}
 const POWERSHELL_PATH_FLAG_RE =
   /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 
@@ -193,6 +205,14 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
               result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
+            if (!powershell)
+              result.directories.push(
+                ...flagDirectories(
+                  [tokens[0], ...node.childrenForFieldName("argument").flatMap((part) => (part ? [part.text] : []))],
+                  cwd,
+                  shell,
+                ),
+              )
             result.commands.push({
               resource: (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim(),
               save: `${prefix(tokens).join(" ")} *`,
@@ -264,6 +284,18 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
       )
       continue
     }
+    if (!powershell)
+      output.directories.push(
+        ...flagDirectories(
+          item.rawWords.map((text, index) =>
+            index > 0 && (text.startsWith("$'") || (!/[$`~\\]/.test(text) && /['"]/.test(text)))
+              ? item.words[index]
+              : text,
+          ),
+          cwd,
+          shell,
+        ),
+      )
     const selected = prefix(words.slice(0, PREFIX_LENGTH))
     const conventional = `${selected.join(" ")} *`
     const end = item.wordEnds?.[selected.length - 1]
@@ -286,6 +318,53 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   }
   return output
 })
+
+function flagDirectories(words: string[], cwd: string, shell: string) {
+  const name = words[0]
+  const flags = DIRECTORY_FLAGS[name]
+  if (!flags) return []
+
+  const make = name === "make" || name === "gmake"
+  const directories: string[] = []
+  let base = ""
+  for (let index = 1; index < words.length; index++) {
+    const text = directoryArgument(words[index], false, cwd, shell) ?? words[index]
+    // GNU make accepts no-argument short-option clusters and unique --directory abbreviations.
+    const word = make
+      ? text
+          .replace(/^-[bBdehikLmnpqrRsStvw]*C/, "-C")
+          .replace(/^--di[^=]*/, (flag) => ("--directory".startsWith(flag) ? "--directory" : flag))
+      : text
+    if (word === "--") break
+    if (!word.startsWith("-")) {
+      if (name === "git") break
+      continue
+    }
+    const flag = flags.find(
+      (flag) =>
+        word === flag || (flag.startsWith("--") || name === "go" ? word.startsWith(`${flag}=`) : word.startsWith(flag)),
+    )
+    if (!flag) {
+      // Other Git global options with separate values must not look like subcommands.
+      if (name === "git" && ["-c", "--namespace", "--config-env", "--super-prefix"].includes(word)) index++
+      continue
+    }
+    const raw = word === flag ? words[++index] : word.slice(flag.length).replace(/^=/, "")
+    if (raw === undefined) continue
+    const value = directoryArgument(raw, false, cwd, shell)
+    if (value === undefined) continue
+    const directory =
+      flag === "--manifest-path"
+        ? path.dirname(value)
+        : base && !path.isAbsolute(value)
+          ? path.join(base, value)
+          : value
+    // Git and make apply each relative directory change from the previous one.
+    if ((name === "git" && flag === "-C") || make) base = directory
+    directories.push(directory)
+  }
+  return directories
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {

@@ -444,6 +444,37 @@ describe("ShellTool scanner permissions", () => {
         }),
       ))
 
+    test(`${scanner}: git directory flags respect external-directory denial`, () =>
+      withScanner(portable, (registry, fixture) =>
+        Effect.gen(function* () {
+          const agents = yield* Agent.Service
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
+              agent.permissions = [
+                { action: "shell", resource: "*", effect: "allow" },
+                { action: "external_directory", resource: "*", effect: "deny" },
+              ]
+            }),
+          )
+          const marker = path.join(fixture.active, "marker")
+          const result = yield* runPermissionCommand(
+            registry,
+            `git -C '${fixture.outside}' status; printf reached > '${marker}'`,
+            marker,
+            [],
+          )
+          expect(result.requests).toEqual([])
+          expect(result.exit).toMatchObject({
+            _tag: "Success",
+            value: {
+              status: "error",
+              error: { message: expect.stringContaining("Permission denied: external_directory") },
+            },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+        }),
+      ))
+
     test(`${scanner}: a numeric symlink operand still reaches outside without an external-directory prompt`, () =>
       withScanner(portable, (registry, fixture) =>
         Effect.gen(function* () {

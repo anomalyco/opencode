@@ -156,6 +156,115 @@ describe("ShellParse", () => {
     })
   })
 
+  test.each([
+    ["git -C /outside status", ["/outside"], "git -C *"],
+    ["git '-C' /tmp status", ["/tmp"], "git '-C' *"],
+    ["git -C=/tmp status", ["/tmp"], "git -C=/tmp *"],
+    ["git -C a -C b status", ["a", path.join("a", "b")], "git -C *"],
+    ["git -Ca -Cb status", ["a", path.join("a", "b")], "git -Ca *"],
+    ["git -C a -C /outside status", ["a", "/outside"], "git -C *"],
+    ["git commit -C HEAD", [], "git commit *"],
+    ["git -c user.name=x -C /outside log", ["/outside"], "git -c *"],
+    [
+      "git --namespace name --config-env user.name=NAME --super-prefix prefix -C /outside log",
+      ["/outside"],
+      "git --namespace *",
+    ],
+    ["git --exec-path=/exec --list-cmds=main -C /outside log", ["/outside"], "git --exec-path=/exec *"],
+    ["git --exec-path status -C /outside", [], "git --exec-path *"],
+    ["git --git-dir /outside status", ["/outside"], "git --git-dir *"],
+    ["git --git-dir=/outside status", ["/outside"], "git --git-dir=/outside *"],
+    ["git --work-tree /outside status", ["/outside"], "git --work-tree *"],
+    ["git --work-tree=/outside status", ["/outside"], "git --work-tree=/outside *"],
+    [
+      "git -C base --git-dir repo --work-tree=tree status",
+      ["base", path.join("base", "repo"), path.join("base", "tree")],
+      "git -C *",
+    ],
+    ["make -C /outside", ["/outside"], "make -C *"],
+    ["make -C/outside", ["/outside"], "make -C/outside *"],
+    ["make -sC /tmp", ["/tmp"], "make -sC *"],
+    ["make -kC/tmp", ["/tmp"], "make -kC/tmp *"],
+    ["make -sfC/tmp", [], "make -sfC/tmp *"],
+    ["make -sjC/tmp", [], "make -sjC/tmp *"],
+    ["make --directory /outside", ["/outside"], "make --directory *"],
+    ["make --directory=/outside", ["/outside"], "make --directory=/outside *"],
+    ["make --di /tmp", ["/tmp"], "make --di *"],
+    ["make --di=/tmp", ["/tmp"], "make --di=/tmp *"],
+    ["make --director /tmp", ["/tmp"], "make --director *"],
+    ["make --director=/tmp", ["/tmp"], "make --director=/tmp *"],
+    ["make -C a --directory=b", ["a", path.join("a", "b")], "make -C *"],
+    ["gmake target -C/outside", ["/outside"], "gmake *"],
+    ["gmake -bsC/tmp", ["/tmp"], "gmake *"],
+    ["gmake --dir=/tmp", ["/tmp"], "gmake *"],
+    ["npm --prefix /outside install", ["/outside"], "npm --prefix *"],
+    ["npm install --prefix=/outside", ["/outside"], "npm install *"],
+    ["npm -C /outside install", ["/outside"], "npm -C *"],
+    ["npm -C=/tmp install", ["/tmp"], "npm -C=/tmp *"],
+    ["pnpm --dir /outside test", ["/outside"], "pnpm --dir *"],
+    ["pnpm test --dir=/outside", ["/outside"], "pnpm test *"],
+    ["pnpm -C /outside test", ["/outside"], "pnpm -C *"],
+    ["yarn --cwd /outside build", ["/outside"], "yarn --cwd *"],
+    ["yarn build --cwd=/outside", ["/outside"], "yarn build *"],
+    ["bun --cwd /outside run build", ["/outside"], "bun --cwd *"],
+    ["go -C /outside test", ["/outside"], "go -C *"],
+    ["go test -C /outside", ["/outside"], "go test *"],
+    ["go env -C /tmp GOMOD", ["/tmp"], "go env *"],
+    ["go test -C=/tmp", ["/tmp"], "go test *"],
+    ["go test --C /tmp", ["/tmp"], "go test *"],
+    ["go test --C=/tmp", ["/tmp"], "go test *"],
+    ["go test -- -C /outside", [], "go test *"],
+    ["uv --directory /outside sync", ["/outside"], "uv *"],
+    ["uv run --project=/outside python", ["/outside"], "uv *"],
+    ["cargo -C /outside build", ["/outside"], "cargo -C *"],
+    ["cargo -Z unstable-options -C /x build", ["/x"], "cargo -Z *"],
+    ["cargo +nightly -Z unstable-options -C /x build", ["/x"], "cargo +nightly *"],
+    ["cargo run -C /outside", ["/outside"], "cargo run -C *"],
+    ["cargo --manifest-path /outside/Cargo.toml build", ["/outside"], "cargo --manifest-path *"],
+    ["cargo build --manifest-path=/outside/Cargo.toml", ["/outside"], "cargo build *"],
+    ["npm run x -- --prefix /outside", [], "npm run x *"],
+    ["make -- -C /outside", [], "make -- *"],
+    ["git -C $TARGET status", [], "git -C *"],
+    ["git -C ${TARGET} status", [], "git -C *"],
+    ['git -C "$HOME/x" status', [], "git -C *"],
+    ["git -C '`pwd`/x' status", [], "git -C *"],
+    ["git -C '$(pwd)/x' status", [], "git -C *"],
+    ["git -C '/out side' status", ["/out side"], "git -C *"],
+    ['make --directory="/out side"', ["/out side"], 'make --directory="/out side" *'],
+    ["sudo git -C /outside status", [], "sudo *"],
+  ])("extracts explicit directory flags without changing shell permissions: %s", async (command, directories, save) => {
+    for (const portable of [false, true]) {
+      expect(await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).toEqual({
+        commands: [{ resource: command, save }],
+        directories,
+      })
+    }
+  })
+
+  test.each(["git 2>/dev/null -C /tmp status", "git -C 2>/dev/null /tmp status"])(
+    "portable scanning extracts directory flags across redirects: %s",
+    async (command) => {
+      expect(
+        (await Effect.runPromise(ShellParse.scanPortable(command, "/bin/bash", "/workspace"))).directories,
+      ).toEqual(["/tmp"])
+    },
+  )
+
+  test.each(["git -C $(pwd) status", "git -C `pwd` status"])(
+    "skips substituted directory flags while retaining nested shell permissions: %s",
+    async (command) => {
+      for (const portable of [false, true]) {
+        expect(await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).toEqual({
+          commands: [
+            { resource: command, save: "git -C *" },
+            { resource: "pwd", save: "pwd *" },
+          ],
+          directories: [],
+        })
+      }
+    },
+  )
+
   test("extracts PowerShell directory parameters", async () => {
     const result = await Effect.runPromise(
       ShellParse.scan("Set-Location -LiteralPath '..\\outside'; Get-ChildItem", "pwsh", "C:\\workspace"),

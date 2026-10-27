@@ -23,6 +23,12 @@ describe("ShellParse native parity", () => {
 
   test.each([
     ["/bin/bash", "git status && npm run test -- --watch"],
+    ["/bin/bash", "git -C a -C b status"],
+    ["/bin/bash", "git -c user.name=x -C '/out side' log"],
+    ["/bin/bash", "git -C $TARGET status; git -C $(pwd) status"],
+    ["/bin/bash", "git commit -C HEAD; make --directory=/outside"],
+    ["/bin/zsh", "pnpm --dir /outside test; cargo build --manifest-path=/outside/Cargo.toml"],
+    ["/bin/sh", "npm run x -- --prefix /outside; bun --cwd '/out side' run build"],
     ["/bin/bash", "git\tstatus; git status | cat; git diff || echo done"],
     ["/bin/bash", "echo \"two words\"; printf 'static text'"],
     ["/bin/bash", "aws s3 ls; docker compose up; git remote add origin; bun run test"],
