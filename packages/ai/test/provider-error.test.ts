@@ -430,8 +430,6 @@ describe("provider error classification", () => {
     const bodies = [
       '{"message":"Too many tokens, please wait before trying again."}',
       '{"message":"Too many tokens per day, please wait before trying again."}',
-      '{"message":"Token limit reached: too many tokens per minute for this model."}',
-      '{"message":"Too many tokens per second for this model."}',
     ]
     for (const body of bodies) {
       const error = new AIError({
@@ -449,6 +447,21 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
     // Plain overflow phrasing without the throttle cue still compacts.
     expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("classifies 429 token throttles as retryable rate limits, not context overflow", () => {
+    const bodies = [
+      // Cerebras, captured live
+      '{"message":"Tokens per minute limit exceeded - too many tokens processed.","type":"too_many_tokens_error","param":"quota","code":"token_quota_exceeded"}',
+      '{"message":"Token limit reached: too many tokens per minute for this model."}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({ message: providerErrorMessage(body), status: 429, rawBody: body }),
+      })
+      expect(error.reason._tag).toBe("RateLimit")
+      expect(isRetryable(error)).toBe(true)
+    }
   })
 
   test("does not infer context overflow from known throttling exceptions", () => {
