@@ -650,19 +650,10 @@ jobs:
     steps:
       - *checkout-release
       - *download-signed-cli
-      - id: token
-        name: Create token
-        if: needs.plan.outputs.dry_run != 'true'
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ vars.OPENCODE_APP_ID }}
-          private-key: ${{ secrets.OPENCODE_APP_SECRET }}
-          owner: anomalyco
-          repositories: homebrew-tap
       - name: Publish
         run: bash .github/release/publish-homebrew.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/build-archives"
         env:
-          HOMEBREW_TOKEN: ${{ steps.token.outputs.token }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
   # The AUR package installs the published npm tarballs, so it follows the npm publish.
   publish-aur:
