@@ -365,7 +365,7 @@ function NewSessionLocation(props: {
         {(directory) => (
           <div
             class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
-            style={{ "min-width": `min(calc(100% - 12px), ${Math.ceil(fitted().minimum) + 26}px)` }}
+            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 26}px)` }}
           >
             <Tooltip
               placement="top"

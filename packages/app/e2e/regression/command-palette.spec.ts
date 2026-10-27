@@ -619,18 +619,59 @@ test("keeps matching session and file results steady across keystrokes while sea
   })
 })
 
-test("keeps the same height as the number of results changes", async ({ page }) => {
-  const { dialog, input } = await openCommandPalette(page)
+test("titlebar session search shrinks with results while its field stays anchored through scrolling", async ({
+  page,
+}) => {
+  await openPaletteWorkspace(page, true, [
+    { ...paletteSession, time: { ...paletteSession.time } },
+    ...Array.from({ length: 23 }, (_, index) => ({
+      ...paletteSession,
+      id: `ses_compact_palette_${index}`,
+      title: index === 0 ? "Compact keeper needle" : `Compact keeper result ${index}`,
+      time: { created: 1700000000000 - index - 1, updated: 1700000000000 - index - 1 },
+    })),
+  ])
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  const options = dialog.getByRole("option")
   const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
-  const height = async () => (await container.boundingBox())?.height
-  const initial = await height()
-  expect(initial).toBe(480)
+  const geometry = () =>
+    container.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      inputTop: element.querySelector('[role="combobox"]')!.getBoundingClientRect().top,
+    }))
+  await expect(input).toBeFocused()
+  await expect(options).toHaveCount(10)
+  // Hover waits for the field's opening animation to settle before taking the reference position.
+  await input.hover()
+  const initial = await geometry()
+  expect(initial.height).toBeGreaterThan(200)
 
-  await input.fill("copy session")
-  await expect(dialog.getByRole("option")).toHaveCount(1)
-  expect(await height()).toBe(initial)
+  await input.fill("Compact keeper needle")
+  await expect(options).toHaveText([/Compact keeper needle/])
+  await expect.poll(async () => (await geometry()).height).toBeLessThan(initial.height - 100)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
 
-  await input.fill("zzzz no palette match")
-  await expect(dialog.getByText("No results found")).toBeVisible()
-  expect(await height()).toBe(initial)
+  await input.clear()
+  await expect(options).toHaveCount(10)
+  await expect.poll(geometry).toEqual({
+    height: expect.closeTo(initial.height, 0),
+    inputTop: expect.closeTo(initial.inputTop, 0),
+  })
+
+  // A broader query exposes more than the recent-session limit and must scroll below the field.
+  await input.fill("Compact keeper")
+  await expect(options).toHaveCount(23)
+  const scroll = dialog.locator('[data-slot="search-list-scroll"]')
+  await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  const last = dialog.getByRole("option", { name: /Compact keeper result 22/ })
+  await expect(last).not.toBeInViewport()
+  await scroll.hover()
+  await page.mouse.wheel(0, 2000)
+  await expect(last).toBeInViewport()
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+  await expect(input).toBeFocused()
 })
