@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
+import { Cause, Clock, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
@@ -22,6 +22,10 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const interval = Duration.toMillis(Duration.hours(1))
+const backoffCap = Duration.toMillis(Duration.days(1))
+const CleanupPlan = Schema.Struct({ failures: Schema.Number, next: Schema.Number })
+const decodePlan = Schema.decodeUnknownOption(Schema.fromJsonString(CleanupPlan))
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -297,20 +301,127 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           yield* stage(allow.filter((item) => !block.has(item)))
         })
 
+        const pack = path.join(state.gitdir, "objects", "pack")
+        const planFile = path.join(state.gitdir, "opencode-cleanup.json")
+        const busy = (result: GitResult) => result.stderr.includes("gc is already running")
+
+        const temporaries = () =>
+          fs.readDirectory(pack).pipe(
+            Effect.map((names) => names.filter((name) => name.startsWith("tmp_"))),
+            Effect.catch(() => Effect.succeed<string[]>([])),
+          )
+
+        // Git leaves the partial pack of a failed or killed repack behind, often as large as the store itself.
+        // Only files that appeared during this run are removed: while it ran, it held gc.pid, so no other git
+        // was repacking this store.
+        const discard = Effect.fnUntraced(function* (before: Set<string>) {
+          const created = (yield* temporaries()).filter((name) => !before.has(name))
+          if (!created.length) return
+          yield* Effect.forEach(created, (name) => remove(path.join(pack, name)), { discard: true })
+          yield* Effect.logWarning("removed temporary files of a failed cleanup", { files: created })
+        })
+
+        const gc = Effect.fnUntraced(function* () {
+          const before = new Set(yield* temporaries())
+          const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory }).pipe(
+            Effect.onInterrupt(() => discard(before)),
+          )
+          if (result.code !== 0 && !busy(result)) yield* discard(before)
+          return result
+        })
+
+        // The index is only a cache of the last staged state, so a damaged store gets a fresh copy of the source
+        // repo's index rather than one that names objects the store cannot read.
+        const reseed = Effect.fnUntraced(function* () {
+          yield* remove(path.join(state.gitdir, "index"))
+          yield* seed()
+        })
+
+        // An alternate whose repository was deleted or moved makes every gc fail: the index still names trees
+        // that lived only there.
+        const dropMissingAlternates = Effect.fnUntraced(function* () {
+          const file = path.join(state.gitdir, "objects", "info", "alternates")
+          const listed = (yield* read(file))
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          const missing: string[] = []
+          for (const item of listed) {
+            if (!(yield* exists(item))) missing.push(item)
+          }
+          if (!missing.length) return
+          const kept = listed.filter((item) => !missing.includes(item))
+          yield* fs.writeFileString(file, kept.length ? `${kept.join("\n")}\n` : "").pipe(Effect.orDie)
+          yield* reseed()
+          yield* Effect.logWarning("dropped missing snapshot alternates", { missing })
+        })
+
+        // A zero-byte loose object (left by a crash or a full disk) makes gc fail, and git add never rewrites
+        // it because the object looks present.
+        const dropEmptyObjects = Effect.fnUntraced(function* () {
+          const root = path.join(state.gitdir, "objects")
+          const dirs = (yield* fs.readDirectory(root).pipe(Effect.catch(() => Effect.succeed<string[]>([])))).filter(
+            (name) => /^[0-9a-f]{2}$/.test(name),
+          )
+          const files = (yield* Effect.forEach(
+            dirs,
+            (dir) =>
+              fs.readDirectory(path.join(root, dir)).pipe(
+                Effect.map((names) => names.map((name) => path.join(root, dir, name))),
+                Effect.catch(() => Effect.succeed<string[]>([])),
+              ),
+            { concurrency: 8 },
+          )).flat()
+          const empty = (yield* Effect.forEach(
+            files,
+            (file) =>
+              fs.stat(file).pipe(
+                Effect.map((info) => (info.type === "File" && Number(info.size) === 0 ? file : undefined)),
+                Effect.catch(() => Effect.void),
+              ),
+            { concurrency: 8 },
+          )).filter((file): file is string => Boolean(file))
+          if (!empty.length) return false
+          yield* Effect.forEach(empty, remove, { discard: true })
+          yield* reseed()
+          yield* Effect.logWarning("removed empty snapshot objects", { count: empty.length })
+          return true
+        })
+
+        // Every process that opens the project runs cleanup a minute after start, so the schedule lives in the
+        // store: short-lived processes would otherwise repack the whole store on every launch and get killed
+        // mid-repack. Failures back off by doubling the interval, up to a day.
         const cleanup = Effect.fnUntraced(function* () {
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
-              const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
-              if (result.code !== 0) {
-                yield* Effect.logWarning("cleanup failed", {
-                  exitCode: result.code,
-                  stderr: result.stderr,
-                })
+              const now = yield* Clock.currentTimeMillis
+              const plan = Option.getOrElse(decodePlan(yield* read(planFile)), () => ({ failures: 0, next: 0 }))
+              if (now < plan.next) return
+              yield* dropMissingAlternates()
+              const first = yield* gc()
+              const result =
+                first.code !== 0 && first.stderr.includes(" is empty") && (yield* dropEmptyObjects())
+                  ? yield* gc()
+                  : first
+              if (busy(result)) return
+              if (result.code === 0) {
+                yield* fs
+                  .writeFileString(planFile, JSON.stringify({ failures: 0, next: now + interval }))
+                  .pipe(Effect.ignore)
+                yield* Effect.logInfo("cleanup", { prune })
                 return
               }
-              yield* Effect.logInfo("cleanup", { prune })
+              const failures = plan.failures + 1
+              const delay = Math.min(interval * 2 ** failures, backoffCap)
+              yield* fs.writeFileString(planFile, JSON.stringify({ failures, next: now + delay })).pipe(Effect.ignore)
+              yield* Effect.logWarning("cleanup failed", {
+                exitCode: result.code,
+                stderr: result.stderr,
+                failures,
+                retryInMs: delay,
+              })
             }),
           )
         })
