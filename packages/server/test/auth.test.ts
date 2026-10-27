@@ -2,17 +2,10 @@ import { expect, test } from "bun:test"
 import { ServerAuth } from "@opencode/server/auth"
 import { Option, Redacted } from "effect"
 
-test("passwords require the configured username", () => {
-  const config = { password: Option.some("secret"), username: "custom" }
-  expect(ServerAuth.authorized({ username: "custom", password: Redacted.make("secret") }, config)).toBe(true)
-  expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(false)
-})
-
-test("session tokens are accepted with any username", () => {
-  const config = { password: Option.some("secret"), username: "custom" }
-  const token = ServerAuth.issueSession(config)
-  if (!token) throw new Error("Expected a session token")
-  expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make(token) }, config)).toBe(true)
+test("accepts only the fixed opencode username", () => {
+  const config = { password: Option.some("secret"), username: "opencode" }
+  expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(true)
+  expect(ServerAuth.authorized({ username: "custom", password: Redacted.make("secret") }, config)).toBe(false)
 })
 
 test("session tokens expire, resist tampering, and are revoked by changing the password", () => {

@@ -12,10 +12,6 @@ export const password = Config.Redacted("OPENCODE_PASSWORD").pipe(
   Config.withDefault(undefined),
 )
 
-// The Basic auth username paired with the password above, for the same
-// clients and servers.
-export const username = Config.String("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode"))
-
 export function session() {
   return Object.fromEntries(
     Object.entries(process.env).filter(

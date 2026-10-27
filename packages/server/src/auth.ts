@@ -13,13 +13,11 @@ export type Info = {
   readonly username: string
 }
 
-export const DEFAULT_USERNAME = "opencode"
-
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 
 export class Config extends Context.Service<Config, Info>()("@opencode/ServerAuthConfig") {
-  static configLayer(input: { readonly password: Option.Option<string>; readonly username?: string }) {
-    return Layer.succeed(this, this.of({ password: input.password, username: input.username ?? DEFAULT_USERNAME }))
+  static configLayer(input: Pick<Info, "password">) {
+    return Layer.succeed(this, this.of({ ...input, username: "opencode" }))
   }
 
   static get layer() {
@@ -31,13 +29,11 @@ export function required(config: Info) {
   return Option.isSome(config.password) && config.password.value !== ""
 }
 
-// Session tokens issued by pairing links are accepted anywhere the password is. Clients holding a token do not know the
-// configured username, so tokens are checked without it.
+// Session tokens issued by pairing links are accepted anywhere the password is.
 export function authorized(credentials: DecodedCredentials, config: Info) {
-  if (Option.isNone(config.password)) return false
+  if (Option.isNone(config.password) || credentials.username !== config.username) return false
   const password = Redacted.value(credentials.password)
-  if (verifySession(password, config)) return true
-  return credentials.username === config.username && password === config.password.value
+  return password === config.password.value || verifySession(password, config)
 }
 
 // Sessions are signed with a key derived from the server password, so rotating the password revokes every session.

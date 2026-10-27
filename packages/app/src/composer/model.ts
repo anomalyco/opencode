@@ -1,7 +1,7 @@
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
-import type { Links, MountedSession } from "@opencode/gui-extensions/sdk"
+import type { Links, MountedSession } from "@opencode/plugin/gui"
 import { createComponent, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
@@ -10,8 +10,8 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspace
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useExtensionHost } from "@/runtime/extension/host"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { usePluginHost } from "@/runtime/plugin/host"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData, useServer } from "@/runtime/server/current"
@@ -50,11 +50,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const server = useServer()
 
   const available = () =>
-    server.conn.type !== "extension" || !server.conn.managed || server.ctx.sdk.connection.status() === "connected"
+    server.conn.type !== "plugin" || !server.conn.managed || server.ctx.sdk.connection.status() === "connected"
 
   const files = useFile()
-  const links = useExtensionHost().links
-  const extensions = useExtensionAttachment()
+  const links = usePluginHost().links
+  const plugins = usePluginAttachment()
   const comments = useComments()
   const dialog = useDialog()
   const command = useCommand()
@@ -62,6 +62,13 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const platform = usePlatform()
   const serverSDK = useServerSDK()
   const prompt = adapter.state
+  // Editor actions write the captured store directly, rather than going through the context methods.
+  createEffect(
+    on(
+      () => prompt.context.items(),
+      (items) => prompt.quoteSource.retain(items.map((item) => item.key)),
+    ),
+  )
   let editor: HTMLDivElement | undefined
   // A path attachment's image is read through the server, which can see both local and uploaded paths.
   const pathImages = new Map<string, Promise<string | undefined>>()
@@ -86,8 +93,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const history = createComposerHistory()
 
   const recent = createMemo(() => {
-    const all = extensions.files.opened()
-    const active = extensions.files.active()
+    const all = plugins.files.opened()
+    const active = plugins.files.active()
 
     return active ? [active, ...all.filter((path) => path !== active)] : all
   })
@@ -340,7 +347,10 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
       if (!selected) return
 
-      return () => command.trigger(selected.id, "slash", selected.input)
+      // A command declines only keys, so a slash command's `false` means nothing more.
+      return async () => {
+        await command.trigger(selected.id, "slash", selected.input)
+      }
     },
   })
 
@@ -413,6 +423,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       })),
     onQuoteComment: (item, comment) => prompt.context.updateComment(item.commentID, { comment }),
     quoteComment: prompt.quoteComment,
+    quoteSource: prompt.quoteSource,
     onContextRemove(item) {
       if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
@@ -440,15 +451,15 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       const item = controller.contextItem(key)
 
       if (item?.type === "note") {
-        // The extension that attached the note reveals its subject.
+        // The plugin that attached the note reveals its subject.
         const href = item.live?.href ?? item.href
 
-        if (href) links.open({ href, origin: item.origin, session: extensions.current() })
+        if (href) links.open({ href, origin: item.origin, session: plugins.current() })
 
         return
       }
 
-      if (item?.type === "file") openComment(item, links, extensions.current(), files, comments)
+      if (item?.type === "file") openComment(item, links, plugins.current(), files, comments)
     },
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
@@ -552,15 +563,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   command.register("composer-editor", () => [
     {
-      id: "prompt.history.search",
-      title: language.t("ui.promptInput.history.search"),
-      keybind: "mod+f",
-      hidden: true,
-      editable: true,
-      when: () => controller.state.popover.type === "history",
-      onSelect: () => void controller.dispatch({ type: "history.search" }),
-    },
-    {
       id: "file.attach",
       title: language.t("prompt.action.attachFile"),
       category: language.t("command.category.file"),
@@ -629,7 +631,7 @@ function openComment(
     })
   }
 
-  // The extension that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
+  // The plugin that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
   links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
 
   if (item.commentOrigin === "review") return queueFocus()

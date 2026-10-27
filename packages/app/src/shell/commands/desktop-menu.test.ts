@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import terminal, { terminalToggleCommand } from "@opencode/gui-extensions/terminal"
+import { terminalToggleCommand } from "@opencode/gui-plugins/terminal"
 import { settingsOpenCommand } from "@/settings/command"
 import { sidebarToggleCommand } from "@/shell/shell"
 import { previousSessionCommand, nextSessionCommand } from "@/shell/titlebar/tab-strip"
@@ -17,8 +17,8 @@ test("every desktop menu command is one its owner registers", () => {
     goForwardCommand.id,
     previousSessionCommand.id,
     nextSessionCommand.id,
-    // The host publishes extension commands as `${extension}.${id}`.
-    `${terminal.id}.${terminalToggleCommand.id}`,
+    // The host publishes plugin commands as `${plugin}.${id}`; the built-in list names the terminal `terminal`.
+    `terminal.${terminalToggleCommand.id}`,
   ])
 
   const commands = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) =>

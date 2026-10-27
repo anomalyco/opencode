@@ -11,8 +11,8 @@ import { Menu } from "@opencode/ui/menu"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/plugin/gui"
+import { PluginSlot } from "@/runtime/plugin/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -26,7 +26,7 @@ import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
 import { useCommand } from "@/shell/commands/command"
-import { useExtensionScoped } from "@/runtime/extension/commands"
+import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
   SessionAncestorTrail,
   SessionHeaderLayout,
@@ -133,7 +133,7 @@ function MessageTimelineView(
 ) {
   const language = useLanguage()
   const command = useCommand()
-  const extensionScoped = useExtensionScoped()
+  const pluginScoped = usePluginScoped()
   const server = useServer()
   const data = server.ctx.data
   const sdk = useWorkspaceLocation()
@@ -305,7 +305,7 @@ function MessageTimelineView(
             title: language.t("command.session.rename"),
             keybind: "ctrl+r",
             disabled: !sessionID() || !!parentID() || title.editing,
-            skip: (event) => extensionScoped(event.target),
+            skip: (event) => pluginScoped(event.target),
             onSelect: openTitleEditor,
           },
           {
@@ -542,7 +542,7 @@ function MessageTimelineView(
                   {(_id) => (
                     <>
                       {props.search}
-                      <ExtensionSlot
+                      <PluginSlot
                         at="session.header"
                         input={{
                           get session() {
@@ -601,7 +601,6 @@ function MessageTimelineView(
                     class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1.5"
                     classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                     style={{
-                      "--inline-input-shadow": "none",
                       "text-align": "start",
                     }}
                     onInput={(event) => setTitle("draft", event.currentTarget.value)}

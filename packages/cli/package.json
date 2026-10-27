@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/cli",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -84,5 +84,10 @@
     "solid-refresh": "0.6.3",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/cli"
   }
 }

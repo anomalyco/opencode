@@ -162,6 +162,9 @@ function init(container: () => HTMLElement | undefined) {
       )
 
     const zIndex = () => String(50 + layer() * 10)
+    // A function, not an inline `&&`: the compiler wraps an inline condition in a memo on every read of the prop, and
+    // Kobalte reads it outside any owner, from outside-pointer handlers and while the closing dialog unmounts.
+    const modal = () => !container() && top()?.id === id
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
     let layerRef: HTMLDivElement | undefined
@@ -177,7 +180,7 @@ function init(container: () => HTMLElement | undefined) {
 
         return (
           <Kobalte
-            modal={!container() && top()?.id === id}
+            modal={modal()}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (!open) dismiss(id)

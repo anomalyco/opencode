@@ -12,6 +12,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginGuiInput,
+  PluginGuiOutput,
   PluginCheckInput,
   PluginCheckOutput,
   PluginUpdateInput,
@@ -109,6 +111,10 @@ import type {
   ModelDefaultOutput,
   GenerateTextInput,
   GenerateTextOutput,
+  GenerateImageInput,
+  GenerateImageOutput,
+  GenerateDecisionsInput,
+  GenerateDecisionsOutput,
   VoiceModelsOutput,
   VoiceSessionInput,
   VoiceSessionOutput,
@@ -520,6 +526,18 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/plugin`,
             query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      gui: (input: PluginGuiInput, requestOptions?: RequestOptions) =>
+        request<PluginGuiOutput>(
+          {
+            method: "GET",
+            path: `/api/plugin/gui`,
+            query: { location: input["location"], id: input["id"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,
@@ -1166,10 +1184,41 @@ export function make(options: ClientOptions) {
         request<{ readonly data: GenerateTextOutput }>(
           {
             method: "POST",
-            path: `/api/experimental/generate`,
+            path: `/api/experimental/generate/text`,
             body: { prompt: input["prompt"], model: input["model"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404, 503],
+            declaredStatuses: [400, 401, 404, 422, 502, 503],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      image: (input: GenerateImageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: GenerateImageOutput }>(
+          {
+            method: "POST",
+            path: `/api/experimental/generate/image`,
+            body: {
+              model: input["model"],
+              prompt: input["prompt"],
+              images: input["images"],
+              n: input["n"],
+              aspect: input["aspect"],
+              resolution: input["resolution"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 422, 502, 503],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      decisions: (input: GenerateDecisionsInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: GenerateDecisionsOutput }>(
+          {
+            method: "POST",
+            path: `/api/experimental/generate/decisions`,
+            body: { model: input["model"], input: input["input"], questions: input["questions"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 422, 502, 503],
             empty: false,
           },
           requestOptions,

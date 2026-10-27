@@ -29,7 +29,7 @@ export function nativeT(key: DesktopNativeKey, params?: Record<string, string | 
   return formatDesktopNativeMessage(bundle.messages[key], params)
 }
 
-/** The app locale the renderer last pushed. GUI extension catalogs resolve against it. */
+/** The app locale the renderer last pushed. GUI plugin catalogs resolve against it. */
 export function nativeLocale() {
   return bundle.locale
 }
@@ -43,7 +43,7 @@ export function onNativeTranslations(listener: () => void) {
   }
 }
 
-/** A shared app message for a key that is only known at runtime, such as one an extension asks for. */
+/** A shared app message for a key that is only known at runtime, such as one a plugin asks for. */
 export function nativeMessage(key: string) {
   const messages: Readonly<Record<string, string>> = bundle.messages
 

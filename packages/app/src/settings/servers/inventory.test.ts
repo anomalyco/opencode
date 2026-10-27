@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
-import type { ExtensionServer } from "@/runtime/extension/servers"
+import type { PluginServer } from "@/runtime/plugin/servers"
 import { settingsServers } from "./inventory"
 
-const ssh: ExtensionServer = {
+const ssh: PluginServer = {
   key: "ssh:build",
-  extension: "ssh",
+  plugin: "ssh",
   entry: { id: "build", name: "Build server", state: "stopped" },
 }
 
-const connection: ServerConnection.Extension = {
-  type: "extension",
+const connection: ServerConnection.Plugin = {
+  type: "plugin",
   key: "ssh:build",
-  extension: "ssh",
+  plugin: "ssh",
   state: "stopped",
   connecting: false,
   authenticationRequired: false,

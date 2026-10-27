@@ -135,14 +135,12 @@ export function DialogIntegration(
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: status
-          ? "Sign in required →"
-          : connectionSummary(integration) || (integration.configured ? "Configured" : undefined),
+        footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
         footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
-          (integration.connections.length > 0 || integration.configured) && !status
+          integration.connections.length > 0 && !status
             ? () => <text fg={theme.text.feedback.success.base}>✓</text>
             : undefined,
         onSelect: () => {

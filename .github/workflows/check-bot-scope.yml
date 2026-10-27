@@ -1,0 +1,30 @@
+name: check-bot-scope
+
+# Required status on dev. Reject the retired aggregate-hash bot branch.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bot-scope:
+    name: bot-scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Reject retired hash bot
+        env:
+          HEAD_REF: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+        run: |
+          if [ "$HEAD_REF" = bot/nix-hashes ]; then
+            echo "::error::Aggregate Nix hashes are no longer used; close this bot pull request"
+            exit 1
+          fi

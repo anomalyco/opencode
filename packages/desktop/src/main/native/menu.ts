@@ -4,7 +4,7 @@ import {
   DESKTOP_MENU,
   desktopMenuKey,
   desktopMenuVisible,
-  desktopMenuWithExtensions,
+  desktopMenuWithPlugins,
   type DesktopMenu,
   type DesktopMenuEntry,
   type DesktopMenuRole,
@@ -23,7 +23,7 @@ type Deps = {
   relaunch: () => void
 }
 
-/** A GUI extension's contribution to the native menu, already translated by the extension. */
+/** A GUI plugin's contribution to the native menu, already translated by the plugin. */
 export type MenubarEntry = {
   readonly menu: string
   readonly id: string
@@ -85,15 +85,14 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Deps): MenuItemConstructorOptions {
   if (menu.role && !extra.length) return { role: nativeRole(menu.role), label: nativeT(menu.labelKey) }
 
-  const items = desktopMenuWithExtensions(
+  const items = desktopMenuWithPlugins(
     (menu.items ?? [])
       .filter((entry) => desktopMenuVisible(entry, "macos"))
       .map((entry) => ({ key: desktopMenuKey(entry), entry })),
     extra,
   )
 
-  return {
-    ...(menu.role ? { role: nativeRole(menu.role) } : {}),
+  const options: MenuItemConstructorOptions = {
     label: nativeT(menu.labelKey),
     submenu: items.map((item) => {
       const entry = item.entry
@@ -104,6 +103,10 @@ function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Dep
       return nativeItem(entry, deps)
     }),
   }
+
+  if (menu.role) options.role = nativeRole(menu.role)
+
+  return options
 }
 
 function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOptions {
@@ -144,6 +147,6 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   return item
 }
 
-function nativeRole(role: DesktopMenuRole) {
-  return role as NonNullable<MenuItemConstructorOptions["role"]>
+function nativeRole(role: DesktopMenuRole): NonNullable<MenuItemConstructorOptions["role"]> {
+  return role
 }

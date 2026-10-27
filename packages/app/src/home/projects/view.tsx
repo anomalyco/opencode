@@ -29,10 +29,10 @@ const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whi
 
 const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerConnection.key(server)}`
 
-// Extension servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
+// Plugin servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
 // pairing link or password.
 const signInRequired = (server: ServerConnection.Any, health: ServerHealth | undefined) =>
-  (server.type === "extension" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
+  (server.type === "plugin" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
 
 const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
   `project:${ServerConnection.key(server)}:${directory}`
@@ -216,7 +216,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
               props.servers.some(
                 (server) =>
                   signInRequired(server, props.serverHealth(server)) ||
-                  (server.type === "extension" && server.connecting),
+                  (server.type === "plugin" && server.connecting),
               )
             }
             fallback={
@@ -251,7 +251,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                   const hasProjects = () => projects().length > 0
                   const collapsed = () => props.collapsed(item)
                   const authentication = () => signInRequired(item, props.serverHealth(item))
-                  const connecting = () => item.type === "extension" && item.connecting
+                  const connecting = () => item.type === "plugin" && item.connecting
 
                   return (
                     <div class="flex min-w-0 flex-col gap-1">
@@ -366,7 +366,8 @@ function HomeServerRow(props: {
 
   return (
     <Tooltip
-      appearance="standard"
+      appearance="large"
+      contentClass="max-w-80 break-words"
       placement="top"
       class="flex h-7 w-full min-w-0"
       inactive={!incompatible() && !authentication()}
@@ -422,7 +423,7 @@ function HomeServerRow(props: {
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
             <ServerHealthIndicator
               health={props.health}
-              connecting={props.server.type === "extension" && props.server.connecting}
+              connecting={props.server.type === "plugin" && props.server.connecting}
               authenticationRequired={authentication()}
             />
           </div>

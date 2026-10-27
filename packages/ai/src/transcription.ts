@@ -130,7 +130,6 @@ const transcriptFields = {
   language: Schema.optional(Schema.String),
   durationSeconds: Schema.optional(Schema.Number),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }
 

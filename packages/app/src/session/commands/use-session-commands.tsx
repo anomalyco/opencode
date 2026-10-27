@@ -16,9 +16,9 @@ import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
-import { useExtensionClaims, useExtensionScoped } from "@/runtime/extension/commands"
-import type { Region } from "@/runtime/extension/panels"
-import { sideTabShortcuts } from "@/runtime/extension/closed-tabs"
+import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
+import type { Region } from "@/runtime/plugin/panels"
+import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
 
 type SessionCommandSource = {
   identity: SessionModel["identity"]
@@ -59,8 +59,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const data = useData()
   const settings = useSettings()
   const platform = usePlatform()
-  const extensionScoped = useExtensionScoped()
-  const extensionClaims = useExtensionClaims()
+  const pluginScoped = usePluginScoped()
+  const pluginClaims = usePluginClaims()
 
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
@@ -82,7 +82,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const inSide = actions.region.focus
   // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
-  const sideKey = (event: KeyboardEvent) => inSide(event) && !extensionClaims(event)
+  const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
   // ⌘W on the side panel's last tab closes the panel and moves focus out of it, where one press too many would close
   // the session tab. Until the user moves on, by clicking, focusing, another key, or another session, ⌘W closes nothing.
   // The close moves focus synchronously, before this is set, so its own focusin does not clear it.
@@ -95,6 +95,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     "keydown",
     (event) => {
       if (["Meta", "Control", "Shift", "Alt"].includes(event.key)) return
+
       if (!command.matches("file.close", event)) resetEmptied()
     },
     { capture: true },
@@ -112,7 +113,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         ? target
         : document.activeElement
 
-    return element instanceof Element && !!element.closest("#review-panel") && !extensionScoped(element)
+    return element instanceof Element && !!element.closest("#review-panel") && !pluginScoped(element)
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {

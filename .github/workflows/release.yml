@@ -45,7 +45,8 @@ jobs:
   plan:
     if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-24.04
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.plan.outputs.version }}
       channel: ${{ steps.plan.outputs.channel }}
@@ -68,6 +69,7 @@ jobs:
         name: Plan
         run: bash .github/release/plan-release.sh
         env:
+          GH_TOKEN: ${{ github.token }} # reads the triggering actor's repository role for stable releases
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
 
@@ -76,8 +78,10 @@ jobs:
   tag:
     needs: plan
     runs-on: ubuntu-24.04
+    # Stable tags are pushed with the release deploy key, the only non-releasers actor the v* tag ruleset admits.
+    environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
-      contents: write
+      contents: read
     env: &env
       OPENCODE_VERSION: ${{ needs.plan.outputs.version }}
       OPENCODE_CHANNEL: ${{ needs.plan.outputs.channel }}
@@ -89,6 +93,8 @@ jobs:
       - name: Check out
         if: needs.plan.outputs.channel == 'latest'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ssh-key: ${{ secrets.RELEASE_TAG_KEY }}
       - id: tag
         name: Tag
         if: needs.plan.outputs.channel == 'latest'
@@ -265,8 +271,8 @@ jobs:
           path: dist/docker
 
   # macOS and Windows pack an unsigned app; Linux packs the final AppImage, deb and rpm.
-  # Beta packages macOS x64 on Apple Silicon and Windows arm64 on Blacksmith for speed. electron-builder's afterPack
-  # rejects a bundle whose CLI or node-pty does not match the target CPU.
+  # Dev and beta package macOS x64 on Apple Silicon and Windows arm64 on Blacksmith for speed. electron-builder's
+  # afterPack rejects a bundle whose CLI or node-pty does not match the target CPU.
   build-desktop:
     needs: [plan, tag, build-cli]
     if: needs.plan.outputs.desktop == 'true'
@@ -278,12 +284,12 @@ jobs:
       matrix:
         include:
           - target: darwin-x64
-            host: ${{ github.ref_name == 'beta' && 'macos-26' || 'macos-26-intel' }}
-            install: ${{ github.ref_name == 'beta' && '--os=darwin --cpu=*' || '--os=darwin --cpu=x64' }}
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'macos-26' || 'macos-26-intel' }}
+            install: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && '--os=darwin --cpu=*' || '--os=darwin --cpu=x64' }}
           - { target: darwin-arm64, host: macos-26, install: --os=darwin --cpu=arm64 }
           # github-hosted: blacksmith lacks the ARM64 MSVC cross-compilation toolchain
           - target: windows-arm64
-            host: ${{ github.ref_name == 'beta' && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
             install: --cpu=*
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
           - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
@@ -307,10 +313,10 @@ jobs:
         run: git fetch --no-tags --filter=blob:none --depth=300 origin "$SHA"
         env:
           SHA: ${{ needs.tag.outputs.sha }}
-      # Beta trades larger packages for faster packaging. fpm sets XZ_OPT for the deb and rpm level, but xz still
-      # reads XZ_DEFAULTS, so it uses every CPU.
-      - name: Beta packaging settings
-        if: needs.plan.outputs.channel == 'beta' && runner.os == 'Linux'
+      # Dev and beta trade larger packages for faster packaging. fpm sets XZ_OPT for the deb and rpm level, but xz
+      # still reads XZ_DEFAULTS, so it uses every CPU.
+      - name: Preview packaging settings
+        if: (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && runner.os == 'Linux'
         run: echo "XZ_DEFAULTS=-T0" >> "$GITHUB_ENV"
       - name: Build
         working-directory: packages/desktop
@@ -319,7 +325,7 @@ jobs:
           OPENCODE_TARGET: ${{ matrix.target }}
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
-          VITE_SENTRY_ENVIRONMENT: ${{ needs.plan.outputs.channel == 'beta' && 'beta' || 'production' }}
+          VITE_SENTRY_ENVIRONMENT: ${{ needs.plan.outputs.channel == 'latest' && 'production' || needs.plan.outputs.channel }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.plan.outputs.version }}
           GITHUB_TOKEN: ${{ github.token }} # read-only; beta notes read pull request authors and descriptions
       - name: Pack
@@ -344,7 +350,7 @@ jobs:
       matrix:
         include:
           - target: windows-arm64
-            host: ${{ github.ref_name == 'beta' && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
             install: --cpu=*
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
     runs-on: ${{ matrix.host }}
@@ -644,19 +650,10 @@ jobs:
     steps:
       - *checkout-release
       - *download-signed-cli
-      - id: token
-        name: Create token
-        if: needs.plan.outputs.dry_run != 'true'
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ vars.OPENCODE_APP_ID }}
-          private-key: ${{ secrets.OPENCODE_APP_SECRET }}
-          owner: anomalyco
-          repositories: homebrew-tap
       - name: Publish
         run: bash .github/release/publish-homebrew.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/build-archives"
         env:
-          HOMEBREW_TOKEN: ${{ steps.token.outputs.token }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
   # The AUR package installs the published npm tarballs, so it follows the npm publish.
   publish-aur:

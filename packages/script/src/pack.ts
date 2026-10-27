@@ -11,16 +11,20 @@ export const archiveDir = path.join(root, "dist", "archives")
 type Manifest = {
   name: string
   version: string
-  exports: Record<string, string>
+  exports: Record<string, string | null>
   imports?: Record<string, Record<string, string>>
 }
 
 /**
  * Builds the package in `directory`, points its TypeScript exports at the build output, and packs it
  * into dist/npm. `types` is where the build writes declarations; `source` keeps `import` on the
- * TypeScript sources for packages that ship them.
+ * TypeScript sources for packages that ship them. `workspaceOnly` exports map to null, so the published package
+ * resolves none of them, even through a wildcard export.
  */
-export async function pack(directory: string, options: { types?: string; source?: boolean } = {}) {
+export async function pack(
+  directory: string,
+  options: { types?: string; source?: boolean; workspaceOnly?: readonly string[] } = {},
+) {
   const types = options.types ?? "./dist/"
   const file = path.join(directory, "package.json")
   const original = await Bun.file(file).text()
@@ -34,6 +38,8 @@ export async function pack(directory: string, options: { types?: string; source?
 
   const exports = Object.fromEntries(
     Object.entries(pkg.exports).map(([key, value]) => {
+      if (value === null || options.workspaceOnly?.includes(key)) return [key, null]
+
       if (!/\.tsx?$/.test(value)) return [key, value]
 
       return [key, { import: options.source ? value : output(value), types: declaration(value) }]

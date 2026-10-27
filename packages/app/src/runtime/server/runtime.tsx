@@ -111,6 +111,8 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
         retry: serverHealth.retry,
       },
       models,
+      /** Runs each keyed sound and system notification once across windows; notifications only while none has focus. */
+      notifications: notificationCoordinator,
       ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },

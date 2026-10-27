@@ -118,6 +118,17 @@ export const MediaUsage = Schema.Union([
   .annotate({ identifier: "AI.MediaUsage" })
 export type MediaUsage = Schema.Schema.Type<typeof MediaUsage>
 
+/** Token usage from a provider's counts. A usage object without any count is no usage, so it returns undefined. */
+export const tokenUsage = (counts: {
+  readonly input?: number
+  readonly output?: number
+  readonly total?: number
+  readonly details?: Record<string, unknown>
+}): MediaUsage | undefined =>
+  counts.input === undefined && counts.output === undefined && counts.total === undefined
+    ? undefined
+    : { type: "tokens", ...counts }
+
 /** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
   replacement: Schema.Array(Message),

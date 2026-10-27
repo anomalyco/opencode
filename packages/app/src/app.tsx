@@ -20,7 +20,7 @@ import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
-import { ExtensionRoot } from "@/runtime/extension/root"
+import { PluginRoot } from "@/runtime/plugin/root"
 
 export { preloadRoute }
 
@@ -75,9 +75,9 @@ export function AppBaseProviders(
             >
               <QueryProvider>
                 <DialogProvider>
-                  <ExtensionRoot>
+                  <PluginRoot>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </ExtensionRoot>
+                  </PluginRoot>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>

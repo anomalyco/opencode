@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -44,6 +44,7 @@
     "./dialog": "./src/overlays/dialog/dialog.tsx",
     "./diff-changes": "./src/data-display/diff-changes/diff-changes.tsx",
     "./divider": "./src/layout/divider/divider.tsx",
+    "./document-surface.css": "./src/components/document-surface.css",
     "./field": "./src/forms/field/field.tsx",
     "./file-tree.css": "./src/styles/file-tree.css",
     "./icon": "./src/icons/icon/icon.tsx",

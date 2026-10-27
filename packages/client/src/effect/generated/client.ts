@@ -18,6 +18,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginGuiInput,
+  PluginGuiOutput,
   PluginCheckInput,
   PluginCheckOutput,
   PluginUpdateInput,
@@ -115,6 +117,10 @@ import type {
   ModelDefaultOutput,
   GenerateTextInput,
   GenerateTextOutput,
+  GenerateImageInput,
+  GenerateImageOutput,
+  GenerateDecisionsInput,
+  GenerateDecisionsOutput,
   VoiceModelsOutput,
   VoiceSessionInput,
   VoiceSessionOutput,
@@ -367,6 +373,13 @@ const EndpointPluginList = (raw: RawClient["server.plugin"]) => (input?: PluginL
     raw["plugin.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointPluginGui = (raw: RawClient["server.plugin"]) => (input: PluginGuiInput) =>
+  preserveEffect<PluginGuiOutput>()(
+    raw["plugin.gui"]({ query: { location: input["location"], id: input["id"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointPluginCheck = (raw: RawClient["server.plugin"]) => (input?: PluginCheckInput) =>
   preserveEffect<PluginCheckOutput>()(
     raw["plugin.check"]({ query: { location: input?.["location"] }, payload: { target: input?.["target"] } }).pipe(
@@ -383,6 +396,7 @@ const EndpointPluginUpdate = (raw: RawClient["server.plugin"]) => (input: Plugin
 
 const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
   list: EndpointPluginList(raw),
+  gui: EndpointPluginGui(raw),
   check: EndpointPluginCheck(raw),
   update: EndpointPluginUpdate(raw),
 })
@@ -885,7 +899,38 @@ const EndpointGenerateText = (raw: RawClient["server.generate"]) => (input: Gene
     ),
   )
 
-const adaptGroupGenerate = (raw: RawClient["server.generate"]) => ({ text: EndpointGenerateText(raw) })
+const EndpointGenerateImage = (raw: RawClient["server.generate"]) => (input: GenerateImageInput) =>
+  preserveEffect<GenerateImageOutput>()(
+    raw["generate.image"]({
+      payload: {
+        model: input["model"],
+        prompt: input["prompt"],
+        images: input["images"],
+        n: input["n"],
+        aspect: input["aspect"],
+        resolution: input["resolution"],
+      },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointGenerateDecisions = (raw: RawClient["server.generate"]) => (input: GenerateDecisionsInput) =>
+  preserveEffect<GenerateDecisionsOutput>()(
+    raw["generate.decisions"]({
+      payload: { model: input["model"], input: input["input"], questions: input["questions"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const adaptGroupGenerate = (raw: RawClient["server.generate"]) => ({
+  text: EndpointGenerateText(raw),
+  image: EndpointGenerateImage(raw),
+  decisions: EndpointGenerateDecisions(raw),
+})
 
 const EndpointVoiceModels = (raw: RawClient["server.voice"]) => () =>
   preserveEffect<VoiceModelsOutput>()(

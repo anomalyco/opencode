@@ -294,19 +294,22 @@ export function desktopMenuVisible(item: { platforms?: DesktopMenuPlatform[] }, 
   return !item.platforms || item.platforms.includes(platform)
 }
 
-/** What a GUI extension's menubar item names in `after`: a built-in item's command, action, or role. */
+/** What a GUI plugin's menubar item names in `after`: a built-in item's command, action, or role. */
 export function desktopMenuKey(entry: DesktopMenuEntry) {
   if (entry.type === "separator") return undefined
 
   return entry.command ?? entry.action ?? entry.role
 }
 
-/** Places extension items after the entry their `after` names, or at the end of the menu. */
-export function desktopMenuWithExtensions<Entry, Extra extends { readonly id: string; readonly after?: string }>(
-  base: readonly { readonly key?: string; readonly entry: Entry }[],
+/** A menu entry with the key a plugin item's `after` can name. */
+export type DesktopMenuPlaced<Entry> = { readonly key?: string; readonly entry: Entry }
+
+/** Places plugin items after the entry their `after` names, or at the end of the menu. */
+export function desktopMenuWithPlugins<Entry, Extra extends { readonly id: string; readonly after?: string }>(
+  base: readonly DesktopMenuPlaced<Entry>[],
   extra: readonly Extra[],
 ) {
-  const list: { readonly key?: string; readonly entry: Entry | Extra }[] = [...base]
+  const list: DesktopMenuPlaced<Entry | Extra>[] = [...base]
 
   extra.forEach((item) => {
     const next = { key: item.id, entry: item }

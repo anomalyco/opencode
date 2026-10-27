@@ -1,6 +1,6 @@
 ---
 name: unit-tests
-description: Use when writing, reviewing, speeding up, or fixing a flaky `bun test` unit test in any package (core, cli, server, ai, codemode, util, client, sdk, plugin, http-recorder, merman, app src and test-browser, desktop, gui-extensions, ui, session-ui, latex, ...), except OpenTUI renderer tests (see tui-tests). Also use when a test "timed out after 5000ms" on Windows CI, fails only on Windows, when the unit job is slow, when adding cli subprocess or service tests, or when adding a package's test task to turbo.json. Covers controlling time instead of sleeping, per-test timeouts, process and git spawn cost on Windows, Windows-only failures, temp dirs and process state, leaks between files, and reading CI timeouts.
+description: Use when writing, reviewing, speeding up, or fixing a flaky `bun test` unit test in any package (core, cli, server, ai, codemode, util, client, sdk, plugin, http-recorder, merman, app src and test-browser, desktop, gui-plugins, ui, session-ui, latex, ...), except OpenTUI renderer tests (see tui-tests). Also use when a test "timed out after 5000ms" on Windows CI, fails only on Windows, when the unit job is slow, when adding cli subprocess or service tests, or when adding a package's test task to turbo.json. Covers controlling time instead of sleeping, per-test timeouts, process and git spawn cost on Windows, Windows-only failures, temp dirs and process state, leaks between files, and reading CI timeouts.
 ---
 
 # Fast, Reliable Unit Tests
@@ -10,7 +10,7 @@ CI runs `bun turbo test --affected --concurrency=3` on 4-vCPU Linux and Windows 
 Read these first; this skill does not repeat them:
 
 - Root `AGENTS.md`: the Testing and Style Guide sections.
-- `packages/app/AGENTS.md` Tests (`packages/desktop` and `packages/gui-extensions` follow it): one owner per contract, and no production seams for tests.
+- `packages/app/AGENTS.md` Tests (`packages/desktop` and `packages/gui-plugins` follow it): one owner per contract, and no production seams for tests.
 - `packages/ai/AGENTS.md`: cassettes. The `effect` skill: `it.effect` and `it.live`.
 
 Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-tests` (Playwright in `packages/app/e2e`), `component-tests` (Playwright on stories, `packages/stories`). This skill owns cli subprocess and service tests.
@@ -19,7 +19,7 @@ Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-te
 
 - Bun's default per-test timeout is 5000ms. Check the package's `test` script:
   - 30s: ai, cli, desktop, http-recorder, latex, merman, simulation, theme and tui pass `--timeout 30000`; core's `script/test.ts` passes `--timeout=30000`.
-  - 5s: client, httpapi-codegen and sdk pass `--timeout 5000`; app, codemode, function, gui-extensions, plugin, plugin-browser, script, server, session-ui, ui and util use the default.
+  - 5s: client, httpapi-codegen and sdk pass `--timeout 5000`; app, codemode, function, gui-plugins, plugin, plugin-browser, script, server, session-ui, ui and util use the default.
 - Size Windows risk by counting spawns, not by local wall time.
   - npm.test.ts "installs a Git package from an npm ::path: subdirectory at a branch" takes 0.4s locally and hit 5000ms on Windows CI. Each Npm.add Git case makes about 75 git process events: 3 `clone --recurse-submodules`, which run the git-submodule shell script.
   - Assume roughly 40ms per Git-for-Windows spawn (estimated from an earlier git.test run on Windows CI: ~24s for 564 spawns). Some core file groups run 5-9x slower on Windows than locally.
@@ -40,7 +40,7 @@ Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-te
 - **Product Effect code must stay on the caller's clock**, which is what makes both patterns above possible. Read time through `Clock`, wait with `Effect.sleep` or `Schedule`, and run nested effects with the caller's context.
   - A bare `Effect.runPromise` runs on the default real clock. McpStdio does this (`packages/core/src/mcp/stdio.ts:66`, `:82`, `:109`), so `packages/core/test/mcp.test.ts:832` waits the real 2s `CLOSE_GRACE` on every OS.
   - Capture `yield* Effect.context()` and use `Effect.runPromiseWith(context)`, as `packages/cli/src/acp/agent.ts:27` does.
-- **Code outside Effect** (app, desktop, ui, session-ui): `jest.useFakeTimers()` and `setSystemTime` from `bun:test`, restored in `afterEach` (`packages/desktop/src/main/extension/lifecycle.test.ts:27-32`, `packages/desktop/src/main/storage/drafts.test.ts:15-17`).
+- **Code outside Effect** (app, desktop, ui, session-ui): `jest.useFakeTimers()` and `setSystemTime` from `bun:test`, restored in `afterEach` (`packages/desktop/src/main/plugin/lifecycle.test.ts:27-32`, `packages/desktop/src/main/storage/drafts.test.ts:15-17`).
 - **Advance fake timers to the next timer** (`jest.advanceTimersToNextTimer()`, `jest.runOnlyPendingTimers()`), not in small fixed steps. The 10ms-step `advance` at `lifecycle.test.ts:37` turns the 1,000-seed fuzz test (`:607`) into about 430k event-loop turns: 2.8-3.8s on Windows, 0.56s on Linux.
 
 ## Real-time waits: deadlines, not attempt counts
@@ -64,7 +64,7 @@ To avoid adding more:
 - Shorten a production duration through an option, not by waiting it out. Precedent: real product options (`Flock.Options` in `packages/util/src/flock.ts:41-47`, `idleTimeout`/`flushInterval` in `packages/client/src/solid/connection.ts`) and client's hidden seam `withEnsureTiming` (`packages/client/src/service-timing.ts:31`, used by `packages/client/test/fixture/service-timing.ts`).
   - For a spawned process the value must reach the child, as `timeoutMs` does through the worker payload at `packages/core/test/util/flock.test.ts:50-58`.
   - server-process.ts has no override today, so its 15s tests cannot be shortened from the test side.
-  - app, desktop and gui-extensions forbid such seams (their AGENTS.md Tests sections); core, cli, util, client and tui have no such ban.
+  - app, desktop and gui-plugins forbid such seams (their AGENTS.md Tests sections); core, cli, util, client and tui have no such ban.
 - Retry timing belongs in core under TestClock. `packages/server/test/fetch.test.ts:363-408` spends about 5.8s of server's 16s in real 200ms bind retries (`packages/core/src/plugin/provider/openai.ts:21`). The fixed ports 1455/1457 are the contract there; new server tests cover routing and error mapping only. Elsewhere bind port 0 (`packages/app/src/runtime/server/global-sync/bootstrap.test.ts:81`).
 
 ## Do not assert wall-clock speed
@@ -105,11 +105,11 @@ To avoid adding more:
 - Do not use `mock.module`; it leaks across files.
   - It is why app's scripts pass `--isolate`: app unit went from 2.4s to 9.9s locally, and unit plus browser from 5.3s to 12-20s on CI.
   - `packages/cli/test/mini-config.test.ts:25` and `packages/core/test/plugin/provider-gitlab.test.ts:74` already leak in non-isolated suites; do not copy them.
-  - In Effect packages, provide the dependency through a test layer. In app, desktop and gui-extensions, drive the real module and entry point, and inject only through a parameter the product already has.
+  - In Effect packages, provide the dependency through a test layer. In app, desktop and gui-plugins, drive the real module and entry point, and inject only through a parameter the product already has.
 - Never add `--isolate` or bare `--parallel` (which implies `--isolate`) to a test script: ai went from 7.6s to 26.3s with `--parallel=2`.
   - `--parallel=N --no-isolate` keeps the shared registry and measured 0.47-0.68x serial wall time at about the same CPU in core. It also exposed load-sensitive tests (browser-idle and integration's `eventually`, both since fixed).
   - Adopting it is a runner decision for maintainers once CI passes on both OSes, not a fix for one slow test.
-- Runtime imports run in every file that loads the module. `packages/desktop/src/main/storage/store.ts:3` imports `electron` only for `getStore`, so `src/main/extension/storage.test.ts` and `src/main/storage/store.test.ts` download the ~100MB Electron binary on a fresh install. On a first local run, storage.test.ts took 5.3s of file time for 0.1s of test bodies. Use `import type` for types (`packages/desktop/src/main/ipc-transport.test.ts:4`).
+- Runtime imports run in every file that loads the module. `packages/desktop/src/main/storage/store.ts:3` imports `electron` only for `getStore`, so `src/main/plugin/storage.test.ts` and `src/main/storage/store.test.ts` download the ~100MB Electron binary on a fresh install. On a first local run, storage.test.ts took 5.3s of file time for 0.1s of test bodies. Use `import type` for types (`packages/desktop/src/main/ipc-transport.test.ts:4`).
 
 ## Turbo test tasks
 

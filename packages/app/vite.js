@@ -105,7 +105,7 @@ export default [
             "@": fileURLToPath(new URL("./src", import.meta.url)),
             // The font package imports its 33 MB Chinese, Japanese and Korean add-on on demand; the app does not ship it.
             "@betteroffice/fonts-cjk": fileURLToPath(
-              new URL("../gui-extensions/src/microsoft-office/fonts-cjk.ts", import.meta.url),
+              new URL("../gui-plugins/src/microsoft-office/fonts-cjk.ts", import.meta.url),
             ),
           },
         },

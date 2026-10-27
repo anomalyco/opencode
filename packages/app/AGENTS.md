@@ -45,23 +45,23 @@ A flash, a blanked area, a dialog that resizes or a reset scroll on first open a
 
 ## Fonts
 
-Users choose three fonts in Settings > Appearance. Every surface uses one of these roles. This section is the single source for font rules across `app`, `ui`, `session-ui`, `gui-extensions` and `desktop`.
+Users choose three fonts in Settings > Appearance. Every surface uses one of these roles. This section is the single source for font rules across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.
 
 | Role          | Use for                                                            | Use                                                                                                   |
 | ------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
 | UI font       | Prose, labels, titles, controls                                    | Inherit, or `var(--font-family-sans)`, `var(--v2-font-family-sans)`, `font-sans`                      |
 | Code font     | Shell commands, code, paths shown as code, diffs, logs, tool input | `var(--font-family-mono)`, `var(--v2-font-family-code)`, `font-mono`, or a `<code>` / `<pre>` element |
-| Terminal font | Terminal output only                                               | `appearance.font("mono")` from the extension SDK                                                      |
+| Terminal font | Terminal output only                                               | `appearance.font("mono")` from the GUI plugin SDK                                                     |
 
 - Never write a literal family (`Inter`, `"IBM Plex Mono"`, `monospace`, `Menlo`, `system-ui`) in production CSS, classes, inline styles, canvas `font` strings or widget options. A literal ignores the user's setting.
 - Never add an `@font-face`, font file, or font package outside `packages/app/src/index.css`. That file is the only place the app ships faces: Inter (variable), IBM Plex Mono Text (weights below 600), Bold (600 and up) and Text Italic, and JetBrainsMono Nerd Font Mono Regular and Bold. If a design needs a face that is not shipped, add it there and say why in the PR.
 - Show shell commands with the timeline shell metrics: code font, `13px`, weight `440`, `-0.04px` letter spacing. Do not invent another size for the same content.
 - Prefer weight tokens (`font-medium`, `var(--font-weight-medium)`) over literal weights. Mono at `600` or more renders IBM Plex Mono Bold, so reserve it for real emphasis.
-- Do not read font settings directly. `src/settings/model.tsx` writes them to the CSS variables above, and the extension host passes the terminal font through `appearance.font`.
+- Do not read font settings directly. `src/settings/model.tsx` writes them to the CSS variables above, and the plugin host passes the terminal font through `appearance.font`.
 
 ## Loading Indicators
 
-This section is the single source for loading indicators across `app`, `ui`, `session-ui`, `gui-extensions` and `desktop`.
+This section is the single source for loading indicators across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.
 
 - The dot-matrix `Spinner` (`@opencode/ui/spinner`, and `SessionProgressIndicatorV2` and `ActivityRing`, which render it) means the AI is working: a running session, turn, subagent or tool call. Use it only for those states.
 - Every other loading state uses `Loader` (`@opencode/ui/loader`): page, pane and file loads, browser reload, search, connecting, authenticating, sending, installing. Use a purpose-built indicator only when the state has one, such as the titlebar update ring.
@@ -69,7 +69,7 @@ This section is the single source for loading indicators across `app`, `ui`, `se
 
 ## Scrolling
 
-This section is the single source for scroll containers across `app`, `ui`, `session-ui`, `gui-extensions` and `desktop`.
+This section is the single source for scroll containers across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.
 
 - Scroll with a plain element: `overflow-y-auto` (or `overflow-x-auto`, `overflow-auto`) plus `min-h-0` or a max height. `packages/ui/src/styles/scrollbar.css` gives every native scrollbar the shared thumb. Do not add `ScrollView` to fix how a scrollbar looks.
 - Mark each scroll container with `data-scrollable`. Nested-scroll handling (the timeline, Home, `createAutoScroll`) uses it to let the inner container scroll first.

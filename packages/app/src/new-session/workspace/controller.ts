@@ -60,9 +60,7 @@ export function createNewSessionWorkspaceController(input: {
   const settings = useSettings()
   const tabs = useTabs()
 
-  const [state, setState] = createStore({
-    existing: undefined as { projectID: string; directory: string } | undefined,
-  })
+  const [state, setState] = createStore<{ existing?: { projectID: string; directory: string } }>({})
 
   const currentProject = createMemo(() => {
     const projectID = data.location.info({ directory: sdk().directory })?.project.id
@@ -267,7 +265,7 @@ export function createNewSessionWorkspaceController(input: {
       visible,
       branch,
     },
-    branches: (search: string, signal: AbortSignal) =>
+    branches: (search: string, signal?: AbortSignal) =>
       serverSDK.api.vcs.branch
         .list({ location: { directory: projectRoot() }, search, limit: 50 }, { signal })
         .then((response) => response.data),

@@ -33,7 +33,7 @@ import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-prog
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
-import { TitlebarItems, useTitlebarItems } from "@/runtime/extension/titlebar-items"
+import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 
 export const newTabCommand = { id: "tab.new", keybind: "mod+t,mod+n" }
 
@@ -556,19 +556,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
                   },
                 },
-                // A draft registers its own, which searches projects in place.
-                layout.route().type === "draft"
-                  ? undefined
-                  : {
-                      ...projectSearchCommand,
-                      title: language.t("session.new.project.search"),
-                      category: language.t("command.category.project"),
-                      onSelect: () => {
-                        layout.draft.projectSearch.request()
-
-                        if (!openNewTab()) layout.draft.projectSearch.take()
-                      },
-                    },
                 {
                   id: "tab.reopenClosed",
                   category: language.t("command.category.file"),
@@ -578,6 +565,21 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 },
               ].filter((v) => v !== undefined)
             })
+
+            // A draft registers this command under the same key and shadows it while mounted, searching projects in place.
+            // Sharing the key, not checking the route, keeps exactly one owner while the router commits a transition.
+            command.register(projectSearchCommand.id, () => [
+              {
+                ...projectSearchCommand,
+                title: language.t("session.new.project.search"),
+                category: language.t("command.category.project"),
+                onSelect: () => {
+                  layout.draft.projectSearch.request()
+
+                  if (!openNewTab()) layout.draft.projectSearch.take()
+                },
+              },
+            ])
 
             const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
 
