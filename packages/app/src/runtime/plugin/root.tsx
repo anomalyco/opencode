@@ -56,7 +56,8 @@ export function PluginRoot(props: ParentProps) {
 
   // The GUIs of the plugins on the app's own server, as main sends them.
   const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
-  // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Settings > Plugins shows them.
+  // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Extensions › Plugins shows
+  // them.
   const [reserved, setReserved] = createSignal<readonly string[]>([])
 
   // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.

@@ -413,7 +413,7 @@ const saved = builtinMainContext(ctx).storage.store("servers", {
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
 - Renaming a built-in that has shipped moves three things: stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`BuiltinPanel.legacy`). Never drop user data. The enable setting starts again under the new id.
 
-A built-in always runs, whatever setting is saved under its id, and Settings › Plugins has no switch for it. For any other plugin, the setting saved under its id wins; with none, the plugin is enabled. A plugin from the config whose `os` leaves out this system never runs; Settings › Plugins keeps its row, without a switch, with "Not available on this system." Both desktop hosts use this rule (`pluginEnabled`). A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled plugins.
+A built-in always runs, whatever setting is saved under its id, so Extensions › Plugins does not list it, unless it failed: then its row shows the error and Reload, without a switch. For any other plugin, the setting saved under its id wins; with none, the plugin is enabled. A plugin from the config whose `os` leaves out this system never runs; Extensions › Plugins keeps its row, without a switch, with "Not available on this system." Both desktop hosts use this rule (`pluginEnabled`). A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled plugins.
 
 ## Runtime rules
 

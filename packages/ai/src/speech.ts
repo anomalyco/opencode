@@ -112,7 +112,6 @@ export class SpeechResponse extends Schema.Class<SpeechResponse>("Speech.Respons
   audio: Media.AssetSchema,
   timestamps: Schema.optional(Schema.Array(SpeechTimestamp)),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 
@@ -131,7 +130,6 @@ export const SpeechFinishEvent = Schema.Struct({
   type: Schema.tag("finish"),
   audio: Media.AssetSchema,
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Speech.Event.Finish" })
 
@@ -163,7 +161,6 @@ const collectResponse = (events: ReadonlyArray<SpeechEvent>): Effect.Effect<Spee
       audio: finish.audio,
       timestamps: timestamps.length === 0 ? undefined : timestamps,
       usage: finish.usage,
-      notices: finish.notices,
       providerMetadata: finish.providerMetadata,
     }),
   )

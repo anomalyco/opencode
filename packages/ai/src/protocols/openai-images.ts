@@ -328,12 +328,9 @@ const step = (state: State, frame: Frame) => (typeof frame === "string" ? onEven
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   if (state.completed === 0) return Effect.fail(route.incomplete())
   const provider = context.request.model.provider
-  const chosen = size(context.request)
-  const notice = chosen === undefined ? undefined : ImageSizing.notice(route.name, context.request, chosen)
   return Effect.succeed([
     ImageFinishEvent.make({
       usage: usage(state.usage, provider),
-      notices: notice === undefined ? undefined : [notice],
       providerMetadata: {
         [provider]: {
           outputFormat: state.format,

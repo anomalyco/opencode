@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { Toast } from "@opencode/ui/toast"
 import {
@@ -44,7 +44,7 @@ import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
 import { PluginSlot } from "../src/runtime/plugin/render"
 import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
-import { PluginsSettings } from "../src/runtime/plugin/settings-plugins"
+import { ExtensionPlugins } from "../src/runtime/plugin/extension-plugins"
 import { SessionPluginPills } from "../src/session/composer/plugin-pills"
 import { ui } from "../src/runtime/plugin/ui"
 
@@ -226,8 +226,8 @@ export function mountPlugins(input: {
   disabled?: readonly string[]
   bridge?: Parameters<typeof createInstalled>[0]
   stored?: Readonly<Record<string, Json>>
-  /** Shows the production Settings > Plugins page for status-label contracts. */
-  settings?: boolean
+  /** Shows the production Extensions › Plugins rows of the desktop app's own server, which lists these plugins. */
+  plugins?: readonly PluginInfo[]
   /** The client of an Ipc while main provides it, as a desktop window's bridge reports it. Omitted: the web. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
 }) {
@@ -310,8 +310,12 @@ export function mountPlugins(input: {
 
     return (
       <Show when={host.ready()}>
-        <Show when={input.settings}>
-          <PluginsSettings />
+        <Show when={input.plugins}>
+          {(plugins) => (
+            <div data-testid="extension-plugins">
+              <ExtensionPlugins plugins={plugins()} own />
+            </div>
+          )}
         </Show>
         <PluginSlot at="window.bottom" input={{}} />
       </Show>

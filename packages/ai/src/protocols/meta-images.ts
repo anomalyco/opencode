@@ -18,7 +18,7 @@ export const DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 
 /**
  * Provider-native options. Common fields (`n`, `aspect`, `images`) live on the request; Meta picks its own output
- * resolution (about 2.5 megapixels), so `resolution` is ignored with a notice.
+ * resolution (about 2.5 megapixels), so `resolution` is ignored.
  */
 export type ImageOptions = {
   /** `WIDTHxHEIGHT` aspect ratio hint; it replaces `aspect`, so setting both fails. */
@@ -127,15 +127,6 @@ const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   return new ImageResponse({
     images,
-    notices:
-      context.request.resolution === undefined
-        ? undefined
-        : [
-            {
-              type: "other",
-              message: `${route.name} picks its own output resolution; ignored ${context.request.resolution}`,
-            },
-          ],
     usage:
       decoded.usage === undefined
         ? undefined

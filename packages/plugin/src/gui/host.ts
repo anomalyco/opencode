@@ -369,7 +369,7 @@ export interface Installed {
   readonly server?: boolean
   /** A plugin from the config that also exports `./tui`, which `cli.json` turns off; a built-in has no TUI part. */
   readonly tui?: boolean
-  /** A plugin from the config whose `os` leaves out this system: it never runs here, and Settings says so. */
+  /** A plugin from the config whose `os` leaves out this system: it never runs here; Extensions › Plugins says so. */
   readonly unsupported?: boolean
 }
 
@@ -403,7 +403,7 @@ export interface BridgePluginGui {
 export interface BridgePluginGuis {
   /** The plugins whose GUI loads on this system, after main's id and OS checks. */
   readonly plugins: readonly BridgePluginGui[]
-  /** Plugins whose GUI cannot load because a built-in claims the id; Settings › Plugins reports them. */
+  /** Plugins whose GUI cannot load because a built-in claims the id; Extensions › Plugins reports them. */
   readonly reserved: readonly string[]
 }
 

@@ -148,10 +148,6 @@ const decodeImageDocument = (identity: MediaProtocol.Identity) => {
     const image = yield* MediaInput.decodedAsset(output.invalid, `${identity.name} result`, data, undefined)
     return new ImageResponse({
       images: [image],
-      notices:
-        document.finish_reason === "CONTENT_FILTERED"
-          ? [{ type: "moderated", message: `${identity.name} blurred the image for violating its content policy` }]
-          : undefined,
       providerMetadata: { stability: { seed: document.seed, finishReason: document.finish_reason } },
     })
   })

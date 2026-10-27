@@ -255,7 +255,10 @@ const [refund, department] = response.answers
 ```
 
 `input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
-A question the host declines is `{ name, type: "error", reason: "refusal" }`; the other answers still come back.
+A question the host declines is `{ name, type: "error", reason, message? }`, with `reason` such as `"refusal"`; the
+other answers still come back.
+`response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;
+the host's raw usage stays in `providerMetadata`.
 Media goes wherever the host reads it, and a kind the host has no place for fails the call. Host-specific fields go in
 `providerOptions`, typed by the selected model (OpenAI `promptCacheKey` and `safetyIdentifier`, OpenRouter
 `provider` routing, Baseten `max_len`).
@@ -628,7 +631,7 @@ const edit = Image.generate({
 
 The default image format is WEBP; `outputFormat` also accepts PNG/JPEG and `responseFormat: "url"`
 returns a signed URL. `aspect` lowers to Meta's `size`, which is only an aspect-ratio hint: Meta renders about 2.5
-megapixels whatever you ask, so `resolution` is ignored with a notice. For conversational images, select
+megapixels whatever you ask, so `resolution` is ignored. For conversational images, select
 `meta.responses("muse-image-1.0")` with `tools: [Meta.imageGeneration({ reasoningStrength: "low" })]`.
 Generated images are provider-executed tool results with file content. Retain `response.message` to
 replay the signed image handle on the next request. Muse Image accepts only the `image_generation` tool.
@@ -668,16 +671,16 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Common fields are portable in shape, not in support. A route that has to approximate `aspect` or `resolution`
-returns what it used in `response.notices`; one that cannot honor them fails with a typed `AIError` before any network
-call rather than dropping them, so check this table before swapping only the `model`:
+Common fields are portable in shape, not in support. Some routes approximate `aspect` or `resolution` with the nearest
+size they offer; others fail with a typed `AIError` before any network call rather than dropping them, so check this
+table before swapping only the `model`:
 
 | Provider              | `n` | `aspect`             | `resolution`          | `images`                         | Moved to `providerOptions`                         |
 | --------------------- | --- | -------------------- | --------------------- | -------------------------------- | -------------------------------------------------- |
-| OpenAI                | ✓¹  | nearest size, notice | nearest size, notice  | ✓                                | `size`, `outputFormat`, `mask`                     |
+| OpenAI                | ✓¹  | nearest size         | nearest size          | ✓                                | `size`, `outputFormat`, `mask`                     |
 | Google (Gemini)       | 1   | ✓                    | ✓ (`imageSize`)       | ✓ (no public URLs)               | `seed`                                             |
-| xAI                   | ✓   | ✓                    | `1k`/`2k`, notice     | ✓                                | none                                               |
-| Meta                  | ✓   | ✓ (hint)             | ignored, notice       | ✓                                | `size`, `outputFormat`                             |
+| xAI                   | ✓   | ✓                    | `1k`/`2k`             | ✓                                | none                                               |
+| Meta                  | ✓   | ✓ (hint)             | ignored               | ✓                                | `size`, `outputFormat`                             |
 | Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
 | Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
 | Black Forest Labs     | 1   | per model            | width × height models | per model (1–8)                  | `width`, `height`, `seed`, `output_format`, `mask` |
@@ -963,8 +966,9 @@ failures (rate limits, provider 5xx, network errors) with backoff that honors `r
 `poll.timeout`; submits and cancels never retry. Interrupting a wait (or aborting its `signal`) does not cancel the
 provider job, which keeps running and billing: call `cancel()` to stop it. Failed,
 cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
-outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) surface as `notices` when
-a video is still returned and as a `ContentPolicy` reason when nothing is.
+outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) fail with a
+`ContentPolicy` reason when no video comes back; when one still does, Veo and xAI keep the raw outcome in
+`providerMetadata`.
 
 Provider notes:
 

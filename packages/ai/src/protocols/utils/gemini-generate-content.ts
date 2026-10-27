@@ -106,18 +106,6 @@ export const withheld = (name: string, chunk: Chunk, frame: string) => {
   })
 }
 
-/** Any finish reason other than `STOP` means the output may be cut short, so it is surfaced rather than dropped. */
-export const notices = (name: string, state: Metadata): ReadonlyArray<Media.Notice> | undefined =>
-  state.finishReason === undefined || state.finishReason === "STOP"
-    ? undefined
-    : [
-        {
-          type: contentFiltered(state.finishReason) ? "filtered" : "other",
-          message: `${name} finished with ${state.finishReason}`,
-          providerMetadata: { google: { finishReason: state.finishReason } },
-        },
-      ]
-
 export const usage = (usage: UsageMetadata | undefined): MediaUsage | undefined =>
   usage === undefined
     ? undefined

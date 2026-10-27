@@ -61,15 +61,8 @@ describe("Video / Google Veo", () => {
         expect(response.video.headers).toEqual({ "x-goog-api-key": "test" })
         expect(JSON.stringify(response.video)).not.toContain("x-goog-api-key")
         expect(Media.from(response.video.source).headers).toBeUndefined()
-        expect(response.notices).toEqual([
-          {
-            type: "filtered",
-            message: "Google Veo filtered media: audio filtered",
-            providerMetadata: { google: { raiMediaFilteredReason: "audio filtered" } },
-          },
-        ])
         expect(response.providerMetadata).toEqual({
-          google: { operation, raiMediaFilteredCount: 1, metadata: undefined },
+          google: { operation, raiMediaFilteredCount: 1, raiMediaFilteredReasons: ["audio filtered"], metadata: undefined },
         })
         expect(yield* response.video.bytes()).toEqual(Uint8Array.from([9, 9, 9]))
       })
@@ -314,8 +307,9 @@ describe("Video / xAI", () => {
       ])
       expect(response.video.source).toEqual({ type: "url", url: "https://vidgen.x.ai/out.mp4", mediaType: "video/mp4" })
       expect(response.video.info).toEqual({ durationSeconds: 10 })
-      expect(response.notices).toBeUndefined()
-      expect(response.providerMetadata).toEqual({ xai: { requestId: "req_1", model: "grok-imagine-video-1.5" } })
+      expect(response.providerMetadata).toEqual({
+        xai: { requestId: "req_1", model: "grok-imagine-video-1.5", respectModeration: true },
+      })
     }),
   )
 
@@ -393,7 +387,7 @@ describe("Video / xAI", () => {
     )
   }
 
-  it.effect("flags moderated results as a notice and withheld videos as a content policy failure", () =>
+  it.effect("returns moderated results and fails withheld videos as a content policy failure", () =>
     Effect.gen(function* () {
       const flagged = yield* Video.generate({ model, prompt: "x" }).pipe(
         Effect.provide(
@@ -409,9 +403,7 @@ describe("Video / xAI", () => {
           ),
         ),
       )
-      expect(flagged.notices).toEqual([
-        { type: "moderated", message: "xAI Video flagged the generated video for moderation" },
-      ])
+      expect(flagged.providerMetadata).toEqual({ xai: { requestId: "req_1", respectModeration: false } })
       const withheld = yield* Video.generate({ model, prompt: "x" }).pipe(
         Effect.flip,
         Effect.provide(

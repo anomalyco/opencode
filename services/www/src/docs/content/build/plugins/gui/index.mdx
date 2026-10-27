@@ -226,13 +226,13 @@ vite build --watch
 - An installed package's GUI changes only with its version.
 - Changing the plugin's `options` in `opencode.json(c)` reloads the plugin.
 - `opencode plugin update` replaces a package's GUI once the update finishes.
-- [**Settings > Plugins**](/plugins#desktop) lists the plugin with a switch that turns its GUI off. To remove it, remove
-  it from `opencode.json(c)` or run `opencode plugin remove <package>`.
+- [**Settings > Extensions > Plugins**](/plugins#desktop) lists the plugin with a switch that turns its GUI off. To
+  remove it, remove it from `opencode.json(c)` or run `opencode plugin remove <package>`.
 
 <Callout type="note">
   The app's own plugins reserve their ids. If your plugin's id is one of them, nests under one with a `.`, has one
-  nested under it, or is in the `opencode` namespace, its GUI does not load, and **Settings > Plugins** lists it as not
-  loaded.
+  nested under it, or is in the `opencode` namespace, its GUI does not load, and **Settings > Extensions > Plugins**
+  lists it as not loaded.
 </Callout>
 
 ## Define the GUI plugin
@@ -260,7 +260,7 @@ export const definition = Plugin.define({
   server part (the directory name for a local directory without a `name`). It prefixes every id the plugin creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored
   keys (`plugin.<id>.<key>`), and the ids of the [contracts and Ipcs](#contracts-and-tokens) it provides.
 - `os` limits the plugin to some operating systems. Omit it to run on every OS. A plugin whose `os` leaves out this
-  system does not run, and **Settings > Plugins** keeps its row with "Not available on this system."
+  system does not run, and **Settings > Extensions > Plugins** keeps its row with "Not available on this system."
 - `stores` declares [stored state](#stored-state) for windows. Read it as `ctx.stores.<key>`.
 - `i18n` holds copy by locale. Write every locale inline; English fills every key a locale lacks. Read it with
   `ctx.t(key, params)` and `ctx.plural(key, count)`. In a window, `ctx.t` also reads the app's shared keys, such as `common.*`. In `main`, a missing key returns the key.

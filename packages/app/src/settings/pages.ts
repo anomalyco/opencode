@@ -14,7 +14,6 @@ export const pageIcons = {
   extensions: "extensions",
   servers: "server",
   experimental: "flask",
-  plugins: "cube",
   about: "info",
 } as const satisfies Record<SettingsRootTab, IconProps["name"]>
 
@@ -30,6 +29,5 @@ export const pageLabels = {
   extensions: "settings.tab.extensions",
   servers: "settings.section.server",
   experimental: "settings.tab.experimental",
-  plugins: "settings.plugins.title",
   about: "settings.tab.about",
 } as const satisfies Record<SettingsRootTab, Parameters<ReturnType<typeof useLanguage>["t"]>[0]>
