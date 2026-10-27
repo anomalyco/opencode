@@ -376,7 +376,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
                 </>
               }
               placement="top"
-              openDelay={1200}
+              openDelay={800}
             >
               <Button
                 size="small"
