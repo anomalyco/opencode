@@ -16,7 +16,7 @@ export const Plugin = define({
       Effect.all([ctx.provider.reload(), ctx.mcp.reload(), ctx.skill.reload()], { discard: true }),
     )
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, reload)
-    // Documents reverse so earlier-loaded policy wins: managed policy, then a Console config document, then user
+    // Documents reverse so earlier-loaded policy wins: a Console config document, then managed policy, then user
     // and project files.
     const policies = () => ManagedPolicy.statements(loaded.entries)
     const runSync = Effect.runSyncWith(yield* Effect.context())

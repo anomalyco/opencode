@@ -44,8 +44,8 @@ export interface Interface {
   /** Updates supported global config fields while preserving unrelated JSONC content. */
   readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
   /**
-   * Replaces, or clears with `undefined`, the document an integration connection contributes. It loads right after
-   * managed policies: its settings layer below remote, user, and project config, while its policies outrank theirs.
+   * Replaces, or clears with `undefined`, the document an integration connection contributes. It loads first:
+   * its settings layer below other config, while its policies outrank all other sources, including managed policies.
    * Changing it reloads config like any other source.
    */
   readonly integration?: (
@@ -268,8 +268,8 @@ export const layer = (options?: Options) =>
 
         // Managed settings load last so they override everything, and MDM
         // preferences outrank the system directory as in V1. Policies evaluate
-        // in reverse load order, so managed policies split off and load first
-        // to keep final file-based authority.
+        // in reverse load order, so managed policies split off and load before
+        // other file-based config, below integration policies.
         const managed = [
           ...(sources.system?.present ? yield* loadDirectory(sources.system.path).pipe(Effect.orDie) : []),
           ...(sources.preferences ? yield* loadPreferences(sources.preferences).pipe(Effect.orDie) : []),
@@ -292,8 +292,8 @@ export const layer = (options?: Options) =>
             ? new Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
             : entry,
         )
-        // Integration documents load right after managed policies: every remote, user, and project layer overrides
-        // their settings, and since policies evaluate earliest-loaded first, only managed policies outrank theirs.
+        // Integration documents load first: other layers override their settings,
+        // and since policies evaluate earliest-loaded first, their policies outrank all other sources.
         // Global entries sit below explicit and direct files; project directories rank above them.
         const globalSupplementary = sources.global ? yield* loadDirectory(sources.global).pipe(Effect.orDie) : []
         const projectSupplementary = yield* Effect.forEach(
@@ -304,8 +304,8 @@ export const layer = (options?: Options) =>
           Effect.map((entries) => entries.flat()),
         )
         return [
-          ...managedPolicies,
           ...integrations.values(),
+          ...managedPolicies,
           ...(yield* loadWellknown().pipe(Effect.orDie)),
           ...globalSupplementary,
           ...explicit,

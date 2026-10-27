@@ -218,7 +218,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
     })
     // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
     const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
-      // The config merges as one integration document, which config loads right after managed policies.
+      // The config merges as one integration document, which config loads before managed policies.
       yield* integrate(
         next.remote &&
           next.connection &&

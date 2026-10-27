@@ -39,7 +39,7 @@ export type Remote = typeof Remote.Type
 
 /**
  * A config document delivered by an integration connection, such as the OpenCode Console's config. Config loads it
- * right after managed policies, so user and project config override its settings while its policies outrank theirs.
+ * first, so other config overrides its settings while its policies outrank all other sources, including MDM.
  * Its providers authenticate with, and only exist for, that connection.
  */
 export class Document extends Config.Document.extend<Document>("Config.IntegrationDocument")({

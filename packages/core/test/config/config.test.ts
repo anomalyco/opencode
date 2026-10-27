@@ -512,7 +512,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("ranks integration policies below managed policies and above user and project policies", () =>
+  it.live("ranks integration policies above managed, user, and project policies", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
         const system = path.join(tmp.path, "system")
@@ -525,7 +525,7 @@ describe("Config", () => {
             .then(() => fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ policies })))
         return Effect.promise(() =>
           Promise.all([
-            write(system, [shell("shell:rm*", "deny")]),
+            write(system, [shell("shell:rm*", "deny"), shell("shell:ls", "allow"), shell("shell:git*", "deny")]),
             write(global, [shell("shell:*", "allow")]),
             write(project, [shell("shell:*", "allow")]),
           ]),
@@ -540,7 +540,7 @@ describe("Config", () => {
                   integrationID: integration,
                   connection: { type: "env", name: "OPENCODE_API_KEY" },
                   organization: "Acme",
-                  info: decodeInfo({ policies: [shell("shell:rm*", "allow"), shell("shell:*", "deny")] }),
+                  info: decodeInfo({ policies: [shell("shell:rm*", "allow"), shell("shell:ls", "deny")] }),
                 }),
               )
               const statements = ManagedPolicy.statements(yield* config.entries())
@@ -549,10 +549,18 @@ describe("Config", () => {
                   (policy) => policy.action === "tool.use" && Wildcard.match(resource, policy.resource),
                 )
               expect(deciding("shell:rm -rf")).toMatchObject({
+                effect: "allow",
+                message: "Blocked by Acme's policy",
+              })
+              expect(deciding("shell:ls")).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
+              expect(deciding("shell:git push")).toMatchObject({
                 effect: "deny",
                 message: "Blocked by configuration policy",
               })
-              expect(deciding("shell:ls")).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
+              yield* config.integration!(integration, undefined)
+              expect(
+                ManagedPolicy.decision(ManagedPolicy.statements(yield* config.entries()), "tool.use", "shell:rm -rf"),
+              ).toBe("deny")
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
