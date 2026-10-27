@@ -60,6 +60,23 @@ describe("new session project selection", () => {
     })
   })
 
+  test("shows the draft directory optimistically before the server lists its project", () => {
+    const existing = { id: "old", worktree: "/old" }
+
+    const controls: PromptProjectControls = {
+      available: [existing],
+      directory: "/new/directory",
+      select() {},
+      add() {},
+    }
+
+    createRoot((dispose) => {
+      const controller = createPromptProjectController({ controls: () => controls })
+      expect(controller.selected()).toEqual({ worktree: "/new/directory" })
+      dispose()
+    })
+  })
+
   test("lists every server's projects in one list: used first, then the rest, each by recent activity", () => {
     const local = { key: "sidecar", name: "hailmary", kind: "current" as const }
     const apollo = { key: "http://apollo:4096", name: "apollo", kind: "remote" as const }

@@ -331,12 +331,13 @@ function NewSessionLocationDialog(props: {
       onClick={() => choose(entry)}
     >
       <Switch>
-        <Match when={entry.type === "project" && entry}>
+        {/* Keyed: the narrowed accessors below would hit a stale read once the entry's type flips during a switch. */}
+        <Match when={entry.type === "project" && entry} keyed>
           {(item) => (
             <ProjectRow
-              project={item().project}
-              path={item().project.worktree}
-              onDrill={drillable(item().project) ? () => drill(item().project) : undefined}
+              project={item.project}
+              path={item.project.worktree}
+              onDrill={drillable(item.project) ? () => drill(item.project) : undefined}
               drillLabel={language.t("session.new.location.worktrees")}
             />
           )}
@@ -352,26 +353,27 @@ function NewSessionLocationDialog(props: {
             <DrillButton label={language.t("session.new.location.servers")} onDrill={pick} />
           </Show>
         </Match>
-        <Match when={entry.type === "server" && entry}>
+        <Match when={entry.type === "server" && entry} keyed>
           {(item) => (
             <div class="command-palette-row-main">
-              <Icon name={serverIcon(item().server)} class="command-palette-row-icon" />
+              <Icon name={serverIcon(item.server)} class="command-palette-row-icon" />
               <div class="command-palette-row-text">
-                <span class="command-palette-title palette-menu-title">{item().server.name}</span>
-                <Show when={item().server.hint}>
-                  {(hint) => <span class="command-palette-description">{hint()}</span>}
+                <span class="command-palette-title palette-menu-title">{item.server.name}</span>
+                <Show when={item.server.hint} keyed>
+                  {(hint) => <span class="command-palette-description">{hint}</span>}
                 </Show>
               </div>
             </div>
           )}
         </Match>
-        <Match when={entry.type === "workspace" && store.drilled && entry}>
+        {/* Keyed: `store.drilled` is carried in the matched value so the row never reads it bare after `back()` clears it. */}
+        <Match when={entry.type === "workspace" && store.drilled && { entry, drilled: store.drilled }} keyed>
           {(item) => (
             <WorkspaceRow
-              title={workspaceTitle(store.drilled!, item().value)}
-              value={item().value}
+              title={workspaceTitle(item.drilled, item.entry.value)}
+              value={item.entry.value}
               description={
-                item().value === "create" ? language.t("session.new.workspace.new.tooltip") : item().directory
+                item.entry.value === "create" ? language.t("session.new.workspace.new.tooltip") : item.entry.directory
               }
             />
           )}
@@ -395,18 +397,19 @@ function NewSessionLocationDialog(props: {
             placeholder={placeholder()}
             leadingIcon={
               <Switch fallback={<Icon name="magnifying-glass" />}>
-                <Match when={store.drilled}>
+                {/* Keyed: the chip's reads must not hit a stale accessor once `back()` clears `store.drilled`. */}
+                <Match when={store.drilled} keyed>
                   {(project) => (
                     <BackChip label={language.t("session.new.location.back")} onBack={back}>
                       <ProjectAvatar
                         class="shrink-0"
-                        fallback={displayName(project())}
-                        src={getProjectAvatarSource(project().id, project().icon)}
-                        variant={getProjectAvatarVariant(project().icon?.color)}
-                        generated={getProjectAvatarGenerated(project())}
+                        fallback={displayName(project)}
+                        src={getProjectAvatarSource(project.id, project.icon)}
+                        variant={getProjectAvatarVariant(project.icon?.color)}
+                        generated={getProjectAvatarGenerated(project)}
                       />
-                      <span class="min-w-0 truncate">{displayName(project())}</span>
-                      <ServerTag server={project().server} />
+                      <span class="min-w-0 truncate">{displayName(project)}</span>
+                      <ServerTag server={project.server} />
                     </BackChip>
                   )}
                 </Match>
@@ -513,7 +516,10 @@ function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () 
           </span>
         </div>
       </div>
-      <Show when={props.onDrill}>{(onDrill) => <DrillButton label={props.drillLabel} onDrill={onDrill()} />}</Show>
+      {/* Keyed: `onDrill` flips to undefined when the project's drillability changes under a re-render. */}
+      <Show when={props.onDrill} keyed>
+        {(onDrill) => <DrillButton label={props.drillLabel} onDrill={onDrill} />}
+      </Show>
     </>
   )
 }

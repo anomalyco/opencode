@@ -93,19 +93,20 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           aria-label={props.language.t("home.projects")}
           class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
         >
-          <Show when={selected()} fallback={<Icon name="folder" size="small" />}>
-            {(project) => <HomeProjectAvatar project={project()} />}
+          {/* Keyed: the dropdown trigger must not read a stale accessor when the selection flips during a switch. */}
+          <Show when={selected()} keyed fallback={<Icon name="folder" size="small" />}>
+            {(project) => <HomeProjectAvatar project={project} />}
           </Show>
           <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
             <bdi class="truncate">
-              <Show when={selected()} fallback={props.language.t("home.projects.all")}>
-                {(project) => displayName(project())}
+              <Show when={selected()} keyed fallback={props.language.t("home.projects.all")}>
+                {(project) => displayName(project)}
               </Show>
             </bdi>
-            <Show when={props.servers.length > 1 && server()}>
+            <Show when={props.servers.length > 1 && server()} keyed>
               {(server) => (
                 <bdi class="truncate text-v2-text-text-muted opacity-70">
-                  {props.serverLabel(server())}
+                  {props.serverLabel(server)}
                 </bdi>
               )}
             </Show>
