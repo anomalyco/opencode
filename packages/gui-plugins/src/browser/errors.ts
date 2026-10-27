@@ -1,7 +1,7 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "./operations"
 
-export function protocolError(method: string, error: unknown) {
-  const detail = message(error)
+export function protocolError(method: string, cause: unknown) {
+  const detail = message(cause)
 
   const recovery =
     method === "DOM.setFileInputFiles" && /not.*file input/i.test(detail)
@@ -16,31 +16,30 @@ export function protocolError(method: string, error: unknown) {
               ? "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security."
               : "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat."
 
-  return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause: error })
+  return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause })
 }
 
-export function browserFailure(action: Browser.Action, error: unknown): Extract<Browser.Outcome, { type: "failure" }> {
-  const detail = message(error, 1_700)
+export function browserFailure(action: Browser.Action, cause: unknown) {
+  const detail = message(cause, 1_700)
   const navigation = ["tabs.open", "navigate", "back", "forward", "reload"].includes(action.type)
   const network = navigation ? detail.match(/\bERR_[A-Z_]+\b/)?.[0] : undefined
 
   const hint =
     network === "ERR_CONNECTION_REFUSED"
-      ? "The browser could not connect to the site. Check its hostname/port on the connected server. localhost means that server, not the desktop."
+      ? "The browser could not connect to the site. Check its hostname/port. Pages load on the desktop's network: localhost means the user's computer, which may not be the machine running OpenCode."
       : network === "ERR_NAME_NOT_RESOLVED"
-        ? "The connected server could not resolve the hostname. Check the URL spelling and the server's DNS/network connection."
+        ? "The desktop could not resolve the hostname. Check the URL spelling and the desktop's DNS/network connection."
         : network?.startsWith("ERR_CERT_") || network?.startsWith("ERR_SSL_")
           ? "The desktop rejected the site's TLS connection. Ask the user to fix the certificate or trust configuration; do not bypass certificate checks."
           : network === "ERR_ABORTED"
             ? "Navigation was interrupted or became a download. Inspect browser.tabs.list({}) and browser.files.list({tabID}) before deciding to navigate again."
             : network
-              ? "The site failed to load through the connected server. Check its URL/network and the OC2 connection before retrying; inspect the current tab first."
+              ? "The site failed to load on the desktop's network. Check its URL and the desktop's connection before retrying; inspect the current tab first."
               : action.type === "screenshot" && /UnknownVizError|capture.*(?:failed|unavailable)/i.test(detail)
                 ? "Chromium could not capture a rendered frame. Call browser.tabs.focus({tabID}) and keep the desktop window visible. If it is already visible, report the capture failure instead of repeating it unchanged."
                 : undefined
 
   return {
-    type: "failure",
     code: network ? "navigation_failed" : "operation_failed",
     message: `browser.${action.type} failed. ${hint ? `${hint} Details: ${detail.slice(0, 400)}` : detail}`.slice(
       0,
@@ -49,6 +48,6 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
   }
 }
 
-function message(error: unknown, limit = 400) {
-  return (error instanceof Error ? error.message : String(error)).slice(0, limit)
+function message(cause: unknown, limit = 400) {
+  return (cause instanceof Error ? cause.message : String(cause)).slice(0, limit)
 }

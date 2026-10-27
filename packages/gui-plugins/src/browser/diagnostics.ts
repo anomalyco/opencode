@@ -1,4 +1,4 @@
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "./operations"
 import type { Protocol } from "devtools-protocol"
 import type { Cdp } from "./cdp"
 
@@ -44,14 +44,15 @@ export function createDiagnostics(cdp: Cdp) {
     timestampMs: number,
     source?: Browser.ConsoleEntry["source"],
   ) => {
-    messages.push({
+    const entry = {
       id: `${scope}:${++sequence}`,
       timestampMs,
       level,
       text: text.slice(0, 2_000),
       textTruncated: text.length > 2_000,
-      ...(source ? { source } : {}),
-    })
+    }
+
+    messages.push(source ? { ...entry, source } : entry)
 
     if (messages.length > 500) {
       messages.shift()
@@ -71,8 +72,9 @@ export function createDiagnostics(cdp: Cdp) {
             : "info",
       event.args
         .map((arg) =>
-          typeof arg.value === "string"
-            ? arg.value
+          // CDP reports a string argument as type "string" with the string itself as its value.
+          arg.type === "string"
+            ? String(arg.value)
             : arg.value !== undefined
               ? JSON.stringify(arg.value)
               : (arg.description ?? arg.unserializableValue ?? arg.type),

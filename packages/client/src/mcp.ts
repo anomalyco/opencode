@@ -7,6 +7,8 @@ export type ClientMcpOptions = {
   readonly directory?: string
   /** Handshake headers, such as `authorization`. Browsers cannot send them; use a ticket in `url` instead. */
   readonly headers?: Record<string, string>
+  /** How to use these tools. The opencode server adds it to the system prompt of sessions that can call them. */
+  readonly instructions?: string
   readonly tools: ReadonlyArray<ClientMcpTool>
   readonly WebSocket?: typeof WebSocket
 }
@@ -15,8 +17,13 @@ export type ClientMcpTool = {
   /** `[a-zA-Z0-9_-]+` */
   readonly name: string
   readonly description?: string
-  /** JSON Schema for the arguments; `type: "object"` is always set. Arguments are not validated here. */
+  /**
+   * JSON Schema for the arguments; `type: "object"` is always set. The opencode server validates arguments against it
+   * before calling the handler.
+   */
   readonly inputSchema?: Record<string, unknown>
+  /** JSON Schema for `structuredContent`. When set, every successful result returns `structuredContent`. */
+  readonly outputSchema?: Record<string, unknown>
   readonly handler: (
     args: Record<string, unknown>,
     ctx: ClientMcpToolContext,
@@ -26,13 +33,22 @@ export type ClientMcpTool = {
 export type ClientMcpToolContext = {
   /** The opencode session that issued the call. */
   readonly sessionID?: string
+  /** Aborts when the opencode server cancels the call, for example on a session interrupt, or the socket closes. */
+  readonly signal: AbortSignal
 }
 
 export type ClientMcpToolResult = {
   readonly content: ReadonlyArray<
     | { readonly type: "text"; readonly text: string }
     | { readonly type: "image"; readonly data: string; readonly mimeType: string }
+    /** A file. The opencode server attaches images and saves other files server-side, giving the model its path. */
+    | {
+        readonly type: "resource"
+        readonly resource: { readonly uri: string; readonly mimeType: string; readonly blob: string }
+      }
   >
+  /** The machine-readable result, matching the tool's `outputSchema`. */
+  readonly structuredContent?: Record<string, unknown>
   readonly isError?: boolean
 }
 
@@ -47,6 +63,7 @@ type Message = {
     readonly protocolVersion?: unknown
     readonly name?: unknown
     readonly arguments?: Record<string, unknown>
+    readonly requestId?: unknown
     readonly _meta?: Record<string, unknown>
   }
 }
@@ -75,20 +92,33 @@ export function connectClientMcp(options: ClientMcpOptions): ClientMcpConnection
         new Socket(endpoint(options), { headers: options.headers } as unknown as string[])
       : new Socket(endpoint(options))
     state.socket = socket
+    // Calls still running on this socket, by request ID, so a cancellation or a closed socket can abort them.
+    const running = new Map<string | number, AbortController>()
     socket.addEventListener("message", (event) => {
       if (state.disposed || typeof event.data !== "string") return
       const message = parse(event.data)
       if (!message) return
       // Reset backoff only once the opencode server finished initializing, so a failed attach keeps backing off.
       if (message.method === "notifications/initialized") state.delay = RECONNECT_MIN
-      // Notifications and responses need no reply.
-      if ((typeof message.id !== "string" && typeof message.id !== "number") || typeof message.method !== "string")
-        return
-      void respond(options, message.method, message.params).then((reply) =>
-        send(socket, { jsonrpc: "2.0", id: message.id, ...reply }),
+      const cancelled = message.params?.requestId
+      if (
+        message.method === "notifications/cancelled" &&
+        (typeof cancelled === "string" || typeof cancelled === "number")
       )
+        return running.get(cancelled)?.abort()
+      // Notifications and responses need no reply.
+      const id = message.id
+      if ((typeof id !== "string" && typeof id !== "number") || typeof message.method !== "string") return
+      const abort = new AbortController()
+      running.set(id, abort)
+      void respond(options, message.method, message.params, abort.signal).then((reply) => {
+        running.delete(id)
+        send(socket, { jsonrpc: "2.0", id, ...reply })
+      })
     })
     socket.addEventListener("close", () => {
+      running.forEach((abort) => abort.abort())
+      running.clear()
       if (state.socket === socket) state.socket = undefined
       if (state.disposed) return
       state.timer = setTimeout(connect, state.delay)
@@ -107,7 +137,7 @@ export function connectClientMcp(options: ClientMcpOptions): ClientMcpConnection
   }
 }
 
-async function respond(options: ClientMcpOptions, method: string, params: Message["params"]) {
+async function respond(options: ClientMcpOptions, method: string, params: Message["params"], signal: AbortSignal) {
   switch (method) {
     case "initialize":
       return {
@@ -116,6 +146,7 @@ async function respond(options: ClientMcpOptions, method: string, params: Messag
           protocolVersion: typeof params?.protocolVersion === "string" ? params.protocolVersion : PROTOCOL_VERSION,
           capabilities: { tools: {} },
           serverInfo: { name: options.name, version: "1.0.0" },
+          ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
         },
       }
     case "ping":
@@ -127,6 +158,7 @@ async function respond(options: ClientMcpOptions, method: string, params: Messag
             name: tool.name,
             description: tool.description,
             inputSchema: { type: "object", ...tool.inputSchema },
+            ...(tool.outputSchema === undefined ? {} : { outputSchema: { type: "object", ...tool.outputSchema } }),
           })),
         },
       }
@@ -135,7 +167,9 @@ async function respond(options: ClientMcpOptions, method: string, params: Messag
       if (!tool) return { error: { code: -32602, message: `Unknown tool: ${String(params?.name)}` } }
       const meta = params?._meta?.[SESSION_ID_META_KEY]
       return Promise.resolve()
-        .then(() => tool.handler(params?.arguments ?? {}, { sessionID: typeof meta === "string" ? meta : undefined }))
+        .then(() =>
+          tool.handler(params?.arguments ?? {}, { sessionID: typeof meta === "string" ? meta : undefined, signal }),
+        )
         .then(
           (result) => ({ result }),
           (error) => ({

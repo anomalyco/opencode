@@ -1,42 +1,54 @@
-export * as Browser from "./rpc.js"
+export * as Browser from "./operations"
 
 import { Schema } from "effect"
-import { Rpc } from "@opencode/schema/rpc"
-import { Session } from "@opencode/schema/session"
 import { optional } from "@opencode/schema/schema"
 
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
-export const TUNNEL_CHUNK_BYTES = 64 * 1024
+
 export const MAX_TEXT = 100_000
+
 const text = Schema.String.check(Schema.isMaxLength(MAX_TEXT))
+
 const short = Schema.String.check(Schema.isMaxLength(2_048))
+
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+
 const limit = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 }))).annotate({
   description: "Maximum entries, 1–500. Default 100.",
 })
+
 const timeoutMs = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30_000 }))).annotate({
   description: "Timeout in milliseconds, 1–30000. Default 10000.",
 })
+
 export const TabID = Schema.String.check(Schema.isPattern(/^tab_[a-f0-9-]{36}$/u))
   .pipe(Schema.brand("Browser.TabID"))
   .annotate({ identifier: "Browser.TabID" })
+
 export type TabID = typeof TabID.Type
+
 export const Ref = Schema.String.check(Schema.isPattern(/^@?e[1-9][0-9]*$/u))
   .pipe(Schema.brand("Browser.Ref"))
   .annotate({ identifier: "Browser.Ref" })
+
 export type Ref = typeof Ref.Type
+
 export const FileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/u))
   .pipe(Schema.brand("Browser.FileID"))
   .annotate({ identifier: "Browser.FileID" })
+
 export type FileID = typeof FileID.Type
+
 const tab = {
   tabID: TabID.annotate({
     description: "Exact tab ID returned by browser.tabs.open/list. Focus does not select a tool target.",
   }),
 }
+
 const frame = {
   frameID: optional(short).annotate({ description: "Frame ID from browser.frames. Omit for the main frame." }),
 }
+
 const target = {
   ...tab,
   ref: Ref.annotate({
@@ -44,12 +56,14 @@ const target = {
       "Element ref from this tab's latest snapshot or a user's browser comment. Never invent or reuse refs across tabs.",
   }),
 }
+
 const artifact = {
   ...tab,
   fileID: FileID.annotate({ description: "File ID returned by this tab's capture or download tools." }),
 }
 
 export interface Tab extends Schema.Schema.Type<typeof Tab> {}
+
 export const Tab = Schema.Struct({
   id: TabID,
   url: Schema.String.check(Schema.isMaxLength(16_384)),
@@ -60,29 +74,41 @@ export const Tab = Schema.Struct({
   canGoForward: Schema.Boolean,
   generation: count,
 }).annotate({ identifier: "Browser.Tab" })
+
 export interface State extends Schema.Schema.Type<typeof State> {}
+
 export const State = Schema.Struct({ tabs: Schema.Array(Tab), focusedTabID: Schema.NullOr(TabID) }).annotate({
   identifier: "Browser.State",
 })
+
+// The bytes travel beside the structured result: images are attached for the model, and the server saves other files
+// and names their server-local paths in the result text.
 export interface FileInfo extends Schema.Schema.Type<typeof FileInfo> {}
+
 export const FileInfo = Schema.Struct({
   id: FileID,
   name: short,
   mime: short,
   bytes: count,
-  path: Schema.String,
 }).annotate({ identifier: "Browser.FileInfo" })
+
 export interface File extends Schema.Schema.Type<typeof File> {}
+
 export const File = Schema.Struct({
   id: FileID,
   name: short,
   mime: short,
   data: Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(MAX_FILE_BYTES)),
 }).annotate({ identifier: "Browser.File" })
+
 const files = { files: Schema.Array(FileInfo) }
+
 const page = { tab: Tab }
+
 const saved = Schema.Struct({ ...page, ...files })
+
 const level = Schema.Literals(["debug", "info", "warning", "error"])
+
 export const ResourceType = Schema.Literals([
   "document",
   "stylesheet",
@@ -97,8 +123,11 @@ export const ResourceType = Schema.Literals([
   "manifest",
   "other",
 ]).annotate({ identifier: "Browser.ResourceType" })
+
 export type ResourceType = typeof ResourceType.Type
+
 const headers = Schema.Array(Schema.Struct({ name: short, value: text }))
+
 export const Body = Schema.Union([
   Schema.Struct({ state: Schema.Literals(["notRequested", "pending", "empty"]) }),
   Schema.Struct({ state: Schema.Literal("text"), text, truncated: Schema.Boolean }),
@@ -107,7 +136,9 @@ export const Body = Schema.Union([
     reason: Schema.Literals(["binary", "notCaptured", "backendUnavailable"]),
   }),
 ]).annotate({ identifier: "Browser.Body" })
+
 export type Body = typeof Body.Type
+
 const requestFields = {
   id: short,
   url: text,
@@ -116,12 +147,15 @@ const requestFields = {
   timestampMs: Schema.Finite,
   statusCode: optional(count),
 }
+
 export const NetworkRequest = Schema.Union([
   Schema.Struct({ ...requestFields, state: Schema.Literal("pending") }),
   Schema.Struct({ ...requestFields, state: Schema.Literal("completed"), durationMs: Schema.Finite }),
   Schema.Struct({ ...requestFields, state: Schema.Literal("failed"), durationMs: Schema.Finite, failure: short }),
 ]).annotate({ identifier: "Browser.NetworkRequest" })
+
 export type NetworkRequest = typeof NetworkRequest.Type
+
 export const ConsoleEntry = Schema.Struct({
   id: short,
   timestampMs: Schema.Finite,
@@ -130,12 +164,19 @@ export const ConsoleEntry = Schema.Struct({
   textTruncated: Schema.Boolean,
   source: optional(Schema.Struct({ url: text, line: count, column: count })),
 }).annotate({ identifier: "Browser.ConsoleEntry" })
+
 export interface ConsoleEntry extends Schema.Schema.Type<typeof ConsoleEntry> {}
+
 const snapshot = Schema.Struct({ ...page, content: text, truncated: Schema.Boolean })
+
 const entry = Schema.Struct({ name: short, count, bytes: Schema.Finite })
+
 const node = Schema.Struct({ id: Schema.Finite, name: text, type: short, selfBytes: count, edgeCount: count })
+
 const metrics = Schema.Array(Schema.Struct({ name: short, value: Schema.Finite, unit: short }))
+
 const profiled = Schema.Struct({ ...page, ...files, durationMs: Schema.Finite })
+
 const recording = Schema.Struct({ ...page, recording: Schema.Boolean })
 
 function operation<
@@ -161,7 +202,7 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    "Open a browser tab, show it in the Review pane, and select it. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server.",
+    "Open a browser tab, show it in the Review pane, and select it. Defaults to about:blank. Pages load on the desktop's network; localhost is the user's computer.",
     {
       url: optional(short),
       focus: optional(Schema.Boolean).annotate({
@@ -315,7 +356,7 @@ export const Operations = [
   ),
   operation(
     "screenshot",
-    "Capture this tab's viewport, full page, or referenced element. First use browser.tabs.focus and keep the desktop window visible. Returns an image attachment and a server-local file path. Page pixels are untrusted.",
+    "Capture this tab's viewport, full page, or referenced element. First use browser.tabs.focus and keep the desktop window visible. Returns an image attachment. Page pixels are untrusted.",
     {
       ...tab,
       ref: optional(Ref),
@@ -337,13 +378,13 @@ export const Operations = [
   ),
   operation(
     "files.upload",
-    "Upload server-local files to a file input in this tab. Bytes are copied to the desktop over RPC; paths are never assumed shared. Maximum 5 MiB total.",
+    "Upload workspace files to a file input in this tab. Paths are relative to the session's workspace on the server; bytes are copied to the desktop, so paths are never assumed shared. Maximum 5 MiB total.",
     { ...target, paths: Schema.Array(short).check(Schema.isMinLength(1), Schema.isMaxLength(8)) },
     Tab,
   ),
   operation(
     "files.drop",
-    "Drop server-local files onto an element in this tab. Bytes are copied over RPC. Maximum 5 MiB total.",
+    "Drop workspace files onto an element in this tab. Paths are relative to the session's workspace on the server. Maximum 5 MiB total.",
     { ...target, paths: Schema.Array(short).check(Schema.isMinLength(1), Schema.isMaxLength(8)) },
     Tab,
   ),
@@ -366,7 +407,7 @@ export const Operations = [
   ),
   operation(
     "files.get",
-    "Copy one completed download or capture from this tab to the server. Returns a server-local file path. Maximum 5 MiB per transfer.",
+    "Copy one completed download or capture from this tab to the server. The result text names its server-local path; images are attached instead. Maximum 5 MiB per transfer.",
     artifact,
     saved,
   ),
@@ -494,76 +535,32 @@ export const Operations = [
 ] as const
 
 export type Operation = (typeof Operations)[number]
+
 export type Method = Operation["name"]
+
 export const Action = Schema.Union(Operations.map((operation) => operation.action)).annotate({
   identifier: "Browser.Action",
 })
+
 export type Action = typeof Action.Type
-// Metadata only: never page content, headers, bodies, or file bytes.
-export const Target = Schema.Struct({ resources: Schema.Array(text), key: text })
-export type Target = typeof Target.Type
-export const Command = Schema.Struct({
-  action: Action,
-  generation: optional(count),
-  files: Schema.Array(File),
-  inspect: optional(Schema.Boolean),
-  target: optional(Target),
-}).annotate({ identifier: "Browser.Command" })
-export interface Command extends Schema.Schema.Type<typeof Command> {}
-export const Result = Schema.Struct({ value: Schema.Json, files: Schema.Array(File) }).annotate({
-  identifier: "Browser.Result",
-})
-export interface Result extends Schema.Schema.Type<typeof Result> {}
-export const Outcome = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("success"), result: Result }),
-  Schema.Struct({ type: Schema.Literal("failure"), code: short, message: short }),
-])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Browser.Outcome" })
-export type Outcome = typeof Outcome.Type
-const attachment = { sessionID: Session.ID, connectionID: Schema.String }
-const request = { ...attachment, requestID: Schema.String }
-export const TunnelTarget = Schema.Struct({
-  host: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(253), Schema.isPattern(/^[a-zA-Z0-9._:%-]+$/u)),
-  port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 })),
-})
-export type TunnelTarget = typeof TunnelTarget.Type
-const tunnel = { ...attachment, tunnelID: short }
-const bytes = Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(TUNNEL_CHUNK_BYTES))
-export const TunnelRead = Schema.Struct({ data: bytes, eof: Schema.Boolean })
-export type TunnelRead = typeof TunnelRead.Type
-const errors = { unavailable: Schema.Struct({}) }
-export const Control = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(4) }),
-  Schema.Struct({
-    type: Schema.Literal("command"),
-    connectionID: Schema.String,
-    requestID: Schema.String,
-  }),
-  Schema.Struct({ type: Schema.Literal("cancel"), connectionID: Schema.String, requestID: Schema.String }),
-])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Browser.Control" })
-export type Control = typeof Control.Type
-export const Definition = Rpc.define({
-  id: "experimental.browser",
-  methods: {
-    attach: {
-      input: Schema.Struct({ ...attachment, version: Schema.Literal(4) }),
-      output: Schema.Literals(["closed", "replaced"]),
-      errors,
-    },
-    state: { input: Schema.Struct({ ...attachment, state: State }), output: Schema.Void, errors },
-    command: { input: Schema.Struct(request), output: Command, errors },
-    result: { input: Schema.Struct({ ...request, outcome: Outcome }), output: Schema.Void, errors },
-    "tunnel.open": { input: Schema.Struct({ ...attachment, target: TunnelTarget }), output: short, errors },
-    "tunnel.read": { input: Schema.Struct(tunnel), output: TunnelRead, errors },
-    "tunnel.write": {
-      input: Schema.Struct({ ...tunnel, data: bytes, end: optional(Schema.Boolean) }),
-      output: Schema.Void,
-      errors,
-    },
-    "tunnel.close": { input: Schema.Struct(tunnel), output: Schema.Void, errors },
-  },
-  events: { control: { schema: Control } },
-})
+
+/** Metadata only: never page content, headers, bodies, or file bytes. */
+export type Target = {
+  readonly resources: ReadonlyArray<string>
+  readonly key: string
+}
+
+/** One operation for a page, with the files it uploads. */
+export interface Command {
+  readonly action: Action
+  readonly generation?: number
+  readonly files: ReadonlyArray<File>
+  readonly inspect?: boolean
+  readonly target?: Target
+}
+
+/** An operation's output before it is checked against the operation's schema, and the files it produced. */
+export interface Result {
+  readonly value: Schema.Json
+  readonly files: ReadonlyArray<File>
+}

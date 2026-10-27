@@ -1,7 +1,7 @@
 import { batch, createRoot, createSignal, getOwner, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "./operations"
 import { createKeyed, type SessionRef, type SetupContext } from "@opencode/plugin/gui"
 import { readHref } from "./comment"
 import {

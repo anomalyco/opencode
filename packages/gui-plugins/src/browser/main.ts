@@ -11,7 +11,7 @@ const setup: Plugin.MainSetup = (ctx) => {
   const loaded: LoadedPane = {}
   const refs = ctx.storage.store("refs", RefsStore)
 
-  // The pane brings the CDP driver and the full RPC client with every protocol schema;
+  // The pane brings the CDP driver and the browser tools with every operation schema;
   // load it when a window first registers a pane instead of at startup.
   const load = () =>
     (loaded.pane ??= import("./pane").then((module) =>

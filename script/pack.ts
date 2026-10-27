@@ -32,7 +32,6 @@ for (const name of [
   "protocol",
   "client",
   "plugin",
-  "plugin-browser",
   "core",
   "simulation",
   "server",

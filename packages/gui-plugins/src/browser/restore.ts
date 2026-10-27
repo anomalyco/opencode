@@ -1,4 +1,4 @@
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "./operations"
 import { Schema } from "effect"
 import type { BuiltinMainStorage, MainStoreFrom } from "@opencode/plugin/gui/builtin"
 

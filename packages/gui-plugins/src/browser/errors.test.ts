@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test"
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "./operations"
 import { browserFailure, protocolError } from "./errors"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 
-test("navigation failures explain the server network and never recommend disabling TLS", () => {
+test("navigation failures explain the desktop network and never recommend disabling TLS", () => {
   const action: Browser.Action = { type: "navigate", tabID, url: "https://example.com" }
   const refused = browserFailure(action, new Error("net::ERR_CONNECTION_REFUSED"))
   expect(refused.code).toBe("navigation_failed")
-  expect(refused.message).toContain("localhost means that server")
+  expect(refused.message).toContain("localhost means the user's computer")
   expect(refused.message).toContain("hostname/port")
   const tls = browserFailure(action, new Error("net::ERR_CERT_AUTHORITY_INVALID"))
   expect(tls.message).toContain("do not bypass certificate checks")

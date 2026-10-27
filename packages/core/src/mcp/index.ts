@@ -854,13 +854,18 @@ export const layer = (options?: Options) =>
           return { ...result, server: target.name, tool: input.name }
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
-          return Array.from(entries)
-            .flatMap(([server, entry]) => {
-              const instructions = entry.client?.instructions
-              if (!instructions) return []
-              return [{ server, instructions }]
-            })
-            .toSorted((a, b) => a.server.localeCompare(b.server))
+          // Like tools, the attached client serving a name replaces a configured server's instructions for it.
+          const servers = new Map<ServerName, string>()
+          entries.forEach((entry, server) => {
+            if (entry.client?.instructions) servers.set(server, entry.client.instructions)
+          })
+          attached.forEach((stack, server) => {
+            const instructions = stack.at(-1)?.client.instructions
+            if (instructions) servers.set(server, instructions)
+          })
+          return Array.from(servers, ([server, instructions]) => ({ server, instructions })).toSorted((a, b) =>
+            a.server.localeCompare(b.server),
+          )
         }),
         prompts: Effect.fn("MCP.prompts")(function* () {
           return Array.from(entries.values())

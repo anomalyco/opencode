@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "./operations"
 import type { IpcClient } from "@opencode/plugin/gui"
 import type { BrowserPane, PaneEvent } from "./ipc"
 

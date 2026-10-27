@@ -81,6 +81,55 @@ describe("connectClientMcp", () => {
     await peer.closed
   })
 
+  test("sends instructions and output schemas, and aborts calls the server cancels", async () => {
+    const server = serve()
+    const started = Promise.withResolvers<AbortSignal>()
+    const connection = connectClientMcp({
+      url: server.url,
+      name: "browser",
+      instructions: "Use explicit tab IDs.",
+      tools: [
+        {
+          name: "count",
+          outputSchema: { properties: { count: { type: "number" } }, required: ["count"] },
+          handler: () => ({ content: [{ type: "text", text: "1" }], structuredContent: { count: 1 } }),
+        },
+        {
+          name: "wait",
+          handler: (_args, ctx) => {
+            started.resolve(ctx.signal)
+            return new Promise((resolve) =>
+              ctx.signal.addEventListener("abort", () => resolve({ content: [{ type: "text", text: "cancelled" }] })),
+            )
+          },
+        },
+      ],
+    })
+    const peer = await server.next()
+
+    expect(peer.client.getInstructions()).toBe("Use explicit tab IDs.")
+    expect((await peer.client.listTools()).tools[0]).toEqual({
+      name: "count",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "object", properties: { count: { type: "number" } }, required: ["count"] },
+    })
+    expect(await peer.client.callTool({ name: "count", arguments: {} })).toMatchObject({
+      structuredContent: { count: 1 },
+    })
+
+    const abort = new AbortController()
+    const call = peer.client.callTool({ name: "wait", arguments: {} }, { signal: abort.signal })
+    const signal = await started.promise
+    abort.abort()
+    await expect(call).rejects.toThrow()
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) return resolve()
+      signal.addEventListener("abort", () => resolve())
+    })
+
+    await connection.close()
+  })
+
   test("reconnects after the server drops the socket", async () => {
     const server = serve()
     const connection = connectClientMcp({

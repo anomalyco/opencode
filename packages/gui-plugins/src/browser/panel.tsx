@@ -13,7 +13,7 @@ import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMemo, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import type { Browser } from "./operations"
 import {
   createKeyed,
   usePlugin,

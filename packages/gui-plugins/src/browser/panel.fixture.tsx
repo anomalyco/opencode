@@ -1,4 +1,4 @@
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "./operations"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import {
   batch,

@@ -149,15 +149,19 @@ const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, tool
     return { type: "file" as const, uri: `data:${part.mimeType};base64,${part.data}`, mime: part.mimeType }
   const bytes = Buffer.from(part.data, "base64")
   const label = part.uri ?? "content"
-  if (Mime.isTextual(mime))
+  const textual = Mime.isTextual(mime)
+  if (textual && bytes.byteLength <= MAX_INLINE_TEXT_BYTES)
     return { type: "text" as const, text: `[Resource ${label} (${part.mimeType})]\n${bytes.toString("utf8")}` }
   const ext = extension(mime)
   const file = yield* toolOutput.save(bytes, ext ? `.${ext}` : "")
   return {
     type: "text" as const,
-    text: `[Binary resource ${label} (${part.mimeType}, ${bytes.byteLength} bytes) saved to ${file}]`,
+    text: `[${textual ? "Resource" : "Binary resource"} ${label} (${part.mimeType}, ${bytes.byteLength} bytes) saved to ${file}]`,
   }
 })
+
+// Larger text, such as a report or profile, is saved like binary data so it never floods the context.
+const MAX_INLINE_TEXT_BYTES = 32 * 1024
 
 export const node = makeLocationNode({
   service: Service,

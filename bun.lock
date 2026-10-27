@@ -273,7 +273,6 @@
         "@opencode/ai": "workspace:*",
         "@opencode/codemode": "workspace:*",
         "@opencode/plugin": "workspace:*",
-        "@opencode/plugin-browser": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/util": "workspace:*",
         "@parcel/watcher": "2.5.1",
@@ -399,7 +398,6 @@
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
-        "@opencode/plugin-browser": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
         "@opencode/ui": "workspace:*",
@@ -552,21 +550,6 @@
         "vite",
         "vite-plugin-solid",
       ],
-    },
-    "packages/plugin-browser": {
-      "name": "@opencode/plugin-browser",
-      "version": "2.1.4",
-      "dependencies": {
-        "@opencode/plugin": "workspace:*",
-        "@opencode/schema": "workspace:*",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@typescript/native": "catalog:",
-        "typescript": "catalog:",
-      },
     },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
@@ -2026,7 +2009,6 @@
 
     "@opencode/plugin": ["@opencode/plugin@workspace:packages/plugin"],
 
-    "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
 

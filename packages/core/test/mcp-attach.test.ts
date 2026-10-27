@@ -54,9 +54,9 @@ const it = testEffect(
 )
 
 /** Starts an in-memory client MCP server whose tools answer with `label` and record the caller's session. */
-const clientServer = (label: string, tools: ReadonlyArray<string>) =>
+const clientServer = (label: string, tools: ReadonlyArray<string>, instructions?: string) =>
   Effect.gen(function* () {
-    const server = new McpServer({ name: label, version: "1.0.0" })
+    const server = new McpServer({ name: label, version: "1.0.0" }, { instructions })
     const sessions: Array<unknown> = []
     for (const tool of tools)
       server.registerTool(tool, { description: `${label} ${tool}` }, (ctx) => {
@@ -146,6 +146,26 @@ it.live("attaches a client MCP server and routes its tools with the session", ()
     expect(result.status).toBe("completed")
     expect(result.output?.output).toBe("tui:open_terminal")
     expect(client.sessions).toEqual(["ses_attached"])
+  }),
+)
+
+it.live("lists the serving attached client's instructions until it detaches", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const first = yield* clientServer("first", ["open_terminal"], "Use the first terminal.")
+    const second = yield* clientServer("second", ["open_terminal"], "Use the second terminal.")
+    const scope = yield* Scope.make()
+
+    yield* mcp.attach("tui", first.client)
+    yield* mcp.attach("tui", second.client).pipe(Scope.provide(scope))
+    expect(yield* mcp.instructions()).toEqual([
+      { server: Mcp.ServerName.make("tui"), instructions: "Use the second terminal." },
+    ])
+
+    yield* Scope.close(scope, Exit.void)
+    expect(yield* mcp.instructions()).toEqual([
+      { server: Mcp.ServerName.make("tui"), instructions: "Use the first terminal." },
+    ])
   }),
 )
 

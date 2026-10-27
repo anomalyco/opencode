@@ -1,4 +1,4 @@
-import { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "./operations"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
@@ -175,7 +175,6 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
-  const detachNetwork = options.network?.attach(contents)
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return
 
@@ -710,7 +709,6 @@ export function createBrowserPage(
       if (closed) return
       closed = true
       clearTimeout(flash)
-      detachNetwork?.()
       contents.session.off("will-download", download)
       await profiling.dispose()
       cdp.dispose()

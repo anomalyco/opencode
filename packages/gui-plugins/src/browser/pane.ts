@@ -1,15 +1,12 @@
-import { NodeHttpClient } from "@effect/platform-node"
-import { Browser } from "@opencode/plugin-browser/rpc"
-import { OpenCode } from "@opencode/client/effect"
-import { SessionID } from "@opencode/schema/session-id"
+import { connectClientMcp, type ClientMcpConnection } from "@opencode/client/mcp"
+import { OpenCode } from "@opencode/client/promise"
 import electron, { type BrowserWindow } from "electron"
-import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
-import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
+import type { Embeds, Persisted, ServerEndpoint, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
-import { browserFailure } from "./errors"
+import { browserTools, instructions } from "./mcp"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
+import { Browser } from "./operations"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
@@ -21,10 +18,13 @@ type Entry = {
   binding: string
   window: number
   win: BrowserWindow
+  server: ServerEndpoint
+  sessionID: string
   abort: AbortController
-  registered: ReturnType<typeof Promise.withResolvers<void>>
-  requests: Map<string, { abort: AbortController; tabID?: Browser.TabID }>
-  report?: (event: PaneEvent) => void
+  /** The key of the tools that serve this pane's session; unset until registration finishes and after it closes. */
+  served?: string
+  /** The agent's operations still running, so closing a tab or the pane can abort them. */
+  requests: Set<{ abort: AbortController; tabID?: Browser.TabID }>
   cleanup?: () => void
   pages: Map<Browser.TabID, BrowserPage>
   tabs: Map<Browser.TabID, Browser.Tab>
@@ -40,6 +40,9 @@ type Entry = {
   fileRoots: string[]
 }
 
+/** One client MCP connection per server and directory; it routes each call to the pane showing the calling session. */
+type Tools = { connection: ClientMcpConnection; entries: Set<Entry> }
+
 export type Pane = ReturnType<typeof createBrowserPane>
 
 export function createBrowserPane(input: {
@@ -52,13 +55,12 @@ export function createBrowserPane(input: {
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const entries = new Map<string, Entry>()
+  const tools = new Map<string, Tools>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
   // for them so a replacement never starts beside old pages still recording.
   const releasing = new Set<Promise<void>>()
-  // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
-  const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
   let disposed = false
 
   return {
@@ -72,8 +74,7 @@ export function createBrowserPane(input: {
       if (!win || entries.has(binding)) throw new Error("browser.pane.owner.invalid")
 
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
-      const sessionID = SessionID.make(target.session)
-      const storageKey = `${target.server}\n${sessionID}`
+      const storageKey = `${target.server}\n${target.session}`
       const saved = restore.load(storageKey)
 
       const previous = target.restore ?? {
@@ -89,9 +90,10 @@ export function createBrowserPane(input: {
         binding,
         window,
         win,
+        server,
+        sessionID: target.session,
         abort: new AbortController(),
-        registered: Promise.withResolvers(),
-        requests: new Map(),
+        requests: new Set(),
         pages: new Map(),
         tabs: new Map(
           previous.tabs.map((tab) => [
@@ -112,16 +114,13 @@ export function createBrowserPane(input: {
       }
 
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
-      // file: URLs outside the roots. One listener per partition covers every page in this attachment.
+      // file: URLs outside the roots. One listener per partition covers every page in this pane.
       electron.session
         .fromPartition(entry.partition)
         .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
           callback({ cancel: !fileURLWithin(details.url, entry.fileRoots) }),
         )
-      // "unsupported" means the server has no browser plugin; the renderer stops retrying.
-      let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
-      let attached = false
-      const stop = () => close(entry, reason)
+      const stop = () => close(entry)
 
       const navigate = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (event.isMainFrame && !event.isSameDocument) stop()
@@ -136,184 +135,27 @@ export function createBrowserPane(input: {
       }
 
       entries.set(binding, entry)
-      void runtime
-        .runPromise(
-          Effect.gen(function* () {
-            const http = yield* HttpClient.HttpClient
 
-            // The renderer never holds the managed sidecar's password; Node requests bypass
-            // the webRequest header injection, so the host resolves the credential here in main.
-            const client = yield* OpenCode.make({ baseUrl: server.url }).pipe(
-              Effect.provideService(
-                HttpClient.HttpClient,
-                Object.keys(server.headers).length
-                  ? HttpClient.mapRequest(http, HttpClientRequest.setHeaders(server.headers))
-                  : http,
-              ),
-            )
-
-            const session = yield* client.session.get({ sessionID })
-
-            // The agent can already read this workspace, so showing its files adds no access.
-            if (server.sameMachine) entry.fileRoots = [session.location.directory]
-
-            const options = {
-              location: { directory: session.location.directory, workspace: session.location.workspaceID },
-            }
-
-            const attachment = { sessionID, connectionID: crypto.randomUUID() }
-            const rpc = client.rpc(Browser.Definition)
-            entry.network = yield* createBrowserNetwork({
-              rpc,
-              attachment,
-              location: options.location,
-              partition: entry.partition,
-            })
-            const connected = yield* Deferred.make<void>()
-            const outbound = yield* Queue.unbounded<Effect.Effect<void>>()
-
-            // A send that fails because the server already replaced or closed this attachment must
-            // not decide the close reason; only the attach call's outcome does.
-            const send = (effect: Effect.Effect<unknown, unknown>) =>
-              Queue.offerUnsafe(
-                outbound,
-                effect.pipe(Effect.catchCause((cause) => Effect.logWarning("Browser send failed", cause))),
-              )
-
-            const reply = (requestID: string, outcome: Browser.Outcome) =>
-              send(
-                rpc.result({ ...attachment, requestID, outcome: Schema.encodeSync(Browser.Outcome)(outcome) }, options),
-              )
-
-            // The window hears every event at once; it never waits on the server, which can stall for
-            // hundreds of milliseconds while it serves the page's own traffic. The server's copy of the
-            // inventory resolves every tab ID, so a state is retried until it arrives or the attachment
-            // ends; the results queued behind it then never name a tab the server lacks. "unavailable"
-            // means the server already dropped this attachment, which attach reports.
-            entry.report = (event) => {
-              publish(entry, event)
-
-              if (event.type !== "state") return
-              send(
-                rpc.state({ ...attachment, state: event.state ?? { tabs: [], focusedTabID: null } }, options).pipe(
-                  Effect.retry({
-                    while: (error) => !("type" in error && error.type === "unavailable"),
-                    schedule: Schedule.min([Schedule.exponential("250 millis"), Schedule.spaced("10 seconds")]),
-                  }),
-                ),
-              )
-            }
-
-            const receive = client.event.subscribe().pipe(
-              Stream.runForEach((event) =>
-                Effect.gen(function* () {
-                  if (event.type === "server.connected") {
-                    yield* Deferred.succeed(connected, undefined)
-
-                    return
-                  }
-
-                  if (
-                    event.type !== "rpc.experimental.browser.control" ||
-                    event.data.connectionID !== attachment.connectionID
-                  )
-                    return
-
-                  const message = yield* Schema.decodeUnknownEffect(Browser.Control)(event.data).pipe(
-                    Effect.tapError(() =>
-                      Effect.sync(() => {
-                        reason = "browser.pane.unsupported"
-                      }),
-                    ),
-                  )
-
-                  if (message.type === "attached") {
-                    attached = true
-
-                    return entry.registered.resolve()
-                  }
-
-                  if (message.type === "cancel") return entry.requests.get(message.requestID)?.abort.abort()
-                  const abort = new AbortController()
-                  entry.requests.set(message.requestID, { abort })
-                  yield* rpc.command({ ...attachment, requestID: message.requestID }, options).pipe(
-                    Effect.flatMap((command) =>
-                      Effect.promise(async () => {
-                        entry.requests.set(
-                          message.requestID,
-                          "tabID" in command.action ? { abort, tabID: command.action.tabID } : { abort },
-                        )
-                        reply(
-                          message.requestID,
-                          await execute(entry, command, abort.signal).then(
-                            (result) => ({ type: "success" as const, result }),
-                            (cause: unknown) => browserFailure(command.action, cause),
-                          ),
-                        )
-                      }),
-                    ),
-                    Effect.ensuring(Effect.sync(() => entry.requests.delete(message.requestID))),
-                    // An operation this desktop cannot decode comes from a newer plugin; answer it so
-                    // the agent does not wait out the server's timeout.
-                    Effect.tapError((error) =>
-                      Effect.sync(() => {
-                        if (!Schema.isSchemaError(error)) return
-                        reply(message.requestID, {
-                          type: "failure",
-                          code: "unsupported",
-                          message:
-                            "This desktop app does not support the requested browser operation. Ask the user to update the desktop app, or use another operation.",
-                        })
-                      }),
-                    ),
-                    // A request that vanished (cancelled before retrieval) fails only that request.
-                    // Transport loss surfaces through the event stream and attach call instead.
-                    Effect.catchCause((cause) =>
-                      abort.signal.aborted ? Effect.void : Effect.logWarning("Browser command failed", cause),
-                    ),
-                    Effect.forkScoped,
-                  )
-                }),
-              ),
-            )
-
-            yield* Effect.raceAllFirst([
-              receive,
-              Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
-              Deferred.await(connected).pipe(
-                Effect.andThen(rpc.attach({ ...attachment, version: 4 }, options)),
-                Effect.tap((result) =>
-                  Effect.sync(() => {
-                    if (result === "replaced") reason = "browser.pane.replaced"
-                  }),
-                ),
-              ),
-            ])
-          }).pipe(
-            Effect.scoped,
-            Effect.tapError((error) =>
-              Effect.sync(() => {
-                const type = error instanceof Object && "type" in error ? error.type : undefined
-
-                if (type === "rpc.unavailable" && attached) {
-                  reason = "browser.pane.suspended"
-
-                  return
-                }
-
-                if (type === "rpc.unavailable" || type === "rpc.method_not_found" || type === "rpc.invalid_input")
-                  reason = "browser.pane.unsupported"
-              }),
-            ),
-            Effect.ensuring(Effect.sync(stop)),
-          ),
-          { signal: entry.abort.signal },
-        )
-        .catch(stop)
-      const timeout = setTimeout(stop, 15_000)
-      await entry.registered.promise.finally(() => clearTimeout(timeout))
+      // Node requests bypass the webRequest header injection, so main sends the credential the host resolved for it;
+      // the renderer never holds the managed sidecar's password.
+      const session = await OpenCode.make({ baseUrl: server.url, headers: server.headers })
+        .session.get({ sessionID: target.session }, { signal: entry.abort.signal })
+        .catch((cause: unknown) => {
+          if (entries.get(binding) !== entry) throw new Error("browser.pane.registration.closed")
+          stop()
+          throw cause
+        })
 
       if (entries.get(binding) !== entry) throw new Error("browser.pane.registration.closed")
+
+      // The agent can already read this workspace, so showing its files adds no access.
+      if (server.sameMachine) entry.fileRoots = [session.location.directory]
+      entry.network = createBrowserNetwork(entry.partition)
+      // A pane for the same session in another window takes over its tools, so calls never reach a stale pane.
+      entries.forEach((other) => {
+        if (other.served && other.storageKey === storageKey) close(other, "browser.pane.replaced")
+      })
+      serve(entry, session.location.directory)
       publishState(entry)
     },
     load(window: number, binding: string, tabID: Browser.TabID) {
@@ -360,8 +202,65 @@ export function createBrowserPane(input: {
       disposed = true
       entries.forEach((entry) => close(entry, "browser.pane.suspended"))
       await Promise.all(releasing)
-      await runtime.dispose()
     },
+  }
+
+  /** Serves the pane's session through the browser tools of its server and directory, connecting them on first use. */
+  function serve(entry: Entry, directory: string) {
+    const key = JSON.stringify([entry.server.id, directory])
+    entry.served = key
+    const existing = tools.get(key)
+
+    if (existing) return void existing.entries.add(entry)
+    const served = new Set([entry])
+    const client = OpenCode.make({ baseUrl: entry.server.url, headers: entry.server.headers })
+    tools.set(key, {
+      entries: served,
+      connection: connectClientMcp({
+        url: entry.server.url,
+        headers: entry.server.headers,
+        name: "browser",
+        directory,
+        instructions,
+        tools: browserTools((sessionID) => {
+          const pane = Array.from(served).find((item) => item.sessionID === sessionID)
+
+          return (
+            pane && {
+              execute: (command, signal) => run(pane, command, signal),
+              read: (path, signal) => client.file.read({ path, location: { directory } }, { signal }),
+            }
+          )
+        }),
+      }),
+    })
+  }
+
+  /** Stops serving the pane's session, closing the connection once no pane uses it. */
+  function unserve(entry: Entry) {
+    const key = entry.served
+    entry.served = undefined
+    const group = key === undefined ? undefined : tools.get(key)
+
+    if (key === undefined || !group) return
+    group.entries.delete(entry)
+
+    if (group.entries.size > 0) return
+    tools.delete(key)
+    void group.connection.close()
+  }
+
+  function run(entry: Entry, command: Browser.Command, signal: AbortSignal) {
+    const request = {
+      abort: new AbortController(),
+      tabID: "tabID" in command.action ? command.action.tabID : undefined,
+    }
+
+    entry.requests.add(request)
+
+    return execute(entry, command, AbortSignal.any([signal, request.abort.signal])).finally(() =>
+      entry.requests.delete(request),
+    )
   }
 
   function owned(window: number, binding: string) {
@@ -379,7 +278,7 @@ export function createBrowserPane(input: {
 
   function close(entry: Entry, reason = "browser.pane.registration.closed") {
     if (entries.get(entry.binding) !== entry) return
-    entry.report = undefined
+    unserve(entry)
     entry.requests.forEach((request) => request.abort.abort())
     entry.requests.clear()
     const suspended = reason === "browser.pane.suspended"
@@ -392,8 +291,8 @@ export function createBrowserPane(input: {
 
     if (!suspended) publishState(entry, reason)
     entries.delete(entry.binding)
-    entry.registered.reject(new Error("browser.pane.registration.closed"))
     entry.cleanup?.()
+    void entry.network?.close()
     entry.abort.abort()
   }
 
@@ -431,7 +330,7 @@ export function createBrowserPane(input: {
     const event = error === undefined ? current : { ...current, error }
 
     // Teardown publishes an empty inventory to the renderer, but the saved URLs survive app exit.
-    if (entry.report)
+    if (entry.served)
       restore.save(entry.storageKey, {
         tabs: event.state.tabs.map((tab) => ({
           id: tab.id,
@@ -444,11 +343,6 @@ export function createBrowserPane(input: {
 
     if (entry.lastState === next) return
     entry.lastState = next
-    report(entry, event)
-  }
-
-  function report(entry: Entry, event: PaneEvent) {
-    if (entry.report) return entry.report(event)
     publish(entry, event)
   }
 
@@ -496,12 +390,12 @@ export function createBrowserPane(input: {
         if (entry.pages.has(id)) publishState(entry, error)
       },
       inspect: (event) => {
-        if (entry.pages.has(id)) report(entry, { type: "inspect", tabID: id, ...event })
+        if (entry.pages.has(id)) publish(entry, { type: "inspect", tabID: id, ...event })
       },
-      // Icons and zoom are local to this desktop, and follow the states reported before them, so the window files a new
-      // page's icon under that page's URL.
+      // Icons and zoom follow the states published before them, so the window files a new page's icon under that
+      // page's URL.
       detail: (value) => {
-        if (entry.pages.has(id)) report(entry, { type: "page", tabID: id, ...value })
+        if (entry.pages.has(id)) publish(entry, { type: "page", tabID: id, ...value })
       },
       zoomed: () => entry.pages.forEach((page) => page.detail()),
       shortcut: (shortcut) => {
@@ -525,7 +419,6 @@ export function createBrowserPane(input: {
 
     entry.pages.set(id, page)
     entry.tabs.set(id, restore ?? page.state())
-    // Straight to the window, not through the server report: the embed is local to this desktop.
     publish(entry, { type: "embed", tabID: id, embed: page.embed })
     void page.ready
       .then(() => {
@@ -548,7 +441,7 @@ export function createBrowserPane(input: {
 
     if (action.type === "preview") {
       // The renderer owns file tabs; it resolves the path against the session's workspace.
-      report(entry, { type: "preview", path: action.path })
+      publish(entry, { type: "preview", path: action.path })
 
       return { value: { path: action.path }, files: [] }
     }
@@ -597,6 +490,6 @@ export function createBrowserPane(input: {
   function focus(entry: Entry, tabID: Browser.TabID) {
     entry.focusedTabID = tabID
     publishState(entry)
-    report(entry, { type: "focus", tabID })
+    publish(entry, { type: "focus", tabID })
   }
 }

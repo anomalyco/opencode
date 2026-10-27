@@ -518,6 +518,12 @@ const mcp = Layer.mock(Mcp.Service, {
               mimeType: "application/vnd.apache.parquet",
               uri: "file:///data.parquet",
             },
+            {
+              type: "media",
+              data: Buffer.from(JSON.stringify({ audits: "x".repeat(40_000) })).toString("base64"),
+              mimeType: "application/json",
+              uri: "file:///report.json",
+            },
           ],
         } satisfies Mcp.ToolResult
       if (input.name === "status")
@@ -1381,9 +1387,7 @@ test("acknowledges completed MCP URL elicitations without returning internal con
           const result = yield* Fiber.join(call)
           expect(yield* forms.state(form.id)).toEqual({ status: "answered", answer: { elicitation: true } })
           return result
-        }).pipe(
-          Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))),
-        )
+        }).pipe(Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))))
 
         expect(result.structured).toEqual({ action: "accept" })
       }),
@@ -1404,10 +1408,12 @@ test("cancels MCP elicitation forms when the server gives up on them", async () 
           const { form } = yield* Deferred.await(created)
           yield* Fiber.await(call)
           // The server's cancellation and its tool error race; the form settles shortly after either.
-          const state = yield* forms.state(form.id).pipe(
-            Effect.repeat({ until: (state) => state.status !== "pending", schedule: Schedule.spaced("10 millis") }),
-            Effect.timeout("2 seconds"),
-          )
+          const state = yield* forms
+            .state(form.id)
+            .pipe(
+              Effect.repeat({ until: (state) => state.status !== "pending", schedule: Schedule.spaced("10 millis") }),
+              Effect.timeout("2 seconds"),
+            )
           expect(state.status).toBe("cancelled")
         }).pipe(Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))))
       }),
@@ -2614,7 +2620,7 @@ it.effect("preserves MCP text and media content for the model", () =>
   }),
 )
 
-it.effect("decodes text blobs and saves other MCP blobs instead of attaching them", () =>
+it.effect("decodes small text blobs and saves other MCP blobs instead of attaching them", () =>
   Effect.gen(function* () {
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
@@ -2636,6 +2642,12 @@ it.effect("decodes text blobs and saves other MCP blobs instead of attaching the
     expect(text[0]).toBe("[Resource file:///README.md (text/markdown)]\n# Notes")
     expect(saved?.startsWith(path.join(outputData, ToolOutput.DIRECTORY, "tool_"))).toBe(true)
     expect(yield* Effect.promise(() => fs.readFile(saved ?? "", "utf8"))).toBe("PAR1")
+    const report = /^\[Resource file:\/\/\/report\.json \(application\/json, 40013 bytes\) saved to (.+)\]$/.exec(
+      text[2] ?? "",
+    )?.[1]
+    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(report ?? "", "utf8")))).toEqual({
+      audits: "x".repeat(40_000),
+    })
   }),
 )
 

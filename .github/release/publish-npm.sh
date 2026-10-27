@@ -9,7 +9,7 @@ shift
 targets="linux-arm64 linux-x64 linux-x64-baseline linux-arm64-musl linux-x64-musl linux-x64-baseline-musl darwin-arm64 darwin-x64 darwin-x64-baseline windows-arm64 windows-x64 windows-x64-baseline"
 expected="@opencode/cli"
 for target in $targets; do expected="$expected @opencode/cli-$target"; done
-for lib in schema codemode theme ai util protocol client plugin plugin-browser core simulation server sdk ui; do expected="$expected @opencode/$lib"; done
+for lib in schema codemode theme ai util protocol client plugin core simulation server sdk ui; do expected="$expected @opencode/$lib"; done
 if [ "$OPENCODE_CHANNEL" != latest ]; then
   expected="$expected @opencode/cli-node"
   for target in linux-arm64 linux-x64 darwin-arm64 windows-arm64 windows-x64; do expected="$expected @opencode/cli-node-$target"; done
