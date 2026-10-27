@@ -300,10 +300,7 @@ export const dict = {
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",
   "download.section.terminal": "OpenCode Terminal",
   "download.section.desktop": "OpenCode Desktop",
-  "download.section.extensions": "ส่วนขยาย OpenCode",
-  "download.section.integrations": "การเชื่อมต่อ OpenCode",
   "download.action.download": "ดาวน์โหลด",
-  "download.action.install": "ติดตั้ง",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",

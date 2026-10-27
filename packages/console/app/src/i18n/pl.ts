@@ -304,10 +304,7 @@ export const dict = {
   "download.meta.description": "Pobierz OpenCode na macOS, Windows i Linux",
   "download.section.terminal": "Terminal OpenCode",
   "download.section.desktop": "Pulpit OpenCode",
-  "download.section.extensions": "Rozszerzenia OpenCode",
-  "download.section.integrations": "Integracje OpenCode",
   "download.action.download": "Pobierz",
-  "download.action.install": "Zainstaluj",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",

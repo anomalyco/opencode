@@ -286,10 +286,7 @@ export const dict = {
   "download.meta.description": "下載適用於 macOS、Windows 與 Linux 的 OpenCode",
   "download.section.terminal": "OpenCode 終端",
   "download.section.desktop": "OpenCode 桌面版",
-  "download.section.extensions": "OpenCode 擴充功能",
-  "download.section.integrations": "OpenCode 整合",
   "download.action.download": "下載",
-  "download.action.install": "安裝",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
