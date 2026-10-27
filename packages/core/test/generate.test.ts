@@ -18,6 +18,7 @@ import { AISDK } from "@opencode/core/aisdk"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { ModelResolver } from "@opencode/core/model-resolver"
+import { ModelsDev } from "@opencode/core/models-dev"
 import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
@@ -294,6 +295,7 @@ describe("image and decision generation", () => {
       package: "@opencode/ai/providers/openrouter/decisions",
     }),
   ].concat(
+    decisionCatalog(),
     (() => {
       const gemini = Info.make({
         ...Info.default(Provider.ID.make("google"), ID.make("gemini-3.1-flash-image")),
@@ -343,6 +345,11 @@ describe("image and decision generation", () => {
               output_format: "png",
               usage: { input_tokens: 9, output_tokens: 272 },
             }),
+          )
+        if (request.url === "https://api.typesafe.ai/v1/systemone")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ model: "clef", answers: { photo: { type: "noul", noul: 0.9 } } }),
           )
         if (request.url === "https://openrouter.ai/api/v1/systemone")
           return HttpClientResponse.fromWeb(
@@ -448,6 +455,40 @@ describe("image and decision generation", () => {
     }),
   )
 
+  const sendImage = (id: string) =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      yield* generate.decisions({
+        model: ref("decide-host", id),
+        input: [
+          { type: "text", text: "Is this a photo?" },
+          { type: "file", data: "aW1hZ2U=", mime: "image/png" },
+        ],
+        questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
+      })
+      return requests[0]?.body
+    })
+
+  mediaIt.effect("places decision media where the catalog's media_input says", () =>
+    Effect.gen(function* () {
+      expect(yield* sendImage("decide-root")).toMatchObject({
+        state: "Is this a photo?",
+        images: ["data:image/png;base64,aW1hZ2U="],
+      })
+      expect(yield* sendImage("decide-state")).toMatchObject({
+        state: ["Is this a photo?", { type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } }],
+      })
+      // Unset or unknown values keep TypeSafe's assets map.
+      for (const id of ["decide-default", "decide-unknown"])
+        expect(yield* sendImage(id)).toMatchObject({
+          state: ["Is this a photo?", "<image-1>"],
+          assets: { "<image-1>": { type: "image", format: "png", data_base64: "aW1hZ2U=" } },
+        })
+      expect(yield* sendImage("decide-override")).toMatchObject({ images: ["data:image/png;base64,aW1hZ2U="] })
+    }),
+  )
+
   mediaIt.effect("sends a variant's reasoning setting and maps provider rejections", () =>
     Effect.gen(function* () {
       requests.length = 0
@@ -493,6 +534,55 @@ describe("image and decision generation", () => {
     }),
   )
 })
+
+// Decision models decoded from models.dev data the way the catalog is, so `media_input` flows from the source.
+function decisionCatalog() {
+  const model = (id: string, compatibility?: Record<string, string>) => ({
+    id,
+    type: "decision",
+    name: id,
+    description: "A decision model",
+    release_date: "2026-01-01",
+    modalities: { input: ["text", "image/png"], output: ["text"] },
+    capabilities: { tools: { supported: false }, reasoning: { supported: false }, temperature: false },
+    limit: { context: 65536, output: 0 },
+    api: {
+      systemone: {
+        base_url: "https://api.typesafe.ai/v1",
+        sdk: { opencodeai: "@opencode/ai/providers/typesafe-ai/decisions" },
+        ...(compatibility ? { compatibility } : {}),
+      },
+    },
+  })
+  const snapshot = Effect.runSync(
+    ModelsDev.decodeSnapshot(
+      JSON.stringify({
+        "decide-host": {
+          id: "decide-host",
+          name: "Decide Host",
+          env: [],
+          models: {
+            "decide-default": model("decide-default"),
+            "decide-root": model("decide-root", { media_input: "root" }),
+            "decide-state": model("decide-state", { media_input: "state" }),
+            "decide-unknown": model("decide-unknown", { media_input: "somewhere_new" }),
+            "decide-override": model("decide-override", { media_input: "state" }),
+          },
+        },
+      }),
+    ),
+  )
+  return snapshot.flatMap((entry) =>
+    entry.models.map((item) =>
+      Info.make({
+        ...item,
+        package: item.package ?? entry.info.package,
+        // What a config `compatibility` override merges in.
+        ...(item.id === "decide-override" ? { compatibility: { ...item.compatibility, mediaInput: "root" } } : {}),
+      }),
+    ),
+  )
+}
 
 const DECISION_RESPONSE =
   '{"model":"typesafe/jev-1.13-20260917","answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"sales":0,"technical":0},"confidence":1},"urgency":{"type":"score","score":1.02,"legend":{"0":"Can wait for normal support","1":"Needs prompt attention","2":"Actively blocking revenue"},"probabilities":{"0":0.01,"1":0.96,"2":0.03},"confidence":0.95},"refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":422,"output_tokens":69,"cost":0.000017724},"id":"gen-dec-1790088886-JRlffOLUwQdx4Lltu2se","provider":"TypeSafe"}'

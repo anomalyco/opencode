@@ -3,7 +3,7 @@ export * as Model from "./model.js"
 import { Schema, Struct } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
-import { Compatibility, MaxTokensField, ReasoningField } from "./model-compatibility.js"
+import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
 import { ephemeral, inventory } from "./event.js"
 
@@ -43,7 +43,7 @@ export const Ref = Schema.Struct({
   )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
-export { Compatibility, MaxTokensField, ReasoningField }
+export { Compatibility, MaxTokensField, MediaInput, ReasoningField }
 
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
