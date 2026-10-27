@@ -10,36 +10,58 @@ interface Input {
 
 /** Bound provider-requested delays so a hostile or buggy retry-after cannot stall a call for hours. */
 const RETRY_AFTER_MAX = Duration.toMillis("15 minutes")
+const RETRY_BACKOFF_MAX = 10_000
 
-const retryAfter = (input: Input) => {
+// Providers with minute-scale quota windows can outlast the default allowance (10 attempts, ~84s
+// of backoff) and drop turns while the error is still transient. The budget is env-tunable so a
+// deployment facing such windows can keep polling instead: OPENCODE_RETRY_MAX_RETRIES raises the
+// attempt cap ("infinite", any case, removes it) and OPENCODE_RETRY_MAX_DELAY_MS bounds every wait
+// between attempts — the backoff step and any honored retry-after alike. Unset or invalid values
+// keep the defaults. Values are clamped below 2^31 so a timer never overflows into an
+// immediate-retry storm.
+const envNumber = (name: string) => {
+  const parsed = Number(process.env[name] ?? "")
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 2_147_483_647) : undefined
+}
+
+const envCount = (name: string, fallback: number) =>
+  process.env[name]?.toLowerCase() === "infinite" ? Number.POSITIVE_INFINITY : (envNumber(name) ?? fallback)
+
+const retryAfter = (input: Input, max: number) => {
   if (input.cause.reason._tag === "RateLimit" || input.cause.reason._tag === "ProviderInternal")
-    return input.cause.reason.retryAfterMs === undefined
-      ? undefined
-      : Math.min(input.cause.reason.retryAfterMs, RETRY_AFTER_MAX)
+    return input.cause.reason.retryAfterMs === undefined ? undefined : Math.min(input.cause.reason.retryAfterMs, max)
   return undefined
 }
 
 // Exponential from 2s capped at 10s per gap, for 10 retries: 2, 4, 8, then 10 × 7, about 84s of
 // waiting when every attempt fails (67–101s with jitter). `min` takes the faster schedule, so the
-// cap applies per gap; `max` with `recurs` bounds the count.
-const schedule = Schedule.max([
-  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced("10 seconds")]),
-  Schedule.recurs(10),
-]).pipe(
-  Schedule.jittered,
-  Schedule.setInputType<Input>(),
-  Schedule.modifyDelay(({ input, duration: delay }) => {
-    const minimum = retryAfter(input)
-    const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
-    return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
-  }),
-)
+// cap applies per gap; `max` with `recurs` bounds the count. An unbounded count drops the `recurs`
+// arm instead of pairing it with Infinity, which `Schedule.recurs` leaves undefined.
+const makeSchedule = (maxRetries: number, backoffMax: number, retryAfterMax: number) => {
+  const backoff = Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced(backoffMax)])
+  const schedule = Number.isFinite(maxRetries) ? Schedule.max([backoff, Schedule.recurs(maxRetries)]) : backoff
+  return schedule.pipe(
+    Schedule.jittered,
+    Schedule.setInputType<Input>(),
+    Schedule.modifyDelay(({ input, duration: delay }) => {
+      const minimum = retryAfter(input, retryAfterMax)
+      const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
+      return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
+    }),
+  )
+}
 
 // A timed-out attempt already waited minutes before failing, so the general allowance would let a
 // dead provider hold a call for most of an hour. Cap those attempts well below it.
 const MAX_TIMEOUT_RETRIES = 3
 
 export const policy = Effect.gen(function* () {
+  const delayMax = envNumber("OPENCODE_RETRY_MAX_DELAY_MS")
+  const schedule = makeSchedule(
+    envCount("OPENCODE_RETRY_MAX_RETRIES", 10),
+    delayMax ?? RETRY_BACKOFF_MAX,
+    delayMax ?? RETRY_AFTER_MAX,
+  )
   const step = yield* Schedule.toStep(schedule)
   let attempt = 1
   let timeouts = 0
