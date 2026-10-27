@@ -409,6 +409,27 @@ describe("WebFetchTool helpers", () => {
 })
 
 describe("WebFetchTool registration", () => {
+  it.effect("reports when nonempty HTML has no readable text", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const url = "https://example.com/empty-html"
+      const html = "<html><head><script>challenge()</script></head><body></body></html>"
+      for (const status of [200, 202]) {
+        const contentType = "text/html; charset=utf-8"
+        respond = () => Effect.succeed(new Response(html, { status, headers: { "content-type": contentType } }))
+        const message = `No readable content was extracted from this HTML response (HTTP ${status}; ${contentType}).`
+        for (const format of ["markdown", "text"] as const) {
+          expect(yield* executeTool(registry, call({ url, format }))).toMatchObject({
+            status: "completed",
+            output: { output: message },
+            content: [{ type: "text", text: message }],
+          })
+        }
+      }
+    }),
+  )
+
   it.effect("registers and fetches an ordinary hostname HTTP URL without rewriting it", () =>
     Effect.gen(function* () {
       reset()
