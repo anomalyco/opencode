@@ -317,7 +317,8 @@ interface RequestDescriptor {
   readonly binary?: true
 }
 
-const maxSseEventBytes = 16 * 1024 * 1024
+// Limit each decoded, newline-normalized frame, including its delimiter, in UTF-16 code units.
+const maxSseEventCodeUnits = 16 * 1024 * 1024
 
 export function make(options: ClientOptions) {
   const fetch = options.fetch ?? globalThis.fetch
@@ -406,16 +407,16 @@ export function make(options: ClientOptions) {
           }
           if (!next.done) requestOptions?.onActivity?.()
           buffer += decoder.decode(next.value, { stream: !next.done })
-          if (buffer.length > maxSseEventBytes) throw new ClientError("SseEventTooLarge")
           const trailingCarriageReturn = !next.done && buffer.endsWith("\r")
           if (trailingCarriageReturn) buffer = buffer.slice(0, -1)
           buffer = buffer.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
           if (trailingCarriageReturn) buffer += "\r"
-          if (next.done && buffer !== "") buffer += "\n\n"
           let boundary = buffer.indexOf("\n\n")
-          while (boundary >= 0) {
-            const block = buffer.slice(0, boundary)
-            buffer = buffer.slice(boundary + 2)
+          while (boundary >= 0 || (next.done && buffer !== "")) {
+            const length = boundary >= 0 ? boundary + 2 : buffer.length
+            if (length > maxSseEventCodeUnits) throw new ClientError("SseEventTooLarge")
+            const block = boundary >= 0 ? buffer.slice(0, boundary) : buffer
+            buffer = buffer.slice(length)
             const data = block
               .split("\n")
               .flatMap((line) => (line.startsWith("data:") ? [line.slice(5).trimStart()] : []))
@@ -429,6 +430,7 @@ export function make(options: ClientOptions) {
             }
             boundary = buffer.indexOf("\n\n")
           }
+          if (buffer.length > maxSseEventCodeUnits) throw new ClientError("SseEventTooLarge")
           if (next.done) return
         }
       } finally {
