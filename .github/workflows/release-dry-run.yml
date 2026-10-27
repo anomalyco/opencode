@@ -385,8 +385,9 @@ jobs:
         uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         with:
           keychain: build
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          p12-file-base64: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
+          # The certificate has no password; the action passes this to `security import -P`.
+          p12-password: ""
       - name: Sign CLI
         if: needs.plan.outputs.cli == 'true'
         run: bash .github/release/sign-cli-macos.sh "$RUNNER_TEMP/in/build-npm" "$RUNNER_TEMP/out"
@@ -396,9 +397,9 @@ jobs:
           bash .github/release/sign-desktop-macos.sh "$RUNNER_TEMP/out" \
             "$RUNNER_TEMP"/in/build-desktop-darwin-*/opencode-desktop-mac-*.app.tar
         env:
-          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_PATH }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
       - id: upload
         name: Upload
         uses: ./.github/release/upload
