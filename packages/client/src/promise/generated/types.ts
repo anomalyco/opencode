@@ -1736,6 +1736,15 @@ export type ProjectUpdated = {
   }
 }
 
+export type ProjectRemoved = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "project.removed"
+  location?: LocationRef
+  data: { projectID: ProjectID }
+}
+
 export type WorktreeUpdated = {
   id: EventID
   created: number
@@ -2743,6 +2752,7 @@ export type V2Event =
   | PermissionReplied
   | PluginUpdated
   | ProjectUpdated
+  | ProjectRemoved
   | WorktreeUpdated
   | WorktreeResolved
   | CommandUpdated
@@ -2849,6 +2859,14 @@ export type UnknownError = {
 }
 export const isUnknownError = (value: unknown): value is UnknownError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
+
+export type ProjectNotFoundError = {
+  readonly _tag: "ProjectNotFoundError"
+  readonly projectID: string
+  readonly message: string
+}
+export const isProjectNotFoundError = (value: unknown): value is ProjectNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProjectNotFoundError"
 
 export type MessageNotFoundError = {
   readonly _tag: "MessageNotFoundError"
@@ -2998,14 +3016,6 @@ export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotF
 export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
 export const isForbiddenError = (value: unknown): value is ForbiddenError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
-
-export type ProjectNotFoundError = {
-  readonly _tag: "ProjectNotFoundError"
-  readonly projectID: string
-  readonly message: string
-}
-export const isProjectNotFoundError = (value: unknown): value is ProjectNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProjectNotFoundError"
 
 export type PermissionSavedNotFoundError = {
   readonly _tag: "PermissionSavedNotFoundError"
@@ -3229,6 +3239,10 @@ export type SessionGetOutput = { data: SessionInfo }["data"]
 export type SessionRemoveInput = { readonly sessionID: string }
 
 export type SessionRemoveOutput = void
+
+export type SessionRemoveProjectInput = { readonly projectID: string }
+
+export type SessionRemoveProjectOutput = void
 
 export type SessionForkInput = { readonly sessionID: string; readonly before?: string | undefined }
 
@@ -4020,6 +4034,10 @@ export type ProjectUpdateInput = {
 
 export type ProjectUpdateOutput = Project
 
+export type ProjectRemoveInput = { readonly projectID: string }
+
+export type ProjectRemoveOutput = void
+
 export type FormListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type FormListOutput = { location: LocationPublicRef; data: Array<FormInfo> }
@@ -4204,6 +4222,7 @@ export type EventSubscribeInput = {
         | "permission.replied"
         | "plugin.updated"
         | "project.updated"
+        | "project.removed"
         | "worktree.updated"
         | "worktree.resolved"
         | "command.updated"

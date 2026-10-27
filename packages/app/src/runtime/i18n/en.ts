@@ -456,6 +456,18 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Worktree startup script",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
 
+  "menu.project.deleteHistory": "Delete history…",
+  "menu.project.deleteProject": "Delete project…",
+  "dialog.project.deleteHistory.title": "Delete history",
+  "dialog.project.deleteHistory.confirm":
+    'Delete every session in "{{name}}"? The project itself is kept. This cannot be undone.',
+  "dialog.project.delete.button": "Delete",
+  "dialog.project.delete.title": "Delete project",
+  "dialog.project.delete.confirm":
+    'Delete "{{name}}" together with all of its sessions? This cannot be undone.',
+  "toast.project.deleteHistory.failed.title": "Failed to delete history",
+  "toast.project.delete.failed.title": "Failed to delete project",
+
   "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "toast.permissions.autoaccept.on.title": "Auto-accepting permissions",

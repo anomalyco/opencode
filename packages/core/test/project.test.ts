@@ -7,9 +7,14 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { Event as EventSchema } from "@opencode/schema/event"
+import { EventTable, EventSequenceTable } from "@opencode/core/event/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Session } from "@opencode/core/session"
+import { BlobRefTable, BlobTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionMessage } from "@opencode/core/session/message"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Hash } from "@opencode/util/hash"
 import { initGit } from "./fixture/git"
@@ -336,6 +341,108 @@ async function initRepo(dir: string, opts?: { commit?: boolean; remote?: string 
 async function rootCommit(dir: string) {
   return (await $`git rev-list --max-parents=0 HEAD`.cwd(dir).text()).trim()
 }
+
+describe("Project.remove", () => {
+  it.effect("deletes the project with its sessions and clears their event streams", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const id = Project.ID.make("remove-me")
+      const keep = Project.ID.make("keep-me")
+      yield* db
+        .insert(ProjectTable)
+        .values([
+          { id, worktree: abs("/remove-me"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 },
+          { id: keep, worktree: abs("/keep-me"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 },
+        ])
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values([
+          {
+            id: Session.ID.make("ses_gone"),
+            project_id: id,
+            slug: "gone",
+            directory: abs("/remove-me"),
+            version: "1",
+            time_created: 1,
+            time_updated: 1,
+          },
+          {
+            id: Session.ID.make("ses_stays"),
+            project_id: keep,
+            slug: "stays",
+            directory: abs("/keep-me"),
+            version: "1",
+            time_created: 1,
+            time_updated: 1,
+          },
+        ])
+        .run()
+      for (const aggregateID of ["ses_gone", "ses_stays"]) {
+        yield* db.insert(EventSequenceTable).values({ aggregate_id: aggregateID, seq: 2 }).run()
+        yield* db
+          .insert(EventTable)
+          .values([
+            { id: EventSchema.ID.make(`evt_${aggregateID}-1`), aggregate_id: aggregateID, seq: 1, created: 1, type: "x", data: {} },
+            { id: EventSchema.ID.make(`evt_${aggregateID}-2`), aggregate_id: aggregateID, seq: 2, created: 1, type: "x", data: {} },
+          ])
+          .run()
+      }
+      // Orphaned by the cascade and reclaimed; `shared` survives on the kept session's ref.
+      yield* db
+        .insert(BlobTable)
+        .values([
+          { hash: "orphan", mime: "image/png", bytes: 1, data: Buffer.alloc(1) },
+          { hash: "shared", mime: "image/png", bytes: 1, data: Buffer.alloc(1) },
+        ])
+        .run()
+      yield* db
+        .insert(BlobRefTable)
+        .values([
+          { session_id: Session.ID.make("ses_gone"), message_id: SessionMessage.ID.make("msg_gone"), hash: "orphan", seq: 1 },
+          { session_id: Session.ID.make("ses_stays"), message_id: SessionMessage.ID.make("msg_stays"), hash: "shared", seq: 1 },
+        ])
+        .run()
+      const removals: Array<{ projectID: Project.ID }> = []
+      yield* bus.subscribe(ProjectSchema.Event.Removed).pipe(
+        Stream.runForEach((event) => Effect.sync(() => removals.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* project.remove(id)
+
+      expect((yield* project.list({ archived: true })).map((item) => item.id)).toEqual([keep])
+      const sessions = yield* db.select({ id: SessionTable.id }).from(SessionTable).all()
+      expect(sessions.map((session) => session.id)).toEqual([Session.ID.make("ses_stays")])
+      const events = yield* db.select().from(EventTable).all()
+      expect(events.map((event) => event.aggregate_id).toSorted()).toEqual(["ses_stays", "ses_stays"])
+      expect((yield* db.select().from(EventSequenceTable).all()).map((event) => event.aggregate_id)).toEqual([
+        "ses_stays",
+      ])
+      expect((yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all()).map((blob) => blob.hash)).toEqual([
+        "shared",
+      ])
+      yield* Effect.yieldNow
+      expect(removals).toEqual([{ projectID: id }])
+    }),
+  )
+
+  it.effect("fails for a missing project and refuses the global project", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const missing = Project.ID.make("missing")
+
+      expect(yield* Effect.result(project.remove(missing))).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "Project.NotFoundError", projectID: missing },
+      })
+      expect(yield* Effect.result(project.remove(Project.ID.global))).toMatchObject({ _tag: "Failure" })
+      expect(yield* project.list()).toEqual([])
+    }),
+  )
+})
 
 describe("Project.resolve", () => {
   it.live("creates distinct deterministic projects for exact markerless directories", () =>

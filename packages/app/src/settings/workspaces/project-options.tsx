@@ -2,7 +2,12 @@ import { Show, type Component } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
+import { errorMessage } from "@/shell/layout/helpers"
+import { showToast } from "@/shell/notifications/toast"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -17,6 +22,7 @@ export const ProjectOptions: Component<{
   onOpenChange?: (open: boolean) => void
   onEdit?: () => void
   onRename?: () => void
+  onRemoved?: () => void
   class?: string
   size?: "small" | "normal" | "large"
 }> = (props) => {
@@ -24,6 +30,7 @@ export const ProjectOptions: Component<{
   const global = useGlobal()
   const platform = usePlatform()
   const revealProject = useRevealProject()
+  const dialog = useDialog()
   const context = () => global.ensureServerCtx(props.server)
 
   const directories = () => [props.project.worktree, ...(props.project.sandboxes ?? [])]
@@ -33,6 +40,72 @@ export const ProjectOptions: Component<{
   const clearNotifications = () => {
     const notification = context().notification
     directories().forEach((directory) => notification.project.markViewed(directory))
+  }
+
+  const name = () => props.project.name ?? props.project.worktree
+  const projectID = () => props.project.id
+
+  const deleteHistory = async () => {
+    const id = projectID()
+
+    if (!id) return
+
+    try {
+      await context().sdk.api.session.removeProject({ projectID: id })
+    } catch (cause) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.project.deleteHistory.failed.title"),
+        description: errorMessage(cause, language.t("toast.project.deleteHistory.failed.title")),
+      })
+    }
+  }
+
+  const remove = async () => {
+    const id = projectID()
+
+    if (!id) return
+
+    try {
+      await context().sdk.api.project.remove({ projectID: id })
+      props.onRemoved?.()
+    } catch (cause) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.project.delete.failed.title"),
+        description: errorMessage(cause, language.t("toast.project.delete.failed.title")),
+      })
+    }
+  }
+
+  const confirmDelete = (kind: "history" | "project") => {
+    dialog.show(() => (
+      <Dialog fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t(kind === "history" ? "dialog.project.deleteHistory.title" : "dialog.project.delete.title")}
+            description={language.t(
+              kind === "history" ? "dialog.project.deleteHistory.confirm" : "dialog.project.delete.confirm",
+              { name: name() },
+            )}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              dialog.close()
+              void (kind === "history" ? deleteHistory() : remove())
+            }}
+          >
+            {language.t("dialog.project.delete.button")}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    ))
   }
 
   return (
@@ -65,6 +138,12 @@ export const ProjectOptions: Component<{
           <Menu.Item disabled={!hasUnread()} onSelect={clearNotifications}>
             {language.t("sidebar.project.clearNotifications")}
           </Menu.Item>
+          <Show when={projectID()}>
+            <Menu.Item onSelect={() => confirmDelete("history")}>{language.t("menu.project.deleteHistory")}</Menu.Item>
+            <Menu.Item data-variant="critical" onSelect={() => confirmDelete("project")}>
+              {language.t("menu.project.deleteProject")}
+            </Menu.Item>
+          </Show>
         </Menu.Content>
       </Menu.Portal>
     </Menu>

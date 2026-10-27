@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
 import { ChildProcess } from "effect/process"
-import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notExists, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -17,6 +17,8 @@ import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
+import { EventSequenceTable } from "./event/sql.js"
+import { BlobRefTable, BlobTable, SessionTable } from "./session/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -79,6 +81,8 @@ export interface ResolveOptions {
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
+  /** Deletes the Project row, cascading its worktrees and sessions, and clears the sessions' event streams. */
+  readonly remove: (projectID: ID) => Effect.Effect<void, NotFoundError>
   /** Records Project activity for recency ordering, at most once per minute per Project. */
   readonly activate: (projectID: ID) => Effect.Effect<void>
   /** Resolves the owning Project, persisting it unless `persist` is false. */
@@ -288,6 +292,41 @@ const layer = Layer.effect(
       if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
     })
 
+    const remove = Effect.fn("Project.remove")(function* (projectID: ID) {
+      if (projectID === ID.global) return yield* new NotFoundError({ projectID })
+      const existing = yield* db
+        .select({ id: ProjectTable.id })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, projectID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!existing) return yield* new NotFoundError({ projectID })
+      const sessionIDs = (
+        yield* db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.project_id, projectID)).all().pipe(
+          Effect.orDie,
+        )
+      ).map((session) => session.id)
+      // The FK cascades take the sessions, their messages, inbox rows, instructions and blob refs with the row.
+      yield* db.delete(ProjectTable).where(eq(ProjectTable.id, projectID)).run().pipe(Effect.orDie)
+      for (let offset = 0; offset < sessionIDs.length; offset += 500) {
+        const batch = sessionIDs.slice(offset, offset + 500)
+        // Deleting the sequence rows cascades to their events.
+        yield* db.delete(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, batch)).run().pipe(Effect.orDie)
+      }
+      if (sessionIDs.length) {
+        yield* db
+          .delete(BlobTable)
+          .where(
+            notExists(
+              db.select({ one: sql`1` }).from(BlobRefTable).where(eq(BlobRefTable.hash, BlobTable.hash)),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+      }
+      yield* bus.publish(ProjectSchema.Event.Removed, { projectID })
+    })
+
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
         Effect.map((value) => value.trim()),
@@ -486,7 +525,7 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({ list, update, activate, resolve, sweep })
+    return Service.of({ list, update, remove, activate, resolve, sweep })
   }),
 )
 
