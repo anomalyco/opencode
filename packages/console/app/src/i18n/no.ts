@@ -70,12 +70,8 @@ export const dict = {
 
   "home.what.title": "Hva er OpenCode?",
   "home.what.body": "OpenCode er en åpen kildekode-agent som hjelper deg å skrive kode i terminal, IDE eller desktop.",
-  "home.what.lsp.title": "LSP aktivert",
-  "home.what.lsp.body": "Laster automatisk de riktige LSP-ene for LLM-en",
   "home.what.multiSession.title": "Multi-sesjon",
   "home.what.multiSession.body": "Start flere agenter parallelt på samme prosjekt",
-  "home.what.shareLinks.title": "Del lenker",
-  "home.what.shareLinks.body": "Del en lenke til en sesjon for referanse eller feilsøking",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Logg inn med GitHub for å bruke Copilot-kontoen din",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -115,8 +111,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Du kan til og med koble til dine",
   "home.faq.a3.p4.localLink": "lokale modeller",
   "home.faq.q4": "Kan jeg bruke mine eksisterende AI-abonnementer med OpenCode?",
-  "home.faq.a4.p1":
-    "Ja, OpenCode støtter abonnementer fra alle store leverandører. Du kan bruke Claude Pro/Max, ChatGPT Plus/Pro eller GitHub Copilot-abonnementer.",
+  "home.faq.a4.p1": "Ja, du kan bruke ChatGPT Plus/Pro- eller GitHub Copilot-abonnementene dine.",
   "home.faq.q5": "Kan jeg bare bruke OpenCode i terminalen?",
   "home.faq.a5.beforeDesktop": "Ikke lenger! OpenCode er nå tilgjengelig som en app for",
   "home.faq.a5.desktop": "desktop",
@@ -165,7 +160,7 @@ export const dict = {
     "For å dekke kostnader legger OpenCode til bare et lite betalingsbehandlingsgebyr på $1.23 per $20 saldo-påfyll.",
   "zen.faq.q5": "Hva med data og personvern?",
   "zen.faq.a5.beforeExceptions":
-    "Alle Zen-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med de",
+    "Alle Zen-modeller hostes i USA og EU. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med de",
   "zen.faq.a5.exceptionsLink": "følgende unntakene",
   "zen.faq.q6": "Kan jeg sette utgiftsgrenser?",
   "zen.faq.a6": "Ja, du kan sette månedlige utgiftsgrenser i kontoen din.",
@@ -198,13 +193,13 @@ export const dict = {
   "zen.how.step2.link": "betal per forespørsel",
   "zen.how.step2.afterLink": "uten påslag",
   "zen.how.step3.title": "Auto-påfyll",
-  "zen.how.step3.body": "når saldoen din når $5, fyller vi automatisk på $20",
+  "zen.how.step3.body": "aktiver valgfri automatisk påfylling og velg saldogrense og påfyllingsbeløp",
   "zen.privacy.title": "Personvernet ditt er viktig for oss",
   "zen.privacy.beforeExceptions":
-    "Alle Zen-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
+    "Alle Zen-modeller hostes i USA og EU. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "zen.privacy.exceptionsLink": "følgende unntak",
 
-  "go.promo.step5": "Step 5 Preview er nå tilgjengelig i Go med 4× bruk i en begrenset periode.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro er nå tilgjengelig i Go.",
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
   "go.meta.description":
     "Go koster $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
@@ -284,7 +279,6 @@ export const dict = {
     "ZDR deaktiverer viktige API-funksjoner som er avhengige av lagrede data, inkludert den tilstandsbaserte Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention":
     "Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager.",
-  "go.faq.a5.geminiRetention": "Ledetekstene og fullføringene dine kan brukes til å trene fremtidige Google-modeller.",
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
     "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. oktober 2026.",
@@ -301,7 +295,7 @@ export const dict = {
 
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter i rullerende perioder: 20 % av den månedlige kvoten per 5 timer, 50 % per uke og 100 % per måned. Modellspesifikke kvoter kan variere (faktisk antall forespørsler varierer etter modell og bruk).",
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter i rullerende perioder: 20 % av den månedlige kvoten per 5 timer, 50 % per uke og 100 % per måned. Modellspesifikke kvoter kan variere (faktisk antall forespørsler varierer etter modell og bruk).",
   "go.faq.q10": "Kan jeg få refusjon?",
   "go.faq.a10":
     "Du kan ha rett på refusjon hvis belastningen ble gjort i løpet av de siste 14 dagene og du ikke har brukt noe av Go-kvoten i den faktureringsperioden. {{contact}} for å be om refusjon.",
@@ -367,6 +361,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Ugyldig e-postformat.",
   "enterprise.form.error.invalidInferenceSpend": "Velg et gyldig intervall for inferensforbruk.",
   "enterprise.form.error.internalServer": "Intern serverfeil.",
+  "enterprise.form.error.captcha": "Captcha-verifiseringen mislyktes. Prøv igjen.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hva er OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -376,7 +371,7 @@ export const dict = {
     "Start enkelt med en intern prøveperiode med teamet ditt. OpenCode lagrer som standard ikke koden din eller kontekstdata, noe som gjør det enkelt å komme i gang. Kontakt oss deretter for å diskutere priser og implementeringsalternativer.",
   "enterprise.faq.q3": "Hvordan fungerer enterprise-prising?",
   "enterprise.faq.a3":
-    "Vi tilbyr enterprise-prising per sete. Har du din egen LLM-gateway, tar vi ikke betalt for brukte tokens. Kontakt oss for flere detaljer og et tilpasset tilbud basert på organisasjonens behov.",
+    "Har du din egen LLM-gateway, tar vi ikke betalt for brukte tokens. Kontakt oss for flere detaljer og et tilpasset tilbud basert på organisasjonens behov.",
   "enterprise.faq.q4": "Er dataene mine sikre med OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Ja. OpenCode lagrer ikke koden din eller kontekstdata. All behandling skjer lokalt eller gjennom direkte API-kall til AI-leverandøren din. Med sentral konfigurasjon og SSO-integrasjon forblir dataene dine sikre innenfor organisasjonens infrastruktur.",

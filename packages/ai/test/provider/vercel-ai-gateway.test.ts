@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Message, CacheHint } from "../../src/index.js"
+import { LLM, LLMClient, LLMEvent, Message, CacheHint } from "../../src/effect.js"
 import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"

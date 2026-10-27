@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { Base64 } from "effect/encoding"
-import { Speech, SpeechClient, SpeechEvent } from "../src/index.js"
+import { Speech, SpeechClient, SpeechEvent } from "../src/effect.js"
 import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -206,6 +206,24 @@ describe("Speech", () => {
       expect(provider.reason).toMatchObject({ _tag: "InvalidRequest", body: JSON.stringify(cartesiaError) })
       expect(provider.message).toBe("Cartesia stream failed (Invalid model): Nope")
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: blocked })
+    }),
+  )
+
+  it.effect("ignores unknown OpenAI speech stream events", () =>
+    Effect.gen(function* () {
+      const events = yield* collect(Speech.stream({ model: openai, text: "Hi" })).pipe(
+        Effect.provide(
+          respond(
+            sseEvents(
+              { type: "speech.audio.delta", audio: "AQI=" },
+              { type: "speech.audio.future", value: 1 },
+              { type: "speech.audio.done" },
+            ),
+            "text/event-stream",
+          ),
+        ),
+      )
+      expect(events.map((event) => event.type)).toEqual(["audio-delta", "finish"])
     }),
   )
 

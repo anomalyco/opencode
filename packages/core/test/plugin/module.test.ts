@@ -331,12 +331,14 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
             ".": "./src/promise/index.ts",
             "./effect": "./src/effect/index.ts",
             "./effect/*": "./src/effect/*.ts",
+            "./gui/*": "./src/gui/*.ts",
           },
         }),
         "consumer/node_modules/@opencode/plugin/src/promise/index.ts": "export const root = 'src'",
         "consumer/node_modules/@opencode/plugin/src/effect/index.ts": "export * as plugin from './plugin.ts'",
         "consumer/node_modules/@opencode/plugin/src/effect/plugin.ts": "export const leaf = 'src'",
         "consumer/node_modules/@opencode/plugin/src/unexported.ts": "export const secret = true",
+        "consumer/node_modules/@opencode/plugin/src/gui/sdk/index.ts": "export const window = true",
         "consumer/node_modules/@opencode/plugin/dist/promise/index.js": "export const root = 'dist'",
         "consumer/node_modules/@opencode/plugin/dist/effect/index.js": "export const index = 'dist'",
         "consumer/node_modules/@opencode/plugin/dist/effect/plugin.js": "export const leaf = 'dist'",
@@ -349,6 +351,8 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
     expect(discovered.get("@opencode/plugin/effect")?.replaceAll("\\", "/")).toEndWith("src/effect/index.ts")
     expect(discovered.get("@opencode/plugin/effect/plugin")?.replaceAll("\\", "/")).toEndWith("src/effect/plugin.ts")
     expect(discovered.has("@opencode/plugin/unexported")).toBe(false)
+    // The GUI SDK runs in the app; the server and TUI runtime never load it.
+    expect([...discovered.keys()].filter((specifier) => specifier.startsWith("@opencode/plugin/gui"))).toEqual([])
 
     const hostDiscovered = discoverPluginRuntimeSpecifiers()
     expect(hostDiscovered.has("effect/schema/SchemaJITCompiler")).toBe(true)
@@ -422,6 +426,50 @@ it.live("blocks a local plugin before module initialization and honors replaceme
     yield* managed.set({ statements: [] })
     expect(yield* modules.load(operation)).toMatchObject({ id: "policy-fixture" })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
+  }),
+)
+
+it.live("loads a GUI-only package under its package name without running it, and leaves a TUI-only one to the TUI", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const gui = path.join(directory.path, "gui")
+    const tui = path.join(directory.path, "acme-tui")
+    const evaluated = 'throw new Error("A client part must not run on the server")'
+    yield* Effect.promise(() =>
+      writeFiles(directory.path, {
+        "gui/package.json": JSON.stringify({
+          name: "opencode-acme-gui",
+          exports: { "./gui-experimental": "./dist/gui-experimental.cjs" },
+        }),
+        "gui/dist/gui-experimental.cjs": evaluated,
+        "acme-tui/tui.tsx": evaluated,
+      }),
+    )
+    const modules = yield* PluginModule.make()
+    const plugins = yield* Plugin.Service
+
+    const loaded = yield* modules.load({ type: "add", target: gui, options: { region: "eu" } })
+    expect(loaded).toMatchObject({
+      id: "opencode-acme-gui",
+      features: { gui: true },
+      gui: { options: { region: "eu" } },
+      source: { type: "local", path: gui },
+    })
+    // The server lists a TUI-only directory as it always has: the TUI loads it from its own config.
+    const terminal = yield* modules.load({ type: "add", target: tui, options: {} }).pipe(Effect.flip)
+    expect(terminal.message).toBe(`Plugin entrypoint not found: ${tui}`)
+    if ("pending" in loaded || "blocked" in loaded) return yield* Effect.die(new Error("The plugin was not loaded"))
+
+    yield* plugins.activate([loaded])
+    yield* plugins.awaitActivation
+    expect((yield* plugins.list()).filter((plugin) => plugin.source.type === "local")).toEqual([
+      {
+        id: Plugin.ID.make("opencode-acme-gui"),
+        source: { type: "local", path: gui },
+        state: { status: "active" },
+        features: { gui: true },
+      },
+    ])
   }),
 )
 

@@ -114,7 +114,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         id: Plugin.ID.make(plugin.id),
         source: plugin.source ?? { type: "builtin" as const },
         state: { status: "failed" as const, error: `Duplicate plugin ID: ${plugin.id}` },
-        features: { server: true as const, ...plugin.features },
+        features: plugin.features ?? { server: true as const },
       })),
     ],
     pending: [...pending],

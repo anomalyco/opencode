@@ -1,13 +1,20 @@
-import { Show, createMemo } from "solid-js"
+import { Show, createEffect, createMemo, createSignal } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
-import { ProviderModelIcon } from "@/providers/models/provider-group"
+import { Slash } from "@opencode/ui/slash"
+import { consoleModelGroup } from "@/providers/models/provider-group"
+import { consoleProviderName } from "@/providers/catalog/console"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
-import { ModelSelectorPopover } from "@/providers/models/select-dialog"
+import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/select-dialog"
+import { DialogSelectModelNext, ModelSelectorDrawerNext } from "@/providers/models/select-dialog-next"
+import { useSettings } from "@/settings/model"
+import { ModelDetails } from "@/providers/models/details"
+import { createModelUsage } from "@/usage/model"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -24,6 +31,21 @@ export function Composer(props: {
   const command = useCommand()
   const language = useLanguage()
 
+  const modelName = () => {
+    const preview = props.model.model.preview
+
+    if (preview) return preview.model
+    const selection = props.model.model.selection
+    const model = selection.current()
+
+    if (model) return model.name
+    const key = selection.key()
+
+    if (key) return language.t("dialog.model.unavailable", { model: key.modelID })
+
+    return language.t("dialog.model.select.title")
+  }
+
   return (
     <div class="flex flex-col gap-3">
       <ComposerEditor
@@ -31,7 +53,7 @@ export function Composer(props: {
         borderUnderlay={props.borderUnderlay}
         readOnly={props.readOnly}
         class={props.class}
-        modelControlsVisible={!props.model.model.loading}
+        modelControlsVisible={!props.model.model.loading || !!props.model.model.preview}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
@@ -40,12 +62,13 @@ export function Composer(props: {
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}
+            preview={!!props.model.model.preview}
             paid={props.model.model.paid}
             title={language.t("command.model.choose")}
             keybind={command.keybindParts("model.choose")}
             model={props.model.model.selection}
-            provider={props.model.model.selection.current()?.provider}
-            modelName={props.model.model.selection.current()?.name ?? language.t("dialog.model.select.title")}
+            providerName={props.model.model.preview?.provider ?? props.model.model.providerName}
+            modelName={modelName()}
             onClose={props.model.restoreFocus}
             onUnpaidClick={() => dialog.show(() => <DialogSelectModelUnpaid model={props.model.model.selection} />)}
           />
@@ -57,29 +80,65 @@ export function Composer(props: {
 
 function ComposerModelControl(props: {
   loading: boolean
+  preview: boolean
   paid: boolean
   title: string
   keybind: string[]
   model: ComposerModel["model"]["selection"]
-  provider?: { id: string; canonical?: string; name: string }
+  providerName?: string
   modelName: string
   onClose: () => void
   onUnpaidClick: () => void
 }) {
-  const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
+  // A preview paints the chip in its resting state, and the loaded names replace it in place.
+  const shouldAnimate = createMemo<boolean>((previous) => previous ?? (props.loading && !props.preview))
   const mobile = createMediaQuery("(max-width: 767px)")
+  const dialog = useDialog()
+  const settings = useSettings()
+  const managed = createMemo(() => consoleModelGroup(props.model.list()))
+  const usage = createModelUsage()
+
+  const open = (detail: number) => {
+    if (!props.paid) return props.onUnpaidClick()
+    const Picker = settings.general.newModelPicker() ? DialogSelectModelNext : DialogSelectModel
+    // A pointer open keeps focus in the composer, so the dialog returns it to the caret. A keyboard open
+    // (a click with no pointer presses) returns focus to this trigger instead of moving it to the editor.
+    void dialog.show(() => <Picker model={props.model} />, detail === 0 ? undefined : props.onClose)
+  }
+
+  // A previewed chip is visible before the catalog loads, so a click on it opens the dialog once loading finishes.
+  const [deferred, setDeferred] = createSignal<number>()
+
+  createEffect(() => {
+    const detail = deferred()
+
+    if (props.loading || detail === undefined) return
+    setDeferred(undefined)
+    open(detail)
+  })
+
+  const providerName = (provider: { id: string; name: string }) => {
+    const group = managed()
+
+    return group?.providers.some((item) => item.id === provider.id)
+      ? consoleProviderName(group, provider.name)
+      : provider.name
+  }
 
   const content = () => (
     <>
-      <Show when={props.provider}>
-        {(provider) => (
-          <ProviderModelIcon
-            provider={provider()}
-            class="shrink-0 opacity-40 transition-opacity duration-150 group-hover:opacity-100"
-          />
-        )}
-      </Show>
-      <span class="truncate leading-4">{props.modelName}</span>
+      <span class="flex min-w-0 whitespace-nowrap leading-4">
+        <Show when={props.providerName}>
+          {(name) => (
+            <>
+              <span class="shrink-0 text-v2-text-text-faint">{name()}</span>
+              <Slash />
+              <span class="sr-only">{" / "}</span>
+            </>
+          )}
+        </Show>
+        <span class="truncate">{props.modelName}</span>
+      </span>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>
@@ -87,48 +146,72 @@ function ComposerModelControl(props: {
   )
 
   return (
-    <Show when={!props.loading}>
+    <Show when={!props.loading || props.preview}>
       <Tooltip
         inactive={mobile()}
+        openDelay={750}
+        contentClass={props.model.current() ? "!p-0 rounded-md" : undefined}
         placement="top"
         gutter={4}
         value={
-          <>
-            {props.title}
-            <Keybind keys={props.keybind} variant="neutral" />
-          </>
+          <Show
+            when={props.model.current()}
+            fallback={
+              <>
+                {props.title}
+                <Keybind keys={props.keybind} variant="neutral" />
+              </>
+            }
+          >
+            {(model) => (
+              <div class="flex w-[188px] max-w-[calc(100vw-24px)] flex-col">
+                <ModelDetails model={model()} provider={providerName(model().provider)} usage={usage(model())} />
+                <div class="flex h-7 min-w-0 items-center gap-2 border-t-[0.5px] border-v2-border-border-base px-2">
+                  <span class="min-w-0 flex-1 truncate text-v2-text-text-faint">{props.title}</span>
+                  <Keybind keys={props.keybind} variant="neutral" />
+                </div>
+              </div>
+            )}
+          </Show>
         }
       >
+        {/* While loading, the drawer would open on a catalog that isn't there yet, so the inert chip stands in. */}
         <Show
-          when={props.paid || mobile()}
+          when={mobile() && !props.loading}
           fallback={
             <Button
               data-action="composer-model"
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+              class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
-              onClick={props.onUnpaidClick}
+              onMouseDown={(event: MouseEvent) => event.preventDefault()}
+              onClick={(event: MouseEvent) => {
+                if (!props.loading) return open(event.detail)
+
+                // On mobile this inert chip stands in for the drawer trigger, so a click there is dropped.
+                if (!mobile()) setDeferred(event.detail)
+              }}
             >
               {content()}
             </Button>
           }
         >
-          <ModelSelectorPopover
+          <Dynamic
+            component={settings.general.newModelPicker() ? ModelSelectorDrawerNext : ModelSelectorDrawer}
             model={props.model}
-            unpaid={!props.paid}
             trigger={(triggerProps) => (
               <Button
                 {...triggerProps}
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
-                data-control-type={mobile() ? "drawer" : "popover"}
+                data-control-type="drawer"
               >
                 {content()}
               </Button>

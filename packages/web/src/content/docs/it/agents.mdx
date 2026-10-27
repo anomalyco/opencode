@@ -150,7 +150,7 @@ Configura gli agenti nel file `opencode.json`:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -170,7 +170,7 @@ Configura gli agenti nel file `opencode.json`:
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -194,7 +194,7 @@ Puoi anche definire agenti usando file markdown. Mettili in:
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -365,7 +365,7 @@ Se non specifichi un modello, gli agenti primari usano il [modello configurato g
 }
 ```
 
-L'ID modello nella configurazione OpenCode usa il formato `provider/model-id`. Per esempio, se stai usando [OpenCode Zen](https://opencode.ai/v2/docs/console/), useresti `opencode/gpt-5.1-codex` per GPT 5.1 Codex.
+L'ID modello nella configurazione OpenCode usa il formato `provider/model-id`. Per esempio, se stai usando [OpenCode Zen](https://opencode.ai/v2/docs/console/), useresti `opencode/gpt-6.1-sol` per GPT-6.1 Sol.
 
 ---
 
@@ -652,7 +652,7 @@ Per esempio, con i modelli di reasoning di OpenAI, puoi controllare lo sforzo di
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -670,19 +670,9 @@ Esegui `opencode models` per vedere la lista dei modelli disponibili.
 
 ## Creazione agenti
 
-Puoi creare nuovi agenti usando il comando seguente:
+Crea un nuovo agente aggiungendo un file markdown in `.opencode/agents/` per il progetto o in `~/.config/opencode/agents/` a livello globale. Il nome del file diventa il nome dell'agente e il frontmatter ne configura descrizione, modalità, modello e permessi. Vedi [Markdown](#markdown) sopra per il formato del file.
 
-```bash
-opencode agent create
-```
-
-Questo comando interattivo:
-
-1. Chiede dove salvare l'agente: globale o specifico del progetto.
-2. Chiede una descrizione di cosa dovrebbe fare l'agente.
-3. Genera un system prompt appropriato e un identificatore.
-4. Ti fa selezionare a quali strumenti l'agente può accedere.
-5. Infine, crea un file markdown con la configurazione dell'agente.
+Esegui `opencode agent list` per elencare gli agenti caricati da OpenCode.
 
 ---
 

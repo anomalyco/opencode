@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("settings menu reconnect retains its prompt handler across server updates", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--settings-reconnect")

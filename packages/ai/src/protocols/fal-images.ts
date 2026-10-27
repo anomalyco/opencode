@@ -5,9 +5,9 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { ProviderShared, optionalNull } from "./shared.js"
+import { optionalNull } from "./shared.js"
 import { FalQueue } from "./utils/fal-queue.js"
-import { MediaInput } from "./utils/media-input.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 
 const route = MediaProtocol.identity({ id: "fal-images", name: "fal Images", provider: "fal" })
 
@@ -15,10 +15,15 @@ const route = MediaProtocol.identity({ id: "fal-images", name: "fal Images", pro
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
+/** Model-defined `input` fields; `aspect` and `resolution` lower to `image_size` or `aspect_ratio` per model. */
 export type FalImageOptions = {
-  readonly image_size?: OpenString<
-    "square_hd" | "square" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9"
-  >
+  readonly image_size?:
+    | OpenString<"square_hd" | "square" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9">
+    | { readonly width: number; readonly height: number }
+  readonly seed?: number
+  readonly output_format?: OpenString<"jpeg" | "png" | "webp">
+  /** Inpainting mask, sent as `mask_url`. */
+  readonly mask?: Media.Asset
   readonly enable_safety_checker?: boolean
 } & Record<string, unknown>
 
@@ -48,21 +53,18 @@ const QueueResult = Schema.StructWithRest(
 // 5. Request body construction
 // ---------------------------------------------------------------------------
 
+/** Nano Banana takes `aspect_ratio` and `resolution` tiers, FLUX Ultra and Kontext only `aspect_ratio`, FLUX `image_size`. */
 const sizing = (model: string) => {
-  if (/^fal-ai\/(nano-banana|flux-pro\/(v1\.1-ultra|kontext))/.test(model)) return "aspect_ratio"
+  if (model.startsWith("fal-ai/nano-banana")) return "tiers"
+  if (/^fal-ai\/flux-pro\/(v1\.1-ultra|kontext)/.test(model)) return "aspect_ratio"
   if (model.startsWith("fal-ai/flux")) return "image_size"
   return undefined
 }
 
 const validate = (request: Request) => {
   const id = request.model.id
-  const field = sizing(id)
-  if (request.size !== undefined && request.aspectRatio !== undefined)
-    return Effect.fail(ProviderShared.invalidRequest(`${route.name} accepts either size or aspectRatio, not both`))
-  if (request.size !== undefined && field === "aspect_ratio")
-    return Effect.fail(route.unsupported("media.size", `${id} sizes by aspectRatio`))
-  if (request.aspectRatio !== undefined && field === "image_size")
-    return Effect.fail(route.unsupported("media.aspectRatio", `${id} sizes by size (image_size)`))
+  if (request.resolution !== undefined && sizing(id) === "aspect_ratio")
+    return Effect.fail(route.unsupported("media.resolution", `${id} sizes by aspect only`))
   if ((request.images?.length ?? 0) > 1 && !takesImageList(id))
     return Effect.fail(
       route.unsupported(
@@ -81,20 +83,21 @@ const fromRequest = Effect.fn("FalImages.fromRequest")(function* (request: Reque
   yield* validate(request)
   const images = yield* Effect.forEach(request.images ?? [], (image) => FalQueue.mediaUrl(image, route.name))
   const list = takesImageList(request.model.id)
+  const { mask, ...native } = request.providerOptions ?? {}
+  const field = sizing(request.model.id)
   return MediaProtocol.json(
     mergeJsonRecords(
       {
         prompt: request.prompt,
         num_images: request.n,
-        seed: request.seed,
-        image_size: request.size === undefined ? undefined : MediaInput.dimensions(request.size),
-        aspect_ratio: request.aspectRatio,
-        output_format: request.format,
+        ...(field === "image_size"
+          ? { image_size: yield* ImageSizing.exact(route, request, { multiple: 16 }) }
+          : { aspect_ratio: request.aspect, resolution: request.resolution }),
         image_urls: list && images.length > 0 ? images : undefined,
         image_url: list ? undefined : images[0],
-        mask_url: request.mask === undefined ? undefined : yield* FalQueue.mediaUrl(request.mask, route.name),
+        mask_url: mask === undefined ? undefined : yield* FalQueue.mediaUrl(mask, route.name),
       },
-      request.providerOptions,
+      native,
       request.http?.body,
     ) ?? {},
   )

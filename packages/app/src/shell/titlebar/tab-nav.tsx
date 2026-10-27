@@ -3,16 +3,15 @@ import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMutation } from "@tanstack/solid-query"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
-import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
@@ -28,10 +27,13 @@ export function TabNavItem(props: {
   session: SessionInfo | undefined
   preparing: boolean
   unread: boolean
+  attention: boolean
   loading: boolean
   fallbackTitle?: string
+  fallbackDirectory?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
+  onDelete: () => void
   onNavigate: () => void
   active?: boolean
   suppressNavigation?: boolean
@@ -47,7 +49,6 @@ export function TabNavItem(props: {
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
   let measureFrame: number | undefined
-  const rename = createMutation(() => ({ mutationFn: props.onRename }))
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -58,14 +59,27 @@ export function TabNavItem(props: {
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
 
-  const unread = () => !!props.session && !props.active && props.unread
+  // The project icon stays put; status shows where the close button appears on hover.
+  const status = () => {
+    if (props.preparing || props.loading) return "busy"
+
+    if (!props.session || props.active) return
+
+    if (props.attention) return "attention"
+
+    if (props.unread) return "unread"
+  }
+
+  const dotted = () => status() === "attention" || status() === "unread"
 
   const project = createMemo(() => {
     const session = props.session
 
-    if (!session) return
+    if (session) return serverCtx()?.projects.forSession(session)
 
-    return serverCtx()?.projects.forSession(session)
+    if (!props.fallbackDirectory) return
+
+    return serverCtx()?.projects.forDirectory(props.fallbackDirectory) ?? { worktree: props.fallbackDirectory }
   })
 
   const title = createMemo(() => {
@@ -87,16 +101,19 @@ export function TabNavItem(props: {
 
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
+    const directory = session.location.directory
 
-    return home ? session.location.directory.replace(home, "~") : session.location.directory
+    if (!home || !directory.startsWith(home) || !/^([/\\]|$)/.test(directory.slice(home.length))) return directory
+
+    return "~" + directory.slice(home.length)
   })
 
-  // Only label the server when multiple servers are connected.
+  // Only label the server when multiple servers are connected, and never the current one.
   const serverLabel = createMemo(() => {
     if (servers.list.length <= 1) return
     const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
 
-    return conn ? serverName(conn) : undefined
+    return conn ? servers.tag(conn) : undefined
   })
 
   // Like the TUI, a prompt sent to a background tab's session pulses the tab once.
@@ -159,7 +176,7 @@ export function TabNavItem(props: {
   }
 
   const closeRename = async (save: boolean) => {
-    if (rename.isPending || !editing()) return
+    if (!editing()) return
 
     const original = props.session?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
@@ -171,7 +188,7 @@ export function TabNavItem(props: {
       return
     }
 
-    await rename.mutateAsync(next)
+    await props.onRename(next)
   }
 
   createEffect(() => {
@@ -188,7 +205,7 @@ export function TabNavItem(props: {
     event?.preventDefault()
     event?.stopPropagation()
 
-    if (props.dragging || editing() || rename.isPending) return
+    if (props.dragging || editing()) return
     const session = props.session
 
     if (!session) return
@@ -236,7 +253,7 @@ export function TabNavItem(props: {
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
-      data-unread={unread()}
+      data-status={status()}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
       onMouseDown={(event) => {
@@ -289,29 +306,14 @@ export function TabNavItem(props: {
       >
         <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
           <Show
-            when={props.session}
-            keyed
+            when={props.session?.location.directory ?? props.fallbackDirectory}
             fallback={
-              <Show
-                when={props.preparing}
-                fallback={
-                  <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
-                }
-              >
-                <SessionProgressIndicatorV2 />
-              </Show>
+              <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
           >
-            {(session) => (
-              <SessionTabAvatarView
-                project={project()}
-                directory={session.location.directory}
-                unread={false}
-                loading={props.loading}
-              />
-            )}
+            {(directory) => <SessionTabAvatarView project={project()} directory={directory()} unread={false} />}
           </Show>
-          <Show when={unread()}>
+          <Show when={dotted()}>
             <span data-slot="tab-avatar-unread-dot" aria-hidden="true" />
           </Show>
         </span>
@@ -328,7 +330,7 @@ export function TabNavItem(props: {
             "overflow-hidden text-clip whitespace-nowrap": !editing(),
             "select-text": editing(),
           }}
-          contenteditable={editing() ? true : undefined}
+          contenteditable={editing() ? "plaintext-only" : undefined}
           onDblClick={openRename}
           onKeyDown={(event) => {
             event.stopPropagation()
@@ -358,15 +360,15 @@ export function TabNavItem(props: {
       </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
-        <Show when={unread()}>
-          <span data-slot="tab-unread-slot" aria-hidden="true">
-            <span data-slot="tab-unread-dot" />
-          </span>
-        </Show>
+        <span data-slot="tab-status" aria-hidden="true">
+          <ActivityRing data-mark="busy" />
+          <span data-mark="attention" data-slot="tab-status-dot" />
+          <span data-mark="unread" data-slot="tab-status-dot" />
+        </span>
         <IconButton
           size="small"
           variant="ghost-muted"
-          class="hover-reveal relative z-10 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          class="hover-reveal relative z-10"
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -412,10 +414,14 @@ export function TabNavItem(props: {
             openRename()
           }}
         >
-          <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
+          <Menu.Item disabled={!props.session} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>
           <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
+          <Menu.Separator />
+          <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
+            {language.t("session.delete.title")}…
+          </Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>
     </Menu.Context>
@@ -528,7 +534,7 @@ export function DraftTabItem(props: {
             event.preventDefault()
             event.stopPropagation()
           }}
-          class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          class="hover-reveal relative z-10"
           onClick={closeTab}
           icon={<Icon name="xmark-small" />}
           aria-label={language.t("common.closeTab")}

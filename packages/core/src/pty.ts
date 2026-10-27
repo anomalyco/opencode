@@ -42,11 +42,11 @@ export type Info = Types.DeepMutable<typeof Info.Type>
 
 export const CreateInput = Pty.CreateInput
 
-export type CreateInput = Types.DeepMutable<typeof CreateInput.Type>
+export type CreateInput = typeof CreateInput.Type
 
 export const UpdateInput = Pty.UpdateInput
 
-export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
+export type UpdateInput = typeof UpdateInput.Type
 
 export { Event } from "@opencode/schema/pty"
 
@@ -275,7 +275,7 @@ const layer = Layer.effect(
       const from =
         input.cursor === -1
           ? end
-          : typeof input.cursor === "number" && Number.isSafeInteger(input.cursor)
+          : input.cursor !== undefined && Number.isSafeInteger(input.cursor)
             ? Math.max(0, input.cursor)
             : 0
       const replay = (() => {

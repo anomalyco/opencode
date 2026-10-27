@@ -1,6 +1,7 @@
 export * as CodeModeWeb from "./web.js"
 
 import { Extension } from "@opencode/codemode"
+import { isRecord } from "@opencode/util/record"
 
 const TIMEOUT_MS = 30_000
 
@@ -43,6 +44,7 @@ export const extension = Extension.make({ name: "web", globals: { fetch } })
 
 /** What to show for a fetch call: its method and URL. */
 export const display = (args: ReadonlyArray<unknown>) => {
-  const [input, init] = args as [string | URL, Init | undefined]
-  return { method: init?.method?.toUpperCase() ?? "GET", url: String(input) }
+  const [input, init] = args
+  const method = isRecord(init) && typeof init.method === "string" ? init.method.toUpperCase() : "GET"
+  return { method, url: String(input) }
 }

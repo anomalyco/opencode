@@ -1,0 +1,74 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 71cf630..4c33e3b 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+ 	else {
+ 		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
+ 		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
+-		url.search = issuer.search;
+ 	}
+ 	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
+ 	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
+@@ -1222,7 +1221,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+ 	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
+ 	if (state) authorizationUrl.searchParams.set("state", state);
+ 	if (scope) authorizationUrl.searchParams.set("scope", scope);
+-	if (scope?.split(" ").includes("offline_access")) authorizationUrl.searchParams.append("prompt", "consent");
+ 	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
+ 	return {
+ 		authorizationUrl,
+diff --git a/dist/index.mjs b/dist/index.mjs
+index c1a09a8..f5b0e1d 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+ 	else {
+ 		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
+ 		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
+-		url.search = issuer.search;
+ 	}
+ 	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
+ 	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
+@@ -1219,7 +1218,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+ 	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
+ 	if (state) authorizationUrl.searchParams.set("state", state);
+ 	if (scope) authorizationUrl.searchParams.set("scope", scope);
+-	if (scope?.split(" ").includes("offline_access")) authorizationUrl.searchParams.append("prompt", "consent");
+ 	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
+ 	return {
+ 		authorizationUrl,
+diff --git a/dist/src-DpAS0jfg.cjs b/dist/src-DpAS0jfg.cjs
+index e2ffe64..af1153c 100644
+--- a/dist/src-DpAS0jfg.cjs
++++ b/dist/src-DpAS0jfg.cjs
+@@ -1093,11 +1093,7 @@ function build$1() {
+ 			properties: zod_v4.record(zod_v4.string(), JSONValueSchema$1).optional(),
+ 			required: zod_v4.array(zod_v4.string()).optional()
+ 		}).catchall(zod_v4.unknown()),
+-		outputSchema: zod_v4.object({
+-			type: zod_v4.literal("object"),
+-			properties: zod_v4.record(zod_v4.string(), JSONValueSchema$1).optional(),
+-			required: zod_v4.array(zod_v4.string()).optional()
+-		}).catchall(zod_v4.unknown()).optional(),
++		outputSchema: zod_v4.looseObject({ $schema: zod_v4.string().optional() }).optional(),
+ 		annotations: ToolAnnotationsSchema$1.optional(),
+ 		execution: ToolExecutionSchema$1.optional(),
+ 		_meta: zod_v4.record(zod_v4.string(), zod_v4.unknown()).optional()
+diff --git a/dist/src-WCy6ifGf.mjs b/dist/src-WCy6ifGf.mjs
+index 7a40fb4..16d9ac0 100644
+--- a/dist/src-WCy6ifGf.mjs
++++ b/dist/src-WCy6ifGf.mjs
+@@ -1092,11 +1092,7 @@ function build$1() {
+ 			properties: z.record(z.string(), JSONValueSchema$1).optional(),
+ 			required: z.array(z.string()).optional()
+ 		}).catchall(z.unknown()),
+-		outputSchema: z.object({
+-			type: z.literal("object"),
+-			properties: z.record(z.string(), JSONValueSchema$1).optional(),
+-			required: z.array(z.string()).optional()
+-		}).catchall(z.unknown()).optional(),
++		outputSchema: z.looseObject({ $schema: z.string().optional() }).optional(),
+ 		annotations: ToolAnnotationsSchema$1.optional(),
+ 		execution: ToolExecutionSchema$1.optional(),
+ 		_meta: z.record(z.string(), z.unknown()).optional()

@@ -269,20 +269,17 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
           return {
             ...content,
             text: redact("text", message.id, content.text),
-            state: content.state ? { redacted: `text-state:${message.id}` } : undefined,
+            native: content.native ? { redacted: `text-native:${message.id}` } : undefined,
           }
         if (content.type === "reasoning")
           return {
             ...content,
             text: redact("reasoning", message.id, content.text),
-            state: content.state ? { redacted: `reasoning-state:${message.id}` } : undefined,
+            native: content.native ? { redacted: `reasoning-native:${message.id}` } : undefined,
           }
         return {
           ...content,
-          providerState: content.providerState ? { redacted: `tool-provider-state:${message.id}` } : undefined,
-          providerResultState: content.providerResultState
-            ? { redacted: `tool-provider-result-state:${message.id}` }
-            : undefined,
+          native: content.native ? { redacted: `tool-native:${message.id}` } : undefined,
           state: sanitizeToolState(message.id, content.state),
         }
       }),
@@ -297,13 +294,7 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       ...message,
       metadata: meta,
       summary: redact("compaction-summary", message.id, message.summary),
-      recent: redact("compaction-recent", message.id, message.recent),
-      ...(message.status === "completed"
-        ? {
-            providerState: metadata("compaction-provider-state", message.id, message.providerState),
-            providerContext: undefined,
-          }
-        : {}),
+      ...(message.status === "completed" ? { native: metadata("compaction-native", message.id, message.native) } : {}),
     }
   }
   return { ...message, metadata: meta }

@@ -1,55 +1,101 @@
-/* Informational tooltips must not block menu items. Kobalte sets pointer events inline. */
-[data-popper-positioner]:has(.session-project-info-tooltip),
-.session-project-info-tooltip {
-  pointer-events: none !important;
-}
-
 .session-options-menu [data-component="menu-v2-item"] {
   padding-inline-end: 30px;
 }
 
-.session-project-link {
-  --session-project-fade-direction: to right;
-  position: relative;
-
-  &:dir(rtl) {
-    --session-project-fade-direction: to left;
-  }
-
-  &[aria-disabled="true"] {
-    opacity: 0.5;
-  }
+.session-header-layout {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  inline-size: 100%;
+  block-size: 48px;
 }
 
-.session-project-link-content {
+.session-header-location {
   display: flex;
+  align-items: center;
+  gap: 0;
+  min-inline-size: 0;
+  flex-shrink: 0;
+}
+
+.session-header-location > .session-location-tooltip,
+.session-header-location [data-slot="session-location-trigger"] {
+  max-inline-size: none;
+  flex-shrink: 0;
+}
+
+.session-header-location .session-location-label {
+  inline-size: max-content;
+  flex-shrink: 0;
+}
+
+/* The label leaves the hit area, but keeps its intrinsic width available to the fit observer. */
+.session-header-layout[data-location-collapse="1"] [data-slot="session-location-worktree"],
+.session-header-layout[data-location-collapse="2"] .session-location-label {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.session-header-location:has([data-slot="session-title-ancestors"]) {
+  max-inline-size: 60%;
+  flex-shrink: 1;
+}
+
+.session-header-title {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex: 1;
-  min-width: 0;
+  min-inline-size: 0;
+}
+
+.session-header-title > [data-slot="session-title-child"] {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  flex-shrink: 1;
+}
+
+.session-header-title-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  inline-size: 0;
+  block-size: 0;
+  overflow: hidden;
+}
+
+.session-header-title-measure > span {
+  display: block;
+  inline-size: max-content;
+  padding-inline: 4px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+.session-header-actions {
+  display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  margin-inline-start: 6px;
 }
 
-.session-project-link-open {
-  position: absolute;
-  inset-inline-end: 12px;
-  inset-block: 0;
+.session-header-fade {
+  top: 48px;
+}
+
+.session-header-separator {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  color: var(--v2-icon-icon-muted);
-  pointer-events: none;
-  opacity: 0;
-}
-
-.session-project-link:is(:hover, [data-highlighted]):not([aria-disabled="true"]) {
-  .session-project-link-content {
-    mask-image: linear-gradient(
-      var(--session-project-fade-direction),
-      #000 calc(100% - 40px),
-      transparent calc(100% - 24px)
-    );
-  }
-
-  .session-project-link-open {
-    opacity: 1;
-  }
+  /* The neighbouring segments' own padding counts toward the gap; 0.5px is the text's side bearing. */
+  margin-inline: calc(var(--separator-gap) - var(--separator-before) - 0.5px)
+    calc(var(--separator-gap) - var(--separator-after) - 0.5px);
+  /* The header's segments are 13px text, and the slash takes their size. */
+  font-size: 13px;
+  line-height: var(--line-height-compact);
 }

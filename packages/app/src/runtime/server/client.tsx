@@ -62,6 +62,8 @@ type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
   url: string
+  /** The connection the API currently uses, which a managed server's reconnect may replace. */
+  http: ServerConnection.HttpBase
   api: ServerApi
   pty: ReturnType<typeof createPtyClient>
   connection: {
@@ -76,7 +78,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   const platform = usePlatform()
   const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
 
-  if (server.type === "extension") {
+  if (server.type === "plugin") {
     createEffect(
       on(
         () => `${server.http.url}\0${server.http.password ?? ""}`,
@@ -87,7 +89,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   }
 
   const events = createOpenCodeEventSource()
-  const reconnect = server.type === "extension" || server.type === "sidecar" ? server.reconnect : undefined
+  const reconnect = server.type === "plugin" || server.type === "sidecar" ? server.reconnect : undefined
 
   const connection = createClientConnection(transport.api, {
     reconnect: reconnect ? async (signal) => transport.update(await reconnect(signal)) : undefined,
@@ -110,6 +112,9 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     get url() {
       return transport.url
     },
+    get http() {
+      return transport.http
+    },
     get api() {
       return transport.api
     },
@@ -121,12 +126,24 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   }
 }
 
-export function createServerTransport(input: { http: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }): {
+/** A server's HTTP and PTY clients, rebuilt when its endpoint changes. */
+export interface ServerTransport {
+  /** Rebuilds the clients for a new endpoint and returns the new API client. */
   update(http: ServerConnection.HttpBase): ServerApi
+  /** The current base URL. */
   readonly url: string
+  /** The current endpoint. */
+  readonly http: ServerConnection.HttpBase
+  /** The current API client. */
   readonly api: ServerApi
+  /** The current PTY client. */
   readonly pty: ReturnType<typeof createPtyClient>
-} {
+}
+
+export function createServerTransport(input: {
+  http: ServerConnection.HttpBase
+  fetch?: typeof globalThis.fetch
+}): ServerTransport {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
 
   const build = (http: ServerConnection.HttpBase) => {
@@ -145,6 +162,9 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
     },
     get url() {
       return state.current.http.url
+    },
+    get http() {
+      return state.current.http
     },
     get api() {
       return state.current.api

@@ -151,7 +151,7 @@ Konfigurirajte agente u svom konfiguracijskom fajlu `opencode.json`:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -171,7 +171,7 @@ Konfigurirajte agente u svom konfiguracijskom fajlu `opencode.json`:
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,7 +195,7 @@ Također možete definirati agente koristeći markdown datoteke. Stavite ih u:
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -366,7 +366,7 @@ Ako ne navedete model, primarni agenti koriste [model globalno konfiguriran](/do
 }
 ```
 
-ID modela u vašoj OpenCode konfiguraciji koristi format `provider/model-id`. Na primjer, ako koristite [OpenCode Zen](https://opencode.ai/v2/docs/console/), koristili biste `opencode/gpt-5.1-codex` za GPT 5.1 Codex.
+ID modela u vašoj OpenCode konfiguraciji koristi format `provider/model-id`. Na primjer, ako koristite [OpenCode Zen](https://opencode.ai/v2/docs/console/), koristili biste `opencode/gpt-6.1-sol` za GPT-6.1 Sol.
 
 ---
 
@@ -653,7 +653,7 @@ Na primjer, sa OpenAI-jevim modelima rezonovanja, možete kontrolisati napor ras
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -671,19 +671,9 @@ Pokrenite `opencode models` da vidite listu dostupnih modela.
 
 ## Kreiranje agenata
 
-Možete kreirati nove agente koristeći sljedeću naredbu:
+Novog agenta kreirate dodavanjem markdown datoteke u `.opencode/agents/` za projekat ili u `~/.config/opencode/agents/` globalno. Naziv datoteke postaje naziv agenta, a frontmatter konfiguriše njegov opis, način rada, model i dozvole. Format datoteke pogledajte u odjeljku [Markdown](#markdown) iznad.
 
-```bash
-opencode agent create
-```
-
-Ova interaktivna komanda će:
-
-1. Pitajte gdje da sačuvate agenta; globalno ili specifično za projekat.
-2. Opis onoga što agent treba da uradi.
-3. Generirajte odgovarajući sistemski prompt i identifikator.
-4. Omogućite vam da odaberete kojim alatima agent može pristupiti.
-5. Konačno, kreirajte markdown datoteku s konfiguracijom agenta.
+Pokrenite `opencode agent list` da biste vidjeli listu agenata koje je OpenCode učitao.
 
 ---
 

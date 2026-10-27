@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin-figma",
-  "version": "2.0.32",
+  "version": "2.1.4",
   "description": "Figma MCP integration and official Figma skills for OpenCode",
   "type": "module",
   "license": "MIT",
@@ -23,7 +23,8 @@
     "skills-source.json"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit",
     "sync:skills": "bun run script/sync-skills.ts"
   },
   "dependencies": {
@@ -34,7 +35,7 @@
   },
   "devDependencies": {
     "@tsconfig/bun": "1.0.9",
-    "@types/bun": "1.4.0",
-    "@typescript/native": "npm:typescript@7.0.2"
+    "@types/bun": "1.4.3",
+    "@typescript/native": "npm:typescript@7.1.0-beta"
   }
 }

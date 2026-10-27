@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/latex",
-  "version": "2.0.32",
+  "version": "2.1.4",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode/plugin": "workspace:*",

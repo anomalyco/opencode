@@ -24,6 +24,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -97,6 +98,7 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       ManagedPolicy.node,
       Mcp.node,
       Session.node,
+      InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,
       Permission.node,

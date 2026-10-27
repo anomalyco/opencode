@@ -116,7 +116,7 @@ export const configure = (input: Config = {}) => {
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({
       id: modelID,
-      compatibility: { supportsStore: false, supportsStrictMode: false },
+      compatibility: { supportsStrictMode: false },
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })

@@ -29,7 +29,6 @@ describe("lastAssistantWithUsage", () => {
       status: "completed",
       reason: "manual",
       summary: "Current state",
-      recent: "",
       time: { created: 0 },
     }
 

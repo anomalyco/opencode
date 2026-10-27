@@ -3,7 +3,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { isMixedContent } from "./browser"
 import { legacyPairingLink, pairingLink, redeemPairingLink, type Pairing } from "./pairing"
 
-export type Redemption = { readonly pairing: Pairing } | { readonly error: string }
+type Redemption = { readonly pairing: Pairing } | { readonly error: string }
 
 /** Redeems a pasted or scanned pairing link; resolves undefined when the value is not a pairing link at all. */
 export type RedeemPairing = (value: string) => Promise<Redemption | undefined>

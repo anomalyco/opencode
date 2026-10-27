@@ -1,8 +1,8 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
-import { LLMClient } from "@opencode/ai"
+import { DateTime, Effect, Layer, Context, Option, Stream } from "effect"
+import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -16,6 +16,7 @@ import { Instance } from "./instance/service.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
+import { SessionBlob } from "./session/blob.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode/schema/agent"
@@ -105,6 +106,7 @@ export {
   AttachmentError,
   BusyError,
   CompactionConflictError,
+  ForkEmptyError,
   InboxConflictError,
   InvalidListCursorError,
   MessageDecodeError,
@@ -146,6 +148,15 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
+  /** Experimental: {@link Interface.messages} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
+  readonly messagesWithRefs: (
+    input: SessionStore.MessagesInput,
+  ) => Effect.Effect<SessionMessage.MediaInfo[], NotFoundError | MessageDecodeError>
+  /** Experimental: {@link Interface.message} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
+  readonly messageWithRefs: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+  }) => Effect.Effect<SessionMessage.MediaInfo | undefined>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -165,6 +176,8 @@ export interface Interface {
    * unhandled compaction barriers.
    */
   readonly inbox: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.Info[], NotFoundError>
+  /** Experimental: {@link Interface.inbox} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
+  readonly inboxWithRefs: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.MediaInfo[], NotFoundError>
   readonly cancelInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly steerInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly queueInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
@@ -183,6 +196,8 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
+  readonly archive: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  readonly unarchive: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly setMetadata: (input: {
     sessionID: SessionSchema.ID
     metadata: SessionSchema.Metadata
@@ -265,7 +280,18 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.make()
-    const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+    // `experimental.media_blob` as the session's own location configures it, where its media is written.
+    const keepsMediaRefs = (session: SessionSchema.Info) =>
+      SessionBlob.enabled.pipe(
+        instances.provide(session),
+        Effect.catch((cause) =>
+          Effect.logWarning("could not resolve experimental.media_blob; serving media inline", { cause }).pipe(
+            Effect.as(false),
+          ),
+        ),
+      )
+    const isDurableSessionEvent = (item: Bus.LogItem): item is SessionEvent.DurableEvent =>
+      Object.hasOwn(SessionEvent.Durable.cases, item.type)
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
@@ -274,7 +300,7 @@ const layer = Layer.effect(
         if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
-        const location = parent?.location ?? input.location
+        const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
@@ -295,13 +321,7 @@ const layer = Layer.effect(
               // location, so host policies that read them treat the family uniformly.
               metadata: input.metadata ?? parent?.metadata,
               permissions: input.permissions ?? parent?.permissions,
-              model: input.model
-                ? {
-                    id: Model.ID.make(input.model.id),
-                    providerID: input.model.providerID,
-                    variant: input.model.variant,
-                  }
-                : undefined,
+              model: input.model,
             },
             { location },
           )
@@ -415,6 +435,18 @@ const layer = Layer.effect(
         return yield* store.messages(input)
       }),
       message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
+      messagesWithRefs: Effect.fn("Session.messagesWithRefs")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        if (!(yield* keepsMediaRefs(session))) return yield* store.messages(input)
+        return yield* store.messagesWithRefs(input)
+      }),
+      messageWithRefs: Effect.fn("Session.messageWithRefs")(function* (input) {
+        const session = yield* result.get(input.sessionID).pipe(Effect.option)
+        if (Option.isNone(session)) return undefined
+        if (!(yield* keepsMediaRefs(session.value))) return yield* result.message(input)
+        const stored = yield* store.messageWithRefs(input.messageID)
+        return stored?.sessionID === input.sessionID ? stored.message : undefined
+      }),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
@@ -431,6 +463,11 @@ const layer = Layer.effect(
         })
       }),
       inbox: (sessionID) => sessions.forSession(sessionID).inbox(),
+      inboxWithRefs: Effect.fn("Session.inboxWithRefs")(function* (sessionID) {
+        const session = yield* result.get(sessionID)
+        if (!(yield* keepsMediaRefs(session))) return yield* result.inbox(sessionID)
+        return yield* SessionInbox.listWithRefs(db, sessionID)
+      }),
       cancelInbox: (input) => sessions.forSession(input.sessionID).cancelInbox(input.inboxID),
       steerInbox: (input) => sessions.forSession(input.sessionID).steerInbox(input.inboxID),
       queueInbox: (input) => sessions.forSession(input.sessionID).queueInbox(input.inboxID),
@@ -465,6 +502,8 @@ const layer = Layer.effect(
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
+      archive: (sessionID) => sessions.forSession(sessionID).archive(),
+      unarchive: (sessionID) => sessions.forSession(sessionID).unarchive(),
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
       move: moves.move,

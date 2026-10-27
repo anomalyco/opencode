@@ -42,6 +42,7 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
 // from disk; nothing is buffered in the renderer.
 function write(url: URL, file: File, password: string | undefined, report: (loaded: number) => void, signal: AbortSignal) {
   return new Promise<string>((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException("Upload aborted", "AbortError"))
     const xhr = new XMLHttpRequest()
     xhr.open("POST", url)
     xhr.responseType = "json"

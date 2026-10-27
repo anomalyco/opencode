@@ -151,7 +151,7 @@ _الوضع_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -171,7 +171,7 @@ _الوضع_: `primary`
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,7 +195,7 @@ _الوضع_: `primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -366,7 +366,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-يستخدم معرّف النموذج في إعدادات OpenCode الصيغة `provider/model-id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](https://opencode.ai/v2/docs/console/)، فستستخدم `opencode/gpt-5.1-codex` لـ GPT 5.1 Codex.
+يستخدم معرّف النموذج في إعدادات OpenCode الصيغة `provider/model-id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](https://opencode.ai/v2/docs/console/)، فستستخدم `opencode/gpt-6.1-sol` لـ GPT-6.1 Sol.
 
 ---
 
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -671,19 +671,9 @@ Only analyze code and suggest changes.
 
 ## إنشاء وكلاء
 
-يمكنك إنشاء وكلاء جدد باستخدام الأمر التالي:
+أنشئ وكيلا جديدا بإضافة ملف Markdown إلى `.opencode/agents/` للمشروع أو إلى `~/.config/opencode/agents/` على المستوى العام. يصبح اسم الملف اسم الوكيل، وتضبط الواجهة الأمامية (frontmatter) وصفه ووضعه ونموذجه وصلاحياته. راجع [Markdown](#markdown) أعلاه لمعرفة تنسيق الملف.
 
-```bash
-opencode agent create
-```
-
-سيقوم هذا الأمر التفاعلي بما يلي:
-
-1. سيسألك أين تريد حفظ الوكيل: عام (global) أو خاص بالمشروع.
-2. سيطلب وصفا لما ينبغي أن يفعله الوكيل.
-3. سيولّد موجّها نظاميا ومعرّفا مناسبا.
-4. سيتيح لك اختيار الأدوات التي يمكن للوكيل الوصول إليها.
-5. أخيرا، سينشئ ملف Markdown يحتوي تهيئة الوكيل.
+شغّل `opencode agent list` لعرض الوكلاء الذين حمّلهم OpenCode.
 
 ---
 

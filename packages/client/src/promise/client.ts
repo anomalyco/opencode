@@ -9,7 +9,7 @@ export type { ClientOptions, RequestOptions } from "./generated/client.js"
 
 export function make(options: ClientOptions) {
   const raw = OpenCode.make(options)
-  const events = SharedEvents.make((signal, onActivity) => raw.event.subscribe({ signal, onActivity }))
+  const events = SharedEvents.make((signal, onActivity) => raw.event.subscribe(undefined, { signal, onActivity }))
   return {
     ...raw,
     rpc: Object.assign(makeRpc(raw, events), raw.rpc),

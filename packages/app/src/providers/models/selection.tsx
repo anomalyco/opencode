@@ -6,7 +6,7 @@ import { createStore } from "solid-js/store"
 import { Schema, SchemaGetter } from "effect"
 import { useModels } from "@/providers/models/models"
 import { useSettings } from "@/settings/model"
-import { useProviders } from "@/providers/catalog/providers"
+import { syncWhileBooting, useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { hasCustomAgent, resolveAgent } from "./agent"
@@ -97,6 +97,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         (item) => item.mode !== "subagent" && !item.hidden,
       ),
     )
+
+    createEffect(() => {
+      if (serverSDK.connection.status() !== "connected") return
+      const directory = sdk().directory
+
+      if (!directory) return
+      void syncWhileBooting(() => data.location.agent.sync({ directory })).catch(() => undefined)
+    })
 
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
@@ -266,27 +274,49 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    const current = createMemo(() => {
+    // The chosen model, kept even when the catalog no longer offers it.
+    const key = createMemo<ModelKey | undefined>(() => {
       if (!configuredModel.ready()) return
 
       const session = durable()
 
       // Catalog availability must not replace a user's choice with a default on the next submission.
-      const item =
+      return (
         scope()?.model ??
         (session?.model && (!session.agent || session.agent === agent.current()?.name)
           ? { providerID: session.model.providerID, modelID: session.model.id }
           : undefined) ??
         firstModel(() => agent.current()?.model, fallback)
+      )
+    })
+
+    const current = createMemo(() => {
+      const item = key()
 
       if (!item) return
 
       return models.find(item)
     })
 
-    const configured = () => {
+    // What `key` and `selected` will resolve to once the Location's agents and config load, read from state already
+    // here: a local draft, else the Session's durable model unless the draft picked another agent.
+    const preview = () => {
+      if (!savedReady()) return
+      const draft = scope()
+
+      if (draft?.model) return { model: draft.model, selected: draft.variant }
+      const session = durable()
+
+      if (!session?.model || (draft?.agent && draft.agent !== session.agent)) return
+
+      return {
+        model: { providerID: session.model.providerID, modelID: session.model.id },
+        selected: session.model.variant ?? null,
+      }
+    }
+
+    const configured = (model = current()) => {
       const item = agent.current()
-      const model = current()
 
       if (!item || !model) return
       const global = configuredModel()
@@ -344,6 +374,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const recent = createMemo(() => models.recent.list().filter(validModel).map(models.find).filter(Boolean))
+
+    const favorite = createMemo(() =>
+      models.favorite
+        .list()
+        .filter(validModel)
+        .map(models.find)
+        .filter((item): item is NonNullable<typeof item> => !!item),
+    )
+
     const pending = new Map<string, State>()
 
     const sameSelection = (a: State, b: State) =>
@@ -384,8 +423,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const model = {
       ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
+      key,
+      preview,
       current,
       recent,
+      favorite: { list: favorite, toggle: models.favorite.toggle },
       list: models.list,
       trackSessionCommit(sessionID: string, selection: { agent: string; model: ModelKey; variant?: string }) {
         pending.set(sessionID, selection)
@@ -439,13 +481,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       variant: {
         configured,
         selected,
-        current() {
-          const model = current()
+        current(item?: ModelKey) {
+          const model = item ? models.find(item) : current()
+          const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
 
           return resolveModelVariant({
-            variants: this.list(),
-            selected: this.selected(),
-            configured: this.configured(),
+            variants: Object.keys(model?.variants ?? {}),
+            selected: same ? this.selected() : undefined,
+            configured: configured(model),
             preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
           })
         },
@@ -544,5 +587,5 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   },
 })
 
-export type ModelSelection = Omit<ReturnType<typeof useLocal>["model"], "trackSessionCommit"> &
-  Partial<Pick<ReturnType<typeof useLocal>["model"], "trackSessionCommit">>
+export type ModelSelection = Omit<ReturnType<typeof useLocal>["model"], "trackSessionCommit" | "preview"> &
+  Partial<Pick<ReturnType<typeof useLocal>["model"], "trackSessionCommit" | "preview">>

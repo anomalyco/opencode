@@ -30,24 +30,21 @@ async function open(page: Page, input: { count?: number; seed?: SeedInput } = {}
     project: { icon: { color: "orange" } },
     provider: NO_PROVIDER,
     projects,
-    seed: {
-      tabs: [],
-      ...(projects ? { projects: { local: projects.map((item) => ({ worktree: item.worktree })) } } : {}),
-      ...input.seed,
-    },
+    seed: { tabs: [], ...input.seed },
   })
 
   const view = {
     settings,
     search: settings.getByRole("combobox", { name: "Search", exact: true }),
     results: settings.getByRole("listbox", { name: "Settings results", exact: true }),
-    viewport: settings.locator(".settings-search-scroll > .scroll-view__viewport"),
+    viewport: settings.locator('.settings-search [data-slot="search-list-scroll"]'),
   }
 
   // Readiness includes the server-backed project inventory, not just the settings shell.
   if (input.count === 0) return view
   await view.search.fill("OpenCode")
-  await expect(view.results.getByRole("option")).toHaveCount(input.count ?? (input.seed?.servers ? 2 : 1))
+  // Only the selected server's projects are indexed.
+  await expect(view.results.getByRole("option")).toHaveCount(input.count ?? 1)
   await view.search.clear()
 
   return view
@@ -70,20 +67,25 @@ test("pointer selection, keyboard navigation, the empty state, and the local fin
     "Terminal FontAppearance",
     "UI FontAppearance",
   ])
+  // Keys stay with the field, as in every shared search list.
   await code.click()
-  await expect(code).toBeFocused()
+  await expect(view.search).toBeFocused()
+  await expect(code).toHaveAttribute("aria-selected", "true")
   await expect(view.settings.getByRole("textbox", { name: "Code Font", exact: true })).toBeInViewport()
-  await code.press("ArrowDown")
-  await expect(terminal).toBeFocused()
+  await view.search.press("ArrowDown")
   await expect(terminal).toHaveAttribute("aria-selected", "true")
-  await terminal.press("Enter")
-  await expect(terminal).toBeFocused()
+  // Shift+arrows select text in the field instead of moving through the results.
+  await view.search.press("Shift+ArrowUp")
+  await expect(view.search).toHaveJSProperty("selectionStart", 0)
+  await expect(terminal).toHaveAttribute("aria-selected", "true")
+  await view.search.press("Enter")
+  await expect(view.search).toBeFocused()
   await expect(view.settings.getByRole("textbox", { name: "Terminal Font", exact: true })).toBeInViewport()
   await expect(view.settings.locator('[data-search-target="row"]')).toContainText("Terminal Font")
-  await terminal.press("End")
-  await expect(font).toBeFocused()
-  await font.press("Home")
-  await expect(code).toBeFocused()
+  await view.search.press("End")
+  await expect(font).toHaveAttribute("aria-selected", "true")
+  await view.search.press("Home")
+  await expect(code).toHaveAttribute("aria-selected", "true")
   await findShortcut(page)
   await expect(view.search).toBeFocused()
   expect(await view.search.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([
@@ -115,6 +117,63 @@ test("pointer selection, keyboard navigation, the empty state, and the local fin
   await expect(page.getByRole("textbox", { name: /Search sessions/ })).toBeFocused()
 })
 
+test("the narrow layout floats the results in the shared search list popover", async ({ page }) => {
+  const view = await open(page, { count: 30 })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await view.search.fill("e")
+  const popover = view.settings.locator('.settings-search [data-component="search-list"][data-popover]')
+  const body = popover.locator('[data-slot="search-list-body"]')
+  await expect(body).toBeVisible()
+  await expect(body).toHaveCSS("position", "absolute")
+  await expect(body.locator('[data-slot="search-list-header"]').first()).toHaveText("Pages")
+  await expect(view.results.getByRole("option").first()).toHaveAttribute("data-slot", "search-list-row")
+  await expect(body.locator('[data-slot="search-list-footer"]')).toHaveText(en["settings.search.refine"])
+  await view.search.fill("zzzzzzzzzz")
+  await expect(body.locator('[data-slot="search-list-empty"]').getByRole("status")).toHaveText(
+    'No results for "zzzzzzzzzz"',
+  )
+
+  // The message's text, not just its box, sits in the middle of the popover.
+  const offset = await body.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element.querySelector('[role="status"]')!)
+    const text = range.getBoundingClientRect()
+    const box = element.getBoundingClientRect()
+
+    return {
+      x: text.left + text.width / 2 - (box.left + box.width / 2),
+      y: text.top + text.height / 2 - (box.top + box.height / 2),
+    }
+  })
+
+  expect(Math.abs(offset.x)).toBeLessThan(1)
+  expect(Math.abs(offset.y)).toBeLessThan(1)
+})
+
+test("a category's results stay under one run of headers when its groups interleave by rank", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    server: REMOTE_SERVER,
+    directory: "/remote/opencode",
+    project: project({ id: "proj_search_remote", directory: "/remote/opencode", name: "Remote app" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  const view = await open(page, { seed: { servers: [{ url: REMOTE_SERVER, name: "Build server" }] } })
+  // With two servers, "e" ranks a This computer setting between unscoped settings and the project results.
+  await view.search.fill("e")
+  const headers = view.results.locator('[data-slot="search-list-header"]')
+  await expect(headers.filter({ hasText: "This computer" })).not.toHaveCount(0)
+
+  const categories = await headers.evaluateAll((elements) =>
+    elements.map((element) => element.firstElementChild?.textContent ?? ""),
+  )
+
+  const runs = categories.filter((category, index) => category !== categories[index - 1])
+  expect(categories.filter((category) => category === "Settings")).toHaveLength(2)
+  expect(runs).toEqual([...new Set(runs)])
+})
+
 test("a long empty-state query keeps its closing quote beside the ellipsis while typing and resizing", async ({
   page,
 }) => {
@@ -124,8 +183,11 @@ test("a long empty-state query keeps its closing quote beside the ellipsis while
   const status = view.settings.getByRole("status")
   const quoted = status.locator("bdi")
 
+  // Rects, not clientWidth: the centred quote is exactly as wide as its text, and clientWidth rounds.
   const fits = () =>
-    quoted.evaluate((element) => element.getBoundingClientRect().width <= element.parentElement!.clientWidth)
+    quoted.evaluate(
+      (element) => element.getBoundingClientRect().width <= element.parentElement!.getBoundingClientRect().width + 0.5,
+    )
 
   await expect(status).toHaveAccessibleName(`No results for "${query}"`)
   await expect(quoted).toHaveText(/^".+…"$/)
@@ -148,10 +210,11 @@ test("the search input tracks overflow through typing, caret moves, resizing, an
     await expect(view.search).toHaveAttribute("data-overflow-end", end)
   }
 
+  // Bare Home and End move through the results, so the caret moves with Shift.
   await view.search.fill("zzzz ".repeat(30))
-  await view.search.press("End")
+  await view.search.press("Shift+End")
   await overflow("true", "false")
-  await view.search.press("Home")
+  await view.search.press("Shift+Home")
   await overflow("false", "true")
   await view.search.evaluate((input: HTMLInputElement) => {
     input.scrollLeft = (input.scrollWidth - input.clientWidth) / 2
@@ -213,11 +276,11 @@ test("Models and Shortcuts leave focus on navigation until the user types", asyn
   }
 
   const search = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
-  await page.keyboard.press("p")
+  await page.keyboard.press("e")
   await expect(search).toBeFocused()
-  await page.keyboard.type("alette")
-  await expect(search).toHaveValue("palette")
-  await expect(view.settings.getByText("Command palette", { exact: true })).toBeVisible()
+  await page.keyboard.type("verything")
+  await expect(search).toHaveValue("everything")
+  await expect(view.settings.getByText("Search everything", { exact: true })).toBeVisible()
 })
 
 test("section search takes typed input, clears in place, and escapes in steps", async ({ page }) => {
@@ -290,6 +353,7 @@ test("all indexed client controls resolve to visible production controls", async
   const view = await open(page)
 
   for (const entry of clientSettings.filter((entry) => entry.target && !entry.available)) {
+    // SAFETY: catalog labels are typed as i18n keys, and English holds every key.
     await view.search.fill(en[entry.label as keyof typeof en])
     const result = view.results.locator(`[data-setting-target="${entry.target}"]`)
     await expect(result).toHaveCount(1)
@@ -335,11 +399,11 @@ test("IME confirmation does not activate a search result", async ({ page }) => {
   await expect(view.settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
 })
 
-test("multi-server results navigate to the named server and keep the query on return", async ({ page }) => {
+test("multi-server results follow the selected server and keep the query on return", async ({ page }) => {
   await mockOpenCodeServer(page, {
     server: REMOTE_SERVER,
     directory: "/remote/opencode",
-    project: project({ id: "proj_search_remote", directory: "/remote/opencode", name: "OpenCode" }),
+    project: project({ id: "proj_search_remote", directory: "/remote/opencode", name: "Remote app" }),
     provider: NO_PROVIDER,
     sessions: [],
     pageMessages: () => ({ items: [] }),
@@ -348,24 +412,24 @@ test("multi-server results navigate to the named server and keep the query on re
   const view = await open(page, {
     seed: {
       servers: [{ url: REMOTE_SERVER, name: "Build server" }],
-      projects: {
-        local: [{ worktree: directory, expanded: true }],
-        [REMOTE_SERVER]: [{ worktree: "/remote/opencode", expanded: true }],
-      },
     },
   })
 
+  await view.search.fill("Remote app")
+  await expect(view.results.getByRole("option")).toHaveCount(0)
   await view.search.fill("MCPs")
-  await expect(view.results.getByRole("option")).toHaveCount(2)
+  await expect(view.results.getByRole("option")).toHaveCount(1)
+  await view.search.clear()
+  await view.settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await view.settings.getByRole("button", { name: "Server This computer", exact: true }).click()
+  await page.getByRole("menuitemradio", { name: "Build server", exact: true }).click()
+
+  await view.search.fill("MCPs")
   await view.results.getByRole("option", { name: "MCPs, Build server, Extensions", exact: true }).click()
-  await expect(view.search).toHaveCount(0)
-  await expect(view.settings.getByRole("tab", { name: "Build server", exact: true })).toBeVisible()
+  await expect(view.settings.getByRole("button", { name: "Server Build server", exact: true })).toBeVisible()
   await expect(view.settings.getByRole("tab", { name: "MCPs", exact: true })).toHaveAttribute("aria-selected", "true")
-  await view.settings.getByRole("button", { name: "Back to settings", exact: true }).click()
-  await expect(view.search).toHaveValue("MCPs")
-  await view.search.fill("Build server OpenCode name")
+  await view.search.fill("Remote app name")
   await expect(view.results.getByRole("option")).toHaveCount(1)
   await view.results.getByRole("option").click()
-  await expect(view.settings.getByRole("button", { name: "Build server", exact: true })).toBeVisible()
-  await expect(view.settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("OpenCode")
+  await expect(view.settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("Remote app")
 })

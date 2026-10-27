@@ -136,6 +136,14 @@ export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()(
   { httpApiStatus: 404 },
 ) {}
 
+export class PluginNotFoundError extends Schema.TaggedError<PluginNotFoundError>()(
+  "PluginNotFoundError",
+  {
+    pluginID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
 export class AgentNotFoundError extends Schema.TaggedError<AgentNotFoundError>()(
   "AgentNotFoundError",
   {
@@ -210,6 +218,15 @@ export class PermissionNotFoundError extends Schema.TaggedError<PermissionNotFou
   "PermissionNotFoundError",
   {
     requestID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PermissionSavedNotFoundError extends Schema.TaggedError<PermissionSavedNotFoundError>()(
+  "PermissionSavedNotFoundError",
+  {
+    id: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

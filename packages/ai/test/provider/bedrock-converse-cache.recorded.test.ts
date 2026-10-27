@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src/index.js"
+import { CacheHint, LLM } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"

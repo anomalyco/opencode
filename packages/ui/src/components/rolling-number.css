@@ -1,0 +1,24 @@
+[data-component="rolling-number"] {
+  display: inline-flex;
+  /* Digits keep numeric order in RTL documents. */
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+
+  [data-slot="rolling-number-digit"] {
+    display: inline-grid;
+    overflow-y: clip;
+  }
+
+  [data-slot="rolling-number-glyph"] {
+    grid-area: 1 / 1;
+  }
+
+  [data-slot="rolling-number-glyph"][data-leaving] {
+    pointer-events: none;
+
+    &::before {
+      content: attr(data-leaving);
+    }
+  }
+}

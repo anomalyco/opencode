@@ -1,10 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { createCliRenderer, RGBA, type CliRenderer, type ColorInput, type ScrollbackWriter } from "@opentui/core"
 import { createScrollbackWriter, render, useKeyboard } from "@opentui/solid"
-import { registerOpencodeSpinner } from "@opencode/tui/component/register-spinner"
+import "@opencode/tui/component/spinner-renderable"
 import { Show, createSignal } from "solid-js"
-
-registerOpencodeSpinner()
 
 export type TimelineHost = {
   readonly signal: AbortSignal
@@ -93,7 +91,9 @@ function bounded(task: Promise<unknown>) {
   })
 }
 
+// closed rejects when the terminal is gone or the final flush times out; nothing is left to restore.
 async function shutdown(renderer: CliRenderer): Promise<void> {
+  if (renderer.isDestroyed) return renderer.closed.catch(() => {})
   await bounded(renderer.idle())
   try {
     renderer.externalOutputMode = "passthrough"
@@ -102,6 +102,7 @@ async function shutdown(renderer: CliRenderer): Promise<void> {
       renderer.screenMode = "main-screen"
     } finally {
       if (!renderer.isDestroyed) renderer.destroy()
+      await renderer.closed.catch(() => {})
     }
   }
 }

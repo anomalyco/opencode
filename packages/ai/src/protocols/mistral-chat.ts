@@ -102,28 +102,19 @@ const MistralTool = Schema.Struct({
 })
 type MistralTool = Schema.Schema.Type<typeof MistralTool>
 
+const ReasoningEffort = ProviderShared.knownString<"none" | "minimal" | "low" | "medium" | "high" | "xhigh">()
+export type ReasoningEffort = typeof ReasoningEffort.Type
+
 const MistralOptions = Schema.Struct({
   safePrompt: Schema.optional(Schema.Boolean),
   documentImageLimit: Schema.optional(Schema.Number),
   documentPageLimit: Schema.optional(Schema.Number),
   parallelToolCalls: Schema.optional(Schema.Boolean),
-  reasoningEffort: Schema.optional(Schema.String),
+  reasoningEffort: Schema.optional(ReasoningEffort),
   promptMode: Schema.optional(Schema.Literal("reasoning")),
   promptCacheKey: Schema.optional(Schema.String),
 })
-
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | (string & {})
-
-export type ProviderOptionsInput = {
-  readonly safePrompt?: boolean
-  readonly documentImageLimit?: number
-  readonly documentPageLimit?: number
-  readonly parallelToolCalls?: boolean
-  readonly reasoningEffort?: ReasoningEffort
-  readonly promptMode?: "reasoning"
-  readonly promptCacheKey?: string
-  readonly [key: string]: unknown
-}
+export type ProviderOptionsInput = typeof MistralOptions.Type & { readonly [key: string]: unknown }
 
 export const MistralBody = Schema.Struct({
   model: Schema.String,
@@ -388,9 +379,6 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MistralOptions))(
     request.providerOptions ?? {},
   )
-  const selected = request.toolChoice?.type === "tool" ? request.toolChoice.name : undefined
-  if (request.toolChoice?.type === "tool" && !selected)
-    return yield* ProviderShared.invalidRequest("Mistral Chat tool choice requires a tool name")
   if (options.reasoningEffort !== undefined && options.promptMode !== undefined)
     return yield* ProviderShared.invalidRequest(
       "Mistral Chat reasoningEffort and promptMode provider options are mutually exclusive",
@@ -505,7 +493,7 @@ const thinkingUnits = (value: unknown): ReadonlyArray<MistralThinkingUnit> => {
 }
 
 const thinkingText = (thinking: ReadonlyArray<MistralThinkingUnit>) =>
-  thinking.flatMap((unit) => (typeof unit.text === "string" ? [unit.text] : [])).join("")
+  thinking.flatMap((unit) => (unit.text !== undefined ? [unit.text] : [])).join("")
 
 const thinkingMetadata = (thinking: MistralThinkingContent) => ({ mistral: { thinking } })
 

@@ -57,7 +57,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-這裡完整的 ID 格式為 `provider_id/model_id`。例如，如果您使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，則 GPT 5.1 Codex 對應的值為 `opencode/gpt-5.1-codex`。
+這裡完整的 ID 格式為 `provider_id/model_id`。例如，如果您使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，則 GPT-6.1 Sol 對應的值為 `opencode/gpt-6.1-sol`。
 
 如果您設定了[自訂提供商](/docs/providers#custom)，`provider_id` 是設定中 `provider` 部分的鍵名，`model_id` 是 `provider.models` 中的鍵名。
 
@@ -73,7 +73,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -85,7 +85,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -99,7 +99,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-這裡我們為兩個內建模型設定了全域選項：透過 `openai` 提供商存取的 `gpt-5`，以及透過 `anthropic` 提供商存取的 `claude-sonnet-4-20250514`。
+這裡我們為兩個內建模型設定了全域選項：透過 `openai` 提供商存取的 `gpt-6.1-sol`，以及透過 `anthropic` 提供商存取的 `claude-sonnet-5-5`。
 內建的提供商和模型名稱可以在 [Models.dev](https://models.dev) 上查閱。
 
 您還可以為使用中的任何代理設定這些選項。代理設定會覆寫此處的全域選項。[了解更多](/docs/agents/#additional)。
@@ -112,7 +112,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -177,7 +177,7 @@ OpenCode 為許多提供商提供了預設變體：
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -211,7 +211,7 @@ OpenCode 啟動時，會按以下優先順序載入模型：
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

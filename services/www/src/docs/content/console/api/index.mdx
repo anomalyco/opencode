@@ -1,167 +1,152 @@
 ---
 title: "API Overview"
-description: "Authenticate with the OpenCode Console API using service account keys or user tokens."
+description: "Authenticate with the OpenCode Console API using personal API keys or service account keys, and scope what each key can do."
 ---
 
-The Console API lets integrations read workspace configuration and manage budgets. Paths are relative
-to the Console base URL.
+The Console API lets your scripts and integrations call models. Every request authenticates with an API key.
 
 ```bash
-export CONSOLE_URL="https://opencode.ai/console"
-export SERVICE_API_KEY="oc_sk_..."
-
-curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
-  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
 ```
 
 | API                                 | Endpoints                                  |
 | ----------------------------------- | ------------------------------------------ |
 | [Inference](/console/api/inference) | `https://opencode.ai/inference/...`        |
 | [Providers](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
-| [Budgets](/console/api/budgets)     | `/api/v1/budgets/members`                  |
-| [Config](#workspace-config)         | `GET /api/v2/config`                       |
 
-## Service accounts
+## API keys
 
-Integrations authenticate with a service account: a non-human member of the workspace with its own API keys, usage,
-and [budget](/console/budgets#service-account-budgets). Owners and admins manage them from **Keys**.
-
-1. Open **Keys** and click **Add Service Account**, then name it, for example `CI Pipeline`.
-2. Open the service account and click **Add API Key**.
-3. Choose a **Key name**, **Permissions**, and an optional **Expiry date**, then click **Create key**.
-4. Copy the key. It is shown only once.
-
-```text
-oc_sk_1a2b3c4d5e6f_...
-```
-
-Send the key as a bearer token. It is bound to one workspace, so no workspace header is needed.
+Both workspace members and service accounts can have API keys. Send a key as a bearer token.
 
 ```text
 Authorization: Bearer oc_sk_...
 ```
 
-### Permissions
+|                  | Personal API key                                       | Service account key                                                      |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Created by       | Any member, for themselves                             | Owners and admins                                                        |
+| Created in       | **Account › Personal API keys**                        | **Settings › Service accounts**                                          |
+| Acts as          | The member who created it                              | The service account                                                      |
+| Usage counted to | The member's [budget](/console/budgets#member-budgets) | The service account's [budget](/console/budgets#service-account-budgets) |
+| Best for         | Your own scripts and [harnesses](/console/harnesses)   | CI, shared machines, and integrations                                    |
 
-| Permission     | Allows                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| Inference only | [Inference](/console/api/inference) and [Providers](/console/api/providers) requests, and `GET /api/v2/config`. |
-| All            | Everything above, plus the Console API with admin access, except managing models.                               |
+- Each key works in one workspace, chosen when it is created. No workspace header is needed.
+- The full key is shown only once, right after you create it. Afterward Console shows only its prefix.
+- **Expiration** is optional: **Never**, **1 day**, **7 days**, **30 days**, or **Custom** (1 to 365 days). An expired
+  key can't be renewed, so create a new one.
 
-Some actions always require a person signed in to the Console, even with an **All** key: inviting members, changing
-roles, removing members, and creating or revoking keys.
+## Personal API keys
 
-### Revoke keys
+A personal key acts as you. Your role, [budgets](/console/budgets#member-budgets), and model rules apply to it.
 
-Open the service account and revoke a key from **API Keys**. Removing the service account revokes all its keys.
-Automations using a revoked or expired key get HTTP `401` immediately.
+1. Open **Account** from the account menu and find **Personal API keys**.
+2. Click **Add API key**.
+3. Choose the **Workspace**, a **Key name**, and an optional **Expiration**. Owners and admins also choose
+   **Permissions**.
+4. Click **Create** and copy the key.
 
-## User tokens
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
 
-User tokens act as a signed-in person with their workspace role. Send the token with an `x-org-id` header naming the
-workspace.
+The key follows your current access to the workspace. If your role changes, so does what the key can do. If the
+workspace enforces [SSO](/console/sso#sso-enforcement), the key works only while you have an active SSO session, unless
+you are an owner.
+
+## Service accounts
+
+A service account is a non-human member of the workspace with its own API keys, usage, and
+[budget](/console/budgets#service-account-budgets). Use one for automation, so usage isn't tied to a person. Owners and
+admins manage them.
+
+1. Open **Settings › Service accounts** and click **Add Service Account**, then name it, for example `CI Pipeline`.
+2. Open the service account and click **Add API Key**.
+3. Choose a **Key name**, an optional **Expiration**, and **Permissions**, then click **Create**.
+4. Copy the key.
 
 ```bash
-curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
-  --header "Authorization: Bearer ${USER_TOKEN}" \
-  --header "x-org-id: org_..."
+export SERVICE_API_KEY="oc_sk_..."
 ```
 
-Tokens from the [device flow](#device-flow) are bound to the workspace chosen during sign-in and do not need the
-header. A different `x-org-id` returns `403`.
+Owners and admins can rename a service account key or change its permissions later with **Edit…** in the key's actions
+menu.
 
-## Device flow
+## Permissions
 
-OpenCode signs in with the OAuth device authorization grant (RFC 8628). Other CLIs can use the same flow.
+Each key has a permission level, chosen under **Permissions** when you create it.
 
-1. Request a device code. Send `supports_org_scope=true` to bind the token to a workspace.
+| Permissions    | Allows                                                                               |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | Everything the member or service account can do, except **This account's API keys**. |
+| **Restricted** | Only the resources you choose.                                                       |
+| **Read only**  | Read access to every resource. The key can list models but not call them.            |
 
-   ```bash
-   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
-     --data "client_id=my-cli" \
-     --data "supports_org_scope=true"
-   ```
+A key never does more than whoever it acts as. A personal key is capped by the member's current role, and a service
+account key by what [service accounts can do](#limitations).
 
-   The response includes `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 seconds), and
-   `interval` (5 seconds).
+### Restricted keys
 
-2. Open `verification_uri_complete` in a browser. It is a path such as `/console/device?user_code=...`, relative to
-   `https://opencode.ai`. The person signs in, picks a workspace, and approves.
+Set each resource to **None**, **Read**, or **Write**. **Write** includes **Read**.
 
-3. Poll for the token every `interval` seconds with the same `client_id`.
+| Resource                    | Levels                |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**, **Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**, **Write**   |
+| **Members**                 | **Read**, **Write**   |
+| **Providers**               | **Read**, **Write**   |
+| **Billing**                 | **Read**, **Write**   |
+| **Workspace settings**      | **Read**, **Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
 
-   ```bash
-   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
-     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
-     --data "device_code=..." \
-     --data "client_id=my-cli"
-   ```
+**Models › Read** lists models, and **Models › Request** also calls them through the [Inference](/console/api/inference)
+and [Providers](/console/api/providers) APIs. For example, a key that only calls models needs:
 
-   Until approval the response is `400` with `authorization_pending`. On success it returns `access_token`,
-   `refresh_token`, `expires_in`, and `org_id`.
-
-4. Refresh before the access token expires. The workspace binding is preserved.
-
-   ```bash
-   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
-     --data "grant_type=refresh_token" \
-     --data "refresh_token=..." \
-     --data "client_id=my-cli"
-   ```
-
-Each refresh token can be used once. Reusing an old refresh token revokes the whole session.
-
-## Workspace config
-
-`GET /api/v2/config` returns the providers and models available to the workspace in the OpenCode V2
-[config](/config) format. OpenCode loads it after `/connect`.
-
-```bash
-curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
-  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```text
+Permissions: Restricted
+Models:      Request
 ```
 
-```json
-{
-  "providers": {
-    "opencode": {
-      "name": "OpenCode",
-      "env": ["OPENCODE_CONSOLE_TOKEN"],
-      "package": "aisdk:@ai-sdk/openai-compatible",
-      "settings": {
-        "baseURL": "https://opencode.ai/inference/openai/v1",
-        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
-      },
-      "headers": { "x-opencode-org-id": "org_..." },
-      "models": {
-        "kimi-k2.6": { "name": "Kimi K2.6" }
-      }
-    }
-  }
-}
-```
+Keys created as **Inference only** before scoped permissions show as **Restricted** with **Models** set to **Request**.
 
-| Field                   | Description                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------- |
-| `providers`             | Console, Go, and connected providers, each with its gateway settings and models. |
-| `websearch`             | Hosted [web search](/console/websearch), for members when enabled.               |
-| `mcp`                   | The Console MCP server, for members.                                             |
-| `policies`              | Workspace [policy](/policies#console) statements.                                |
-| `experimental.policies` | Deprecated name for `policies`, still accepted.                                  |
+### Who can grant what
 
-Every key permission level and member role can read the config.
+- **Members** can only create personal keys that list and call models. Console shows "This key can list and call
+  models as you." instead of permission choices.
+- **Owners and admins** can give their personal keys **All**, **Restricted**, or **Read only**, up to their own role.
+  The default is **Restricted** with **Models** set to **Request**. If they are later demoted, their keys shrink to
+  match.
+- **Service account keys** default to **All**. Owners and admins choose their permissions.
 
-## Errors
+### Limitations
 
-Errors return JSON with a `_tag` naming the error.
+Some actions always need a person signed in to the Console, and creating keys with a key is tightly limited.
 
-```json
-{ "_tag": "Forbidden" }
-```
+- No API key can change SSO settings or delete the workspace.
+- Service account keys can't invite members, change roles, remove members, manage billing, change workspace settings,
+  manage models, or create or remove service accounts, even with **All**.
+- **This account's API keys** is only available on service account keys, and **All** doesn't include it. A key with it
+  can create and revoke keys for its own service account only. New keys must be **Restricted**, stay within the
+  creating key's permissions, and can't include **This account's API keys**.
+- Personal keys can never get **This account's API keys**, and no API key can create or revoke personal API keys.
 
-| Status | Meaning                                                                                  |
-| ------ | ---------------------------------------------------------------------------------------- |
-| `400`  | `OrgRequired`: a user token was sent without `x-org-id`.                                 |
-| `401`  | Missing, invalid, expired, or revoked credential.                                        |
-| `403`  | Wrong workspace, missing permission, or an **Inference only** key on a Console endpoint. |
-| `404`  | The workspace does not exist or was deleted.                                             |
+Requests outside a key's permissions return HTTP `403`.
+
+## Revocation
+
+| Key                 | Who can revoke it      | Where                                                                             |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| Personal API key    | The member who owns it | **Account › Personal API keys**, then **Revoke**                                  |
+| Personal API key    | Owners and admins      | The member's page in **Settings › Members**, under **API Keys**                   |
+| Service account key | Owners and admins      | The service account's page in **Settings › Service accounts**, under **API Keys** |
+
+Keys are also revoked automatically:
+
+- Leaving or being removed from a workspace, or being deprovisioned through [SCIM](/console/scim), revokes every key
+  that person created in it, including service account keys. Other keys on the same service account keep working.
+- Removing a service account revokes all its keys.
+
+Revoked and expired keys stop working immediately and return HTTP `401`.

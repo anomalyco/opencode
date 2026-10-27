@@ -2,6 +2,17 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { InvalidRequestError, LocationNotFoundError, ServiceUnavailableError } from "../errors.js"
 
+export const VoiceTransportType = Schema.Literals(["webrtc", "websocket"]).annotate({
+  identifier: "VoiceTransportType",
+})
+
+export const VoiceModel = Schema.Struct({
+  model: Schema.String,
+  provider: Schema.String,
+  transports: Schema.Array(VoiceTransportType),
+  available: Schema.Boolean,
+}).annotate({ identifier: "VoiceModel" })
+
 export const VoiceWebRTCTransportInput = Schema.Struct({
   type: Schema.Literal("webrtc"),
   sdp: Schema.String,
@@ -35,6 +46,24 @@ export const VoiceTransport = Schema.Union([
 ]).annotate({ identifier: "VoiceTransport" })
 
 export const VoiceGroup = HttpApiGroup.make("server.voice")
+  .add(
+    HttpApiEndpoint.get("voice.models", "/api/experimental/voice/models", {
+      success: Schema.Struct({
+        data: Schema.Struct({
+          models: Schema.Array(VoiceModel),
+          default: Schema.optional(Schema.String),
+        }),
+      }).annotate({ identifier: "VoiceModelsResponse" }),
+      error: [ServiceUnavailableError, LocationNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.voice.models",
+        summary: "List voice models",
+        description:
+          "List supported voice models, their transports, and whether the server has a usable API key for each provider.",
+      }),
+    ),
+  )
   .add(
     HttpApiEndpoint.post("voice.session", "/api/experimental/voice/session", {
       payload: Schema.Struct({

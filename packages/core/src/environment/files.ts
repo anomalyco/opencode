@@ -67,4 +67,11 @@ export const typeFollowing = (files: Files, path: string) =>
     ),
   )
 
+/** Follows a final symlink, so a dangling symlink does not exist. */
+export const exists = (files: Files, path: string) =>
+  typeFollowing(files, path).pipe(
+    Effect.as(true),
+    Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+  )
+
 export * as EnvironmentFiles from "./files.js"
