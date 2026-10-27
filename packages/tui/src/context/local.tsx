@@ -178,16 +178,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           : { providerID: configured.providerID, modelID: configured.model, variant: configured.variant }
       })
 
+      const cliModel = createMemo(() => (args.model ? parse(args.model) : undefined))
+
       const fallbackModel = createMemo(() => {
-        if (args.model) {
-          const { providerID, modelID } = parse(args.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
+        const requested = cliModel()
+        if (requested && isModelValid(requested)) return requested
 
         const configured = configuredModel()
         if (configured && isModelValid(configured)) return configured
@@ -210,6 +205,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const a = agent.current()
         return getFirstValidModel(
           () => a && selectionState.newSessionModelByLocationAgent[locationAgentKey(a.id)],
+          cliModel,
           () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
           fallbackModel,
         )

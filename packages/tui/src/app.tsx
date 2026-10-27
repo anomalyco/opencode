@@ -629,13 +629,14 @@ function App() {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
         const { providerID, modelID } = Model.parse(args.model)
-        if (!providerID || !modelID)
-          return toast.show({
+        const valid = providerID.length > 0 && modelID.length > 0
+        if (!valid)
+          toast.show({
             variant: "warning",
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
           })
-        local.model.set({ providerID, modelID }, { recent: true })
+        if (valid) local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.sessionID && !args.fork) {
         route.navigate({

@@ -109,6 +109,7 @@ export default Runtime.handler(Commands, (input) =>
           : undefined,
       },
       args: {
+        model: Option.getOrUndefined(input.model),
         continue: input.continue,
         sessionID: sessionExists ? session : undefined,
         newSessionID: sessionExists ? undefined : session,

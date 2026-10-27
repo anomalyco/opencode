@@ -803,81 +803,92 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   expect(reverted).not.toContain("50.0 tok/s")
 })
 
-test("session startup prompt is submitted exactly once", async () => {
-  await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const events = createEventStream()
-  const cwd = process.cwd()
-  const location = { directory: cwd, project: { id: "project", directory: cwd } }
-  const session = {
-    id: "dummy",
-    title: "Demo session",
-    projectID: "project",
-    location: { directory: cwd },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, updated: 0 },
-  }
-  const bodies: unknown[] = []
-  const promptSubmitted = Promise.withResolvers<void>()
-  const calls = createFetch(async (url, request) => {
-    if (url.pathname === "/api/location") return json(location)
-    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-    if (url.pathname === "/api/session/dummy") return json({ data: session })
-    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
-    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
-    if (url.pathname === "/api/agent")
-      return json({
-        location,
-        data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
-      })
-    if (url.pathname === "/api/model")
-      return json({
-        location,
-        data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
-      })
-    if (url.pathname === "/api/session/dummy/prompt") {
-      bodies.push(await request.json())
-      promptSubmitted.resolve()
-      return json({ data: {} })
+test.each([undefined, "provider/", "/model", "model-without-provider"])(
+  "session startup prompt is submitted exactly once with model %s",
+  async (model) => {
+    await using state = await tmpdir()
+    const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+    const events = createEventStream()
+    const cwd = process.cwd()
+    const location = { directory: cwd, project: { id: "project", directory: cwd } }
+    const session = {
+      id: "dummy",
+      title: "Demo session",
+      projectID: "project",
+      location: { directory: cwd },
+      agent: "build",
+      model: { providerID: "provider", id: "model" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
     }
-  }, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+    const bodies: unknown[] = []
+    let createdSessions = 0
+    const promptSubmitted = Promise.withResolvers<void>()
+    const calls = createFetch(async (url, request) => {
+      if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/session") {
+        if (request.method === "POST") {
+          createdSessions++
+          return new Response("Unexpected new session", { status: 500 })
+        }
+        return json({ data: [session], cursor: {} })
+      }
+      if (url.pathname === "/api/session/dummy") return json({ data: session })
+      if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+      if (url.pathname === "/api/agent")
+        return json({
+          location,
+          data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
+        })
+      if (url.pathname === "/api/model")
+        return json({
+          location,
+          data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
+        })
+      if (url.pathname === "/api/session/dummy/prompt") {
+        bodies.push(await request.json())
+        promptSubmitted.resolve()
+        return json({ data: {} })
+      }
+    }, events)
+    const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
 
-  try {
-    const { run } = await import("../src/app")
-    const task = Effect.runPromise(
-      run({
-        app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() } },
-        config: { get: async () => ({}), update: async () => ({}) },
-        packages: { prepare: async () => ({ directory: "" }) },
-        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-        args: { sessionID: "dummy", prompt: "RESUME_READY" },
-        log: () => {},
-      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
-    )
+    try {
+      const { run } = await import("../src/app")
+      const task = Effect.runPromise(
+        run({
+          app: { name: "test", version: "test", channel: "test" },
+          server: { endpoint: { url: server.url.toString() } },
+          config: { get: async () => ({}), update: async () => ({}) },
+          packages: { prepare: async () => ({ directory: "" }) },
+          terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+          args: { sessionID: "dummy", model, prompt: "RESUME_READY" },
+          log: () => {},
+        }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+      )
 
-    await Promise.race([
-      promptSubmitted.promise,
-      Bun.sleep(2000).then(() => {
-        throw new Error("startup prompt was not submitted")
-      }),
-    ])
-    await Bun.sleep(20)
-    setup.renderer.destroy()
-    await task
+      await Promise.race([
+        promptSubmitted.promise,
+        Bun.sleep(2000).then(() => {
+          throw new Error("startup prompt was not submitted")
+        }),
+      ])
+      await Bun.sleep(20)
+      setup.renderer.destroy()
+      await task
 
-    expect(bodies).toHaveLength(1)
-    expect(bodies[0]).toMatchObject({ text: "RESUME_READY" })
-  } finally {
-    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-    await server.stop()
-  }
-})
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0]).toMatchObject({ text: "RESUME_READY" })
+      expect(createdSessions).toBe(0)
+    } finally {
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+      await server.stop()
+    }
+  },
+)
 
 test("home startup prompt is submitted exactly once", async () => {
   await using state = await tmpdir()
