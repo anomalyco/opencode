@@ -63,6 +63,8 @@ const ripgrepLayer = Layer.effect(
     let initialized = false
     let settledAt = Number.NEGATIVE_INFINITY
     let refreshing: Deferred.Deferred<void> | undefined
+    // The symlinked files last found in each listed directory, keyed by its path relative to the location.
+    let linked = new Map<string, ReadonlyArray<string>>()
     const scan = Effect.gen(function* () {
       const next = emptyIndex()
       const previous = index
@@ -88,29 +90,41 @@ const ripgrepLayer = Layer.effect(
       // Look for links only in the directories this scan walked, and let a depth-1 `--follow` listing of
       // those directories decide which links are visible files. It applies the scan's ignore and hidden
       // rules, and a symlinked directory or a broken link yields nothing, so no link is ever traversed.
-      if (next.files.size < limit)
+      // A directory found without links is not listed again, so a refresh only lists the root, new
+      // directories and the few that hold links, rather than the whole tree.
+      if (next.files.size < limit) {
+        const found = new Map<string, ReadonlyArray<string>>()
         yield* Effect.forEach(
           ["", ...[...next.directories.keys()].map((directory) => directory.slice(0, -1))],
           (directory) =>
             Effect.gen(function* () {
+              if (directory && linked.get(directory)?.length === 0) {
+                found.set(directory, [])
+                return
+              }
               const cwd = path.join(location.directory, directory)
               const entries = yield* environment.files.list(cwd)
               const links = new Set(entries.filter((entry) => entry.type === "symlink").map((entry) => entry.name))
-              if (links.size === 0) return
-              yield* ripgrep.find({
-                cwd,
-                pattern: "*",
-                limit,
-                follow: true,
-                maxDepth: 1,
-                onEntry: (entry) =>
-                  Effect.sync(() => {
-                    if (links.has(entry.path)) add(directory ? `${directory}/${entry.path}` : entry.path)
-                  }),
-              })
+              const files: string[] = []
+              if (links.size > 0)
+                yield* ripgrep.find({
+                  cwd,
+                  pattern: "*",
+                  limit,
+                  follow: true,
+                  maxDepth: 1,
+                  onEntry: (entry) =>
+                    Effect.sync(() => {
+                      if (links.has(entry.path)) files.push(directory ? `${directory}/${entry.path}` : entry.path)
+                    }),
+                })
+              files.forEach(add)
+              found.set(directory, files)
             }).pipe(Effect.ignore),
           { concurrency: 16, discard: true },
         )
+        linked = found
+      }
       index = next
       initialized = true
     }).pipe(Effect.orDie)
