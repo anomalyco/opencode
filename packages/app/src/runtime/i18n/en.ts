@@ -670,6 +670,7 @@ export const dict = {
   "session.header.reveal.fileExplorer": "Reveal in File Explorer",
   "session.header.reveal.containingFolder": "Open containing folder",
   "session.location.copyPath": "Copy path",
+  "session.location.copyBranch": "Copy branch name",
   "session.location.noBranch": "No branch",
 
   "settings.tab.servers": "Servers",

@@ -1,4 +1,6 @@
 import { createMemo, lazy, on, onCleanup, Suspense } from "solid-js"
+import { Icon } from "@opencode/ui/icon"
+import { Menu } from "@opencode/ui/menu"
 import {
   Command,
   createKeyed,
@@ -16,7 +18,7 @@ import { terminalTab, type LocalPTY } from "./state"
 import { terminalTabLabel } from "./title"
 import { TerminalTabLabel } from "./label"
 import quoteStyles from "./quote.css?inline"
-import { onIdle, BuiltinCommand } from "@opencode/plugin/gui/builtin"
+import { onIdle, BuiltinCommand, BuiltinSlot } from "@opencode/plugin/gui/builtin"
 
 const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
   const sessions = ctx.sessions
@@ -66,7 +68,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     void terminal.new().then((id) => {
       const pty = id ? terminal.all().find((item) => item.id === id) : undefined
 
-      if (pty) show(session, terminal, pty)
+      if (pty && !ctx.signal.aborted) show(session, terminal, pty)
     })
 
   // Closes the tab, which closes its terminal; the narrow-screen view lists terminals without storing their tabs.
@@ -77,6 +79,16 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
   }
 
   const active = (terminal: TerminalWorkspace) => terminal.all().find((pty) => pty.id === terminal.active())
+
+  ctx.add(BuiltinSlot, {
+    at: "session.location.branch.menu",
+    render: (input) => (
+      <Menu.Item onSelect={() => create(input.session, model.load(input.session))}>
+        <Icon name="outline-console" class="text-v2-icon-icon-muted" />
+        {ctx.t("location.open")}
+      </Menu.Item>
+    ),
+  })
 
   ctx.add(
     Command,
