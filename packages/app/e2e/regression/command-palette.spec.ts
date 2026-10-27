@@ -146,31 +146,39 @@ test("Search commands lists only commands and runs the chosen one", async ({ pag
   await expect(page).toHaveURL("/settings")
 })
 
-test("Search projects opens a new session's project picker from a session and from Home", async ({ page }) => {
+test("Search projects opens the full location picker from a session, draft, and Home", async ({ page }) => {
   const editor = page.locator('[data-component="composer-editor"]')
   const picker = page.getByRole("combobox", { name: "Search projects", exact: true })
-  const { dialog, input } = await openCommandPalette(page)
-  await input.fill("search projects")
-  await dialog.getByRole("option", { name: /^Search projects/ }).click()
+  await openPaletteWorkspace(page)
+  const shortcut = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+Shift+O" : "Control+Shift+O"
+  await page.keyboard.press(shortcut)
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
   await expect(picker).toBeFocused()
-  // Just the projects: no "Add project", no worktrees and no key hints.
   const projects = page.getByRole("dialog").getByRole("option")
-  await expect(projects).toHaveCount(1)
-  await expect(projects).toHaveText(/command-palette/)
-  await expect(projects.getByRole("button", { name: "Worktrees", exact: true })).toHaveCount(0)
-  await expect(page.locator(".new-session-location-hints")).toHaveCount(0)
+  await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
+  await picker.fill("command-palette")
+  await expect(projects).toHaveCount(2)
+  await expect(projects.getByRole("button", { name: "Worktrees", exact: true })).toBeVisible()
+  await picker.press("ArrowRight")
+  await expect(page.getByRole("option", { name: /^New worktree/ })).toBeVisible()
+  await page.getByRole("combobox").press("Escape")
   await picker.press("Escape")
   await expect(picker).toHaveCount(0)
   await expect(editor).toBeFocused()
+
+  await page.keyboard.press(shortcut)
+  await expect(picker).toBeFocused()
+  await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
+  await picker.press("Escape")
 
   await page.goto("/")
   await expect(
     page.getByRole("region", { name: "Recent sessions" }).getByRole("button", { name: /Palette fixture session/ }),
   ).toBeEnabled()
-  await page.keyboard.press("ControlOrMeta+Shift+O")
+  await page.keyboard.press(shortcut)
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
   await expect(picker).toBeFocused()
+  await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
 })
 
 declare global {

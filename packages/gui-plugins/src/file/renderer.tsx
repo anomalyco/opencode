@@ -46,7 +46,7 @@ import type File from "./index"
 import { FileVisual } from "./label"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
 import tabStyles from "./tabs.css?inline"
-import { onIdle, BuiltinPanel, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import { onIdle, BuiltinPanel, BuiltinSlot, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
 import { Changes } from "@opencode/plugin/gui/review"
 
@@ -414,6 +414,10 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
   const OpenInAppButton = lazy(() => import("./open-in-app"))
 
+  const OpenInAppMenuItem = lazy(() =>
+    import("./open-in-app").then((module) => ({ default: module.OpenInAppMenuItem })),
+  )
+
   // How many "Open in" buttons each screen's panel headers show; the tab strip shows its own only while none do.
   const headers = new WeakMap<SessionScreen, Signal<number>>()
 
@@ -430,7 +434,22 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   }
 
   if (desktop) {
-    onCleanup(onIdle(() => void OpenInAppButton.preload()))
+    onCleanup(
+      onIdle(() => {
+        void OpenInAppButton.preload()
+        void OpenInAppMenuItem.preload()
+      }),
+    )
+    ctx.add(BuiltinSlot, {
+      at: "session.location.path.menu",
+      render: (input) => (
+        <FileProvider>
+          <Suspense>
+            <OpenInAppMenuItem session={input.session} />
+          </Suspense>
+        </FileProvider>
+      ),
+    })
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (

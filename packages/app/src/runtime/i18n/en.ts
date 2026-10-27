@@ -60,6 +60,7 @@ export const dict = {
   "command.usage.view": "View usage",
   "command.usage.view.description": "See your OpenCode Go allowance and Console budgets",
   "command.session.location.cycle": "Cycle session location",
+  "session.location.toggle": "Toggle session location",
 
   "command.palette": "Search everything",
   "command.commands.search": "Search commands",
@@ -660,6 +661,7 @@ export const dict = {
   "session.quote.actions": "Quote selection",
   "session.quote.add": "Quote",
   "session.quote.addWithComment": "Quote and comment",
+  "session.quote.commentPlaceholder": "Add a comment about this quote",
   "session.quote.tooLong": "Selection too long",
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "File Explorer",
@@ -668,6 +670,7 @@ export const dict = {
   "session.header.reveal.fileExplorer": "Reveal in File Explorer",
   "session.header.reveal.containingFolder": "Open containing folder",
   "session.location.copyPath": "Copy path",
+  "session.location.copyBranch": "Copy branch name",
   "session.location.noBranch": "No branch",
 
   "settings.tab.servers": "Servers",
@@ -1127,6 +1130,7 @@ export const dict = {
   "session.new.workspace.search.placeholder": "Search worktrees",
   "session.new.workspace.search.empty": "No matching worktrees",
   "session.new.location.select": "Select",
+  "session.new.location.otherProjects": "Other projects",
   "session.new.location.worktrees": "Worktrees",
   "session.new.location.back": "Back to projects",
   "session.new.location.servers": "Servers",
