@@ -126,7 +126,7 @@ describe("session target resolver", () => {
     spyOn(client.session, "create").mockResolvedValue({ ...session("ses_fresh", "/project"), agent: "review" })
 
     const target = await resolveSessionTarget({ client, prepare })
-    expect(target.agent).toBe("review")
+    expect<unknown>(target.agent).toBe("review")
   })
 
   test("does not retry an ambiguous Session creation", async () => {

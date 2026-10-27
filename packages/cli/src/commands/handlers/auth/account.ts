@@ -1,3 +1,4 @@
+import { Credential } from "@opencode/schema/credential"
 import { autocomplete } from "@clack/prompts"
 import { Effect } from "effect"
 import type { IntegrationInfo } from "@opencode/client"
@@ -51,16 +52,16 @@ export const chooseCredential = Effect.fn("cli.auth.account.credential")(functio
   }
   if (target) {
     const byID = credentials.find((credential) => credential.id === target)
-    if (byID) return byID.id
+    if (byID) return Credential.ID.make(byID.id, { disableChecks: true })
     const matches = credentials.filter((credential) => credential.label.toLowerCase() === target.toLowerCase())
-    if (matches.length === 1) return matches[0].id
+    if (matches.length === 1) return Credential.ID.make(matches[0].id, { disableChecks: true })
     if (matches.length > 1)
       return yield* Effect.fail(
         new Error(`Credential label "${target}" is ambiguous. Use an ID: ${matches.map((item) => item.id).join(", ")}`),
       )
     return yield* Effect.fail(new Error(`Credential not found for ${integration.name}: ${target}`))
   }
-  return yield* prompt<string>(() =>
+  const id = yield* prompt<string>(() =>
     autocomplete({
       message: `Select ${integration.name} account to ${action}`,
       maxItems: 8,
@@ -71,4 +72,5 @@ export const chooseCredential = Effect.fn("cli.auth.account.credential")(functio
       })),
     }),
   )
+  return Credential.ID.make(id, { disableChecks: true })
 })

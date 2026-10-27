@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Effect } from "effect"
@@ -13,7 +14,8 @@ const handler = Effect.fn("cli.session.delete")(function* (
   const server = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
   yield* Effect.tryPromise({
-    try: (signal) => client.session.remove({ sessionID: input.sessionID }, { signal }),
+    try: (signal) =>
+      client.session.remove({ sessionID: Session.ID.make(input.sessionID, { disableChecks: true }) }, { signal }),
     catch: (cause) => cause,
   })
   process.stdout.write(`Session ${input.sessionID} deleted${EOL}`)
