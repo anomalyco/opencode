@@ -7,7 +7,7 @@ import type { InstancePlugins } from "@opencode/core/plugin/instance"
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { Context, Duration, Effect, Layer, LayerMap, RcMap, Scope } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap, Scope } from "effect"
 
 export interface Configuration {
   readonly plugins: InstancePlugins.List
@@ -102,7 +102,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           ),
         { idleTimeToLive: Duration.infinity },
       )
-      return Instance.Service.of({ provide, provideCached, live: (session) => RcMap.has(instances.rcMap, key(session)) })
+      return Instance.Service.of({ provide, provideCached })
     }),
   )
 }
