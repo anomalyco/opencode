@@ -16,7 +16,6 @@ import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
@@ -102,7 +101,6 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Command.node,
       Integration.node,
       KV.node,
-      ManagedPolicy.node,
       Mcp.node,
       Session.node,
       InstructionEntry.node,
