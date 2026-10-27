@@ -263,6 +263,36 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
       }) ??
         Provider.aisdk(aisdk)))
   if (!packageName) return undefined
+
+  // If the selected package is a generic chat-completions compatible package
+  // (openai-compatible or anthropic-compatible) for a known OpenAI model
+  // that requires the Responses API, upgrade to the native Responses package
+  // while preserving the provider's base URL. This handles providers like
+  // agentrouter, requesty, etc. that only list chat-completions in the catalog
+  // but support Responses at the same endpoint.
+  const isGenericChatCompatible = packageName === "@opencode/ai/providers/openai-compatible" ||
+    packageName === "@opencode/ai/providers/anthropic-compatible"
+  const isKnownOpenAIModel = /^gpt-(?:5|6)/i.test(model.id) || /^o[134]/.test(model.id)
+  if (isGenericChatCompatible && isKnownOpenAIModel && api.base_url) {
+    const nativeOpenAIResponses = "@opencode/ai/providers/openai/responses"
+    if (Provider.builtinPackages.has(nativeOpenAIResponses)) {
+      const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
+      const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
+      const compatibility = {
+        ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
+        ...(maxTokensField ? { maxTokensField } : {}),
+        ...(mediaInput ? { mediaInput } : {}),
+      }
+      // Use the native responses package with the provider's base URL
+      // This routes to the provider's endpoint (e.g., agentrouter.org/v1) with the Responses protocol
+      return {
+        package: nativeOpenAIResponses,
+        baseURL: api.base_url,
+        ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
+      }
+    }
+  }
+
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
   const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
   const compatibility = {
