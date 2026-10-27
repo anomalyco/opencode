@@ -21,4 +21,8 @@ export type {
   SkillApi,
 } from "./api.js"
 export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types.js"
+export type {
+  MediaFileAttachment as PromptMediaFileAttachment,
+  Attachment as PromptAttachment,
+} from "@opencode/schema/prompt"
 export type OpenCodeClient = ReturnType<typeof OpenCode.make>

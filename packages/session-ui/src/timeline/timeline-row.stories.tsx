@@ -709,6 +709,38 @@ const RichUserAttachments = {
   ),
 }
 
+const UserMessageLinks = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Prompt with links"
+      description="URLs in a prompt open externally; trailing punctuation and mentions stay plain text."
+      document={{
+        ...thinkingDocument,
+        status: { type: "idle" },
+        messages: [
+          {
+            id: "msg_story_user_links",
+            type: "user",
+            text: "set it up on this pc https://github.com/Hona/mesh, then compare @src/a.ts with (https://opencode.ai/docs).",
+            agents: [],
+            files: [
+              {
+                data: "",
+                mime: "text/plain",
+                name: "a.ts",
+                source: { type: "uri", uri: "src/a.ts" },
+                mention: { text: "@src/a.ts", start: 64, end: 73 },
+              },
+            ],
+            time: { created: 1_735_689_633_000 },
+          },
+        ],
+      }}
+      width="620px"
+    />
+  ),
+}
+
 const conversationScenarios = {
   reasoning: AgentReasoning,
   hidden: WorkingWithoutReasoningDetails,
@@ -719,6 +751,7 @@ const conversationScenarios = {
   interruption: InterruptedTurn,
   models: AliasedModelNotices,
   attachments: RichUserAttachments,
+  links: UserMessageLinks,
 }
 
 export const Conversation = {

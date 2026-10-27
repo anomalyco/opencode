@@ -47,16 +47,21 @@ export interface Resolved {
 }
 
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
-export const root = Effect.fn("Project.root")(function* (
-  fs: FSUtil.Interface,
-  input: AbsolutePath,
-  markers: readonly string[] = [".git", ".hg"],
-) {
-  return yield* fs.up({ targets: [...markers], start: input, mode: "first" }).pipe(
-    Effect.map((matches) => (matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined)),
-    Effect.orElseSucceed(() => undefined),
-  )
-})
+export const root = Effect.fn("Project.root")(
+  function* (
+    fs: { readonly exists: (path: string) => Effect.Effect<boolean, unknown> },
+    input: AbsolutePath,
+    markers: readonly string[] = [".git", ".hg"],
+  ) {
+    for (let current: string = input; ; current = path.dirname(current)) {
+      for (const marker of markers) {
+        if (yield* fs.exists(path.join(current, marker))) return AbsolutePath.make(current)
+      }
+      if (path.dirname(current) === current) return undefined
+    }
+  },
+  Effect.orElseSucceed(() => undefined),
+)
 
 const ACTIVATE_INTERVAL = 60_000
 const SWEEP_INTERVAL = Duration.hours(1)

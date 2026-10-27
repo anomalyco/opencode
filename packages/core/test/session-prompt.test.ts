@@ -94,8 +94,10 @@ const locations = makeGlobalNode({
               replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
             }),
             Layer.mock(Image.Service, {
-              normalize: (_resource, content) =>
-                Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+              normalize: (resource, content) =>
+                content.mime === "image/heic"
+                  ? Effect.fail(new Image.DecodeError({ resource }))
+                  : Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
             }),
             Layer.mock(Snapshot.Service, {
               capture: () => Effect.undefined,
@@ -517,6 +519,23 @@ describe("Session.prompt", () => {
           source: { type: "inline" },
         },
       ])
+    }),
+  )
+
+  it.effect("passes images the resizer cannot decode through unchanged", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const data = Buffer.from("000000186674797068656963000000006d69663168656963", "hex").toString("base64")
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect this photo",
+        files: [{ uri: `data:image/heic;base64,${data}` }],
+        resume: false,
+      })
+
+      expect(message.payload.files).toEqual([{ data, mime: "image/heic", source: { type: "inline" } }])
     }),
   )
 

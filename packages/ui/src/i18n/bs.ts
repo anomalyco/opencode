@@ -206,7 +206,6 @@ export const dict = {
   "ui.question.answer.none": "(nema odgovora)",
   "ui.question.review.notAnswered": "(nije odgovoreno)",
   "ui.question.multiHint": "Odaberi sve primjenjive odgovore",
-  "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor…",
 
   "ui.fileSearch.placeholder": "Pronađi",

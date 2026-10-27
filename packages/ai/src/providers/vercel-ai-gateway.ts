@@ -13,7 +13,14 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import type { Protocol } from "../route/protocol.js"
-import { LLMRequest, ModelID, ProviderID, ProviderMetadata, ReasoningEffort } from "../schema/index.js"
+import {
+  LLMRequest,
+  ModelID,
+  ProviderID,
+  ProviderMetadata,
+  ReasoningEffort,
+  type ProviderOptions,
+} from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("vercel-ai-gateway")
@@ -230,7 +237,8 @@ export const configure = (input: Options = {}) => {
     return messages(modelID)
   }
   const media = MediaRoute.deployment({ ...input, baseURL: configured.endpoint.baseURL }, configured.auth)
-  const image = (modelID: string | ModelID) => OpenAIImages.model({ ...media, id: modelID, provider: id })
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
   const decisionRoute = OpenAIDecisions.route.with({
     provider: id,
     endpoint: { baseURL: configured.endpoint.baseURL },
@@ -238,7 +246,8 @@ export const configure = (input: Options = {}) => {
     headers: input.headers,
     http: input.http,
   })
-  const decision = (modelID: string | ModelID) => decisionRoute.model({ id: modelID })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model({ id: modelID, providerOptions })
   return { id, model, messages, responses, chat, image, decision, configure }
 }
 
@@ -250,24 +259,32 @@ export const chat = provider.chat
 export const image = provider.image
 
 export const model: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).model(modelID)
+  configure(config(settings)).model(modelID)
 export const messagesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).messages(modelID)
+  configure(config(settings)).messages(modelID)
 export const responsesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (
   modelID,
   settings,
-) => fromSettings(settings).responses(modelID)
+) => configure(config(settings)).responses(modelID)
 export const chatModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).chat(modelID)
+  configure(config(settings)).chat(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
-function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
-  return configure({
+function config({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  })
+  }
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"

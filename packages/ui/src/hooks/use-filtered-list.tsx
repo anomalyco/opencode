@@ -13,7 +13,6 @@ export interface FilteredListProps<T> {
   sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   skipFilter?: (item: T) => boolean
   onSelect?: (value: T | undefined, index: number) => void
-  noInitialSelection?: boolean
 }
 
 export function groupItems<T>(
@@ -80,31 +79,14 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
 
   const flat = createMemo(() => (grouped.latest || []).flatMap((x) => x.items))
 
-  function initialActive() {
-    if (props.noInitialSelection) return ""
-
-    if (props.current) return props.key(props.current)
-
-    const items = flat()
-
-    if (items.length === 0) return ""
-
-    return props.key(items[0])
-  }
-
+  // Lists open on their first row; `current` only marks the selected item.
   const list = createList({
     items: () => flat().map(props.key),
-    initialActive: initialActive(),
+    initialActive: flat()[0] ? props.key(flat()[0]) : "",
     loop: true,
   })
 
   const reset = () => {
-    if (props.noInitialSelection) {
-      list.setActive("")
-
-      return
-    }
-
     const all = flat()
 
     if (all.length === 0) return

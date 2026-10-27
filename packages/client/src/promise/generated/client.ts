@@ -12,6 +12,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginGuiInput,
+  PluginGuiOutput,
   PluginCheckInput,
   PluginCheckOutput,
   PluginUpdateInput,
@@ -109,6 +111,10 @@ import type {
   ModelDefaultOutput,
   GenerateTextInput,
   GenerateTextOutput,
+  GenerateImageInput,
+  GenerateImageOutput,
+  GenerateDecisionsInput,
+  GenerateDecisionsOutput,
   VoiceModelsOutput,
   VoiceSessionInput,
   VoiceSessionOutput,
@@ -203,6 +209,7 @@ import type {
   SkillListOutput,
   RpcCallInput,
   RpcCallOutput,
+  EventSubscribeInput,
   EventSubscribeOutput,
   PtyListInput,
   PtyListOutput,
@@ -234,6 +241,8 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalMediaGetInput,
+  ExperimentalMediaGetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -517,6 +526,18 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/plugin`,
             query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      gui: (input: PluginGuiInput, requestOptions?: RequestOptions) =>
+        request<PluginGuiOutput>(
+          {
+            method: "GET",
+            path: `/api/plugin/gui`,
+            query: { location: input["location"], id: input["id"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,
@@ -1138,7 +1159,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/model`,
-            query: { location: input?.["location"] },
+            query: { location: input?.["location"], types: input?.["types"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 503],
             empty: false,
@@ -1163,10 +1184,41 @@ export function make(options: ClientOptions) {
         request<{ readonly data: GenerateTextOutput }>(
           {
             method: "POST",
-            path: `/api/experimental/generate`,
+            path: `/api/experimental/generate/text`,
             body: { prompt: input["prompt"], model: input["model"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404, 503],
+            declaredStatuses: [400, 401, 404, 422, 502, 503],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      image: (input: GenerateImageInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: GenerateImageOutput }>(
+          {
+            method: "POST",
+            path: `/api/experimental/generate/image`,
+            body: {
+              model: input["model"],
+              prompt: input["prompt"],
+              images: input["images"],
+              n: input["n"],
+              aspect: input["aspect"],
+              resolution: input["resolution"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 422, 502, 503],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      decisions: (input: GenerateDecisionsInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: GenerateDecisionsOutput }>(
+          {
+            method: "POST",
+            path: `/api/experimental/generate/decisions`,
+            body: { model: input["model"], input: input["input"], questions: input["questions"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 422, 502, 503],
             empty: false,
           },
           requestOptions,
@@ -1809,9 +1861,16 @@ export function make(options: ClientOptions) {
         ),
     },
     event: {
-      subscribe: (requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
+      subscribe: (input?: EventSubscribeInput, requestOptions?: RequestOptions): AsyncIterable<EventSubscribeOutput> =>
         sse<EventSubscribeOutput>(
-          { method: "GET", path: `/api/event`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          {
+            method: "GET",
+            path: `/api/event`,
+            query: { types: input?.["types"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
           requestOptions,
         ),
     },
@@ -2024,6 +2083,20 @@ export function make(options: ClientOptions) {
             requestOptions,
           ).then((value) => value.data),
       },
+      media: {
+        get: (input: ExperimentalMediaGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMediaGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
     },
     shell: {
       list: (input?: ShellListInput, requestOptions?: RequestOptions) =>
@@ -2231,7 +2304,13 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/vcs/diff`,
-            query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
+            query: {
+              location: input["location"],
+              mode: input["mode"],
+              base: input["base"],
+              context: input["context"],
+              untracked: input["untracked"],
+            },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 503],
             empty: false,

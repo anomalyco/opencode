@@ -43,7 +43,7 @@
   display: block;
   max-width: 320px;
   padding: 2px 8px;
-  border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
+  border: 1px solid var(--v2-border-border-muted);
   border-radius: var(--radius-sm);
   background: var(--surface-float-base);
   color: var(--text-invert-strong);
@@ -94,7 +94,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="tooltip-v2"],
   [data-component="tooltip-v2"][data-closed] {
     animation: none;

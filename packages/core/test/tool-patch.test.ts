@@ -709,6 +709,48 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("preserves files across self-moves and multi-hunk moves in one patch", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const same = path.join(directory, "same.txt")
+        const source = path.join(directory, "old.txt")
+        const destination = path.join(directory, "moved.txt")
+        yield* Effect.promise(() => Promise.all([fs.writeFile(same, "before\n"), fs.writeFile(source, "a\nb\nc\n")]))
+        const settled = yield* executeTool(
+          registry,
+          call(
+            [
+              "*** Begin Patch",
+              "*** Update File: same.txt",
+              "*** Move to: ./same.txt",
+              "@@",
+              "-before",
+              "+after",
+              "*** Update File: old.txt",
+              "@@",
+              "-a",
+              "+A",
+              "*** Update File: old.txt",
+              "*** Move to: moved.txt",
+              "@@",
+              "-b",
+              "+B",
+              "*** Update File: moved.txt",
+              "@@",
+              "-c",
+              "+C",
+              "*** End Patch",
+            ].join("\n"),
+          ),
+        )
+        expect(settled).toMatchObject({ status: "completed" })
+        expect(yield* Effect.promise(() => fs.readFile(same, "utf8"))).toBe("after\n")
+        expect(yield* exists(source)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("A\nB\nC\n")
+      }),
+    ),
+  )
+
   it.live("does not invent a first-line diff for BOM files", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {

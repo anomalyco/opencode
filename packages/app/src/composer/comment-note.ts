@@ -3,9 +3,9 @@ import { Option, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { uuid } from "@/runtime/persistence/uuid"
 import { FileSelection } from "@/workspaces/files/types"
-import { durableNote, LegacyBrowserNote, NoteComment, type ContextItem } from "./schema"
+import { durableNote, LegacyBrowserNote, NoteComment, QuoteComment, type ContextItem } from "./schema"
 
-export const PromptFileComment = Persistence.struct({
+const PromptFileComment = Persistence.struct({
   type: Schema.optional(Schema.Literal("file")),
   path: Schema.String,
   selection: Persistence.optional(FileSelection),
@@ -14,9 +14,9 @@ export const PromptFileComment = Persistence.struct({
   origin: Persistence.optional(Schema.Literals(["review", "file"])),
 })
 
-export type PromptFileComment = typeof PromptFileComment.Type
+type PromptFileComment = typeof PromptFileComment.Type
 
-export type PromptComment = PromptFileComment | NoteComment
+export type PromptComment = PromptFileComment | NoteComment | QuoteComment
 
 /** An attachment the model receives as a path on the server rather than inline bytes. */
 export const PromptAttachmentReference = Persistence.struct({
@@ -37,7 +37,9 @@ const decodePromptPresentation = Schema.decodeUnknownOption(
   }),
 )
 
-const decodePromptComment = Schema.decodeUnknownOption(Schema.Union([NoteComment, LegacyBrowserNote, PromptFileComment]))
+const decodePromptComment = Schema.decodeUnknownOption(
+  Schema.Union([NoteComment, QuoteComment, LegacyBrowserNote, PromptFileComment]),
+)
 
 export function readPromptPresentation(metadata: SessionMessageUser["metadata"]) {
   return Option.getOrUndefined(
@@ -58,10 +60,24 @@ export function formatNoteComment(input: NoteComment) {
   return `The user made the following comment regarding ${input.live?.subject ?? input.subject}: ${input.comment}`
 }
 
+/** Each quoted line is prefixed, so quoted text cannot end the quote early and read as the user's own words. */
+export function formatQuoteComment(input: QuoteComment) {
+  const quote = `The user quoted the following from ${input.source?.subject ?? "earlier in the conversation"}:\n${input.text
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n")}`
+
+  if (!input.comment) return quote
+
+  return `${quote}\n\nThe user made the following comment regarding this quote: ${input.comment}`
+}
+
 /** Restores a sent comment to the composer, for example after a revert or fork. */
 export function commentContextItem(comment: PromptComment): ContextItem {
   // The message may predate this app process, so a note's live references can no longer be trusted.
   if (comment.type === "note") return { ...durableNote(comment), commentID: uuid() }
+
+  if (comment.type === "quote") return { ...comment, commentID: uuid() }
 
   return {
     type: "file",

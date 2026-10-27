@@ -6,8 +6,11 @@ import { buildPromptRequest } from "./request"
 import { contextItemKey, type FileContextItem } from "./schema"
 import { createPathHelpers, decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
 import { Skill } from "@opencode/schema/skill"
+import { Session } from "@opencode/schema/session"
+import { sessionMentions } from "@opencode/util/session-mention"
 
 type Inline =
+  | { type: "session"; start: number; end: number; value: string; id: Session.ID; title?: string }
   | {
       type: "file"
       start: number
@@ -67,7 +70,7 @@ export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "a
 // return as trailing mentions, and inline files as attachments.
 export function extractPromptFromMessage(
   message: PromptSource,
-  opts?: { directory?: string; attachmentName?: string },
+  opts?: { directory?: string; attachmentName?: string; sessionTitle?: (id: string) => string | undefined },
 ): Prompt {
   const presentation = readPromptPresentation(message.metadata)
   const text = presentation?.displayText ?? message.text
@@ -83,7 +86,17 @@ export function extractPromptFromMessage(
     return path
   }
 
-  const inline: Inline[] = []
+  const inline: Inline[] = sessionMentions(text)
+    .filter((mention) => mention.text.startsWith("@session:"))
+    .map((mention) => ({
+      type: "session",
+      start: mention.start,
+      end: mention.end,
+      value: mention.text,
+      id: Session.ID.make(mention.id),
+      title: opts?.sessionTitle?.(mention.id),
+    }))
+
   const trailing: Inline[] = []
   const attachments: (ImageAttachmentPart | PathAttachmentPart)[] = []
 
@@ -237,10 +250,16 @@ function buildPrompt(
   }
 
   const pushPart = (item: Inline) => {
-    const content = item.value
+    const content = item.type === "session" && item.title ? `@${item.title}` : item.value
     const span = { content, start: position, end: position + content.length }
     position += content.length
     tail = content
+
+    if (item.type === "session") {
+      result.push({ type: "session", id: item.id, ...span })
+
+      return
+    }
 
     if (item.type === "agent") {
       result.push({ type: "agent", name: item.name, ...span })

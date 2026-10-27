@@ -606,6 +606,23 @@ must migrate to the V2 API.
 Use the `@opencode/client` package to access the released V2 API. See the generated [API reference](/api) for its
 endpoints, request types, and responses.
 
+### Server authentication
+
+V2 servers still use HTTP Basic auth, with these changes:
+
+- `OPENCODE_PASSWORD` sets the password. `OPENCODE_SERVER_PASSWORD` still works.
+- `OPENCODE_SERVER_USERNAME` is no longer supported. The username is always `opencode`.
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+See [Web](/cli/web#authentication).
+
 ## Verify your setup
 
 Verify your model, provider credentials, agents, permissions, MCP servers, and plugins in a project before relying on V2

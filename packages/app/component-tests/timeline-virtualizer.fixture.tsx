@@ -115,7 +115,6 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         <div ref={container} style={{ height: "180px", width: "400px" }}>
           <timeline.View
             header={null}
-            workspaceSession={() => false}
             deferred={() => false}
             renderRow={(row) => (
               <div

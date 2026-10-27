@@ -1,7 +1,7 @@
 export * as SessionStored from "./stored.js"
 
 import { Schema } from "effect"
-import { FileAttachment } from "@opencode/schema/prompt"
+import { FileAttachment, MediaRef } from "@opencode/schema/prompt"
 import { optional } from "@opencode/schema/schema"
 import { UserPayload as InboxUserPayload } from "@opencode/schema/session-inbox"
 import { Tool } from "@opencode/schema/tool"
@@ -11,8 +11,8 @@ import { SessionMessage } from "./message.js"
  * Stored rows may reference a `blob` row as `media:` and the lowercase hex SHA-256 of its raw bytes. The blob
  * row holds the bytes and size; the ref names no server route.
  */
-export const Ref = Schema.String.check(Schema.isPattern(/^media:[0-9a-f]{64}$/))
-export type Ref = typeof Ref.Type
+export const Ref = MediaRef
+export type Ref = MediaRef
 
 /** The `blob` hash a {@link Ref} names. */
 export const refHash = (ref: Ref) => ref.slice("media:".length)
