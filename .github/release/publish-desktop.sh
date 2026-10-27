@@ -9,11 +9,12 @@ win=("$windows/opencode-desktop-win-arm64.exe" "$windows/opencode-desktop-win-x6
 mac=("$macos/opencode-desktop-mac-arm64.zip" "$macos/opencode-desktop-mac-arm64.dmg" "$macos/opencode-desktop-mac-x64.zip" "$macos/opencode-desktop-mac-x64.dmg")
 linux=("$linux_x64/opencode-desktop-linux-x86_64.AppImage" "$linux_x64/opencode-desktop-linux-amd64.deb" "$linux_x64/opencode-desktop-linux-x86_64.rpm")
 linux_arm=("$linux_arm64/opencode-desktop-linux-arm64.AppImage" "$linux_arm64/opencode-desktop-linux-arm64.deb" "$linux_arm64/opencode-desktop-linux-aarch64.rpm")
-# Beta skips the .app.tar.gz, which only the retired Tauri updater feed read.
+# Dev and beta skip the .app.tar.gz, which only the retired Tauri updater feed read.
 bundles=()
-if [ "$OPENCODE_CHANNEL" != beta ]; then
-  bundles=("$macos/opencode-desktop-mac-arm64.app.tar.gz" "$macos/opencode-desktop-mac-x64.app.tar.gz")
-fi
+case "$OPENCODE_CHANNEL" in
+  dev | beta) ;;
+  *) bundles=("$macos/opencode-desktop-mac-arm64.app.tar.gz" "$macos/opencode-desktop-mac-x64.app.tar.gz") ;;
+esac
 
 feed() {
   for file in "$@"; do

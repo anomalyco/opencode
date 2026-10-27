@@ -2,7 +2,7 @@
 # plan-release.sh: decides version, channel and npm dist-tag from the event, ref and dispatch inputs
 # (INPUT_BUMP, INPUT_VERSION) only, and writes them to $GITHUB_OUTPUT. Nothing here reads repository files.
 #
-#   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev
+#   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev, desktop
 #   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only
 #   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
@@ -58,7 +58,7 @@ fi
 # What each channel builds and publishes.
 case "$channel" in
   latest) npm_tag=latest cli=true desktop=true node=false release=true ;;
-  dev) npm_tag=dev cli=true desktop=false node=true release=false ;;
+  dev) npm_tag=dev cli=true desktop=true node=true release=false ;;
   beta) npm_tag="" cli=false desktop=true node=false release=false ;;
   pr) npm_tag=pr cli=true desktop=true node=true release=true ;;
 esac
