@@ -45,7 +45,6 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
 import { QuoteCommentEditor } from "./quote-comment"
-import { formatKeybindParts } from "@/shell/commands/command"
 import "../attachments/attachments.css"
 import "./editor.css"
 import "@/shell/palette-menu.css"
@@ -185,8 +184,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const search = () => {
     if (state.popover.type !== "history" && state.popover.type !== "command-menu") return
 
-    if (state.popover.type === "history" && !state.popover.searching) return
-
     return {
       value: state.popover.query,
       label: i18n.t(state.popover.type === "history" ? "ui.promptInput.history" : "ui.promptInput.commands"),
@@ -219,9 +216,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
           activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
           search={search()}
           history={state.popover.type === "history" ? state.mode : undefined}
-          historyBrowsing={state.popover.type === "history" && !state.popover.searching}
-          editor={() => editor}
-          onSearch={() => props.controller.dispatch({ type: "history.search" })}
           onClose={() => props.controller.dispatch({ type: "popover.close" })}
           onActiveChange={(item) => props.controller.dispatch({ type: "popover.active", id: item.id })}
           onSelect={(item) => props.controller.dispatch({ type: "popover.select", item })}
@@ -297,11 +291,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
               aria-multiline="true"
               aria-label={i18n.t("ui.promptInput.label")}
               aria-controls={state.popover.type === "history" ? suggestionsID : undefined}
-              aria-activedescendant={
-                state.popover.type === "history" && !state.popover.searching && state.popover.activeID
-                  ? `${suggestionsID}-${state.popover.activeID}`
-                  : undefined
-              }
               dir={state.mode === "normal" ? "auto" : "ltr"}
               contenteditable={!props.disabled && !props.readOnly}
               autocapitalize={state.mode === "normal" ? "sentences" : "off"}
@@ -1163,9 +1152,6 @@ function ComposerEditorPopover(props: {
   items: ComposerSuggestion[]
   activeID?: string
   history?: ComposerMode
-  historyBrowsing?: boolean
-  editor?: () => HTMLElement | undefined
-  onSearch?: () => void
   onClose?: () => void
   search?: {
     value: string
@@ -1205,7 +1191,6 @@ function ComposerEditorPopover(props: {
     const dismiss = (event: Event) => {
       if (!(event.target instanceof Node) || container?.contains(event.target)) return
 
-      if (event.type === "focusin" && props.historyBrowsing && props.editor?.()?.contains(event.target)) return
       props.onClose?.()
     }
 
@@ -1239,7 +1224,7 @@ function ComposerEditorPopover(props: {
       <Show when={props.history}>
         <Show when={props.search}>
           {(search) => (
-            <div class="shrink-0 px-2 py-1">
+            <div class="flex h-7 shrink-0 items-center px-2 py-1">
               <input
                 ref={(element) => requestAnimationFrame(() => element.isConnected && element.focus())}
                 value={search().value}
@@ -1259,16 +1244,6 @@ function ComposerEditorPopover(props: {
               />
             </div>
           )}
-        </Show>
-        <Show when={props.historyBrowsing}>
-          <button
-            type="button"
-            class="flex h-7 shrink-0 items-center justify-between gap-2 rounded-md px-2 text-[13px] leading-4 text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover"
-            onClick={props.onSearch}
-          >
-            <span>{i18n.t("ui.promptInput.history.searchAction")}</span>
-            <Keybind keys={formatKeybindParts("mod+f")} variant="ghost" />
-          </button>
         </Show>
         <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
           <div id={listID} role="listbox" aria-label={i18n.t("ui.promptInput.history")} class="flex flex-col">
@@ -1296,11 +1271,10 @@ function ComposerEditorPopover(props: {
                     <bdi
                       dir={props.history === "shell" ? "ltr" : "auto"}
                       class="palette-menu-title flex-1 text-start"
-                      style={
-                        props.history === "shell"
-                          ? { "font-family": "var(--font-family-mono)", "font-weight": 440 }
-                          : undefined
-                      }
+                      style={{
+                        "font-family": props.history === "shell" ? "var(--font-family-mono)" : undefined,
+                        "font-weight": props.history === "shell" ? 440 : "var(--font-weight-regular)",
+                      }}
                     >
                       {item.label || item.description || i18n.t("ui.promptInput.history.contextOnly")}
                     </bdi>

@@ -563,15 +563,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   command.register("composer-editor", () => [
     {
-      id: "prompt.history.search",
-      title: language.t("ui.promptInput.history.search"),
-      keybind: "mod+f",
-      hidden: true,
-      editable: true,
-      when: () => controller.state.popover.type === "history",
-      onSelect: () => void controller.dispatch({ type: "history.search" }),
-    },
-    {
       id: "file.attach",
       title: language.t("prompt.action.attachFile"),
       category: language.t("command.category.file"),

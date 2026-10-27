@@ -264,17 +264,14 @@ export function createComposerEditor(input: {
     if (state.popover.type !== "history") return list().flat()
     const query = state.popover.query.trim().toLowerCase()
 
-    return history()
-      .filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
-      .toReversed()
+    return history().filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
   }
 
   const execute = (command: ComposerInteractionCommand) => {
     if (command.type === "history.preview") {
       const item = history().find((entry) => entry.id === command.id)
 
-      if (item?.history)
-        applyHistory(item.history, { focus: state.popover.type === "history" && !state.popover.searching })
+      if (item?.history) applyHistory(item.history, { focus: false })
 
       return
     }
@@ -324,7 +321,7 @@ export function createComposerEditor(input: {
   }
 
   function dispatch(event: ComposerInteractionEvent) {
-    if (event.type === "history.search" || event.type === "popover.close") cancelFocus()
+    if (event.type === "popover.close") cancelFocus()
 
     if (
       event.type === "history.open" ||
@@ -379,21 +376,6 @@ export function createComposerEditor(input: {
 
   const onKeyDown = (event: KeyboardEvent) => {
     flushFocus()
-
-    if (
-      state.popover.type === "history" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      !event.isComposing &&
-      event.key.toLowerCase() === "f"
-    ) {
-      event.preventDefault()
-      event.stopPropagation()
-      dispatch({ type: "history.search" })
-
-      return true
-    }
 
     if (
       state.mode === "normal" &&
