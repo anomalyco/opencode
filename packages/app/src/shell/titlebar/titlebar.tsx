@@ -31,6 +31,7 @@ import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
+import { AccountSwitcher } from "./account-switcher"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
@@ -879,11 +880,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <SidebarInbox />
                               </Show>
                             </div>
-                            <Show when={titlebarItems.ids().length > 0}>
-                              <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
+                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col gap-1">
+                              <AccountSwitcher vertical />
+                              <Show when={titlebarItems.ids().length > 0}>
                                 <TitlebarItems items={titlebarItems} vertical />
-                              </div>
-                            </Show>
+                              </Show>
+                            </div>
                           </Portal>
                         )}
                       </Show>
@@ -895,6 +897,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 </Show>
                 <Show when={!props.verticalTabs}>
                   <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
+                    <Show when={!mobile()}>
+                      <AccountSwitcher />
+                    </Show>
                     <TitlebarItems items={titlebarItems} />
                   </div>
                 </Show>

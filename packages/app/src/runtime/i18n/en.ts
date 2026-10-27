@@ -1080,6 +1080,9 @@ export const dict = {
   "settings.providers.tag.custom": "Custom",
   "settings.providers.tag.account": "Account",
   "settings.providers.tag.other": "Other",
+
+  "account.switcher.empty": "No accounts yet",
+  "account.switcher.manage": "Manage accounts…",
   "settings.models.title": "Models",
   "settings.models.description": "Choose which models appear in model picker",
   "settings.models.enableAll": "Enable all models",

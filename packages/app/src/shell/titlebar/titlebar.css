@@ -172,3 +172,33 @@
     animation-range: calc(100% - 1.1px) calc(100% - 1px);
   }
 }
+
+/* The sidebar account row spans the footer at the same inset as the home and search rows. */
+.titlebar-account-switcher[data-component="button-v2"] {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 6px;
+  padding-inline: 6px;
+}
+
+.titlebar-account-switcher-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Account labels are usually emails, which are wider than the rest of the titlebar's menus allow. */
+.titlebar-account-switcher-menu[data-component="menu-v2-content"] {
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+.titlebar-account-switcher-option {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

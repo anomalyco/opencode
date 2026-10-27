@@ -1365,6 +1365,90 @@ test("providers: the account options rename and remove the active account", asyn
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
+test("providers: the titlebar account switcher lists accounts and switches them in both layouts", async ({ page }) => {
+  const accounts = [
+    { type: "credential", id: "cred_anomaly", label: "Anomaly", method: "oauth" },
+    { type: "credential", id: "cred_clara", label: "Clara", method: "oauth" },
+  ]
+
+  const state = { active: "cred_anomaly" }
+
+  await mockWorkspace(page, {
+    name: "Account switcher",
+    sessions: [],
+    seed: { tabs: [] },
+    // The active Console account signs in to a workspace, which keeps the switch from settling on a poll.
+    provider: () => ({
+      all: [{ id: "opencode", integrationID: "opencode", name: "Anomaly / OpenCode", models: {} }],
+      connected: ["opencode"],
+      default: {},
+    }),
+    integrations: () => [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
+      },
+      { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
+    ],
+    onCredentialActivate: (credentialID) => {
+      state.active = credentialID
+    },
+  })
+  await page.goto("/")
+
+  const trigger = page.getByRole("button", { name: "Accounts", exact: true })
+  await expect(trigger).toBeVisible()
+  await trigger.click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  // An integration without accounts stays out of the menu.
+  await expect(menu.getByText("OpenCode Go", { exact: true })).toHaveCount(0)
+  await expect(menu.getByRole("menuitemradio")).toHaveText(["Anomaly", "Clara"])
+  await expect(menu.getByRole("menuitemradio", { name: "Anomaly", exact: true })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  )
+
+  const activating = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/credential/cred_clara/activate",
+  )
+  await menu.getByRole("menuitemradio", { name: "Clara", exact: true }).click()
+  await activating
+  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+
+  await trigger.click()
+  await menu.getByRole("menuitem", { name: "Add account", exact: true }).click()
+  const connect = page.getByRole("dialog", { name: "Connect an integration", exact: true })
+  await expect(connect).toBeVisible()
+  await connect.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(connect).toBeHidden()
+
+  await trigger.click()
+  await menu.getByRole("menuitem", { name: "Manage accounts…", exact: true }).click()
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+
+  // The side tabs footer carries the same switcher and names the active account.
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  await settings.getByRole("group", { name: "Interface" }).getByText("Side tabs", { exact: true }).click()
+  await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+
+  const vertical = page
+    .locator('[data-slot="vertical-tabs-footer"]')
+    .getByRole("button", { name: "Accounts", exact: true })
+  await expect(vertical).toHaveText("Clara")
+  await vertical.click()
+  await expect(page.getByRole("menuitemradio", { name: "Clara", exact: true })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByRole("menuitemradio", { name: "Anomaly", exact: true })).toHaveAttribute(
+    "aria-checked",
+    "false",
+  )
+  await page.keyboard.press("Escape")
+})
+
 test("providers: switching to a Zen API key does not wait for a Console workspace", async ({ page }) => {
   const accounts = [
     { type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" },

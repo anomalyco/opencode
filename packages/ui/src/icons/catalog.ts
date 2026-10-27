@@ -322,6 +322,10 @@ const icons = {
     viewBox: "0 0 14 14",
     body: `<path d="M2.13889 11.0833L6.22222 7L2.13889 2.91667M7.38888 11.0834H11.8611" stroke="currentColor"/>`,
   },
+  "outline-user": {
+    viewBox: "0 0 16 16",
+    body: `<circle cx="8" cy="5.25" r="2.75" stroke="currentColor"/><path d="M2.75 13.5C2.75 11.0147 5.01472 9 8 9C10.9853 9 13.25 11.0147 13.25 13.5" stroke="currentColor"/>`,
+  },
 }
 
 /** Icon names derived from the shared artwork, with no UI or runtime dependencies. */
