@@ -5,6 +5,7 @@ import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
@@ -14,7 +15,9 @@ import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
+import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect } from "effect"
 import { initRepo } from "./fixture/git"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -141,6 +144,25 @@ it.effect("groups available models by provider with paging", () =>
     })
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
+  }),
+)
+
+it.effect("skips the session_move hint when the context hook has no execute tool", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const hooks = yield* PluginHooks.Service
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins))
+    const event: SessionHooks["context"] = {
+      sessionID: Session.ID.make("ses_hint"),
+      agent: Agent.ID.make("build"),
+      model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("alpha") }),
+      system: [],
+      messages: [],
+      tools: {},
+      options: {},
+    }
+    yield* hooks.trigger("session", "context", event)
+    expect(event.system.some((part) => part.text.includes("tools.opencode.session_move"))).toBe(false)
   }),
 )
 
