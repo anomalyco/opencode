@@ -631,7 +631,7 @@ describe("shell scanner permission impact", () => {
               assertion({
                 action: "shell",
                 resources: parsed.commands.map((command) => command.resource),
-                save: parsed.commands.map((command) => command.save),
+                save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
               }),
             )
             expect(result.effect, portable ? "native" : "legacy").toBe(scenario.expected[index])
@@ -639,7 +639,9 @@ describe("shell scanner permission impact", () => {
             expect(pending).toHaveLength(result.effect === "ask" ? 1 : 0)
             if (result.effect !== "ask") continue
             expect(pending[0]?.resources).toEqual(parsed.commands.map((command) => command.resource))
-            expect(pending[0]?.save).toEqual(parsed.commands.map((command) => command.save))
+            expect(pending[0]?.save).toEqual(
+              parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
+            )
             yield* service.reply({ requestID: result.id, reply: "once" })
             expect(yield* service.list()).toEqual([])
           }
@@ -708,14 +710,14 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [["printf *"], ["printf *"]],
-      // Identical saved rules cover only the native resource, regardless of which parser saved them.
+      grants: [[], ["printf *"]],
+      // Omit a cross-statement proposal without changing the glued Tree-sitter authorization resource.
       repeat: [
-        ["ask", "allow"],
+        ["ask", "ask"],
         ["ask", "allow"],
       ],
       next: "printf next",
-      nextEffect: ["allow", "allow"],
+      nextEffect: ["ask", "allow"],
     },
     {
       name: "PowerShell tab prefix",
@@ -731,7 +733,7 @@ describe("shell scanner permission impact", () => {
     },
   ] as const) {
     for (const [origin, portable] of [false, true].entries()) {
-      it.live(`${fixture.name}: always allow from ${portable ? "native" : "legacy"}, then use either parser`, () =>
+      it.live(`${fixture.name}: always from ${portable ? "portable" : "Tree-sitter"}, then use either parser`, () =>
         Effect.gen(function* () {
           yield* setup()
           const service = yield* Permission.Service
@@ -741,7 +743,7 @@ describe("shell scanner permission impact", () => {
             assertion({
               action: "shell",
               resources: parsed.commands.map((command) => command.resource),
-              save: parsed.commands.map((command) => command.save),
+              save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
             }),
           )
           expect(first.effect).toBe("ask")
@@ -759,10 +761,10 @@ describe("shell scanner permission impact", () => {
                 assertion({
                   action: "shell",
                   resources: parsed.commands.map((command) => command.resource),
-                  save: parsed.commands.map((command) => command.save),
+                  save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
                 }),
               )
-              expect(result.effect, `${target ? "native" : "legacy"}: ${command}`).toBe(
+              expect(result.effect, `${target ? "portable" : "Tree-sitter"}: ${command}`).toBe(
                 command === fixture.next ? fixture.nextEffect[origin] : fixture.repeat[origin]?.[index],
               )
               if (result.effect === "ask") yield* service.reply({ requestID: result.id, reply: "once" })
