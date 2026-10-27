@@ -63,8 +63,8 @@ const ripgrepLayer = Layer.effect(
     let initialized = false
     let settledAt = Number.NEGATIVE_INFINITY
     let refreshing: Deferred.Deferred<void> | undefined
-    // The symlinked files last found in each listed directory, keyed by its path relative to the location.
-    let linked = new Map<string, ReadonlyArray<string>>()
+    // Whether each listed directory held any symlink last time (visible or not), keyed by its path relative to the location.
+    let linked = new Map<string, boolean>()
     const scan = Effect.gen(function* () {
       const next = emptyIndex()
       const previous = index
@@ -90,16 +90,17 @@ const ripgrepLayer = Layer.effect(
       // Look for links only in the directories this scan walked, and let a depth-1 `--follow` listing of
       // those directories decide which links are visible files. It applies the scan's ignore and hidden
       // rules, and a symlinked directory or a broken link yields nothing, so no link is ever traversed.
-      // A directory found without links is not listed again, so a refresh only lists the root, new
-      // directories and the few that hold links, rather than the whole tree.
+      // A directory found without any symlink is not listed again, so a refresh only lists the root, new
+      // directories and the few that hold symlinks (broken or ignored ones too, so a link that starts
+      // resolving later still shows up), rather than the whole tree.
       if (next.files.size < limit) {
-        const found = new Map<string, ReadonlyArray<string>>()
+        const found = new Map<string, boolean>()
         yield* Effect.forEach(
           ["", ...[...next.directories.keys()].map((directory) => directory.slice(0, -1))],
           (directory) =>
             Effect.gen(function* () {
-              if (directory && linked.get(directory)?.length === 0) {
-                found.set(directory, [])
+              if (directory && linked.get(directory) === false) {
+                found.set(directory, false)
                 return
               }
               const cwd = path.join(location.directory, directory)
@@ -119,7 +120,7 @@ const ripgrepLayer = Layer.effect(
                     }),
                 })
               files.forEach(add)
-              found.set(directory, files)
+              found.set(directory, links.size > 0)
             }).pipe(Effect.ignore),
           { concurrency: 16, discard: true },
         )

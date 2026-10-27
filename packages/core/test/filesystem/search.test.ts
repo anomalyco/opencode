@@ -425,7 +425,7 @@ describe("FileSystemSearch", () => {
 
   // Symlink creation needs elevated privileges on Windows.
   ;(process.platform === "win32" ? it.effect.skip : it.effect)(
-    "lists only the root, new directories and directories with links on a refresh",
+    "lists only the root, new directories and directories with symlinks on a refresh",
     () =>
       Effect.gen(function* () {
         const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-relist-"))))
@@ -435,6 +435,8 @@ describe("FileSystemSearch", () => {
           await Bun.write(path.join(directory, "app/sub/index.ts"), "app")
           await Bun.write(path.join(directory, "lib/index.ts"), "lib")
           await symlink("../.agents/AGENTS.md", path.join(directory, "lib/AGENTS.md"))
+          // Broken until its target appears later: the directory must stay on the refresh list.
+          await symlink("../../shared/rules.txt", path.join(directory, "app/sub/AGENTS.md"))
         })
         const listed: string[] = []
         const environment = Environment.node.mapLayer((base) =>
@@ -469,9 +471,10 @@ describe("FileSystemSearch", () => {
           expect(yield* find("AGENTS")).toEqual(["lib/AGENTS.md"])
           expect(listed.sort()).toEqual(["", "app", "app/sub", "lib"])
 
-          // Links added to the root, to a directory that already holds links and to a new directory are found;
-          // the unchanged link-free directories are not listed again.
+          // Links added to the root, to a directory that already holds links and to a new directory are found,
+          // and so is a broken link once its target exists; the unchanged symlink-free directories are not listed again.
           yield* Effect.promise(async () => {
+            await Bun.write(path.join(directory, "shared/rules.txt"), "rules")
             await Bun.write(path.join(directory, "docs/index.ts"), "docs")
             await symlink(".agents/AGENTS.md", path.join(directory, "AGENTS.md"))
             await symlink("../.agents/AGENTS.md", path.join(directory, "lib/CLAUDE.md"))
@@ -482,9 +485,9 @@ describe("FileSystemSearch", () => {
           const refreshed = yield* Effect.gen(function* () {
             yield* Effect.yieldNow
             return yield* find("md")
-          }).pipe(Effect.repeat({ until: (paths) => paths.length === 4 }))
-          expect(refreshed).toEqual(["AGENTS.md", "docs/AGENTS.md", "lib/AGENTS.md", "lib/CLAUDE.md"])
-          expect(listed.sort()).toEqual(["", "docs", "lib"])
+          }).pipe(Effect.repeat({ until: (paths) => paths.length === 5 }))
+          expect(refreshed).toEqual(["AGENTS.md", "app/sub/AGENTS.md", "docs/AGENTS.md", "lib/AGENTS.md", "lib/CLAUDE.md"])
+          expect(listed.sort()).toEqual(["", "app/sub", "docs", "lib", "shared"])
         }).pipe(Effect.provide(layer))
       }),
   )
