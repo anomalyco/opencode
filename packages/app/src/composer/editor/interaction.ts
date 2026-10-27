@@ -262,17 +262,14 @@ export function createComposerEditor(input: {
     if (state.popover.type !== "history") return list().flat()
     const query = state.popover.query.trim().toLowerCase()
 
-    return history()
-      .filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
-      .toReversed()
+    return history().filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
   }
 
   const execute = (command: ComposerInteractionCommand) => {
     if (command.type === "history.preview") {
       const item = history().find((entry) => entry.id === command.id)
 
-      if (item?.history)
-        applyHistory(item.history, { focus: state.popover.type === "history" && !state.popover.searching })
+      if (item?.history) applyHistory(item.history, { focus: false })
 
       return
     }
