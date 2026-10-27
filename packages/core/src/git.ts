@@ -522,9 +522,15 @@ const layer = Layer.effect(
           path.join(input.seed.commonDirectory, "objects") + "\n",
         )
         .pipe(Effect.mapError(operationError("Failed to configure shared Git objects")))
-      yield* fs
-        .copyFile(path.join(input.seed.gitDirectory, "index"), path.join(input.directory, "index"))
-        .pipe(Effect.ignore)
+      const index = path.join(input.directory, "index")
+      yield* seedIndex(
+        new Repository({ worktree: input.worktree, gitDirectory: input.directory, commonDirectory: input.directory }),
+        input.seed,
+        index,
+      ).pipe(
+        Effect.catch(() => fs.remove(index, { force: true })),
+        Effect.ignore,
+      )
     })
 
     /**
@@ -698,6 +704,29 @@ const layer = Layer.effect(
             mtime,
           )
           .pipe(Effect.ignore)
+    })
+
+    /**
+     * Copy the source index into the store. A split index names a shared index file in
+     * its own Git directory, so those files are linked in just long enough to rewrite the
+     * copy as a complete index.
+     */
+    const seedIndex = Effect.fnUntraced(function* (store: Repository, source: Repository, target: string) {
+      yield* copyIndex(path.join(source.gitDirectory, "index"), target)
+      const shared = (yield* fs.readDirectory(source.gitDirectory)).filter((entry) => entry.startsWith("sharedindex."))
+      if (shared.length === 0) return
+      yield* Effect.forEach(shared, (entry) => {
+        const from = path.join(source.gitDirectory, entry)
+        const to = path.join(store.gitDirectory, entry)
+        return fs.link(from, to).pipe(Effect.catch(() => fs.copyFile(from, to)))
+      }).pipe(
+        Effect.andThen(repositoryOperation("refresh", store, ["update-index", "--no-split-index"], { index: target })),
+        Effect.ensuring(
+          Effect.forEach(shared, (entry) =>
+            fs.remove(path.join(store.gitDirectory, entry), { force: true }).pipe(Effect.ignore),
+          ),
+        ),
+      )
     })
 
     /**
@@ -915,7 +944,7 @@ const layer = Layer.effect(
       const temporary = temporaryIndex(repository)
       // The source's stat cache and cache-tree spare recovery from rehashing every tracked file.
       const copied = source
-        ? yield* copyIndex(path.join(source.gitDirectory, "index"), temporary).pipe(
+        ? yield* seedIndex(repository, source, temporary).pipe(
             Effect.as(true),
             Effect.orElseSucceed(() => false),
           )

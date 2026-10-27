@@ -3,7 +3,7 @@ import type { Diagnostic } from "../codemode.js"
 import { locate, normalizeError } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { MAX_PENDING_PROMISES } from "./limits.js"
-import { type AstNode, type GeneratorRequestKind, rangeError, Throw, typeError } from "./model.js"
+import { type AstNode, type GeneratorRequestKind, PendingThrow, rangeError, Throw, typeError } from "./model.js"
 import { fn } from "./native.js"
 import { type Callable, get, Obj, PromiseObj, type Value } from "./objects.js"
 import { typeofValue } from "./references.js"
@@ -38,9 +38,12 @@ export class Enter {
   ) {}
 }
 
-/** Suspend the innermost async body until `value` settles. */
+/** Suspend the innermost async body until `value` settles; a stall while it waits is reported at `node`. */
 export class Await {
-  constructor(readonly value: Value) {}
+  constructor(
+    readonly value: Value,
+    readonly node?: AstNode,
+  ) {}
 }
 
 /** Suspend the innermost generator body, producing `value`; it continues with the next request. */
@@ -90,7 +93,7 @@ export class AsyncBoundary implements Boundary {
   readonly generator = false
   constructor(
     private readonly settle: (completion: Completion) => void,
-    private readonly result: Value,
+    readonly result: Value,
   ) {}
   finish(completion: Completion): Completion {
     this.settle(completion)
@@ -152,6 +155,8 @@ export class Runner<R> {
   private nextID = 0
   /** Rejections nothing handled yet, described when they happened so reporting them at the end is cheap. */
   private readonly unhandled = new Map<PromiseObj, Diagnostic>()
+  /** Bodies suspended at an `await` and the promise each waits on, so a stall can point at the one that is stuck. */
+  private readonly parked = new Map<Task, { readonly promise: PromiseObj; readonly node: AstNode | undefined }>()
   private readonly fibers = new Set<Fiber.Fiber<unknown, unknown>>()
   private readonly inbox: Array<() => void> = []
   private wake: (() => void) | undefined
@@ -206,8 +211,10 @@ export class Runner<R> {
             continue
           }
           return abrupt(
-            new Error(
-              "Execution stalled: the program is waiting for a promise that nothing can settle (no job is queued and no tool call is running).",
+            new PendingThrow(
+              "Error",
+              "The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. Code Mode has no timers or sleep, so don't wait or poll inside a program.",
+              self.stuckAwait(),
             ),
           )
         }
@@ -462,7 +469,11 @@ export class Runner<R> {
         }
         const boundary = stack[index]!.boundary!
         const continuation = new Task(stack.splice(index))
-        this.then(promise, (settled) => ({ task: continuation, input: settled }))
+        this.parked.set(continuation, { promise, node: signal.node })
+        this.then(promise, (settled) => {
+          this.parked.delete(continuation)
+          return { task: continuation, input: settled }
+        })
         completion = boundary.suspended()
         continue
       }
@@ -481,6 +492,18 @@ export class Runner<R> {
     this.current = undefined
     if (!completion.ok) throw completion.error
     return undefined
+  }
+
+  // The innermost stuck `await`: an outer one waits on the result of a parked async body, so prefer one that does not.
+  // Bodies that wait on each other in a cycle leave no such await; any located one is then as good as another.
+  private stuckAwait(): AstNode | undefined {
+    const results = new Set<Value>()
+    for (const task of this.parked.keys()) {
+      const boundary = task.stack[0]?.boundary
+      if (boundary instanceof AsyncBoundary) results.add(boundary.result)
+    }
+    const located = [...this.parked.values()].filter((parked) => parked.node !== undefined)
+    return (located.find((parked) => !results.has(parked.promise)) ?? located[0])?.node
   }
 
   private dequeue(): Job | undefined {
