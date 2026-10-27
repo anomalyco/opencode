@@ -140,7 +140,7 @@ export class UnknownProviderError extends Schema.TaggedError<UnknownProviderErro
 /** A caller-supplied deadline elapsed, such as `Generation.await` polling past its `Poll.timeout`. */
 export class TimeoutError extends Schema.TaggedError<TimeoutError>("AI.Error.Timeout")("Timeout", {
   ...ReasonFields,
-  timeoutMs: Schema.optional(Schema.Number),
+  timeoutMs: Schema.optional(NonNegativeInt),
 }) {}
 
 export const AIErrorReason = Schema.Union([

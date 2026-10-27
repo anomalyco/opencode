@@ -5,8 +5,8 @@ import {
   Equal,
   FiberHandle,
   Option,
+  Predicate,
   Schema,
-  SchemaGetter,
   Scope,
   Semaphore,
   Stream,
@@ -17,58 +17,20 @@ import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
+import { Config } from "../../config.js"
+import { ConfigIntegration } from "../../config/integration.js"
+import { ConfigProviderPlugin } from "../../config/plugin/provider.js"
+import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { ManagedPolicy } from "../../managed-policy.js"
-import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
-import { Variant } from "../../variant.js"
 import { WebSearch } from "../../websearch.js"
-import { ConfigPolicy } from "@opencode/schema/config/policy"
-import { ConfigProvider } from "@opencode/schema/config/provider"
-import { Mcp } from "@opencode/schema/mcp"
-import { Money } from "@opencode/schema/money"
+import { OpencodeLegacy } from "./opencode-legacy.js"
 
-const defaultServer = "https://opencode.ai/console"
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
-// Drop statements whose action or effect is a value this version does not know, so a newer Console can
-// extend either enum. Malformed statements still fail validation.
-const RemotePolicies = Schema.Array(Schema.Unknown).pipe(
-  Schema.decodeTo(Schema.Unknown, {
-    decode: SchemaGetter.transform((policies) =>
-      policies.filter((policy) => {
-        const action = Schema.decodeUnknownOption(Schema.Struct({ action: Schema.String }))(policy)
-        if (Option.isSome(action) && !Schema.is(ConfigPolicy.Info.fields.action)(action.value.action)) return false
-        const effect = Schema.decodeUnknownOption(Schema.Struct({ effect: Schema.String }))(policy)
-        return Option.isNone(effect) || Schema.is(ConfigPolicy.Effect)(effect.value.effect)
-      }),
-    ),
-    encode: SchemaGetter.passthrough({ strict: false }),
-  }),
-  Schema.decodeTo(Schema.Array(ConfigPolicy.Info)),
-  Schema.optional,
-)
-const RemoteResponse = Schema.Struct({
-  providers: Schema.Record(Schema.String, ConfigProvider.Info),
-  websearch: Schema.Struct({
-    providerID: WebSearch.ID,
-  }).pipe(Schema.optional),
-  // MCP servers by name, in the same shape as a remote server in local config. Only remote servers are
-  // accepted so the Console can never make the client run a command. `auth: "console"` asks the client
-  // to attach its own Console credential to that server's requests.
-  mcp: Schema.Struct({
-    servers: Schema.Record(
-      Schema.String,
-      Schema.Struct({ ...Mcp.RemoteConfig.fields, auth: Schema.Literal("console").pipe(Schema.optional) }),
-    ),
-  }).pipe(Schema.optional),
-  // Organization policy compiled for the authenticated caller; omitted when there is none.
-  // `experimental.policies` remains accepted alongside top-level `policies`.
-  policies: RemotePolicies,
-  experimental: Schema.Struct({ policies: RemotePolicies }).pipe(Schema.optional),
-})
 const Device = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
@@ -128,13 +90,13 @@ function oauth(http: HttpClient.HttpClient) {
           type: "string",
           format: "uri",
           hidden: true,
-          default: defaultServer,
+          default: ConsoleAccess.defaultServer,
         },
       ],
     },
     authorize: (answer) =>
       Effect.gen(function* () {
-        const server = yield* normalizeServer(answer.server ?? defaultServer)
+        const server = yield* normalizeServer(answer.server ?? ConsoleAccess.defaultServer)
         const device = yield* post(
           http,
           `${server}/auth/device/code`,
@@ -159,7 +121,7 @@ function oauth(http: HttpClient.HttpClient) {
       }),
     refresh: (credential) =>
       Effect.gen(function* () {
-        const response = yield* send(http, `${serverUrl(credential)}/auth/device/token`, {
+        const response = yield* send(http, `${ConsoleAccess.server(credential)}/auth/device/token`, {
           grant_type: "refresh_token",
           refresh_token: credential.refresh,
           client_id: clientID,
@@ -194,7 +156,9 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | ManagedPolicy.Service | Scope.Scope>({
+export const OpencodePlugin = define<
+  HttpClient.HttpClient | Bus.Service | Config.Service | ManagedPolicy.Service | Scope.Scope
+>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
@@ -204,18 +168,17 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const managed = yield* ManagedPolicy.Service
+    const config = yield* Config.Service
     const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
-      config: typeof RemoteResponse.Type | undefined
+      // The Console response in one of its two formats: a regular OpenCode config, merged as an integration config
+      // layer, or the legacy response, which OpencodeLegacy applies directly.
+      remote: { type: "config"; info: ConfigIntegration.Remote } | OpencodeLegacy.Snapshot | undefined
       connection: ActiveConnection
       organization: string | undefined
-      // Console MCP servers carry the credential in their headers, so a rotated token changes the snapshot.
-      mcp:
-        | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
-        | undefined
-    } = { config: undefined, connection: undefined, organization: undefined, mcp: undefined }
+    } = { remote: undefined, connection: undefined, organization: undefined }
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
@@ -227,7 +190,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { config: undefined, connection, organization: undefined, mcp: undefined }
+        return { remote: undefined, connection, organization: undefined }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
@@ -236,13 +199,15 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ config: undefined, connection, organization: undefined, mcp: undefined })
+            return Effect.succeed({ remote: undefined, connection, organization: undefined })
           return fetchConfig(http, credential).pipe(
-            Effect.map((config) => ({
-              config,
+            Effect.map((remote) => ({
+              remote:
+                remote?.type === "legacy"
+                  ? OpencodeLegacy.make(remote.response, ConsoleAccess.headers(credential))
+                  : remote,
               connection,
               organization: organizationName(credential),
-              mcp: config?.mcp && { servers: config.mcp.servers, headers: credentialHeaders(credential) },
             })),
           )
         }),
@@ -256,18 +221,98 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             // A load that fails for the connection already in place keeps its last config: dropping it
             // would lift organization policy while personal credentials keep working.
             return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-              ? { config: snapshot.config, connection, organization: snapshot.organization, mcp: snapshot.mcp }
-              : { config: undefined, connection, organization: undefined, mcp: undefined }
+              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
+              : { remote: undefined, connection, organization: undefined }
           }),
         ),
       )
     })
-    // Statements ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
-    const publish = (next: typeof snapshot) =>
-      managed.set({
-        statements: [...(next.config?.experimental?.policies ?? []), ...(next.config?.policies ?? [])],
-        organization: next.organization,
-      })
+    // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
+    // where the legacy overlay applies, while the rest of the document merges through config.
+    let integrated: ConfigIntegration.Document | undefined
+    const integrate = Effect.fnUntraced(function* (document: ConfigIntegration.Document | undefined) {
+      yield* config.integration?.(Integration.ID.make("opencode"), document) ?? Effect.void
+      integrated = (yield* config.entries()).find(
+        (entry): entry is ConfigIntegration.Document =>
+          entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
+      )
+    })
+    // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
+    const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
+      switch (next.remote?.type) {
+        // A regular config merges as one integration document, which config loads right after managed policies,
+        // so its policies reach ManagedPolicy through config rather than as Console statements.
+        case "config":
+          yield* managed.set({ statements: [], organization: next.organization })
+          return yield* integrate(
+            next.connection &&
+              ConfigIntegration.make({
+                integrationID: Integration.ID.make("opencode"),
+                connection:
+                  next.connection.type === "credential"
+                    ? { ...next.connection, id: Credential.ID.make(next.connection.id) }
+                    : next.connection,
+                organization: next.organization,
+                info: next.remote.info,
+              }),
+          )
+        case "legacy":
+          yield* managed.set({ statements: OpencodeLegacy.statements(next.remote), organization: next.organization })
+          return yield* integrate(undefined)
+        default:
+          yield* managed.set({ statements: [], organization: next.organization })
+          return yield* integrate(undefined)
+      }
+    })
+    const search = (providerID: WebSearch.ID, connection: NonNullable<ActiveConnection>) => ({
+      id: providerID,
+      name: "OpenCode Web Search",
+      execute: (input: WebSearch.ProviderInput) =>
+        Effect.gen(function* () {
+          const active = yield* ctx.integration.connection.active("opencode")
+          if (
+            !active ||
+            (connection.type === "credential"
+              ? active.type !== "credential" || active.id !== connection.id
+              : active.type !== "env" || active.name !== connection.name)
+          ) {
+            return yield* Effect.fail(new Error("OpenCode Console connection changed"))
+          }
+          const credential = yield* ctx.integration.connection.resolve(active)
+          if (!credential || credential.type === "external")
+            return yield* Effect.fail(new Error("OpenCode Console is not connected"))
+          const metadata = credential.metadata
+          const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
+          const token = credential.type === "oauth" ? credential.access : credential.key
+          const server = yield* normalizeServer(ConsoleAccess.server(credential))
+          const request = yield* HttpClientRequest.post(`${server}/api/websearch`).pipe(
+            HttpClientRequest.acceptJson,
+            HttpClientRequest.bearerToken(token),
+            HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
+            HttpClientRequest.schemaBodyJson(WebSearch.Input)({
+              query: input.query,
+              providerID,
+            }),
+          )
+          const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
+            .execute(request)
+            .pipe(
+              Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+              Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
+              Effect.scoped,
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(25),
+                orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+              }),
+            )
+          if (response.providerID !== providerID) {
+            return yield* Effect.fail(
+              new Error(`OpenCode web search returned provider ${response.providerID} instead of ${providerID}`),
+            )
+          }
+          return response.results
+        }),
+    })
 
     yield* ctx.integration.transform((editor) => {
       editor.update("opencode", (integration) => {
@@ -279,90 +324,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
 
     snapshot = yield* load()
     yield* publish(snapshot)
+    yield* OpencodeLegacy.register(ctx, () => snapshot, search)
     yield* ctx.provider.transform((providers) => {
-      for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {
-        const source = providers.get(item.canonical ?? providerID)
-        providers.update(providerID, (provider) => {
-          if (source && source.provider !== provider)
-            Object.assign(provider, structuredClone(source.provider), { id: provider.id })
-          provider.integrationID = Integration.ID.make("opencode")
-          if (item.canonical !== undefined) provider.canonical = item.canonical
-          if (item.name !== undefined) provider.name = item.name
-          provider.package = item.package ?? provider.package
-          provider.settings = Provider.mergeOverlay(
-            withoutCredentials(provider.settings),
-            withoutCredentials(item.settings),
-          )
-          provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
-          provider.body = Provider.mergeOverlay(provider.body, item.body)
-        })
-
-        for (const [modelID, config] of Object.entries(item.models ?? {})) {
-          const base = source?.models.get(config.modelID ?? modelID) ?? source?.models.get(modelID)
-          providers.models.update(providerID, modelID, (model) => {
-            Object.assign(model, structuredClone(base ?? model))
-            if (config.family !== undefined) model.family = config.family
-            if (config.name !== undefined) model.name = config.name
-            if (config.modelID !== undefined) model.modelID = config.modelID
-            if (config.releaseDate !== undefined) model.time = { released: Date.parse(config.releaseDate) }
-            if (config.compatibility !== undefined)
-              model.compatibility = { ...model.compatibility, ...config.compatibility }
-            model.package = config.package ?? (item.package !== undefined ? undefined : model.package)
-            if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
-            if (config.capabilities !== undefined)
-              model.capabilities = Model.mergeCapabilities(config.capabilities, model.capabilities)
-            model.settings = Provider.mergeOverlay(
-              withoutCredentials(model.settings),
-              withoutCredentials(config.settings),
-            )
-            model.headers = Provider.mergeHeaders(model.headers, config.headers)
-            model.body = Provider.mergeOverlay(model.body, config.body)
-            if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }
-          })
-          // Variants are spelled for the final package, which the update above normalizes from `aisdk:*`.
-          providers.models.update(providerID, modelID, (model) => {
-            // The Console's reasoning replaces the base variants; its variants still overlay them below.
-            if (config.capabilities?.reasoning !== undefined)
-              model.variants = [
-                ...Variant.resolve(
-                  { ...model, package: model.package ?? providers.get(providerID)?.provider.package },
-                  Variant.supports(config.capabilities.reasoning),
-                ),
-              ]
-            for (const variant of config.variants ?? []) {
-              let existing = model.variants.find((item) => item.id === variant.id)
-              if (!existing) {
-                existing = { id: variant.id }
-                model.variants.push(existing)
-              }
-              if (variant.settings !== undefined)
-                existing.settings = Provider.mergeOverlay(existing.settings, withoutCredentials(variant.settings))
-              if (variant.headers !== undefined)
-                existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
-              if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
-            }
-            if (config.cost !== undefined)
-              model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
-                tier: cost.tier && { ...cost.tier },
-                input: cost.input,
-                output: cost.output,
-                cache: {
-                  read: cost.cache?.read ?? Money.USDPerMillionTokens.zero,
-                  write: cost.cache?.write ?? Money.USDPerMillionTokens.zero,
-                },
-              }))
-            model.enabled = !config.disabled
-          })
-        }
-        const configured = providers.get(providerID)
-        if (configured)
-          providers.add({
-            info: configured.provider,
-            models: Array.from(configured.models.values()),
-            sourceConnection: snapshot.connection,
-          })
-      }
-
+      if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
+    })
+    yield* ctx.provider.transform((providers) => {
       const item = providers.get(Provider.ID.opencode)
       if (!item) return
       const hasKey = Boolean(process.env.OPENCODE_API_KEY || snapshot.connection || item.provider.settings?.apiKey)
@@ -389,74 +355,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
         })
       }
     })
-
+    // Like any search plugin, the Console's provider is available whenever it is connected; the Console's config
+    // selects it as the default through config, where the user's own selection wins.
     yield* ctx.websearch.transform((editor) => {
-      const descriptor = snapshot.config?.websearch
-      const connection = snapshot.connection
-      if (!descriptor || !connection) return
-      editor.add({
-        id: descriptor.providerID,
-        name: "OpenCode Web Search",
-        execute: (input) =>
-          Effect.gen(function* () {
-            const active = yield* ctx.integration.connection.active("opencode")
-            if (
-              !active ||
-              (connection.type === "credential"
-                ? active.type !== "credential" || active.id !== connection.id
-                : active.type !== "env" || active.name !== connection.name)
-            ) {
-              return yield* Effect.fail(new Error("OpenCode Console connection changed"))
-            }
-            const credential = yield* ctx.integration.connection.resolve(active)
-            if (!credential || credential.type === "external")
-              return yield* Effect.fail(new Error("OpenCode Console is not connected"))
-            const metadata = credential.metadata
-            const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
-            const token = credential.type === "oauth" ? credential.access : credential.key
-            const server = yield* normalizeServer(serverUrl(credential))
-            const request = yield* HttpClientRequest.post(`${server}/api/websearch`).pipe(
-              HttpClientRequest.acceptJson,
-              HttpClientRequest.bearerToken(token),
-              HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
-              HttpClientRequest.schemaBodyJson(WebSearch.Input)({
-                query: input.query,
-                providerID: descriptor.providerID,
-              }),
-            )
-            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-              .execute(request)
-              .pipe(
-                Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-                Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
-                Effect.scoped,
-                Effect.timeoutOrElse({
-                  duration: Duration.seconds(25),
-                  orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
-                }),
-              )
-            if (response.providerID !== descriptor.providerID) {
-              return yield* Effect.fail(
-                new Error(
-                  `OpenCode web search returned provider ${response.providerID} instead of ${descriptor.providerID}`,
-                ),
-              )
-            }
-            return response.results
-          }),
-      })
-      editor.default.set(descriptor.providerID)
-    })
-
-    yield* ctx.mcp.transform((editor) => {
-      const mcp = snapshot.mcp
-      if (!mcp) return
-      for (const [name, server] of Object.entries(mcp.servers)) {
-        // A server the user configured under the same name wins.
-        if (editor.get(name)) continue
-        const { auth, ...config } = server
-        editor.set(name, auth === "console" ? { ...config, headers: { ...config.headers, ...mcp.headers } } : config)
-      }
+      if (snapshot.remote?.type === "config" && snapshot.connection)
+        editor.add(search(WebSearch.ID.make("opencode"), snapshot.connection))
     })
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
@@ -505,7 +408,14 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
       explainers = yield* Effect.forEach(
-        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.config?.providers ?? {})]) : [],
+        next.connection
+          ? new Set([
+              Provider.ID.opencode,
+              ...(next.remote?.type === "config"
+                ? Object.keys(next.remote.info.providers ?? {})
+                : OpencodeLegacy.providerIDs(next.remote)),
+            ])
+          : [],
         (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
@@ -534,9 +444,9 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
   // Scoped so responses whose body is never read (404, errors) are released here instead of by a GC-time abort.
   return HttpClient.withScope(http)
     .execute(
-      HttpClientRequest.get(`${serverUrl(value)}/api/v2/config`).pipe(
+      HttpClientRequest.get(`${ConsoleAccess.server(value)}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
-        HttpClientRequest.setHeaders(credentialHeaders(value)),
+        HttpClientRequest.setHeaders(ConsoleAccess.headers(value)),
       ),
     )
     .pipe(
@@ -552,12 +462,14 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
             if (Option.isSome(body))
               return yield* new SsoRequiredError({
                 organization: organizationName(value),
-                url: yield* ssoUrl(serverUrl(value), body.value.connectionId),
+                url: yield* ssoUrl(ConsoleAccess.server(value), body.value.connectionId),
               })
           }
-          return yield* HttpClientResponse.filterStatusOk(response).pipe(
-            Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
-          )
+          const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
+          // A Console that serves a regular OpenCode config marks it with `$schema`; any other body is the legacy response.
+          if (Predicate.hasProperty(body, "$schema"))
+            return { type: "config" as const, info: yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body) }
+          return { type: "legacy" as const, response: yield* Schema.decodeUnknownEffect(OpencodeLegacy.Response)(body) }
         }),
       ),
       Effect.scoped,
@@ -591,28 +503,6 @@ function connectionStatus(cause: unknown): IntegrationConnection.Status | undefi
 
 function organizationName(credential: Credential.Value) {
   return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
-}
-
-function credentialHeaders(value: Credential.Key | Credential.OAuth): Record<string, string> {
-  const orgID = value.metadata?.orgID
-  return {
-    authorization: `Bearer ${value.type === "oauth" ? value.access : value.key}`,
-    ...(typeof orgID === "string" ? { "x-org-id": orgID } : {}),
-  }
-}
-
-function serverUrl(value: Credential.Value) {
-  const server = typeof value.metadata?.server === "string" ? value.metadata.server : defaultServer
-  // Credentials saved before August 2026 store the retired console.opencode.ai host, which maps path-for-path onto
-  // the default server; rewriting it lets that host be shut down without forcing those users to reconnect.
-  return server.replace(/^https:\/\/console\.opencode\.ai(?=\/|$)/, defaultServer)
-}
-
-function withoutCredentials<Value>(body: Readonly<Record<string, Value>> | undefined) {
-  return (
-    body &&
-    Object.fromEntries(Object.entries(body).filter(([key]) => !["apiKey", "authToken", "accessToken"].includes(key)))
-  )
 }
 
 function normalizeServer(input: unknown) {

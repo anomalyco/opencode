@@ -49,22 +49,44 @@ export function shellResultFailed(metadata: Record<string, unknown>) {
   return metadata.timeout === true || (typeof metadata.exit === "number" && metadata.exit !== 0)
 }
 
-export function executeToolFailed(metadata: Record<string, unknown>) {
+function executeToolFailed(metadata: Record<string, unknown>) {
   // Code Mode can report failed nested calls in a completed tool result.
+  return metadata.error === true || executeToolCalls(metadata).some((call) => call.status === "error")
+}
+
+const decodeExecuteCall = Schema.decodeUnknownOption(
+  Schema.Struct({
+    tool: Schema.String,
+    status: Schema.Literals(["running", "completed", "error"]),
+    input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+)
+
+export type ExecuteToolCall = Option.Option.Value<ReturnType<typeof decodeExecuteCall>>
+
+// Code Mode streams the tools a script calls through metadata rather than child tool parts.
+export function executeToolCalls(metadata: Record<string, unknown>): ExecuteToolCall[] {
   const calls = metadata.toolCalls
 
-  return (
-    metadata.error === true ||
-    (Array.isArray(calls) &&
-      calls.some(
-        (call) =>
-          call !== null &&
-          typeof call === "object" &&
-          !Array.isArray(call) &&
-          "status" in call &&
-          call.status === "error",
-      ))
-  )
+  if (!Array.isArray(calls)) return []
+
+  return calls.flatMap((call) => Option.toArray(decodeExecuteCall(call)))
+}
+
+export function executeToolCallArgs(call: ExecuteToolCall) {
+  return Object.entries(call.input ?? {})
+    .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+    .map(([key, value]) => `${key}=${String(value).replace(/\s+/g, " ")}`)
+}
+
+// Collapsed rows name the failed call, or else the latest one.
+export function executeToolSubtitle(calls: readonly ExecuteToolCall[]) {
+  const call = calls.find((item) => item.status === "error") ?? calls.at(-1)
+
+  if (!call) return undefined
+  const args = executeToolCallArgs(call)
+
+  return args.length ? `${call.tool} [${args.join(", ")}]` : call.tool
 }
 
 export function currentToolHasLoadedFiles(tool: SessionMessageAssistantTool) {

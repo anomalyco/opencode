@@ -13,7 +13,19 @@ export function createHoverCommentUtility(props: {
   const button = document.createElement("button")
   button.type = "button"
   button.ariaLabel = props.label
-  button.textContent = "+"
+  // A drawn plus, unlike a "+" glyph, is centered regardless of the font's metrics.
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+  icon.setAttribute("width", "12")
+  icon.setAttribute("height", "12")
+  icon.setAttribute("viewBox", "0 0 12 12")
+  icon.setAttribute("fill", "none")
+  icon.setAttribute("aria-hidden", "true")
+  const plus = document.createElementNS("http://www.w3.org/2000/svg", "path")
+  plus.setAttribute("d", "M6 2V10M2 6H10")
+  plus.setAttribute("stroke", "currentColor")
+  plus.setAttribute("stroke-width", "1.5")
+  icon.append(plus)
+  button.append(icon)
   button.style.width = "20px"
   button.style.height = "20px"
   button.style.display = "flex"
@@ -24,8 +36,7 @@ export function createHoverCommentUtility(props: {
   button.style.background = "var(--icon-interactive-base)"
   button.style.color = "var(--white)"
   button.style.boxShadow = "var(--shadow-xs)"
-  button.style.fontSize = "14px"
-  button.style.lineHeight = "1"
+  button.style.padding = "0"
   button.style.cursor = "pointer"
   button.style.position = "relative"
   button.style.left = "30px"

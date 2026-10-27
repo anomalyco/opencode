@@ -14,3 +14,4 @@
 - Never copy Figma's generated `leading-none` onto text. Inter descenders clip when a solid `13px` line box meets `overflow: hidden`, `overflow: clip`, or truncation.
 - Keep fixed row dimensions explicit; correct inner line metrics do not require transforms, negative margins, or paint-space compensation.
 - `TextShimmer` inherits font metrics, so put typography overrides on its parent.
+- Fonts follow the Fonts section of `packages/app/AGENTS.md`. Commands, code and paths shown as code use the code font with the timeline shell metrics; never write a literal family or add font files here.

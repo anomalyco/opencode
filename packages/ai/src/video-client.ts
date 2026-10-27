@@ -22,7 +22,6 @@ export const VideoClient = {
       ...response.videos.map((video, index) => VideoOutputEvent.make({ index, video })),
       VideoFinishEvent.make({
         usage: response.usage,
-        notices: response.notices,
         providerMetadata: response.providerMetadata,
       }),
     ],

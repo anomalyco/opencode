@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/index.js"
+import { LLM, LLMRequest, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"

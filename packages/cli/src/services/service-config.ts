@@ -2,7 +2,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
@@ -38,23 +38,28 @@ const decodeLegacy = Schema.decodeUnknownOption(
 )
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
+// Released channels share one service, port and database, so switching between stable and beta keeps the same sessions.
+// Dev builds come from every merge to dev and run their own: sharing let a dev build replace the stable server, and a
+// beta app then adopt that dev server.
 export function filename(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
+  if (channel === "latest" || channel === "beta" || channel === "next") return "service.json"
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
 export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
   const port = channelPort(channel)
-  // Windows hands out 0xC000-0xFFFF for outgoing connections, and Hyper-V and WinNAT reserve blocks of that range at
-  // boot, so a port there can fail as in use while nothing listens on it. Moving into the 0xB000 block keeps the low
-  // 12 bits: 0xC0DE becomes 0xB0DE, which is 0xC0DE - 4096, a nod to the v1 port.
-  if (platform === "win32" && port >= 0xc000) return 0xb000 | (port & 0xfff)
+  // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
+  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
+  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
+  // 12 bits: 0xC0DE becomes 0x70DE.
+  if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
   return port
 }
 
 function channelPort(channel: string) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
+  if (channel === "latest" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
+  if (channel === "dev") return 0xc0e0
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
 }
 
@@ -124,11 +129,24 @@ const paths = Effect.gen(function* () {
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
+      // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
+      // older build and is left for a released client to replace.
+      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
+        ? [path.join(global.state, "service.json")]
+        : []),
     ],
     configFile: path.join(global.config, name),
   }
 })
+
+// Clients find the service at its registration under XDG_STATE_HOME. A saved value would move the
+// registration away from them, and children of the service (tool shells, a relaunched Desktop) would
+// look for it in the wrong place, so the service keeps the state directory it was launched with.
+export function processEnv(env: Info["env"]) {
+  if (env === undefined) return undefined
+  const { XDG_STATE_HOME: _state, ...rest } = env
+  return rest
+}
 
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
@@ -136,12 +154,8 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: (yield* read()).env,
-    command: [
-      ...selfCommand(),
-      "serve",
-      "--service",
-    ],
+    env: processEnv((yield* read()).env),
+    command: [...selfCommand(), "serve", "--service"],
   }
 })
 
@@ -168,10 +182,10 @@ function route() {
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   const { fs, configFile } = yield* paths
-  const temp = configFile + ".tmp"
+  const temp = configFile + "." + process.pid + ".tmp"
   yield* fs.makeDirectory(path.dirname(configFile), { recursive: true })
   yield* fs.writeFileString(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })
-  yield* fs.rename(temp, configFile)
+  yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
 })
 
 export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {

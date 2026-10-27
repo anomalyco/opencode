@@ -24,40 +24,27 @@ export type ID = typeof ID.Type
 export const Source = Permission.Source
 export type Source = typeof Source.Type
 
-const RequestFields = {
-  sessionID: Permission.Request.fields.sessionID,
-  action: Permission.Request.fields.action,
-  resources: Permission.Request.fields.resources,
-  save: Permission.Request.fields.save,
-  metadata: Permission.Request.fields.metadata,
-  source: Permission.Request.fields.source,
-}
-
 export const Request = Permission.Request
 export type Request = typeof Request.Type
 
 export const Reply = Permission.Reply
 export type Reply = typeof Reply.Type
 
-export const AssertInput = Schema.Struct({
-  id: ID.pipe(Schema.optional),
-  ...RequestFields,
-  agent: Agent.ID.pipe(Schema.optional),
-}).annotate({ identifier: "Permission.AssertInput" })
-export type AssertInput = typeof AssertInput.Type
+export interface AssertInput extends Omit<Request, "id" | "message"> {
+  readonly id?: ID
+  readonly agent?: Agent.ID
+}
 
-export const ReplyInput = Schema.Struct({
-  requestID: ID,
-  reply: Reply,
-  message: Schema.String.pipe(Schema.optional),
-}).annotate({ identifier: "Permission.ReplyInput" })
-export type ReplyInput = typeof ReplyInput.Type
+export interface ReplyInput {
+  readonly requestID: ID
+  readonly reply: Reply
+  readonly message?: string
+}
 
-export const AskResult = Schema.Struct({
-  id: ID,
-  effect: Permission.Effect,
-}).annotate({ identifier: "Permission.AskResult" })
-export type AskResult = typeof AskResult.Type
+export interface AskResult {
+  readonly id: ID
+  readonly effect: Permission.Effect
+}
 
 export { Event } from "@opencode/schema/permission"
 

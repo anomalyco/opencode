@@ -13,5 +13,5 @@
 ## Deviations
 
 - Lives under `script/oxlint/` rather than `tools/oxlint/`, next to the repository's other lint tooling in `script/`.
-- `.oxlintrc.json` enables the rules only for the GUI packages: `app`, `desktop`, `gui-extensions`, `ui` and `session-ui`. The Effect rules skip `ui`, which has no direct `effect` dependency.
+- `.oxlintrc.json` enables the rules only for the GUI packages: `app`, `desktop`, `gui-plugins`, the GUI SDK in `plugin/src/gui`, `ui` and `session-ui`. The Effect rules skip `ui`, which has no direct `effect` dependency.
 - The rules run at `warn`, not `error`, while existing findings are fixed package by package.

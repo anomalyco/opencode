@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LLM, Message, ToolCallPart } from "../../src/effect.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { Auth } from "../../src/route/auth.js"

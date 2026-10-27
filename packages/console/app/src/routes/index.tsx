@@ -187,19 +187,7 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>{i18n.t("home.what.lsp.title")}</strong> {i18n.t("home.what.lsp.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
                   <strong>{i18n.t("home.what.multiSession.title")}</strong> {i18n.t("home.what.multiSession.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.shareLinks.title")}</strong> {i18n.t("home.what.shareLinks.body")}
                 </div>
               </li>
               <li>

@@ -1,5 +1,6 @@
 ---
 title: "RPC"
+description: "Expose a plugin's custom methods and events to other plugins and clients."
 ---
 
 Plugins can expose custom methods and events that run on the server and can be
@@ -198,6 +199,29 @@ export default Plugin.define({
   },
 })
 ```
+
+A [GUI plugin](/build/plugins/gui) reads the client of the desktop app's own server from `ctx.client`:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+Read `ctx.client` where you call it: it changes after the server restarts. While the server is unreachable, every call
+rejects.
 
 ### Subscribe
 

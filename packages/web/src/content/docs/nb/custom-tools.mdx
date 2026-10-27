@@ -3,7 +3,7 @@ title: Egendefinerte verktøy
 description: Lag verktøy som LLM kan kalle inn OpenCode.
 ---
 
-Egendefinerte verktøy er funksjoner du oppretter som LLM kan kalle under samtaler. De fungerer sammen med OpenCode sine [innebygde verktøy](/docs/tools) som `read`, `write` og `shell`.
+Egendefinerte verktøy er funksjoner du oppretter som LLM kan kalle under samtaler. De fungerer sammen med OpenCode sine [innebygde verktøy](/docs/tools) som `read`, `write` og `bash`.
 
 ---
 
@@ -83,13 +83,13 @@ Dette lager to verktøy: `math_add` og `math_multiply`.
 
 Egendefinerte verktøy er nøklet etter verktøynavn. Hvis et egendefinert verktøy bruker samme navn som et innebygd verktøy, vil det egendefinerte verktøyet ha forrang.
 
-For eksempel erstatter denne filen det innebygde `shell`-verktøyet:
+For eksempel erstatter denne filen det innebygde `bash`-verktøyet:
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },

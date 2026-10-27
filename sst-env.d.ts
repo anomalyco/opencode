@@ -23,23 +23,7 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
-    "DISCORD_SUPPORT_BOT_TOKEN": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "DISCORD_SUPPORT_CHANNEL_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "EMAILOCTOPUS_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "FEISHU_APP_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "FEISHU_APP_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }

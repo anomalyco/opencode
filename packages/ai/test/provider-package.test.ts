@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { model } from "@opencode/ai/providers/openai"
-import { LLM } from "../src/index.js"
+import { LLM } from "../src/effect.js"
 import { Endpoint } from "../src/route/endpoint.js"
 
 const configuration = (provider: string, message: string) =>

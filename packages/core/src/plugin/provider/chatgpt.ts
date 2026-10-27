@@ -45,6 +45,8 @@ const fallbackModels = new Set([
   "gpt-6-sol-fast",
   "gpt-6.1-sol",
   "gpt-6.1-sol-fast",
+  "gpt-6.1-terra",
+  "gpt-6.1-terra-fast",
 ])
 const nonRetryableSharingCodes = [
   "subscription_sharing_usage_limit_exceeded",

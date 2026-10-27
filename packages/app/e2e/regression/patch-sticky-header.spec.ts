@@ -148,6 +148,7 @@ const scenarios = [
 for (const scenario of scenarios) {
   for (const [width, direction] of [
     [1400, "ltr"],
+    [900, "ltr"],
     [390, "rtl"],
   ] as const) {
     test(`${scenario.name}: file headers stay flush at ${width}px in ${direction}`, async ({ page }, info) => {
@@ -176,7 +177,7 @@ for (const scenario of scenarios) {
       const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
       const toolTitle = scroller.locator('[data-slot="collapsible-trigger"][data-locked]')
       await expect(toolTitle).toHaveCount(scenario.title ? 1 : 0)
-      await expect(scroller.locator("[data-session-title]")).toHaveCount(width === 1400 ? 1 : 0)
+      await expect(scroller.locator("[data-session-title]")).toHaveCount(width >= 768 ? 1 : 0)
 
       for (const file of scenario.files) {
         const name = new RegExp(`${file}\\.ts`)

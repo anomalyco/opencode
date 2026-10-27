@@ -28,7 +28,7 @@ Her izin kuralı şunlardan birine çözümlenir:
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ Ayrıca tüm izinleri aynı anda ayarlayabilirsiniz:
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ Ana dizininize referans vermek için bir modelin başlangıcında `~` veya `$HOM
 
 ### Harici Dizinler
 
-opencode'un başlatıldığı çalışma dizini dışındaki yollara dokunan araç çağrılarına izin vermek için `external_directory` kullanın. Bu, girdi olarak bir yolu alan tüm araçlar için geçerlidir (örneğin `read`, `edit`, `glob`, `grep` ve birçok `shell` komutu).
+opencode'un başlatıldığı çalışma dizini dışındaki yollara dokunan araç çağrılarına izin vermek için `external_directory` kullanın. Bu, girdi olarak bir yolu alan tüm araçlar için geçerlidir (örneğin `read`, `edit`, `glob`, `grep` ve birçok `bash` komutu).
 
 Ana sayfa genişletmesi (`~/...` gibi) yalnızca bir kalıbın nasıl yazıldığını etkiler. Geçerli çalışma alanının harici bir yolunu oluşturmaz, dolayısıyla çalışma dizini dışındaki yollara yine de `external_directory` aracılığıyla izin verilmesi gerekir.
 
@@ -121,7 +121,7 @@ Burada izin verilen herhangi bir dizin, geçerli çalışma alanıyla aynı vars
 }
 ```
 
-Listeyi güvenilir yollara odaklı tutun ve diğer araçlar için gereken ekstra izin verme veya reddetme kurallarını katmanlayın (örneğin `shell`).
+Listeyi güvenilir yollara odaklı tutun ve diğer araçlar için gereken ekstra izin verme veya reddetme kurallarını katmanlayın (örneğin `bash`).
 
 ---
 
@@ -133,7 +133,7 @@ opencode izinleri araç adına ve birkaç güvenlik önlemine göre anahtarlanı
 - `edit` — tüm dosya değişiklikleri (`edit`, `write`, `patch`'i kapsar)
 - `glob` — dosya genellemesi (glob düzeniyle eşleşir)
 - `grep` — içerik arama (regex modeliyle eşleşir)
-- `shell` — kabuk komutlarını çalıştırma (`git status --porcelain` gibi ayrıştırılmış komutlarla eşleşir)
+- `bash` — kabuk komutlarını çalıştırma (`git status --porcelain` gibi ayrıştırılmış komutlarla eşleşir)
 - `task` — alt agent'ların başlatılması (alt agent türüyle eşleşir)
 - `skill` — bir skill yükleniyor (skill adıyla eşleşir)
 - `lsp` — LSP sorgularını çalıştırıyor (şu anda ayrıntılı değil)
@@ -175,7 +175,7 @@ opencode onay istediğinde kullanıcı arayüzü üç sonuç sunar:
 - `always` — önerilen kalıplarla eşleşen gelecekteki istekleri onaylayın (geçerli opencode oturumunun geri kalanı için)
 - `reject` — isteği reddet
 
-`always`'ın onaylayacağı kalıp seti araç tarafından sağlanır (örneğin, shell onayları genellikle `git status*` gibi güvenli bir komut önekini beyaz listeye alır).
+`always`'ın onaylayacağı kalıp seti araç tarafından sağlanır (örneğin, bash onayları genellikle `git status*` gibi güvenli bir komut önekini beyaz listeye alır).
 
 ---
 
@@ -191,7 +191,7 @@ Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı 
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı 
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 
