@@ -266,7 +266,7 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
 
   // If the selected package is a generic chat-completions compatible package
   // (openai-compatible or anthropic-compatible) for a known OpenAI model
-  // that requires the Responses API, upgrade to the native Responses package
+  // that requires the Responses API, upgrade to the compatible Responses package
   // while preserving the provider's base URL. This handles providers like
   // agentrouter, requesty, etc. that only list chat-completions in the catalog
   // but support Responses at the same endpoint.
@@ -274,8 +274,8 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
     packageName === "@opencode/ai/providers/anthropic-compatible"
   const isKnownOpenAIModel = /^gpt-(?:5|6)/i.test(model.id) || /^o[134]/.test(model.id)
   if (isGenericChatCompatible && isKnownOpenAIModel && api.base_url) {
-    const nativeOpenAIResponses = "@opencode/ai/providers/openai/responses"
-    if (Provider.builtinPackages.has(nativeOpenAIResponses)) {
+    const compatibleOpenAIResponses = "@opencode/ai/providers/openai-compatible/responses"
+    if (Provider.builtinPackages.has(compatibleOpenAIResponses)) {
       const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
       const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
       const compatibility = {
@@ -283,10 +283,10 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
         ...(maxTokensField ? { maxTokensField } : {}),
         ...(mediaInput ? { mediaInput } : {}),
       }
-      // Use the native responses package with the provider's base URL
+      // Use the compatible responses package with the provider's base URL
       // This routes to the provider's endpoint (e.g., agentrouter.org/v1) with the Responses protocol
       return {
-        package: nativeOpenAIResponses,
+        package: compatibleOpenAIResponses,
         baseURL: api.base_url,
         ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
       }
