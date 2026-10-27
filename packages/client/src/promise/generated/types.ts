@@ -188,6 +188,27 @@ export type ModelCapabilities = { tools: boolean; input: Array<string>; output: 
 
 export type MoneyUSDPerMillionTokens = number
 
+export type ModelPricingCache = {
+  read?: number
+  write?: number | { [x: string]: number }
+  storage?: number
+  explicit?: { read?: number; write?: number | { [x: string]: number }; storage?: number }
+}
+
+export type ModelPricingCondition = {
+  key: string
+  not?: boolean
+  equals?: string | number | boolean
+  in?: Array<string | number | boolean>
+  gt?: number | string
+  gte?: number | string
+  lt?: number | string
+  lte?: number | string
+  minItems?: number
+}
+
+export type ModelPricingFactor = number | { [x: string]: number }
+
 export type GenerateTextResponse = { data: { text: string } }
 
 export type VoiceTransportType = "webrtc" | "websocket"
@@ -655,6 +676,8 @@ export type ModelCost = {
   output: MoneyUSDPerMillionTokens
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
+
+export type ModelPricingWhen = Array<Array<ModelPricingCondition>>
 
 export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
 
@@ -2003,6 +2026,22 @@ export type FormState =
   | { status: "answered"; answer: FormAnswer }
   | { status: "cancelled"; message?: string }
 
+export type ModelPricingInput = {
+  unit?: string
+  price: number
+  cache?: ModelPricingCache
+  overrides?: Array<{ when: ModelPricingWhen; price?: number; cache?: ModelPricingCache }>
+}
+
+export type ModelPricingOutput = {
+  unit?: string
+  price: number
+  reasoning?: number
+  overrides?: Array<{ when: ModelPricingWhen; price?: number; reasoning?: number }>
+}
+
+export type ModelPricingWebSearch = { price: number; overrides?: Array<{ when: ModelPricingWhen; price?: number }> }
+
 export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
@@ -2413,6 +2452,8 @@ export type SessionMessageAssistantTool1 = {
 
 export type FormFields = [FormField, ...Array<FormField>]
 
+export type ModelPricingModality = { input?: ModelPricingInput; output?: ModelPricingOutput }
+
 export type CredentialEntry = {
   id: CredentialID
   integrationID: IntegrationID
@@ -2435,28 +2476,6 @@ export type AgentInfo = {
   color?: AgentColor
   steps?: number
   permissions: PermissionRuleset
-}
-
-export type ModelInfo = {
-  id: string
-  modelID: string
-  providerID: ProviderID
-  canonical?: ProviderID
-  type?: ModelType
-  family?: string
-  name: string
-  compatibility?: ModelCompatibility
-  package?: string
-  settings?: ModelSettings
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-  capabilities: ModelCapabilities
-  variants: Array<ModelVariant>
-  time: { released: number }
-  cost: Array<ModelCost>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: { context: number; input?: number; output: number }
 }
 
 export type SessionsResponse = {
@@ -2516,6 +2535,16 @@ export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFie
 
 export type IntegrationExternalMethod = { id: IntegrationMethodID; type: "external"; label: string; form?: FormFields }
 
+export type ModelPricing = {
+  serviceTier?: string
+  text?: ModelPricingModality
+  image?: ModelPricingModality
+  audio?: ModelPricingModality
+  video?: ModelPricingModality
+  webSearch?: ModelPricingWebSearch
+  multipliers?: Array<{ when: ModelPricingWhen; factor: ModelPricingFactor }>
+}
+
 export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
 export type SessionMessageInfo =
@@ -2547,6 +2576,29 @@ export type IntegrationMethod =
   | IntegrationKeyMethod
   | IntegrationExternalMethod
   | IntegrationEnvMethod
+
+export type ModelInfo = {
+  id: string
+  modelID: string
+  providerID: ProviderID
+  canonical?: ProviderID
+  type?: ModelType
+  family?: string
+  name: string
+  compatibility?: ModelCompatibility
+  package?: string
+  settings?: ModelSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+  capabilities: ModelCapabilities
+  variants: Array<ModelVariant>
+  time: { released: number }
+  cost: Array<ModelCost>
+  pricing?: ModelPricing
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: { context: number; input?: number; output: number }
+}
 
 export type FormCreated = {
   id: EventID

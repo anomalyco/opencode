@@ -97,6 +97,7 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+          model.pricing = { text: { input: { price: 1 }, output: { price: 2 } } }
           model.cost = [
             {
               input: Money.USDPerMillionTokens.make(1),
@@ -170,6 +171,7 @@ describe("OpenAIPlugin", () => {
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(eligible.cost).toEqual([])
+      expect(eligible.pricing).toBeUndefined()
       expect(eligible.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5"))).enabled).toBe(false)

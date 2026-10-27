@@ -1,4 +1,4 @@
-import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
+import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore, Struct } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField } from "@opencode/schema/model-compatibility"
@@ -64,6 +64,75 @@ const SourceCost = Schema.Struct({
   multipliers: Schema.optional(Schema.Array(Schema.Struct({ when: When, factor: Factor }))),
 })
 type SourceCost = typeof SourceCost.Type
+
+// Pricing keeps the whole v2 cost, decoded apart from SourceCost so it never fails a model or its `cost`.
+const PricingCachePrices = {
+  read: Schema.optional(Schema.Finite),
+  write: Schema.optional(Schema.Union([Schema.Finite, Schema.Record(Schema.String, Schema.Finite)])),
+  storage: Schema.optional(Schema.Finite),
+}
+const PricingCache = Schema.Struct({ ...PricingCachePrices, explicit: Schema.optional(Schema.Struct(PricingCachePrices)) })
+type PricingCache = typeof PricingCache.Type
+const PricingInput = Schema.Struct({
+  unit: Schema.optional(Schema.String),
+  price: Schema.Finite,
+  cache: Schema.optional(PricingCache),
+  overrides: Schema.optional(
+    Schema.Array(
+      Schema.Struct({ when: When, price: Schema.optional(Schema.Finite), cache: Schema.optional(PricingCache) }),
+    ),
+  ),
+})
+const PricingOutput = Schema.Struct({
+  unit: Schema.optional(Schema.String),
+  price: Schema.Finite,
+  reasoning: Schema.optional(Schema.Finite),
+  overrides: Schema.optional(
+    Schema.Array(
+      Schema.Struct({ when: When, price: Schema.optional(Schema.Finite), reasoning: Schema.optional(Schema.Finite) }),
+    ),
+  ),
+})
+const PricingModality = Schema.Struct({ input: Schema.optional(PricingInput), output: Schema.optional(PricingOutput) })
+type PricingModality = typeof PricingModality.Type
+const PricingWebSearch = Schema.Struct({
+  price: Schema.Finite,
+  overrides: Schema.optional(Schema.Array(Schema.Struct({ when: When, price: Schema.optional(Schema.Finite) }))),
+})
+const PricingMultiplier = Schema.Struct({ when: When, factor: Factor })
+const SourcePricing = Schema.Struct({
+  text: Schema.optional(PricingModality),
+  image: Schema.optional(PricingModality),
+  audio: Schema.optional(PricingModality),
+  video: Schema.optional(PricingModality),
+  web_search: Schema.optional(PricingWebSearch),
+  multipliers: Schema.optional(Schema.Array(PricingMultiplier)),
+})
+type SourcePricing = typeof SourcePricing.Type
+// The same parts, left undecoded, for a cost that doesn't decode whole.
+const PricingParts = Schema.Struct({
+  text: Schema.optional(Schema.Unknown),
+  image: Schema.optional(Schema.Unknown),
+  audio: Schema.optional(Schema.Unknown),
+  video: Schema.optional(Schema.Unknown),
+  web_search: Schema.optional(Schema.Unknown),
+  multipliers: Schema.optional(Schema.Array(Schema.Unknown)),
+})
+const PricingComparison = Schema.Struct(Struct.omit(Model.PricingCondition.fields, ["key", "not"])).pipe(
+  Schema.encodeKeys({ minItems: "min_items" }),
+)
+const decodePricing = Schema.decodeUnknownOption(Schema.Struct({ cost: Schema.optional(SourcePricing) }))
+const decodePricingParts = Schema.decodeUnknownOption(Schema.Struct({ cost: Schema.optional(PricingParts) }))
+const decodeModalityParts = Schema.decodeUnknownOption(
+  Schema.Struct({ input: Schema.optional(Schema.Unknown), output: Schema.optional(Schema.Unknown) }),
+)
+const decodeInput = Schema.decodeUnknownOption(PricingInput)
+const decodeOutput = Schema.decodeUnknownOption(PricingOutput)
+const decodeWebSearch = Schema.decodeUnknownOption(PricingWebSearch)
+const decodeMultiplier = Schema.decodeUnknownOption(PricingMultiplier)
+const decodeWhen = Schema.decodeUnknownOption(When)
+const decodeWhenList = Schema.decodeUnknownOption(Schema.Array(When))
+const decodeComparison = Schema.decodeUnknownOption(PricingComparison, { onExcessProperty: "error" })
 
 // API entries and modes are lists models.dev keeps adding to, so each is decoded on its own and an
 // entry this version doesn't understand is skipped instead of failing the model.
@@ -174,7 +243,7 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
       const target = model && TYPES.includes(model.type) && route(providerID, model)
-      return model && target ? [{ model, route: target }] : []
+      return model && target ? [{ model, route: target, raw: value }] : []
     })
     if (sources.length === 0) return []
     // v2 lists APIs per model, so the provider defaults are what most of its models use. A model that
@@ -193,7 +262,10 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
     const models = sources.flatMap((source) => {
       const baseCost = cost(source.model.cost)
       const id = Model.ID.make(source.model.id)
-      const base = modelInfo(providerID, { packageName, baseURL }, id, source, { cost: baseCost })
+      const base = modelInfo(providerID, { packageName, baseURL }, id, source, {
+        cost: baseCost,
+        pricing: pricing(source.raw),
+      })
       const variants = Variant.resolve(
         { ...base, package: source.route.package },
         Variant.supports(source.model.capabilities.reasoning),
@@ -204,6 +276,11 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
           modelInfo(providerID, { packageName, baseURL }, Model.ID.make(`${source.model.id}-${mode}`), source, {
             name: `${source.model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`,
             cost: modeCost(source.model, baseCost, mode, options),
+            // A mode without its own cost takes the model's prices on its service tier.
+            pricing: pricing(
+              options.cost ? source.model.experimental?.modes?.[mode] : source.raw,
+              options.service_tier ?? mode,
+            ),
             request: options,
             variants,
           }),
@@ -370,6 +447,149 @@ function factorAt(factor: Factor, path: readonly string[]): number {
   return typeof first === "number" ? first : 1
 }
 
+// Normalizes a model's or mode's v2 cost. Unset and empty parts are left out, so a model without
+// prices has no pricing.
+function pricing(input: unknown, serviceTier?: string): Model.Pricing | undefined {
+  const source = pricingSource(input)
+  if (!source) return undefined
+  const webSearch = source.web_search
+  const result = compact({
+    text: modalityPricing(source.text),
+    image: modalityPricing(source.image),
+    audio: modalityPricing(source.audio),
+    video: modalityPricing(source.video),
+    webSearch: webSearch && {
+      price: webSearch.price,
+      ...compact({ overrides: rules(webSearch.overrides, (rule) => compact({ price: rule.price })) }),
+    },
+    multipliers: rules(source.multipliers, (rule) => ({
+      factor: typeof rule.factor === "number" ? rule.factor : Object.fromEntries(factorPaths(rule.factor, [])),
+    })),
+  })
+  if (Object.keys(result).length === 0) return undefined
+  return serviceTier ? { serviceTier, ...result } : result
+}
+
+// Most costs decode whole. One that doesn't is decoded part by part, so only the parts this version
+// can't read are left out.
+function pricingSource(input: unknown): SourcePricing | undefined {
+  const whole = decodePricing(input)
+  if (Option.isSome(whole)) return whole.value.cost
+  const parts = Option.getOrUndefined(decodePricingParts(input))?.cost
+  if (!parts) return undefined
+  const modality = (value: unknown) =>
+    Option.getOrUndefined(
+      Option.map(decodeModalityParts(value), (item) => ({
+        input: Option.getOrUndefined(decodeInput(item.input)),
+        output: Option.getOrUndefined(decodeOutput(item.output)),
+      })),
+    )
+  return {
+    text: modality(parts.text),
+    image: modality(parts.image),
+    audio: modality(parts.audio),
+    video: modality(parts.video),
+    web_search: Option.getOrUndefined(decodeWebSearch(parts.web_search)),
+    multipliers: parts.multipliers?.flatMap((item) => Option.toArray(decodeMultiplier(item))),
+  }
+}
+
+function modalityPricing(source: PricingModality | undefined) {
+  if (!source) return undefined
+  const input = source.input
+  const output = source.output
+  return compact({
+    input: input && {
+      price: input.price,
+      ...compact({
+        unit: input.unit,
+        cache: cachePricing(input.cache),
+        overrides: rules(input.overrides, (rule) => compact({ price: rule.price, cache: cachePricing(rule.cache) })),
+      }),
+    },
+    output: output && {
+      price: output.price,
+      ...compact({
+        unit: output.unit,
+        reasoning: output.reasoning,
+        overrides: rules(output.overrides, (rule) => compact({ price: rule.price, reasoning: rule.reasoning })),
+      }),
+    },
+  })
+}
+
+function cachePricing(input: PricingCache | undefined) {
+  if (!input) return undefined
+  const prices = (item: PricingCache) =>
+    compact({ read: item.read, write: item.write, storage: item.storage })
+  return compact({ ...prices(input), explicit: input.explicit && prices(input.explicit) })
+}
+
+// A rule whose condition can't be read is left out: keeping it without that condition would widen it.
+// So is a rule that never applies or sets no price.
+function rules<A extends { readonly when: Record<string, unknown> }, B extends object>(
+  input: readonly A[] | undefined,
+  prices: (rule: A) => B,
+) {
+  return (input ?? []).flatMap((rule) => {
+    const match = when(rule.when, false)
+    const result = prices(rule)
+    return match && match.length > 0 && Object.keys(result).length > 0 ? [{ when: match, ...result }] : []
+  })
+}
+
+// v2 nests conditions with `all`, `any` and `not`; pricing flattens them into any-of-all-of clauses,
+// pushing `not` down to single conditions.
+function when(input: Record<string, unknown>, negated: boolean): Model.PricingWhen | undefined {
+  const parts = Object.entries(input).map(([key, value]): Model.PricingWhen | undefined => {
+    if (key === "all" || key === "any") {
+      const list = Option.getOrUndefined(decodeWhenList(value))?.map((item) => when(item, negated))
+      if (!list || list.some((item) => item === undefined)) return undefined
+      const items = list.filter((item) => item !== undefined)
+      return (key === "all") !== negated ? allOf(items) : items.flat()
+    }
+    if (key === "not") return Option.getOrUndefined(Option.map(decodeWhen(value), (item) => when(item, !negated)))
+    // Exactly one operator: a condition with an unknown one would otherwise read as no condition.
+    const comparison = Option.getOrUndefined(decodeComparison(value))
+    if (!comparison || Object.keys(comparison).length !== 1) return undefined
+    return [[{ key, ...(negated ? { not: true } : {}), ...comparison }]]
+  })
+  if (parts.some((part) => part === undefined)) return undefined
+  const items = parts.filter((part) => part !== undefined)
+  return negated ? items.flat() : allOf(items)
+}
+
+function allOf(items: readonly Model.PricingWhen[]): Model.PricingWhen {
+  return items.reduce<Model.PricingWhen>(
+    (result, item) => result.flatMap((left) => item.map((right) => [...left, ...right])),
+    [[]],
+  )
+}
+
+// models.dev nests factors by price path, and names web search prices `web_search` there too.
+function factorPaths(factor: Factor, path: readonly string[]): (readonly [string, number])[] {
+  if (typeof factor === "number") return [[path.join("."), factor]]
+  return Object.entries(factor).flatMap(([key, value]) =>
+    factorPaths(value, [...path, path.length === 0 && key === "web_search" ? "webSearch" : key]),
+  )
+}
+
+// Drops unset fields and empty lists and objects. Written as loops, as it runs for every part of every model.
+function compact<T extends object>(value: T): T {
+  const result: Record<string, unknown> = {}
+  for (const key in value) {
+    const item = value[key]
+    if (item !== undefined && !empty(item)) result[key] = item
+  }
+  return result as T
+}
+
+function empty(value: unknown) {
+  if (typeof value !== "object" || value === null) return false
+  for (const _ in value) return false
+  return true
+}
+
 // v2 lists exact MIME types; opencode's capabilities use the broad kind.
 function modality(value: string) {
   if (value === "application/pdf") return "pdf"
@@ -389,6 +609,7 @@ function modelInfo(
   input: {
     readonly name?: string
     readonly cost?: Model.Info["cost"]
+    readonly pricing?: Model.Pricing
     readonly request?: { readonly body?: Provider.Settings; readonly headers?: Readonly<Record<string, string>> }
     readonly variants?: NonNullable<Model.Info["variants"]>
   } = {},
@@ -425,6 +646,7 @@ function modelInfo(
       tier: item.tier && { ...item.tier },
       cache: { ...item.cache },
     })),
+    pricing: input.pricing,
     status: Option.getOrElse(decodeStatus(model.status), () => "active" as const),
     enabled: true,
     limit: { context: model.limit?.context ?? 0, input: model.limit?.input, output: model.limit?.output ?? 0 },

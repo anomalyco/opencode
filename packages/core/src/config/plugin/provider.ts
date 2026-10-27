@@ -265,6 +265,8 @@ function overlay(
           write: cost.cache?.write ?? Money.USDPerMillionTokens.zero,
         },
       }))
+      // The catalog's pricing no longer describes a model whose cost is configured.
+      model.pricing = undefined
     }
     if (config.disabled !== undefined) model.enabled = !config.disabled
   })

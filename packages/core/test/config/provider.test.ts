@@ -752,6 +752,32 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("drops catalog pricing from a model whose cost is configured", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const pricing = { text: { input: { price: 1 }, output: { price: 2 } }, webSearch: { price: 10 } }
+      yield* providers.transform((editor) => {
+        for (const id of ["priced", "named"])
+          editor.models.update(providerID, Model.ID.make(id), (model) => {
+            model.pricing = structuredClone(pricing)
+          })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: { custom: { models: { priced: { cost: { input: 3, output: 4 } }, named: { name: "Named" } } } },
+          }),
+        }),
+      ])
+      const model = (id: string) => models.get(providerID, Model.ID.make(id)).pipe(Effect.map(required))
+      expect((yield* model("priced")).pricing).toBeUndefined()
+      expect((yield* model("named")).pricing).toEqual(pricing)
+    }),
+  )
+
   it.effect("lets a configured provider baseURL override catalog model baseURLs", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

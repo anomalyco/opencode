@@ -138,7 +138,7 @@ export const register = Effect.fn("OpencodeLegacy.register")(function* (
               existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
             if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
           }
-          if (config.cost !== undefined)
+          if (config.cost !== undefined) {
             model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
               tier: cost.tier && { ...cost.tier },
               input: cost.input,
@@ -148,6 +148,9 @@ export const register = Effect.fn("OpencodeLegacy.register")(function* (
                 write: cost.cache?.write ?? Money.USDPerMillionTokens.zero,
               },
             }))
+            // The catalog's pricing no longer describes a model whose cost is configured.
+            model.pricing = undefined
+          }
           model.enabled = !config.disabled
         })
       }

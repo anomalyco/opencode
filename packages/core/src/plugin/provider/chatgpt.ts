@@ -325,6 +325,8 @@ export const ChatGPTPlugin = define({
           //   return
           // }
           draft.cost = []
+          // The subscription covers usage, so the catalog's list prices don't apply either.
+          draft.pricing = undefined
         })
       }
     })

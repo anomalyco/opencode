@@ -18228,6 +18228,9 @@
               "$ref": "#/components/schemas/Model.Cost"
             }
           },
+          "pricing": {
+            "$ref": "#/components/schemas/Model.Pricing"
+          },
           "status": {
             "type": "string",
             "enum": ["alpha", "beta", "deprecated", "active"]
@@ -18270,6 +18273,311 @@
       "Model.MaxTokensField": {
         "type": "string",
         "enum": ["max_completion_tokens", "max_tokens"]
+      },
+      "Model.Pricing": {
+        "type": "object",
+        "properties": {
+          "serviceTier": {
+            "type": "string"
+          },
+          "text": {
+            "$ref": "#/components/schemas/Model.PricingModality"
+          },
+          "image": {
+            "$ref": "#/components/schemas/Model.PricingModality"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/Model.PricingModality"
+          },
+          "video": {
+            "$ref": "#/components/schemas/Model.PricingModality"
+          },
+          "webSearch": {
+            "$ref": "#/components/schemas/Model.PricingWebSearch"
+          },
+          "multipliers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "when": {
+                  "$ref": "#/components/schemas/Model.PricingWhen"
+                },
+                "factor": {
+                  "$ref": "#/components/schemas/Model.PricingFactor"
+                }
+              },
+              "required": ["when", "factor"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Model.PricingCache": {
+        "type": "object",
+        "properties": {
+          "read": {
+            "type": "number"
+          },
+          "write": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            ]
+          },
+          "storage": {
+            "type": "number"
+          },
+          "explicit": {
+            "type": "object",
+            "properties": {
+              "read": {
+                "type": "number"
+              },
+              "write": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  }
+                ]
+              },
+              "storage": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "Model.PricingCondition": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "not": {
+            "type": "boolean"
+          },
+          "equals": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "in": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "gt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "gte": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "lt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "lte": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "minItems": {
+            "type": "integer"
+          }
+        },
+        "required": ["key"],
+        "additionalProperties": false
+      },
+      "Model.PricingFactor": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        ]
+      },
+      "Model.PricingInput": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/Model.PricingCache"
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "when": {
+                  "$ref": "#/components/schemas/Model.PricingWhen"
+                },
+                "price": {
+                  "type": "number"
+                },
+                "cache": {
+                  "$ref": "#/components/schemas/Model.PricingCache"
+                }
+              },
+              "required": ["when"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["price"],
+        "additionalProperties": false
+      },
+      "Model.PricingModality": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/Model.PricingInput"
+          },
+          "output": {
+            "$ref": "#/components/schemas/Model.PricingOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Model.PricingOutput": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "reasoning": {
+            "type": "number"
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "when": {
+                  "$ref": "#/components/schemas/Model.PricingWhen"
+                },
+                "price": {
+                  "type": "number"
+                },
+                "reasoning": {
+                  "type": "number"
+                }
+              },
+              "required": ["when"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["price"],
+        "additionalProperties": false
+      },
+      "Model.PricingWebSearch": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number"
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "when": {
+                  "$ref": "#/components/schemas/Model.PricingWhen"
+                },
+                "price": {
+                  "type": "number"
+                }
+              },
+              "required": ["when"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["price"],
+        "additionalProperties": false
+      },
+      "Model.PricingWhen": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Model.PricingCondition"
+          }
+        }
       },
       "Model.ReasoningField": {
         "anyOf": [

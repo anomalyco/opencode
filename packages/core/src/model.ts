@@ -41,6 +41,14 @@ export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilit
 
 export const Cost = Model.Cost
 
+export const Pricing = Model.Pricing
+export type Pricing = Model.Pricing
+
+export const PricingCondition = Model.PricingCondition
+export type PricingCondition = Model.PricingCondition
+
+export type PricingWhen = Model.PricingWhen
+
 export const Type = Model.Type
 export type Type = Model.Type
 

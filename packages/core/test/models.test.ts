@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
-import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
+import { Effect, Fiber, Layer, Ref, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
@@ -436,6 +436,207 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("carries the whole v2 cost on pricing and leaves cost as it was", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const weekdays = { utc_days: { in: ["mon", "tue", "wed", "thu", "fri"] } }
+      writeCache(cache, {
+        acme: {
+          ...fixture.acme,
+          models: {
+            "acme-1": sourceModel("acme-1", {
+              cost: {
+                text: {
+                  input: {
+                    price: 0.75,
+                    cache: { read: 0.075, write: { "5m": 0.9375, "1h": 1.5 }, storage: 1 },
+                    overrides: [{ when: { context: { gt: 200000 } }, price: 1.5, cache: { read: 0.15 } }],
+                  },
+                  output: { price: 3.75, reasoning: 4.5 },
+                },
+                audio: { input: { unit: "second", price: 0.0005, cache: { read: 0.075 } } },
+                image: {
+                  output: {
+                    unit: "image",
+                    price: 0.04,
+                    overrides: [{ when: { resolution: { equals: "2K" }, quality: { equals: "low" } }, price: 0.06 }],
+                  },
+                },
+                web_search: {
+                  price: 14,
+                  overrides: [{ when: { search_context_size: { equals: "high" } }, price: 25 }],
+                },
+                multipliers: [
+                  { when: { service_tier: { equals: "priority" } }, factor: { text: 2, web_search: 1.5 } },
+                  {
+                    when: { not: { region: { equals: "global" } } },
+                    factor: { text: { input: { price: 1.1, cache: { read: 1.1 } }, output: 1.1 } },
+                  },
+                  { when: { date: { gte: "2027-01-01" } }, factor: 2 },
+                  {
+                    when: {
+                      ...weekdays,
+                      any: [
+                        { all: [{ utc_hours: { gte: "01:00" } }, { utc_hours: { lt: "04:00" } }] },
+                        { utc_hours: { gte: "06:00" } },
+                      ],
+                      not: { holiday: { equals: "CN" } },
+                    },
+                    factor: 2,
+                  },
+                ],
+              },
+              experimental: {
+                modes: {
+                  fast: { service_tier: "priority", body: { speed: "fast" } },
+                  flex: { cost: { text: { input: { price: 0.3 }, output: { price: 1.5 } } } },
+                },
+              },
+            }),
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      const price = Money.USDPerMillionTokens.make
+      const tier = {
+        tier: { type: "context" as const, size: 200000 },
+        input: price(1.5),
+        output: price(3.75),
+        cache: { read: price(0.15), write: price(0.9375) },
+      }
+      expect(acme?.models.map((model) => model.cost)).toEqual([
+        [{ input: price(0.75), output: price(3.75), cache: { read: price(0.075), write: price(0.9375) } }, tier],
+        [{ input: price(1.5), output: price(7.5), cache: { read: price(0.15), write: price(1.875) } }, tier],
+        [{ input: price(0.3), output: price(1.5), cache: { read: price(0), write: price(0) } }, tier],
+      ])
+      const pricing: Model.Pricing = {
+        text: {
+          input: {
+            price: 0.75,
+            cache: { read: 0.075, write: { "5m": 0.9375, "1h": 1.5 }, storage: 1 },
+            overrides: [{ when: [[{ key: "context", gt: 200000 }]], price: 1.5, cache: { read: 0.15 } }],
+          },
+          output: { price: 3.75, reasoning: 4.5 },
+        },
+        audio: { input: { price: 0.0005, unit: "second", cache: { read: 0.075 } } },
+        image: {
+          output: {
+            price: 0.04,
+            unit: "image",
+            overrides: [
+              {
+                when: [
+                  [
+                    { key: "resolution", equals: "2K" },
+                    { key: "quality", equals: "low" },
+                  ],
+                ],
+                price: 0.06,
+              },
+            ],
+          },
+        },
+        webSearch: { price: 14, overrides: [{ when: [[{ key: "search_context_size", equals: "high" }]], price: 25 }] },
+        multipliers: [
+          { when: [[{ key: "service_tier", equals: "priority" }]], factor: { text: 2, webSearch: 1.5 } },
+          {
+            when: [[{ key: "region", not: true, equals: "global" }]],
+            factor: { "text.input.price": 1.1, "text.input.cache.read": 1.1, "text.output": 1.1 },
+          },
+          { when: [[{ key: "date", gte: "2027-01-01" }]], factor: 2 },
+          {
+            when: [
+              [
+                { key: "utc_days", in: ["mon", "tue", "wed", "thu", "fri"] },
+                { key: "utc_hours", gte: "01:00" },
+                { key: "utc_hours", lt: "04:00" },
+                { key: "holiday", not: true, equals: "CN" },
+              ],
+              [
+                { key: "utc_days", in: ["mon", "tue", "wed", "thu", "fri"] },
+                { key: "utc_hours", gte: "06:00" },
+                { key: "holiday", not: true, equals: "CN" },
+              ],
+            ],
+            factor: 2,
+          },
+        ],
+      }
+      expect(acme?.models.map((model) => model.pricing)).toEqual([
+        pricing,
+        // A mode without its own cost takes the model's prices on its service tier.
+        { serviceTier: "priority", ...pricing },
+        { serviceTier: "flex", text: { input: { price: 0.3 }, output: { price: 1.5 } } },
+      ])
+      expect(acme?.models.every((model) => Schema.is(Model.Pricing)(model.pricing))).toBe(true)
+    }),
+  )
+
+  it.live("leaves out pricing parts it can't read without failing the model or its cost", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          ...fixture.acme,
+          models: {
+            "acme-1": sourceModel("acme-1", {
+              cost: {
+                text: {
+                  input: {
+                    price: 2,
+                    overrides: [
+                      { when: { speaker_labels: { equals: true } }, price: 3 },
+                      { when: { context: { between: [1, 2] } }, price: 4 },
+                      { when: { region: { equals: "us", in: ["eu"] } }, price: 5 },
+                      { when: { any: [] }, price: 6 },
+                      { when: { keyterms_prompt: { min_items: 1 } }, price: 7 },
+                    ],
+                  },
+                  output: { price: 10 },
+                },
+                audio: { input: { price: "free" } },
+                hologram: { output: { unit: "voxel", price: 1 } },
+                multipliers: [
+                  { when: { region: { near: "eu" } }, factor: 2 },
+                  { when: {}, factor: 3 },
+                ],
+              },
+            }),
+            "acme-free": sourceModel("acme-free"),
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      const price = Money.USDPerMillionTokens.make
+      expect(acme?.models[0]?.cost).toEqual([{ input: price(2), output: price(10), cache: { read: price(0), write: price(0) } }])
+      expect(acme?.models[0]?.pricing).toEqual({
+        text: {
+          input: {
+            price: 2,
+            overrides: [
+              // Unknown condition keys are kept; unknown or extra operators leave the rule out.
+              { when: [[{ key: "speaker_labels", equals: true }]], price: 3 },
+              { when: [[{ key: "keyterms_prompt", minItems: 1 }]], price: 7 },
+            ],
+          },
+          output: { price: 10 },
+        },
+        multipliers: [{ when: [[]], factor: 3 }],
+      })
+      expect(acme?.models[1]?.pricing).toBeUndefined()
+    }),
+  )
+
   it.live("drops model types opencode doesn't keep", () =>
     Effect.gen(function* () {
       const cache = makeCache()
@@ -563,6 +764,12 @@ describe("ModelsDev Service", () => {
         [undefined, 1, 2],
         [200000, 3, 4],
       ])
+      expect(acme?.models[0]?.pricing).toEqual({
+        text: {
+          input: { price: 1, overrides: [{ when: [[{ key: "context", gt: 200000 }]], price: 3 }] },
+          output: { price: 2, overrides: [{ when: [[{ key: "context", gt: 200000 }]], price: 4 }] },
+        },
+      })
     }),
   )
 
