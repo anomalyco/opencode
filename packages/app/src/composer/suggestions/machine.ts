@@ -19,7 +19,6 @@ export type ComposerInteractionEvent =
   | { type: "commands.open" }
   | { type: "context.open" }
   | { type: "history.open"; id: string }
-  | { type: "history.search" }
   | { type: "popover.query"; value: string }
   | { type: "popover.results"; ids: string[] }
   | { type: "popover.active"; id: string }
@@ -75,9 +74,6 @@ export function transitionComposer(
     return changed({ ...state, popover: { type: "history", query: "", activeID: event.id }, focus: "history-search" }, [
       { type: "history.preview", id: event.id },
     ])
-
-  if (event.type === "history.search" && state.popover.type === "history")
-    return changed({ ...state, focus: "history-search" })
 
   if (event.type === "popover.query") return queryChanged(state, event.value)
 
