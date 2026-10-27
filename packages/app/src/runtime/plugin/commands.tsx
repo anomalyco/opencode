@@ -14,11 +14,11 @@ export function PluginCommands() {
   const rank = createMemo(() => new Map(host.definitions().map((definition, index) => [definition.id, index])))
   const order = (plugin: string) => rank().get(plugin) ?? rank().size
   command.register("plugins", () =>
-    host
-      .items(BuiltinCommand)
+    pluginCommandItems(host.items(BuiltinCommand))
       .toSorted((a, b) => order(a.plugin) - order(b.plugin))
       .map((item) => ({
         id: `${item.plugin}.${item.value.id}`,
+        plugin: item.plugin,
         title: item.value.title,
         description: item.value.description,
         keywords: item.value.keywords,
@@ -40,6 +40,14 @@ export function PluginCommands() {
   )
 
   return null
+}
+
+/**
+ * One item per published command id. A plugin may contribute the same command from several mounted owners, such as one
+ * per cached timeline; the newest wins, as the newest keyed registration does in the command registry.
+ */
+export function pluginCommandItems(items: readonly Item<BuiltinCommand>[]) {
+  return [...new Map(items.map((item) => [`${item.plugin}.${item.value.id}`, item])).values()]
 }
 
 // A command scoped to a selector runs only while the event's target is inside it.

@@ -449,6 +449,23 @@ export function TitlebarTabStrip(props: {
     },
   ])
 
+  // One registration numbers the visible tabs, so a reorder, a close or a tab coming into view never leaves two tabs
+  // holding the same number while their owners update.
+  const tabRefs = new Map<string, () => HTMLDivElement | undefined>()
+
+  command.register("titlebar-tab-numbers", () =>
+    visibleTabs()
+      .slice(0, 9)
+      .map((tab, index) => ({
+        id: `tab.${index + 1}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${index + 1}`,
+        hidden: true,
+        onSelect: () => props.onNavigate(tab, tabRefs.get(tabKey(tab))?.()),
+      })),
+  )
+
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
@@ -536,7 +553,11 @@ export function TitlebarTabStrip(props: {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
-                useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
+                const element = () => ref
+                tabRefs.set(id, element)
+                onCleanup(() => {
+                  if (tabRefs.get(id) === element) tabRefs.delete(id)
+                })
 
                 const serverCtx = useServerCtx(() => {
                   if (tab.type !== "session") return
@@ -599,25 +620,4 @@ export function TitlebarTabStrip(props: {
       </Show>
     </div>
   )
-}
-
-function useTabShortcut(index: () => number, onSelect: () => void) {
-  const command = useCommand()
-
-  command.register(() => {
-    const number = index() + 1
-
-    if (number < 1 || number > 9) return []
-
-    return [
-      {
-        id: `tab.${number}`,
-        category: "tab",
-        title: "",
-        keybind: `mod+${number}`,
-        hidden: true,
-        onSelect,
-      },
-    ]
-  })
 }
