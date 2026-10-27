@@ -1,4 +1,5 @@
-import { TextareaRenderable } from "@opentui/core"
+import { stripAnsiSequences, TextareaRenderable } from "@opentui/core"
+import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogFooter, DialogHeader, DialogLayout, useDialog, type DialogSize } from "./dialog"
@@ -6,6 +7,7 @@ import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
 import { useConfig, useNewDesigns } from "../config"
 import { useRenderer } from "@opentui/solid"
+import { useToast } from "./toast"
 
 export type DialogPromptAction = {
   title: string
@@ -37,12 +39,24 @@ export function DialogPrompt(props: DialogPromptProps) {
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
   const newDesigns = useNewDesigns()
+  const clipboard = useClipboard()
+  const toast = useToast()
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable
 
   function confirm() {
     if (props.busy) return
     props.onConfirm?.(textarea.plainText)
+  }
+
+  function paste() {
+    return clipboard
+      .read()
+      .then((content) => {
+        if (content?.mime !== "text/plain" || textarea.isDestroyed) return
+        textarea.insertText(stripAnsiSequences(content.data).replace(/\r\n?/g, "\n").replace(/\n+$/, ""))
+      })
+      .catch(toast.error)
   }
 
   const handle = {
@@ -72,6 +86,16 @@ export function DialogPrompt(props: DialogPromptProps) {
         title: "Submit dialog prompt",
         group: "Dialog",
         run: confirm,
+      },
+      {
+        id: "prompt.paste",
+        title: "Paste from clipboard",
+        group: "Dialog",
+        run: (_input, event) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          return paste()
+        },
       },
       ...(props.actions ?? []).map((action) => ({
         id: action.command,
