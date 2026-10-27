@@ -379,6 +379,22 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("sends the cache TTL as a request option when no markers carry it", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatible.configure({ baseURL: "https://api.compatible.test/v1", apiKey: "test" }).model(
+            "compatible-model",
+          ),
+          prompt: "Hello",
+          cache: { ttl: "1h" },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({ prompt_cache_options: { ttl: "1h" } })
+    }),
+  )
+
   it.effect("omits the prompt cache key without the compatibility flag", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

@@ -17,6 +17,7 @@ export interface ButtonProps
     | "ghost"
     | "ghost-muted"
     | "ghost-faint"
+    | "ghost-danger"
     | "loading"
   icon?: IconProps["name"]
 }

@@ -4,7 +4,7 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, tokenUsage, type OpenString } from "../schema/index.js"
 import { JsonObject, ProviderShared, optionalNull } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
@@ -18,7 +18,7 @@ export const DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 
 /**
  * Provider-native options. Common fields (`n`, `aspect`, `images`) live on the request; Meta picks its own output
- * resolution (about 2.5 megapixels), so `resolution` is ignored with a notice.
+ * resolution (about 2.5 megapixels), so `resolution` is ignored.
  */
 export type ImageOptions = {
   /** `WIDTHxHEIGHT` aspect ratio hint; it replaces `aspect`, so setting both fails. */
@@ -127,25 +127,15 @@ const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   return new ImageResponse({
     images,
-    notices:
-      context.request.resolution === undefined
-        ? undefined
-        : [
-            {
-              type: "other",
-              message: `${route.name} picks its own output resolution; ignored ${context.request.resolution}`,
-            },
-          ],
     usage:
       decoded.usage === undefined
         ? undefined
-        : {
-            type: "tokens",
+        : tokenUsage({
             input: decoded.usage.input_tokens,
             output: decoded.usage.output_tokens,
             total: decoded.usage.total_tokens,
             details: { meta: decoded.usage },
-          },
+          }),
     providerMetadata: { meta: { outputFormat: format } },
   })
 })

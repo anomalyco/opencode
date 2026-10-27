@@ -1,7 +1,7 @@
 export * as CodeModeWeb from "./web.js"
 
 import { Extension } from "@opencode/codemode"
-import { isRecord } from "@opencode/ai/utils/record"
+import { isRecord } from "@opencode/util/record"
 
 const TIMEOUT_MS = 30_000
 

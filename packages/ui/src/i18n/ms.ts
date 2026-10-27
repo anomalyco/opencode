@@ -195,7 +195,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(tiada jawapan)",
   "ui.question.review.notAnswered": "(belum dijawab)",
   "ui.question.multiHint": "Pilih semua jawapan yang berkaitan",
-  "ui.question.singleHint": "Pilih satu jawapan",
   "ui.question.custom.placeholder": "Taip jawapan anda…",
   "ui.tool.loadedFile": "Memuatkan {{path}}",
   "ui.tool.loadedSkill": "Memuatkan kemahiran {{name}}",

@@ -118,6 +118,17 @@ export const MediaUsage = Schema.Union([
   .annotate({ identifier: "AI.MediaUsage" })
 export type MediaUsage = Schema.Schema.Type<typeof MediaUsage>
 
+/** Token usage from a provider's counts. A usage object without any count is no usage, so it returns undefined. */
+export const tokenUsage = (counts: {
+  readonly input?: number
+  readonly output?: number
+  readonly total?: number
+  readonly details?: Record<string, unknown>
+}): MediaUsage | undefined =>
+  counts.input === undefined && counts.output === undefined && counts.total === undefined
+    ? undefined
+    : { type: "tokens", ...counts }
+
 /** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
   replacement: Schema.Array(Message),
@@ -310,6 +321,13 @@ export const ProviderErrorEvent = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ProviderError" })
 export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
 
+/** One provider frame as received, emitted before the events parsed from it when the request sets `includeRaw`. */
+export const RawEvent = Schema.Struct({
+  type: Schema.tag("raw"),
+  data: Schema.Unknown,
+}).annotate({ identifier: "LLM.Event.Raw" })
+export type RawEvent = Schema.Schema.Type<typeof RawEvent>
+
 const llmEventTagged = Schema.Union([
   CompactionPart,
   StepStart,
@@ -330,6 +348,7 @@ const llmEventTagged = Schema.Union([
   StepFinish,
   Finish,
   ProviderErrorEvent,
+  RawEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
@@ -384,6 +403,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
   providerError: ProviderErrorEvent.make,
+  raw: RawEvent.make,
   is: {
     compaction: llmEventTagged.guards.compaction,
     stepStart: llmEventTagged.guards["step-start"],
@@ -404,6 +424,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     stepFinish: llmEventTagged.guards["step-finish"],
     finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
+    raw: llmEventTagged.guards.raw,
   },
 })
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
@@ -646,6 +667,7 @@ const reduceToolCall = (state: ResponseState, event: ToolCall): ResponseState =>
 }
 
 const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseState => {
+  if (event.type === "raw") return state
   const next = appendEvent(state, event)
   switch (event.type) {
     case "compaction":

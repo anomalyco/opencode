@@ -670,6 +670,8 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google": gemini,
   "@opencode/ai/providers/google-vertex": gemini,
   "@opencode/ai/providers/google-vertex/gemini": gemini,
+  "@opencode/ai/providers/google/images": gemini,
+  "@opencode/ai/providers/google-vertex/images": gemini,
   "@opencode/ai/providers/google/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex/interactions": googleInteractions,
   "@opencode/ai/providers/google-vertex-interactions": googleInteractions,

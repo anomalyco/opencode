@@ -311,7 +311,15 @@ download_and_install() {
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -f -# -L -o "$tmp_dir/$filename" "$url"
+        local ret=0
+        curl -f -# -L -o "$tmp_dir/$filename" "$url" || ret=$?
+        # curl exits 23 when it cannot write the file, usually because the temporary directory is full.
+        if [ "$ret" -eq 23 ]; then
+            print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
+        fi
+        if [ "$ret" -ne 0 ]; then
+            exit "$ret"
+        fi
     fi
 
     tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"

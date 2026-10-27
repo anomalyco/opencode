@@ -1,14 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "test": "bun test --only-failures",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "pack": "bun run script/pack.ts",
+    "generate": "bun script/icon-name.ts"
   },
   "exports": {
     ".": "./src/promise/index.ts",
@@ -16,6 +18,16 @@
     "./host": "./src/host.ts",
     "./runtime": "./src/runtime.ts",
     "./tui": "./src/tui/index.ts",
+    "./gui": "./src/gui/index.ts",
+    "./gui/main": "./src/gui/main.ts",
+    "./gui/host": "./src/gui/host.ts",
+    "./gui/builtin": "./src/gui/builtin.ts",
+    "./gui/file": "./src/gui/file.ts",
+    "./gui/review": "./src/gui/review.ts",
+    "./gui/browser": "./src/gui/browser.ts",
+    "./gui/updater": "./src/gui/updater.ts",
+    "./gui/vite": "./src/gui/vite.ts",
+    "./gui/*": null,
     "./*": "./src/*.ts"
   },
   "imports": {
@@ -39,9 +51,12 @@
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
-    "@opentui/core": ">=0.6.8",
-    "@opentui/solid": ">=0.6.8",
-    "solid-js": ">=1.9.0"
+    "@opentui/core": "0.7.0",
+    "@opentui/solid": "0.7.0",
+    "electron": "*",
+    "solid-js": ">=1.9.0",
+    "vite": ">=6",
+    "vite-plugin-solid": ">=2.11"
   },
   "peerDependenciesMeta": {
     "@opencode/theme": {
@@ -53,7 +68,16 @@
     "@opentui/solid": {
       "optional": true
     },
+    "electron": {
+      "optional": true
+    },
     "solid-js": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    },
+    "vite-plugin-solid": {
       "optional": true
     }
   },
@@ -65,8 +89,16 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "electron": "44.9.1",
     "solid-js": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:",
     "@typescript/native": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/plugin"
   }
 }

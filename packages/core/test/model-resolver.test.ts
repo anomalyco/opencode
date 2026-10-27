@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LLM, LanguageModel, Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
-import { compileRequest } from "@opencode/ai/route/client"
+import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { Headers } from "effect/http"
 import { AISDKNative } from "@opencode/core/aisdk-native"

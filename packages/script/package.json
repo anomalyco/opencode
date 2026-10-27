@@ -15,6 +15,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./highlights": "./src/highlights.ts"
+    "./highlights": "./src/highlights.ts",
+    "./pack": "./src/pack.ts"
   }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/simulation",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -25,6 +25,7 @@
   },
   "scripts": {
     "build": "bun run script/build.ts",
+    "pack": "bun run script/pack.ts",
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "bun check --no-script -b",
     "typecheck:tsc": "tsc -b"
