@@ -10,6 +10,9 @@ import { TestClock } from "effect/testing"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AppProcess } from "@opencode/util/process"
+import { PortOwner } from "../src/services/port-owner"
 import { ServiceConfig } from "../src/services/service-config"
 import { ServiceRegistration } from "../src/services/service-registration"
 import { isolatedEnv, transpilerCache } from "./fixture/environment"
@@ -19,7 +22,7 @@ const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0e0)
   expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
@@ -30,7 +33,7 @@ test("managed service ports are stable per installation channel", () => {
 
 test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
   expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70e0)
   expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
   const ports = Array.from({ length: 200 }, (_, index) => ({
     windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
@@ -192,9 +195,75 @@ test("service config manages environment variables", async () => {
   }
 })
 
-test("service filenames share release channels and identify preview channels", () => {
+test("saved service environment cannot move the registration's state directory", async () => {
+  expect(ServiceConfig.processEnv(undefined)).toBeUndefined()
+  expect(ServiceConfig.processEnv({ XDG_STATE_HOME: "/custom/state", XDG_DATA_HOME: "/custom/data", A: "1" })).toEqual({
+    XDG_DATA_HOME: "/custom/data",
+    A: "1",
+  })
+
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-env-state-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  try {
+    await fs.mkdir(path.join(root, "config"), { recursive: true })
+    await Bun.write(
+      path.join(root, "config", ServiceConfig.filename()),
+      JSON.stringify({ env: { XDG_STATE_HOME: path.join(root, "elsewhere"), A: "1" } }),
+    )
+    const options = await Effect.runPromise(
+      ServiceConfig.options().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
+    )
+    expect(options.env).toEqual({ A: "1" })
+    expect(options.file).toBe(path.join(root, "state", ServiceConfig.filename()))
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test.skipIf(process.platform === "win32" || !Bun.which("lsof"))("port owner names the listening process", async () => {
+  using listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })
+  using wildcard = Bun.serve({ hostname: "0.0.0.0", port: 0, fetch: () => new Response() })
+  const describe = (port: number | undefined, hostname?: string) =>
+    Effect.runPromise(PortOwner.describe(port ?? 0, hostname).pipe(Effect.provide(LayerNode.compile(AppProcess.node))))
+  expect(await describe(listener.port)).toStartWith(`PID ${process.pid} (`)
+  expect(await describe(listener.port, "127.0.0.1")).toStartWith(`PID ${process.pid} (`)
+  expect(await describe(listener.port, "localhost")).toStartWith(`PID ${process.pid} (`)
+  expect(await describe(listener.port, "127.0.0.2")).toBeUndefined()
+  expect(await describe(wildcard.port, "127.0.0.2")).toStartWith(`PID ${process.pid} (`)
+})
+
+test.skipIf(process.platform === "win32")("port owner gives up on a lookup that ignores SIGTERM", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-port-owner-stuck-"))
+  const PATH = process.env.PATH
+  try {
+    await Bun.write(path.join(root, "lsof"), "#!/bin/sh\ntrap '' TERM\nsleep 10\n")
+    await fs.chmod(path.join(root, "lsof"), 0o755)
+    process.env.PATH = `${root}${path.delimiter}${PATH}`
+    const started = Date.now()
+    const owner = await Promise.race([
+      Effect.runPromise(PortOwner.describe(1).pipe(Effect.provide(LayerNode.compile(AppProcess.node)))),
+      Bun.sleep(4_000).then(() => "hung"),
+    ])
+    expect(owner).toBeUndefined()
+    expect(Date.now() - started).toBeLessThan(3_000)
+  } finally {
+    process.env.PATH = PATH
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test.skipIf(process.platform === "win32")("port owner is unknown for a free port", async () => {
+  const free = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })
+  const port = free.port ?? 0
+  free.stop(true)
+  expect(
+    await Effect.runPromise(PortOwner.describe(port).pipe(Effect.provide(LayerNode.compile(AppProcess.node)))),
+  ).toBeUndefined()
+})
+
+test("service filenames share release channels and identify dev and preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
-  expect(ServiceConfig.filename("dev")).toBe("service.json")
+  expect(ServiceConfig.filename("dev")).toBe("service-dev.json")
   expect(ServiceConfig.filename("beta")).toBe("service.json")
   expect(ServiceConfig.filename("next")).toBe("service.json")
   expect(ServiceConfig.filename("local")).toBe("service-local.json")
@@ -359,9 +428,10 @@ test("concurrent service processes elect one server", async () => {
       await fetch(new URL("/api/info", info.url), {
         headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
       }).then((response) => response.json()),
-    ).toEqual({
+    ).toMatchObject({
       version: info.version,
       pid: info.pid,
+      hostname: os.hostname(),
       urls: [info.url],
       // The server reports the canonical tmp directory; Windows os.tmpdir() can be an 8.3 short name.
       paths: { tmp: await fs.realpath(path.join(os.tmpdir(), "opencode")) },
@@ -548,7 +618,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(
     path.join(root, "config", "opencode", "service-local.json"),
-    JSON.stringify({ port: listener.port }),
+    JSON.stringify({ port: listener.port, env: { XDG_STATE_HOME: path.join(root, "elsewhere") } }),
   )
   const stale = {
     id: "stale",
@@ -558,8 +628,17 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     password: "stale",
   }
   await fs.writeFile(registration, JSON.stringify(stale))
+  // The port lookup is a child of the service, so it shows the state directory tools would inherit.
+  const lsof = process.platform === "win32" ? null : Bun.which("lsof")
+  if (lsof) {
+    await Bun.write(
+      path.join(root, "bin", "lsof"),
+      `#!/bin/sh\nprintf %s "$XDG_STATE_HOME" > "${path.join(root, "inherited-state")}"\nexec "${lsof}" "$@"\n`,
+    )
+    await fs.chmod(path.join(root, "bin", "lsof"), 0o755)
+  }
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: serviceEnv(root),
+    env: { ...serviceEnv(root), PATH: `${path.join(root, "bin")}${path.delimiter}${process.env.PATH}` },
     stderr: "pipe",
     stdout: "pipe",
   })
@@ -569,7 +648,12 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     const exitCode = await Promise.race([contender.exited, Bun.sleep(20_000).then(() => undefined)])
     expect(exitCode).toBe(1)
     const output = (await new Response(contender.stdout).text()) + (await new Response(contender.stderr).text())
-    expect(output).toContain(`Managed service port ${listener.port} on 127.0.0.1 is already in use by another process`)
+    expect(output).toContain(
+      `Managed service port ${listener.port} on 127.0.0.1 is already in use by ${
+        lsof ? `PID ${process.pid} (` : "another process"
+      }`,
+    )
+    if (lsof) expect(await Bun.file(path.join(root, "inherited-state")).text()).toBe(path.join(root, "state"))
     expect(await Bun.file(registration).json()).toEqual(stale)
   } finally {
     contender.kill("SIGTERM")
@@ -767,6 +851,7 @@ function serviceEnv(root: string) {
     ...process.env,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: transpilerCache,
     HOME: root,
+    OPENCODE_CONFIG_DIR: undefined,
     OPENCODE_DB: path.join(root, "opencode.db"),
     OPENCODE_TEST_HOME: root,
     XDG_CACHE_HOME: path.join(root, "cache"),

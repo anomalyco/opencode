@@ -191,7 +191,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(ޖަވާބެއް ނެތް)",
   "ui.question.review.notAnswered": "(ޖަވާބެއް ނުލިބޭ)",
   "ui.question.multiHint": "އެކަމާ ގުޅޭ ހުރިހާ ޖަވާބެއް ހޮވާށެވެ",
-  "ui.question.singleHint": "އެއް ޖަވާބެއް ހޮވާށެވެ",
   "ui.question.custom.placeholder": "ޖަވާބު ޓައިޕް ކުރާށެވެ…",
   "ui.messagePart.context.match.one": "({{count}} މެޗެއް)",
   "ui.messagePart.context.match.other": "({{count}} މެޗްތައް)",

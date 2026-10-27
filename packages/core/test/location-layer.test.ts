@@ -229,6 +229,45 @@ describe("LocationServiceMap", () => {
     )
   }
 
+  testEffect(Layer.empty).live("closes every location concurrently on shutdown, including borrowed ones", () =>
+    Effect.gen(function* () {
+      const count = 3
+      const closing = { started: 0 }
+      const allClosing = yield* Deferred.make<void>()
+      const overlapped: boolean[] = []
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        LocationWatcher.node.replace(
+          LocationWatcher.node.mapLayer((layer) =>
+            layer.pipe(
+              Layer.tap(() =>
+                Effect.addFinalizer(() =>
+                  Effect.gen(function* () {
+                    if (++closing.started === count) yield* Deferred.succeed(allClosing, undefined)
+                    // Sequential teardown would leave this finalizer waiting alone.
+                    const waited = yield* Deferred.await(allClosing).pipe(Effect.timeoutOption("5 seconds"))
+                    overlapped.push(Option.isSome(waited))
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ])
+      const dirs = yield* Effect.forEach(Array.from({ length: count }), () => tmpdirScoped())
+      const borrow = yield* Scope.make()
+      yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        const refs = dirs.map((dir) => Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+        yield* Effect.forEach(refs.slice(1), (ref) => locations.contextEffect(ref).pipe(Effect.scoped))
+        yield* locations.contextEffect(refs[0]).pipe(Scope.provide(borrow))
+      }).pipe(Effect.provide(layer))
+      expect(overlapped).toEqual(Array.from({ length: count }, () => true))
+      yield* Scope.close(borrow, Exit.void)
+    }),
+  )
+
   itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
@@ -418,6 +457,23 @@ describe("LocationServiceMap", () => {
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
+
+            const variants = [
+              `${directory}${path.sep}`,
+              `${directory}${path.sep}${path.sep}`,
+              `${path.dirname(directory)}${path.sep}${path.sep}${path.basename(directory)}`,
+              `${directory}${path.sep}.${path.sep}child${path.sep}..${path.sep}`,
+            ]
+            for (const variant of variants) {
+              const ref = Location.Ref.make({ directory: AbsolutePath.make(variant) })
+              expect(LocationServiceMap.canonical(ref).directory).toBe(directory)
+              expect(yield* locations.contextEffect(ref)).toBe(first)
+            }
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            const root = path.parse(directory).root
+            expect(
+              LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(root) })).directory,
+            ).toBe(AbsolutePath.make(root))
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)

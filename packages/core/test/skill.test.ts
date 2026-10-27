@@ -5,19 +5,18 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Document, Event } from "@opencode/schema/config"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
-import { registerIntegrationPolicy } from "./fixture/policy"
+import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 
 const configLayer = Config.testLayer()
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node, ManagedPolicy.node]),
+    LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node]),
     [Config.node.replace(configLayer)],
   ).pipe(Layer.provideMerge(configLayer)),
 )
@@ -35,8 +34,8 @@ describe("Skill", () => {
   it.live("hides and refuses denied skills while organization policy overrides local allows", () =>
     Effect.gen(function* () {
       const skills = yield* Skill.Service
-      const managed = yield* ManagedPolicy.Service
       const config = yield* Config.Test
+      const bus = yield* Bus.Service
       yield* skills.transform((editor) => {
         editor.add(info("team:review", "Review"))
         editor.add(info("deploy", "Deploy"))
@@ -49,13 +48,11 @@ describe("Skill", () => {
           },
         }),
       ])
-      yield* managed.set({
-        statements: [
-          { action: "integration.use", resource: "*", effect: "deny" },
-          { action: "integration.use", resource: "skill:team:review", effect: "allow" },
-        ],
-      })
-      yield* registerIntegrationPolicy({ skill: skills })
+      yield* setOrganizationPolicy([
+        { action: "integration.use", resource: "*", effect: "deny" },
+        { action: "integration.use", resource: "skill:team:review", effect: "allow" },
+      ])
+      yield* registerIntegrationPolicy({ skill: skills, events: bus.subscribe() })
       expect(yield* skills.list()).toEqual([info("team:review", "Review")])
       expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
       expect(yield* skills.get(Skill.ID.make("team:review"))).toEqual(info("team:review", "Review"))
@@ -64,11 +61,13 @@ describe("Skill", () => {
       expect(guidance.text).toContain("<id>team:review</id>")
       expect(guidance.text).not.toContain("deploy")
 
-      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:team:review", effect: "deny" }] })
+      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:team:review", effect: "deny" }])
+      yield* bus.publish(Event.Updated, {})
       yield* waitUntil(skills.get(Skill.ID.make("team:review")).pipe(Effect.map((skill) => skill === undefined)))
       expect(yield* skills.get(Skill.ID.make("team:review"))).toBeUndefined()
       expect(yield* skills.list()).toEqual([info("deploy", "Deploy")])
-      yield* managed.set({ statements: [] })
+      yield* setOrganizationPolicy(undefined)
+      yield* bus.publish(Event.Updated, {})
       yield* waitUntil(skills.list().pipe(Effect.map((skills) => skills.length === 2)))
       expect(yield* skills.list()).toHaveLength(2)
     }),
@@ -102,19 +101,19 @@ describe("Skill", () => {
     }),
   )
 
-  it.live("publishes catalog updates when managed policy changes", () =>
+  it.live("publishes catalog updates when organization policy changes", () =>
     Effect.gen(function* () {
       const skills = yield* Skill.Service
-      const managed = yield* ManagedPolicy.Service
       const bus = yield* Bus.Service
       yield* skills.transform((editor) => editor.add(info("review", "Review")))
-      yield* registerIntegrationPolicy({ skill: skills })
+      yield* registerIntegrationPolicy({ skill: skills, events: bus.subscribe() })
       const updated = yield* Deferred.make<Skill.Info[]>()
       yield* bus.subscribe(Skill.Event.Updated).pipe(
         Stream.runForEach(() => skills.list().pipe(Effect.flatMap((values) => Deferred.succeed(updated, values)))),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:review", effect: "deny" }] })
+      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:review", effect: "deny" }])
+      yield* bus.publish(Event.Updated, {})
       expect(yield* Deferred.await(updated).pipe(Effect.timeout("1 second"))).toEqual([])
     }),
   )

@@ -87,21 +87,9 @@ const decodeResponse = Effect.fn("ZAIImages.decodeResponse")(function* (
   const output = yield* decodeDocument(response)
   const decoded = output.value
   if (decoded.data.length === 0) return yield* output.invalid(`${route.name} returned no images`)
-  const filters = decoded.content_filter ?? []
   return new ImageResponse({
     // Z.ai returns only URLs and no content type; the media type resolves when the asset is materialized.
     images: yield* Effect.forEach(decoded.data, (item) => MediaProtocol.expiringUrl(item.url, OUTPUT_RETENTION)),
-    // Z.ai reports applied content filters alongside a successful result; surface them instead of dropping them.
-    notices:
-      filters.length === 0
-        ? undefined
-        : filters.map((filter) => ({
-            type: "moderated" as const,
-            message: `${route.name} applied a content filter${filter.role === undefined ? "" : ` for ${filter.role}`}${
-              filter.level === undefined ? "" : ` at level ${filter.level}`
-            }`,
-            providerMetadata: { zai: filter },
-          })),
     providerMetadata: {
       zai: {
         created: decoded.created,

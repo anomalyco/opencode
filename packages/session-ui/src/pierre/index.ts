@@ -234,6 +234,11 @@ const unsafeCSS = `
   );
 }
 
+/* Pierre insets line numbers by 2ch to leave room for diff change bars; compact file viewers can tighten it. */
+[data-file]:not([data-disable-line-numbers]) :is([data-column-number], [data-gutter-buffer]) {
+  padding-left: var(--opencode-diffs-number-inset, 2ch);
+}
+
 [data-diff-header],
 [data-diff],
 [data-file] {

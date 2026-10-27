@@ -134,7 +134,7 @@ export function milestoneForLine(line: string): Milestone | undefined {
 
 const milestonePatterns: ReadonlyArray<{ name: Milestone; text: string }> = [
   { name: "bunRootScript", text: "$ bun --cwd packages/desktop dev" },
-  { name: "bunDesktopScript", text: "$ bun ./scripts/dev.ts" },
+  { name: "bunDesktopScript", text: "$ bun run script/dev.ts" },
   { name: "desktopPrepared", text: "Copied dev icons from" },
   { name: "mainBundleReady", text: "electron main process built successfully" },
   { name: "preloadBundleReady", text: "electron preload scripts built successfully" },

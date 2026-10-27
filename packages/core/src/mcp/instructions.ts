@@ -92,8 +92,8 @@ export const layer = Layer.effect(
         const visible = instructions
           .flatMap((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
-            const codemode = owned[0]?.codemode !== false
-            if (codemode && !canExecute) return []
+            // Without execute, Code Mode server tools are exposed directly.
+            const codemode = canExecute && owned[0]?.codemode !== false
             if (
               !owned.some(
                 (tool) =>

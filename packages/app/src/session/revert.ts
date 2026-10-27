@@ -6,7 +6,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
-import { promptLength } from "@/composer/prompt-parts"
+import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
 
@@ -36,6 +36,7 @@ export function createSessionRevert(input: {
     const restored = extractPromptFromMessage(message, {
       directory: location().directory,
       attachmentName: language.t("common.attachment"),
+      sessionTitle: (id) => data.session.get(id)?.title,
     })
 
     const context = extractPromptContext(message, { directory: location().directory })
@@ -69,11 +70,48 @@ export function createSessionRevert(input: {
 
     if (!(await request(() => server.api.session.wait({ sessionID })))) return
 
+    // Read before staging: the staged event can land before the request resolves.
+    const prior = input.session.data.revertMessageID()
+
     if (!(await request(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
+
+    const draft = {
+      prompt: clonePrompt(target.current()),
+      cursor: target.cursor(),
+      context: target.context.items().map((item) => ({ ...item })),
+    }
+
     // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them,
     // and redo delivers them.
     restore(target, message)
     owner.run(() => input.setActiveMessage(previous))
+
+    // Rewinding also puts the files back, so offer the way out right where it happened. Undo is bound to
+    // this Session and its earlier revert, not to whatever the route and the event stream show when clicked.
+    const undoRewind = async () => {
+      const undone = prior
+        ? request(() => server.api.session.revert.stage({ sessionID, messageID: prior }))
+        : request(() => server.api.session.revert.clear({ sessionID }))
+
+      if (!(await undone)) return
+      target.set(draft.prompt, draft.cursor ?? promptLength(draft.prompt))
+      target.context.replace(draft.context)
+      owner.run(() => {
+        const messages = input.session.history.userMessages()
+        const boundary = prior ? messages.findIndex((item) => item.id === prior) : -1
+
+        input.setActiveMessage(
+          boundary >= 0
+            ? messages[boundary - 1]
+            : messages.filter((item) => !data.session.input.has(sessionID, item.id)).at(-1),
+        )
+      })
+    }
+
+    showToast({
+      title: language.t("session.rewind.toast.title"),
+      actions: [{ label: language.t("session.rewind.toast.undo"), onClick: () => void undoRewind() }],
+    })
   }
 
   const to = async (messageID: string) => {
