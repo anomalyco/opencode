@@ -58,6 +58,7 @@ test("keeps shell and question failures in their Used group", async ({ page }) =
 test("keeps rendering when a plugin tool reports progress metadata that is not an object", async ({ page }) => {
   const toolID = "prt_plugin_progress"
   const input = { prompt: "a cat" }
+
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
@@ -71,12 +72,16 @@ test("keeps rendering when a plugin tool reports progress metadata that is not a
     )
     .click()
   await timeline.waitForPart(toolID)
+
   const progress = partUpdated(
     toolPart(toolID, "plugin_imagegen", "running", input, { metadata: { status: "x" } }),
   ).find((event) => event.type === "session.tool.progress")!
-  // Plugin tools are untyped at runtime, and the server forwards progress metadata as sent.
-  const metadata: unknown = "polling"
-  await timeline.transport.send({ ...progress, data: { ...progress.data, metadata } } as typeof progress)
+
+  // Plugin tools are untyped at runtime, and the server forwards progress metadata as sent, so the
+  // frame is written raw to skip the harness's event validation.
+  await timeline.transport.writeRaw(
+    `data: ${JSON.stringify({ ...progress, data: { ...progress.data, metadata: "polling" } })}\n\n`,
+  )
   await timeline.send(partUpdated(textPart("prt_plugin_progress_text", "Still polling the image task.")))
 
   await expect(page.getByText("Still polling the image task.")).toBeVisible()
