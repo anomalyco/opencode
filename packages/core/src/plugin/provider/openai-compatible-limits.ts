@@ -1,11 +1,15 @@
+import { createHash } from "node:crypto"
 import { isRecord } from "@opencode/util/record"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Option, Semaphore, Stream } from "effect"
+import { Effect, Option, Schedule, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { Value as CredentialValue } from "@opencode/schema/credential"
 import { Bus } from "../../bus.js"
+import { Credential } from "../../credential.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
+import { localProviderIDs } from "./local.js"
 
 // Fill missing context limits for generic OpenAI-compatible providers from the
 // provider's own `GET {baseURL}/models` advertisement.
@@ -13,9 +17,10 @@ import { Provider } from "../../provider.js"
 // Custom models synthesized without a models.dev catalog entry carry the
 // built-in placeholder limits, so auto-compaction fires against a guess
 // instead of the real window. Catalog-backed models — bundled providers,
-// config models inherited from a canonical catalog provider, and integration
-// models with their own inventory — keep their real values and are neither
-// probed nor filled.
+// config models inherited from a canonical catalog provider, integration
+// models with their own cost rows, and providers a dedicated discovery
+// plugin owns (LM Studio, Ollama, vLLM) — keep their real values and are
+// neither probed nor filled.
 //
 // Auth for the probe, highest first: a configured `authorization` header, the
 // provider's active connection credential (keys added via `opencode auth` or
@@ -30,6 +35,10 @@ import { Provider } from "../../provider.js"
 //
 // Fail-open: an unreachable, erroring, or malformed endpoint is skipped and
 // keeps its previously discovered limits; discovery never blocks the catalog.
+// Discovery runs at startup, whenever the catalog or the active credential
+// changes, and on the schedule below, so failed endpoints retry once a
+// minute and successes refresh at their TTL instead of waiting for a catalog
+// change.
 
 const FETCH_TIMEOUT = "4 seconds"
 const CACHE_TTL_MS = 5 * 60_000
@@ -55,13 +64,24 @@ type Endpoint = {
 type CacheEntry = {
   readonly at: number
   readonly ttl: number
+  /** Fingerprint of the connection credential the cached fetch ran under; `""` when none was active. */
+  readonly connection: string
   readonly value: Record<string, AdvertisedLimit>
 }
 
 // Shared across Locations so every catalog rebuild reuses one fetch per endpoint.
 const cache = new Map<string, CacheEntry>()
 
-const endpointKey = (endpoint: Endpoint) => `${endpoint.providerID}\n${endpoint.baseURL}`
+const digest = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16)
+
+// The key covers everything known synchronously: provider, URL, and the auth
+// set directly in settings, so a rotated `apiKey` or `authorization` header
+// never reuses the previous credential's result. The active connection's
+// identity rides in the entry and is compared at discovery time.
+const endpointKey = (endpoint: Endpoint) =>
+  `${endpoint.providerID}\n${endpoint.baseURL}\n${
+    endpoint.authorization ?? (endpoint.apiKey ? digest(endpoint.apiKey) : "")
+  }`
 
 const freshEntry = (endpoint: Endpoint) => {
   const entry = cache.get(endpointKey(endpoint))
@@ -150,6 +170,17 @@ const bearerFrom = (credential: CredentialValue | undefined) => {
 // An empty key is absent, matching local providers, so the probe sends no bare `Bearer ` header.
 const bearerKey = (apiKey: string | undefined) => (apiKey ? `Bearer ${apiKey}` : undefined)
 
+// Identifies which connection the cached fetch ran under. The connection's
+// identity (not a rotating OAuth access token) keys the cache, plus the stored
+// key value for key credentials, which can be edited in place under the same id.
+const connectionFingerprint = (
+  connection: Parameters<typeof IntegrationConnection.key>[0],
+  credential: CredentialValue | undefined,
+) => {
+  const identity = IntegrationConnection.key(connection) ?? ""
+  return credential?.type === "key" ? `${identity}:${digest(credential.key)}` : identity
+}
+
 export const OpenAICompatibleLimitsPlugin = define({
   id: "opencode.provider.openai-compatible-limits",
   effect: Effect.fn(function* (ctx) {
@@ -161,6 +192,9 @@ export const OpenAICompatibleLimitsPlugin = define({
     yield* ctx.model.transform((models) => {
       endpoints.clear()
       for (const item of models.provider.list()) {
+        // A dedicated discovery plugin owns this provider's inventory and probes
+        // its own endpoints; a second /models request here would be redundant.
+        if (localProviderIDs.has(item.provider.id)) continue
         for (const [id, definition] of item.models) {
           if ((definition.package ?? item.provider.package) !== OPENAI_COMPATIBLE) continue
           if (fromCatalog(definition)) continue
@@ -201,60 +235,100 @@ export const OpenAICompatibleLimitsPlugin = define({
     const discover = Effect.fn("OpenAICompatibleLimits.discover")(function* () {
       yield* lock.withPermit(
         Effect.gen(function* () {
-          const stale = [...endpoints.values()].filter((endpoint) => freshEntry(endpoint) === undefined)
+          // Resolve the active connection first: an entry cached under a
+          // different credential (for example after `opencode auth login`) is
+          // stale no matter its TTL.
+          const stale: Array<{
+            endpoint: Endpoint
+            connection: string
+            authorization: string | undefined
+          }> = []
+          for (const endpoint of endpoints.values()) {
+            const connection = yield* ctx.integration.connection
+              .active(endpoint.providerID)
+              .pipe(Effect.orElseSucceed(() => undefined))
+            const credential = connection
+              ? yield* ctx.integration.connection
+                  .resolve(connection)
+                  .pipe(Effect.orElseSucceed(() => undefined))
+              : undefined
+            const fingerprint = connectionFingerprint(connection, credential)
+            const entry = cache.get(endpointKey(endpoint))
+            if (entry !== undefined && Date.now() - entry.at < entry.ttl && entry.connection === fingerprint)
+              continue
+            stale.push({
+              endpoint,
+              connection: fingerprint,
+              authorization:
+                endpoint.authorization ?? bearerFrom(credential) ?? bearerKey(endpoint.apiKey),
+            })
+          }
+          if (stale.length === 0) return
           const results = yield* Effect.all(
-            stale.map((endpoint) =>
-              Effect.option(
-                ctx.integration.connection
-                  .active(endpoint.providerID)
-                  .pipe(
-                    Effect.flatMap((connection) =>
-                      connection
-                        ? ctx.integration.connection
-                            .resolve(connection)
-                            .pipe(Effect.orElseSucceed(() => undefined), Effect.map(bearerFrom))
-                        : Effect.succeed(undefined),
-                    ),
-                    Effect.orElseSucceed(() => undefined),
-                    Effect.flatMap((resolved) =>
-                      fetchLimits(
-                        http,
-                        endpoint.baseURL,
-                        endpoint.authorization ?? resolved ?? bearerKey(endpoint.apiKey),
-                      ),
-                    ),
-                  ),
-              ),
-            ),
+            stale.map((item) => Effect.option(fetchLimits(http, item.endpoint.baseURL, item.authorization))),
             { concurrency: "unbounded" },
           )
           let changed = false
-          for (const [index, endpoint] of stale.entries()) {
+          for (const [index, item] of stale.entries()) {
             const result = results[index]
-            const previous = cache.get(endpointKey(endpoint))
+            const key = endpointKey(item.endpoint)
+            const previous = cache.get(key)
             if (Option.isNone(result)) {
               // Keep the last successful inventory through transient outages and retry soon.
-              cache.set(endpointKey(endpoint), {
+              cache.set(key, {
                 at: Date.now(),
                 ttl: FAILURE_TTL_MS,
+                connection: item.connection,
                 value: previous?.value ?? {},
               })
               continue
             }
-            cache.set(endpointKey(endpoint), { at: Date.now(), ttl: CACHE_TTL_MS, value: result.value })
-            changed = true
+            cache.set(key, {
+              at: Date.now(),
+              ttl: CACHE_TTL_MS,
+              connection: item.connection,
+              value: result.value,
+            })
+            if (previous === undefined || !sameLimits(previous.value, result.value)) changed = true
           }
           if (changed) yield* ctx.model.reload()
         }),
       )
     })
 
-    yield* discover().pipe(Effect.ignore, Effect.forkScoped)
+    // Failed endpoints retry once a minute and successes refresh at their TTL,
+    // on a schedule like the local provider plugins, instead of only when the
+    // catalog changes.
+    yield* discover().pipe(Effect.ignore, Effect.repeat(Schedule.spaced(FAILURE_TTL_MS)), Effect.forkScoped)
     yield* bus
       .subscribe([Model.Event.Updated])
       .pipe(
         Stream.runForEach(() => discover().pipe(Effect.ignore)),
         Effect.forkScoped({ startImmediately: true }),
       )
+    // A credential switch can change what /models advertises; revalidate at
+    // once instead of waiting out the cache TTL.
+    yield* bus
+      .subscribe(Credential.Event.Switched)
+      .pipe(
+        Stream.filter((event) =>
+          [...endpoints.values()].some(
+            (endpoint) => endpoint.providerID === Provider.ID.make(event.data.integrationID),
+          ),
+        ),
+        Stream.runForEach(() => discover().pipe(Effect.ignore)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
   }),
 })
+
+const sameLimits = (left: Record<string, AdvertisedLimit>, right: Record<string, AdvertisedLimit>) => {
+  const ids = Object.keys(left)
+  if (ids.length !== Object.keys(right).length) return false
+  return ids.every((id) => {
+    const a = left[id]
+    const b = right[id]
+    if (b === undefined) return false
+    return a.context === b.context && a.input === b.input && a.output === b.output
+  })
+}

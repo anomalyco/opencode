@@ -2685,8 +2685,12 @@ Precedence, highest first:
 
 Discovery fails open: if the endpoint is unreachable, errors, or returns
 malformed data, OpenCode keeps whatever limits it already has and never blocks
-startup. A manual `limit` in the config is still the right choice when the
-server does not advertise limits or advertises wrong ones.
+startup. Failed lookups retry about once a minute and successful ones refresh
+every five minutes, so an endpoint that was down when OpenCode started catches
+up on its own. Providers with their own discovery integration (LM Studio,
+Ollama, vLLM) are left to that integration and are never probed here. A manual
+`limit` in the config is still the right choice when the server does not
+advertise limits or advertises wrong ones.
 
 ---
 

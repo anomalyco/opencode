@@ -10,7 +10,8 @@ import {
 } from "@opencode/core/plugin/provider/openai-compatible-limits"
 import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { Provider } from "@opencode/core/provider"
-import { Document, type Entry, Info } from "@opencode/schema/config"
+import { Bus } from "@opencode/core/bus"
+import { Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
@@ -23,8 +24,11 @@ const addPlugins = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   const config = Config.testLayer(entries)
-  yield* OpenAICompatibleLimitsPlugin.effect(host).pipe(Effect.provide(config))
-  yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provide(config))
+  return yield* Effect.gen(function* () {
+    yield* OpenAICompatibleLimitsPlugin.effect(host)
+    yield* ConfigProviderPlugin.Plugin.effect(host)
+    return yield* Config.Test
+  }).pipe(Effect.provide(config))
 })
 
 function eventually<A>(
@@ -240,6 +244,83 @@ describe("OpenAICompatibleLimitsPlugin", () => {
           ).toMatchObject({ limit: { context: 200_000, output: 32_000 } })
         }),
       ({ dead, live }) => Effect.promise(() => Promise.all([dead.stop(true), live.stop(true)])),
+    ),
+  )
+
+  it.live("does not probe providers owned by a dedicated discovery plugin", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: string[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            requests.push(new URL(request.url).pathname)
+            return Response.json({ data: [{ id: "local-model", context_length: 1_000_000 }] })
+          },
+        })
+        return { requests, server }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const modelState = yield* Model.Service
+          yield* addPlugins([configuration("vllm", `${server.url.origin}/v1`, { "local-model": {} })])
+
+          const model = yield* eventually(
+            modelState.get(Provider.ID.make("vllm"), Model.ID.make("local-model")),
+            (model) => model !== undefined,
+          )
+          // LM Studio, Ollama, and vLLM keep the inventory their own plugin discovers.
+          yield* Effect.promise(() => Bun.sleep(200))
+          expect(requests).toEqual([])
+          expect(model?.limit).toMatchObject({ context: 200_000, output: 32_000 })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("refetches when the settings apiKey changes instead of serving the cached result", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const authorizations: Array<string | null> = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const authorization = request.headers.get("authorization")
+            authorizations.push(authorization)
+            return Response.json({
+              data: [
+                {
+                  id: "rotating-model",
+                  context_length: authorization === "Bearer one" ? 111_111 : 222_222,
+                },
+              ],
+            })
+          },
+        })
+        return { authorizations, server }
+      }),
+      ({ authorizations, server }) =>
+        Effect.gen(function* () {
+          const modelState = yield* Model.Service
+          const bus = yield* Bus.Service
+          const providerID = Provider.ID.make("rotating")
+          const origin = `${server.url.origin}/v1`
+          const models = { "rotating-model": {} }
+          const test = yield* addPlugins([configuration("rotating", origin, models, "one")])
+
+          yield* eventually(
+            modelState.get(providerID, Model.ID.make("rotating-model")),
+            (model) => model?.limit.context === 111_111,
+          )
+          yield* test.setEntries([configuration("rotating", origin, models, "two")])
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(
+            modelState.get(providerID, Model.ID.make("rotating-model")),
+            (model) => model?.limit.context === 222_222,
+          )
+          expect(authorizations).toContain("Bearer two")
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
     ),
   )
 })
