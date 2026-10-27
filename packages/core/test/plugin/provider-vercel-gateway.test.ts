@@ -243,18 +243,18 @@ describe("Vercel AI Gateway setup", () => {
       expect(test.requests.some((request) => request.path.startsWith("/v1/api-keys"))).toBe(false)
     }),
   )
-  it.live("uses the temporary Vercel CLI client ID when no override is configured", () =>
+  it.live("uses a placeholder client ID when no OAuth client is configured", () =>
     withEnv({ OPENCODE_VERCEL_CLIENT_ID: undefined }, () =>
       Effect.gen(function* () {
         const test = yield* fixture(false, "")
         const device = test.requests.find((request) => request.path === "/device")
-        expect(new URLSearchParams(String(device?.body)).get("client_id")).toBe("cl_HYyOPBNtFMfHhaUn9L4QPfTZz6TP47bp")
+        expect(new URLSearchParams(String(device?.body)).get("client_id")).toBe("REPLACE_ME")
         yield* test.integrations.oauth.cancel(test.input)
       }),
     ),
   )
 
-  it.live("allows a dedicated OAuth client ID to override the temporary default", () =>
+  it.live("uses the configured OpenCode OAuth client ID", () =>
     withEnv({ OPENCODE_VERCEL_CLIENT_ID: "dedicated-opencode-client" }, () =>
       Effect.gen(function* () {
         const test = yield* fixture(false, "")

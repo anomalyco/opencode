@@ -9,8 +9,6 @@ import type { PluginInternal } from "../internal.js"
 
 const providerID = Provider.ID.make("vercel")
 const methodID = Integration.MethodID.make("gateway-setup")
-// Temporary default from vercel/vercel packages/cli/src/util/oauth.ts.
-const vercelCLIClientID = "cl_HYyOPBNtFMfHhaUn9L4QPfTZz6TP47bp"
 const Discovery = Schema.Struct({ device_authorization_endpoint: Schema.String, token_endpoint: Schema.String })
 const Device = Schema.Struct({
   device_code: Schema.NonEmptyString,
@@ -37,7 +35,7 @@ const metadata = Schema.decodeUnknownOption(Metadata)
 const expiredMessage = "Your Vercel AI Gateway key has expired. Sign in to Vercel to create a replacement."
 const rejectedMessage = "Your Vercel AI Gateway key is no longer valid. Sign in to Vercel to create a replacement."
 
-/** A dedicated OAuth application can override the temporary Vercel CLI client ID. */
+/** The client ID belongs to OpenCode's registered public Vercel OAuth application. */
 export function make(options: { clientID?: string; issuer?: string; api?: string } = {}) {
   return define({
     id: "opencode.provider.vercel.gateway",
@@ -111,7 +109,7 @@ export function make(options: { clientID?: string; issuer?: string; api?: string
                   previous.value.type !== "key")
               )
                 return yield* Effect.fail(new Error("Select an existing Vercel API-key connection to renew"))
-              const clientID = options.clientID ?? process.env.OPENCODE_VERCEL_CLIENT_ID ?? vercelCLIClientID
+              const clientID = options.clientID ?? process.env.OPENCODE_VERCEL_CLIENT_ID ?? "REPLACE_ME"
               const issuer = options.issuer ?? "https://vercel.com"
               const discovery = yield* request(`${issuer}/.well-known/openid-configuration`, {}, Discovery)
               const device = yield* request(

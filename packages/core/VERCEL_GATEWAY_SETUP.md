@@ -6,15 +6,12 @@ Budget configuration is not part of the required interview. After connecting, us
 
 ## App registration
 
-For now the wizard defaults to Vercel CLI's public client ID, `cl_HYyOPBNtFMfHhaUn9L4QPfTZz6TP47bp`, copied from the linked CLI source at the user's request. No client secret is used. The Vercel consent screen will identify the application as Vercel CLI.
-
-To switch to an OpenCode-owned app later, set `OPENCODE_VERCEL_CLIENT_ID` in the **OpenCode server's environment**. That app must support the device authorization grant as a public client, without a client secret.
+The default OAuth client ID is the placeholder `REPLACE_ME`. Set `OPENCODE_VERCEL_CLIENT_ID` in the **OpenCode server's environment** to the public client ID of an OpenCode-owned Vercel OAuth app, or replace the placeholder before release. The app must support the device authorization grant as a public client, without a client secret.
 
 Configure the app with **Team: Read Only** and **AI Gateway API Keys: Read and Write** permissions. Vercel currently documents API permissions as a private beta; confirm that the OpenCode app is eligible for these permissions and the device authorization grant before enabling this in a release. Budget write access is unnecessary because budget management opens Vercel's dashboard.
 
 References:
 
-- [Vercel CLI OAuth implementation](https://github.com/vercel/vercel/blob/main/packages/cli/src/util/oauth.ts)
 - [Vercel scopes and permissions](https://vercel.com/docs/sign-in-with-vercel/scopes-and-permissions)
 - [Vercel CLI AI Gateway setup](https://github.com/vercel/vercel/blob/main/packages/cli/src/commands/ai-gateway/coding-agents-setup.ts)
 
@@ -40,4 +37,4 @@ From `packages/core`:
 bun run script/test.ts test/integration.test.ts test/plugin/provider-vercel-gateway.test.ts test/plugin/provider-vercel.test.ts
 ```
 
-These tests exercise a local HTTP server, the real integration state machine, validation, cancellation, denied authorization, the key-creation payload, credential persistence, and the optional budget link. They do not authenticate to Vercel or create real keys. Live verification requires completing browser authorization.
+These tests exercise a local HTTP server, the real integration state machine, validation, cancellation, denied authorization, the key-creation payload, credential persistence, and the optional budget link. They do not authenticate to Vercel or create real keys. Live verification requires the registered client ID and its permissions.
