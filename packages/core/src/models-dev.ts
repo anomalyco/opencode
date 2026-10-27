@@ -246,19 +246,9 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
   const apis = entries(model.api, decodeApi).map(
     ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
   )
-
-  // Prefer responses API over chat-completions for chat models when both are available,
-  // since responses is the newer, more capable API (supports reasoning, effort updates, etc.)
-  const hasResponses = apis.some(([protocol]) => protocol === "responses")
-  const hasChatCompletions = apis.some(([protocol]) => protocol === "chat-completions")
-  const preferResponses = model.type === "chat" && hasResponses && hasChatCompletions
-
   const [protocol, api, opencodeai] =
     (model.type === "chat"
-      ? preferResponses
-        ? apis.find(([protocol]) => protocol === "responses") ??
-          apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
-        : apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
+      ? apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
       : (apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`)) ??
         apis.find(([, , opencodeai]) => opencodeai))) ?? []
   if (!protocol || !api) return undefined
@@ -273,6 +263,45 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
       }) ??
         Provider.aisdk(aisdk)))
   if (!packageName) return undefined
+
+  // If the selected package is a generic chat-completions compatible package (e.g., openai-compatible)
+  // and the model is a known OpenAI GPT-5/6 or O-series model that supports responses,
+  // prefer a responses-capable package (native openai/responses or openai-compatible/responses)
+  // which has better support for reasoning/effort.
+  const isGenericChatCompatible = packageName === "@opencode/ai/providers/openai-compatible" ||
+    packageName === "@opencode/ai/providers/anthropic-compatible"
+  const isKnownOpenAIModel = /^gpt-(?:5|6)/i.test(model.id) || /^o[134]/.test(model.id)
+  if (isGenericChatCompatible && isKnownOpenAIModel) {
+    const responsesApi = apis.find(([p]) => p === "responses")
+    if (responsesApi) {
+      const [, responsesEntry, responsesOpencodeai] = responsesApi
+      const responsesPackage = responsesOpencodeai ??
+        (responsesEntry.sdk?.aisdk &&
+          (AISDKNative.native(responsesEntry.sdk.aisdk, {
+            providerID,
+            modelID: model.id,
+            shape: "responses",
+          }) ??
+            Provider.aisdk(responsesEntry.sdk.aisdk)))
+      // Accept native openai/responses or openai-compatible/responses (responses-specific compat package)
+      if (responsesPackage?.startsWith("@opencode/ai/providers/openai/") ||
+          responsesPackage === "@opencode/ai/providers/openai-compatible/responses") {
+        const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(responsesEntry.compatibility?.max_tokens_field))
+        const mediaInput = Option.getOrUndefined(decodeMediaInput(responsesEntry.compatibility?.media_input))
+        const responsesCompatibility = {
+          ...(responsesEntry.compatibility?.reasoning_field ? { reasoningField: responsesEntry.compatibility.reasoning_field } : {}),
+          ...(maxTokensField ? { maxTokensField } : {}),
+          ...(mediaInput ? { mediaInput } : {}),
+        }
+        return {
+          package: responsesPackage,
+          ...(BUILDS_OWN_URL.has(responsesPackage) || !responsesEntry.base_url ? {} : { baseURL: responsesEntry.base_url }),
+          ...(Object.keys(responsesCompatibility).length > 0 ? { compatibility: responsesCompatibility } : {}),
+        }
+      }
+    }
+  }
+
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
   const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
   const compatibility = {
