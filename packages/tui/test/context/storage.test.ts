@@ -111,8 +111,65 @@ test("latest starts fresh when prod storage is absent", async () => {
   }
 })
 
-test("latest propagates legacy storage errors other than absence", async () => {
+test("latest remains writable when legacy storage is invalid", async () => {
   await using temporary = await tmpdir()
-  await Bun.write(path.join(temporary.path, "prod", "tui"), "not a directory")
-  expect(() => createStorage(temporary.path, "latest")).toThrow("ENOTDIR")
+  const source = path.join(temporary.path, "prod", "tui")
+  await Bun.write(source, "not a directory")
+  await Bun.write(path.join(temporary.path, "latest", "tui", "tabs.json"), '{"active":"latest"}')
+  const result = createStorage(temporary.path, "latest")
+  try {
+    const [store, update] = result.storage.store("tabs", { initial: { active: "initial" } })
+    expect(store.active).toBe("latest")
+    await update((draft) => {
+      draft.active = "updated"
+    })
+    expect(await Bun.file(source).text()).toBe("not a directory")
+  } finally {
+    result.close()
+  }
+  const reopened = createStorage(temporary.path, "latest")
+  try {
+    expect(reopened.storage.store("tabs", { initial: { active: "initial" } })[0].active).toBe("updated")
+  } finally {
+    reopened.close()
+  }
+})
+
+test("latest retries failed imports without replacing its own state", async () => {
+  await using temporary = await tmpdir()
+  const source = path.join(temporary.path, "prod", "tui")
+  await Bun.write(source, "not a directory")
+  await Bun.write(path.join(temporary.path, "latest", "tui", "tabs.json"), '{"active":"latest"}')
+  const first = createStorage(temporary.path, "latest")
+  first.close()
+  fs.rmSync(source)
+  await Bun.write(path.join(source, "tabs.json"), '{"active":"prod"}')
+  await Bun.write(path.join(source, "plugin.retry.json"), '{"enabled":true}')
+  const retried = createStorage(temporary.path, "latest")
+  try {
+    expect(retried.storage.store("tabs", { initial: { active: "initial" } })[0].active).toBe("latest")
+    expect(retried.storage.store("plugin.retry", { initial: { enabled: false } })[0].enabled).toBe(true)
+  } finally {
+    retried.close()
+  }
+})
+
+test("deleting latest state after migration does not restore stale prod state", async () => {
+  await using temporary = await tmpdir()
+  const source = path.join(temporary.path, "prod", "tui", "tabs.json")
+  await Bun.write(source, '{"active":"prod"}')
+  const first = createStorage(temporary.path, "latest")
+  try {
+    expect(first.storage.store("tabs", { initial: { active: "initial" } })[0].active).toBe("prod")
+  } finally {
+    first.close()
+  }
+  fs.rmSync(path.join(temporary.path, "latest", "tui", "tabs.json"))
+  const reopened = createStorage(temporary.path, "latest")
+  try {
+    expect(reopened.storage.store("tabs", { initial: { active: "initial" } })[0].active).toBe("initial")
+    expect(await Bun.file(source).json()).toEqual({ active: "prod" })
+  } finally {
+    reopened.close()
+  }
 })

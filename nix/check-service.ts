@@ -120,11 +120,30 @@ async function start(env = process.env, flags = ["--port", "0"], legacy = false)
   }
 }
 
+const releasedFile = path.join(
+  process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"),
+  "opencode",
+  "service.json",
+)
+const pendingHandoff = {
+  source: { id: "previous-instance", pid: process.pid, url: "http://127.0.0.1:1" },
+  handoff: null,
+  expiresAt: Date.now() + 60_000,
+}
+await Bun.write(releasedFile + ".pty-handoff", JSON.stringify(pendingHandoff))
 const published = await start()
 try {
   const endpoint = await Service.discover({ version })
   assert.equal(endpoint?.url, published.url)
   assert.equal(endpoint?.auth?.type, "basic")
+  assert.ok(
+    await Bun.file(releasedFile + ".pty-handoff").exists(),
+    "Normal startup must leave client-owned handoff intact",
+  )
+  assert.deepEqual(await Bun.file(releasedFile + ".pty-handoff").json(), pendingHandoff)
+  assert.equal((await Service.ensure({ version, command: [] })).url, published.url)
+  assert.equal(await Bun.file(releasedFile + ".pty-handoff").exists(), false)
+  console.log("Normal service startup leaves handoff cleanup to the client's ready acknowledgement")
   console.log("Released CLI is discoverable through the Desktop client's default registration")
 } finally {
   published.child.kill()

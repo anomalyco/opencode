@@ -67,21 +67,22 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
       // Legacy discovery may advertise a different default port.
-      if (serviceOptions?.legacyURL !== undefined) {
-        const legacy = yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })
-        if (legacy !== undefined) {
-          if (
-            (options.port === undefined &&
-              options.hostname === undefined &&
-              config.hostname === undefined &&
-              config.port === undefined) ||
-            (findIncumbent !== undefined && (yield* findIncumbent) !== undefined)
-          )
-            return
-          // Read the ticket after stopping its owner, then continue in this process.
-          yield* Service.stop({ file: serviceOptions.file, pty: legacy.state === "ready" ? "handoff" : "clear" })
-          inherited = (yield* Effect.tryPromise(() => PtyHandoff.environment(serviceOptions.file))).OPENCODE_PTY_HANDOFF
-        }
+      const legacy =
+        serviceOptions?.legacyURL === undefined
+          ? undefined
+          : yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })
+      if (legacy !== undefined && serviceOptions !== undefined) {
+        if (
+          (options.port === undefined &&
+            options.hostname === undefined &&
+            config.hostname === undefined &&
+            config.port === undefined) ||
+          (findIncumbent !== undefined && (yield* findIncumbent) !== undefined)
+        )
+          return
+        // Read the ticket after stopping its owner, then continue in this process.
+        yield* Service.stop({ file: serviceOptions.file, pty: legacy.state === "ready" ? "handoff" : "clear" })
+        inherited = (yield* Effect.tryPromise(() => PtyHandoff.environment(serviceOptions.file))).OPENCODE_PTY_HANDOFF
       }
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
       const handoff =
@@ -225,7 +226,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         )
       }
       const url = HttpServer.formatAddress(server.address)
-      if (serviceOptions !== undefined)
+      if (legacy !== undefined && serviceOptions !== undefined)
         yield* Effect.tryPromise(() =>
           PtyHandoff.complete(serviceOptions.file, { id: instanceID, pid: process.pid, url }),
         ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to clear persistent terminal restart handoff", cause)))
