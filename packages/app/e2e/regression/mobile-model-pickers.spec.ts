@@ -203,14 +203,13 @@ for (const direction of ["ltr", "rtl"] as const) {
   })
 }
 
-test("desktop model button shows the model details", async ({ page }) => {
+test("desktop model button shows only the choose-model hint, not the model details", async ({ page }) => {
   const { model } = await openDesktopPicker(page, "ltr")
   await model.hover()
-  const details = page.getByRole("tooltip")
-  await expect(details.getByText("Mobile Model A", { exact: true })).toBeVisible()
-  await expect(details.getByText("OpenCode", { exact: true })).toBeVisible()
-  await expect(details.getByText("1,000,000", { exact: true })).toBeVisible()
-  await expect(details.getByText("Input & Output", { exact: true })).toBeVisible()
+  const tooltip = page.getByRole("tooltip")
+  await expect(tooltip).toContainText("Choose model")
+  await expect(tooltip.getByText("1,000,000", { exact: true })).toHaveCount(0)
+  await expect(tooltip.getByText("Input & Output", { exact: true })).toHaveCount(0)
 })
 
 test("model dialog shows a summary for models without variants", async ({ page }) => {
