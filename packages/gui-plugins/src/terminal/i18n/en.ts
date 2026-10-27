@@ -3,6 +3,7 @@ export default {
   "command.toggle": "Toggle terminal",
   "command.new": "New terminal",
   "command.new.description": "Create a new terminal tab",
+  "location.open": "Open in terminal",
   loading: "Loading terminal…",
   "title.numbered": "Terminal {{number}}",
   close: "Close terminal",

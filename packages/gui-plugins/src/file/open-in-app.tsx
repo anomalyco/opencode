@@ -193,6 +193,27 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
 
 type OpenInAppState = ReturnType<typeof useOpenInApp>
 
+export function OpenInAppMenuItem(props: { session: MountedSession }) {
+  const ctx = usePlugin()
+
+  const state = useOpenInApp({
+    get session() {
+      return props.session
+    },
+    path: () => props.session.directory,
+    request: useShared().request,
+  })
+
+  return (
+    <Show when={state.canOpen() && state.current().id !== "finder"}>
+      <Menu.Item disabled={state.opening()} onSelect={() => state.openPath(state.current().id)}>
+        <AppIcon id={state.current().icon} class="size-3.5 shrink-0" />
+        {ctx.t("open.ariaLabel", { app: state.current().label })}
+      </Menu.Item>
+    </Show>
+  )
+}
+
 export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = usePlugin()
   const directory = () => props.screen.file.root

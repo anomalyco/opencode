@@ -2,6 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
+import { reviewTabs } from "../utils/side-panel"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -333,7 +334,7 @@ test.describe("location", () => {
 
   test("names the project and worktree, and the card copies the full path", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"])
-    await openSession(page, workspace)
+    await openSession(page, { ...workspace, vcs: { current: "", default: "main" } })
     await expect(trigger(page).locator('[data-slot="session-location-project"]')).toHaveText("Location")
     await expect(trigger(page).locator('[data-slot="session-location-worktree"]')).toHaveText("quiet-falcon")
     await expect(trigger(page)).not.toContainText("/")
@@ -341,6 +342,8 @@ test.describe("location", () => {
     await trigger(page).click()
     const card = page.locator('[data-slot="session-location-card"]')
     const path = card.getByRole("menuitem", { name: worktree, exact: true })
+    await expect(card.getByText("No branch", { exact: true })).toBeVisible()
+    await expect(card.getByRole("menuitem", { name: "No branch", exact: true })).toHaveCount(0)
     await expect(path).toHaveText(worktree)
     await expect(card.getByRole("menuitem", { name: "Copy path", exact: true })).toHaveCount(0)
     // Select actual text on the first line, not the empty half of a wrapped path's bounding box.
@@ -378,6 +381,98 @@ test.describe("location", () => {
     await trigger(page).click()
     await expect(page.locator('[data-slot="session-location-card"]').getByText("apollo", { exact: true })).toBeVisible()
   })
+
+  test("copies the branch name and opens its worktree in the right-panel terminal", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await page.setViewportSize({ width: 1440, height: 900 })
+
+    const { pty } = await openSession(page, {
+      ...workspace,
+      vcs: (directory) => ({ current: directory === worktree ? "feature/branch-menu" : "main", default: "main" }),
+      pty: {},
+    })
+
+    await expect(page.getByRole("button", { name: "More options", exact: true })).toBeVisible()
+    await trigger(page).click()
+    const card = page.locator('[data-slot="session-location-card"]')
+    const branch = card.getByRole("menuitem", { name: "feature/branch-menu", exact: true })
+    await page.screenshot({ path: test.info().outputPath("branch-card.png"), animations: "disabled" })
+    await branch.press("Enter")
+    const actions = page.getByRole("menu", { name: "feature/branch-menu", exact: true })
+    await expect(actions.getByRole("menuitem")).toHaveText(["Copy branch name", "Open in terminal"])
+    await page.screenshot({ path: test.info().outputPath("branch-actions.png"), animations: "disabled" })
+    await actions.getByRole("menuitem", { name: "Copy branch name", exact: true }).click()
+    await expect(card).toBeHidden()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("feature/branch-menu")
+
+    await trigger(page).click()
+    await branch.click()
+    await actions.getByRole("menuitem", { name: "Open in terminal", exact: true }).click()
+    await expect(card).toBeHidden()
+    await expect.poll(() => pty.created.map((item) => item.cwd)).toEqual([worktree])
+    await expect.poll(() => pty.sockets.length).toBe(1)
+    pty.send("$ pwd\r\n" + worktree + "\r\n")
+    const terminal = page.locator('[data-component="terminal"]')
+    await expect(terminal).toHaveCSS("opacity", "1")
+    await expect(terminal.locator("textarea")).toBeFocused()
+    await expect
+      .poll(async () => {
+        const box = await terminal.boundingBox()
+        const header = await page.locator("[data-session-title]").boundingBox()
+
+        return !!box && !!header && box.x >= header.x + header.width
+      })
+      .toBe(true)
+    await page.screenshot({ path: test.info().outputPath("branch-terminal.png"), animations: "disabled" })
+  })
+
+  for (const app of [
+    { id: "vscode", label: "VS Code" },
+    { id: "finder", label: "Finder" },
+  ]) {
+    test(`uses the selected ${app.label} app in the path submenu`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 })
+
+      const mock = await mockWorkspace(page, {
+        ...workspace,
+        seed: {
+          storage: {
+            ...reviewTabs(worktree, "ses_location"),
+            "opencode.global.dat:plugin.file.app": { app: app.id },
+          },
+        },
+      })
+
+      await page.goto(
+        `/e2e/utils/windows-menu.html?${new URLSearchParams({
+          server: mock.server,
+          path: sessionHref("ses_location", "sidecar"),
+          os: "macos",
+          openApps: "1",
+        })}`,
+      )
+      await expectSessionTitle(page, "Location session")
+      await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+      // Opening review hands focus to the panel after its motion; let that finish before opening another menu.
+      await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+      await expect(page.getByRole("button", { name: `Open in ${app.label}`, exact: true })).toBeVisible()
+      await trigger(page).click()
+      await page.getByRole("menuitem", { name: worktree, exact: true }).click()
+      const actions = page.getByRole("menu", { name: worktree, exact: true })
+
+      if (app.id === "finder") {
+        await expect(actions.getByRole("menuitem")).toHaveText(["Copy path", "Reveal in Finder"])
+
+        return
+      }
+
+      await page.screenshot({ path: test.info().outputPath("path-open-app.png"), animations: "disabled" })
+      await actions.getByRole("menuitem", { name: "Open in VS Code", exact: true }).click()
+      await expect(page.getByLabel("Opened paths")).toHaveText(
+        JSON.stringify([{ path: worktree, app: "Visual Studio Code" }]),
+      )
+    })
+  }
 
   test.describe("touch", () => {
     test.use({ hasTouch: true })

@@ -1,0 +1,43 @@
+:root,
+:host {
+  --timeline-quote-background: light-dark(
+    rgb(from var(--v2-blue-1100) r g b / 0.1),
+    rgb(from var(--v2-blue-400) r g b / 0.25)
+  );
+}
+
+[data-slot="session-timeline-scroll"] ::selection,
+:host ::selection,
+::highlight(timeline-quote-source) {
+  background-color: var(--timeline-quote-background);
+  color: currentColor;
+}
+
+.timeline-quote-highlight-host {
+  isolation: isolate;
+
+  &::highlight(timeline-quote-source) {
+    background-color: transparent;
+  }
+}
+
+.timeline-quote-highlight-relative {
+  position: relative;
+}
+
+[data-component="timeline-quote-background"] {
+  position: absolute;
+  /* These offsets share the physical coordinate system of DOMRects, including in RTL. */
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: -1;
+  pointer-events: none;
+  user-select: none;
+
+  > span {
+    position: absolute;
+    background-color: var(--timeline-quote-background);
+  }
+}

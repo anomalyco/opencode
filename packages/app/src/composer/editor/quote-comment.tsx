@@ -4,6 +4,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
+import { useLanguage } from "@/runtime/i18n/language"
 
 const GAP = 8
 
@@ -18,6 +19,8 @@ export function QuoteCommentEditor(props: {
   onSubmit: (comment: string) => void
   onClose: () => void
 }) {
+  const language = useLanguage()
+
   const [state, setState] = createStore({
     draft: props.comment,
     rect: bounds(props.anchor),
@@ -70,6 +73,7 @@ export function QuoteCommentEditor(props: {
           onInput={(value) => setState("draft", value)}
           onCancel={props.onClose}
           onSubmit={props.onSubmit}
+          placeholder={language.t("session.quote.commentPlaceholder")}
           allowEmpty
           mention={{ items: props.mention }}
           selection={

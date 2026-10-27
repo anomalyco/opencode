@@ -53,7 +53,7 @@ export default function NewSessionPage(props: { draftId: string }) {
     restoreFocus: model.restoreFocus,
     project: {
       empty: project.empty,
-      open: () => location({ projectsOnly: true }),
+      open: () => location(),
     },
     workspace: {
       enabled: workspace.bar.visible,
@@ -67,7 +67,7 @@ export default function NewSessionPage(props: { draftId: string }) {
       if (!ready) return
 
       // Search projects opened this draft; the picker returns focus to the composer when it closes.
-      if (layout.draft.projectSearch.take()) location({ projectsOnly: true })
+      if (layout.draft.projectSearch.take()) location()
       else model.restoreFocus()
     }),
   )
