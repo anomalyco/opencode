@@ -65,7 +65,22 @@ export function createPromptProjectController(input: { controls: Accessor<Prompt
       ),
   )
 
-  const selected = () => current() ?? projects()[0]
+  // A directory switch must show the target immediately: before the server resolves and lists the
+  // directory, no entry matches, and falling back to the first listed project would flash the old
+  // project back into the chip for as long as the resolution takes.
+  const selected = () => {
+    const controls = input.controls()
+    const matched = current()
+
+    if (matched) return matched
+
+    if (!controls.directory) return undefined
+
+    return {
+      worktree: controls.directory,
+      server: controls.servers?.find((server) => server.key === controls.server),
+    }
+  }
 
   const matches = (project: PromptProject, other?: PromptProject) =>
     !!other && pathKey(other.worktree) === pathKey(project.worktree) && other.server?.key === project.server?.key

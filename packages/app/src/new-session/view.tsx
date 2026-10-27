@@ -107,10 +107,12 @@ export function NewSessionView(props: {
                 <div class="relative z-10">
                   <Composer model={props.composer} />
                 </div>
-                <Show when={props.project.selected()}>
+                {/* Keyed: the location chip rebuilds only when the selected project identity changes, so the
+                    narrowed accessor can never be read after `selected()` flips during a directory switch. */}
+                <Show when={props.project.selected()} keyed>
                   {(project) => (
                     <NewSessionLocation
-                      project={project()}
+                      project={project}
                       workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
                       root={props.workspace.project.root()}
                       branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
@@ -132,10 +134,11 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
-        <Show when={wordmark.mode !== "flat" && wordmark.box}>
+        {/* Keyed: `wordmark.box` only ever transitions null -> element, so a rebuild here is the mount itself. */}
+        <Show when={wordmark.mode !== "flat" && wordmark.box} keyed>
           {(logo) => (
             <NewSessionPinBoard
-              logo={logo()}
+              logo={logo}
               sound={settings.sounds.interfaceEnabled}
               entrance="chain"
               closing={wordmark.mode === "closing"}

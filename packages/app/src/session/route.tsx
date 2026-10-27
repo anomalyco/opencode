@@ -132,7 +132,14 @@ function ResolvedTargetSessionRoute() {
     { children: true, connected: () => server.ctx.sdk.connection.status() === "connected" },
   )
 
-  const directory = createMemo(() => current()?.location.directory)
+  // Keyed on the session object: a store update reconciles in place, so worktree navigation on the same
+  // session keeps the providers below alive, while switching or deleting the session tears them down instead
+  // of leaving effects reading a stale <Show> accessor after its directory flips.
+  const directorySession = createMemo(() => {
+    const session = current()
+
+    return session?.location.directory ? session : undefined
+  })
 
   // Only a failed health check: a version mismatch has its own panel, and a rejected credential is not an outage.
   const unreachable = () => {
@@ -154,7 +161,8 @@ function ResolvedTargetSessionRoute() {
       }
     >
       <Show
-        when={directory()}
+        when={directorySession()}
+        keyed
         fallback={
           // Nothing is cached and an unreachable server never resolves the session, so explain instead of waiting blank.
           <Show when={unreachable()} fallback={<PendingSessionState sessionID={params.id} />}>
@@ -167,9 +175,9 @@ function ResolvedTargetSessionRoute() {
           </Show>
         }
       >
-        {(value) => (
-          <LocationProvider directory={value()}>
-            <SessionUIProvider directory={value()} server={server.key}>
+        {(session) => (
+          <LocationProvider directory={session.location.directory}>
+            <SessionUIProvider directory={session.location.directory} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
           </LocationProvider>
