@@ -279,6 +279,12 @@ function RootSettings() {
 
   const addServer = () => void dialog.push(() => <DialogServer mode="add" onSave={selectServer} />)
 
+  const pluginTabs = (group?: "about") =>
+    surface.plugins
+      .pages()
+      .filter((item) => item.value.group === group)
+      .map((item) => ({ value: item.value.id, icon: item.value.icon ?? pageIcons.extensions, label: item.value.title }))
+
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
       items: serverTabs.map((item) => ({
@@ -290,11 +296,7 @@ function RootSettings() {
     {
       items: [
         ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
-        ...surface.plugins.pages().map((item) => ({
-          value: item.value.id,
-          icon: item.value.icon ?? pageIcons.extensions,
-          label: item.value.title,
-        })),
+        ...pluginTabs(),
       ],
     },
     {
@@ -310,7 +312,9 @@ function RootSettings() {
       ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
       : []),
     ...(showPlugins ? [{ items: pluginsTab.map((item) => ({ ...item, label: language.t(item.label) })) }] : []),
-    { items: aboutTab.map((item) => ({ ...item, label: language.t(item.label) })) },
+    {
+      items: [...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs("about")],
+    },
   ])
 
   const change = (value: string) => {

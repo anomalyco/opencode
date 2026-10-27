@@ -87,6 +87,7 @@ function betaNotes(ctx: SetupContext<typeof definition>) {
   ctx.add(SettingsPage, {
     id: "whats-new",
     icon: "flask",
+    group: "about",
     get title() {
       return ctx.t("beta.title")
     },
