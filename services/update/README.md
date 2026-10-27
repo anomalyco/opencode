@@ -128,8 +128,9 @@ using a short-lived OIDC token with audience `https://update.opencode.ai`. The o
 hostname and token audience remain supported. The Worker accepts only tokens signed by
 GitHub for repository ID `975734319`, owner ID `66570915`, `.github/workflows/release.yml`
 and environment `release`. Pushes to `dev` may publish only to `dev`; only a
-`workflow_dispatch` on `dev` (a versioned release) may publish to `latest`, and `beta`
-publishes only to `beta`.
+`workflow_dispatch` on `dev` (a versioned release) may publish to `latest`. The retired
+`beta` channel no longer accepts publishes; existing artifacts stay readable for installed
+beta builds.
 
 Apply migrations and deploy from this directory:
 

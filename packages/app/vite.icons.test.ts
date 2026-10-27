@@ -4,7 +4,7 @@ import { build, createServer } from "vite"
 import { icons } from "./vite.icons"
 import manifest from "./manifest.json" with { type: "json" }
 
-test.each(["dev", "beta", "prod", "local"])("bundles %s app icons", async (channel) => {
+test.each(["dev", "prod", "local"])("bundles %s app icons", async (channel) => {
   const result = await build({
     root: import.meta.dirname,
     configFile: false,
@@ -33,7 +33,7 @@ test.each(["dev", "beta", "prod", "local"])("bundles %s app icons", async (chann
   })
 })
 
-test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
+test.each(["dev", "prod"])("serves %s app icons", async (channel) => {
   const server = await createServer({
     root: import.meta.dirname,
     configFile: false,

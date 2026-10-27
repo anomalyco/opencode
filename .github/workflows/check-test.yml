@@ -4,19 +4,13 @@ on:
   push:
     branches:
       - dev
-      - beta
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
-    inputs:
-      quarantine:
-        description: Run only the quarantined browser tests (packages/app/e2e/QUARANTINE.md)
-        type: boolean
-        default: false
 
 concurrency:
   # A new push to a pull request cancels its stale run. Every push and manual run keeps its own group, so each
-  # dev and beta commit gets a verdict and a quarantine run never cancels a normal one.
+  # dev commit gets a verdict.
   group: ${{ case(github.event_name == 'pull_request', format('{0}-{1}', github.workflow, github.event.pull_request.number), format('{0}-{1}', github.workflow, github.run_id)) }}
   cancel-in-progress: true
 
@@ -63,7 +57,7 @@ jobs:
 
   unit:
     name: unit (${{ matrix.settings.name }})
-    if: ${{ !inputs.quarantine && !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +143,7 @@ jobs:
 
   build:
     name: build (${{ matrix.settings.name }})
-    if: ${{ !inputs.quarantine && !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -215,17 +209,17 @@ jobs:
           bun run script/service-smoke.ts --node
 
   e2e-suite:
-    name: e2e (${{ matrix.settings.name }}, ${{ matrix.suite.id }}${{ matrix.quarantine && ', quarantine' || '' }})
+    name: e2e (${{ matrix.settings.name }}, ${{ matrix.suite.id }})
     needs: affected
     if: needs.affected.outputs.e2e == 'true'
-    # Quarantined tests are known red; their legs report without failing the e2e checks.
-    continue-on-error: ${{ matrix.quarantine }}
     strategy:
       fail-fast: false
       matrix:
-        # Beta PRs gate on Linux; Windows runs on pushes and manual runs (nightly-beta.yml dispatches beta).
-        settings: ${{ fromJSON(github.base_ref == 'beta' && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
-        quarantine: ${{ fromJSON(inputs.quarantine && '[true]' || '[false]') }}
+        settings:
+          - name: linux
+            host: blacksmith-4vcpu-ubuntu-2404
+          - name: windows
+            host: blacksmith-4vcpu-windows-2025
         # Playwright splits whole spec files across shards by test count, not duration. Every app-N
         # entry must use the same total, and the entries must cover 1..total. The service worker suite
         # reuses shard 2's production build. Each component suite runs once per OS in its own leg, so the
@@ -240,9 +234,6 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
-      # Beta only (packages/app/e2e/QUARANTINE.md): gate legs skip quarantined tests, retry once and stop after 8
-      # failures; quarantine legs run only those tests, to the end. Other branches keep the config defaults.
-      PLAYWRIGHT_ARGS: ${{ matrix.quarantine && '--grep @quarantine --pass-with-no-tests --retries=1' || (github.base_ref == 'beta' || github.ref == 'refs/heads/beta') && '--grep-invert @quarantine --max-failures=8 --retries=1' || '' }}
     defaults:
       run:
         shell: bash
@@ -286,36 +277,36 @@ jobs:
 
       - name: Run app e2e tests against production build
         if: matrix.suite.shard
-        run: bun --cwd packages/app test:e2e:built --shard=${{ matrix.suite.shard }} ${{ env.PLAYWRIGHT_ARGS }}
+        run: bun --cwd packages/app test:e2e:built --shard=${{ matrix.suite.shard }}
         env:
           CI: true
-        timeout-minutes: ${{ (matrix.quarantine || github.base_ref == 'beta' || github.ref == 'refs/heads/beta') && 10 || 15 }}
+        timeout-minutes: 15
 
       - name: Verify service worker precaching and upgrades
-        if: matrix.suite.shard == '2/2' && !matrix.quarantine
+        if: matrix.suite.shard == '2/2'
         working-directory: packages/app
         run: bunx playwright test --config e2e/service-worker/playwright.config.ts
         timeout-minutes: 5
 
       - name: Run session UI component tests
         if: matrix.suite.id == 'session-ui-components'
-        run: bun --cwd packages/session-ui test:components ${{ env.PLAYWRIGHT_ARGS }}
+        run: bun --cwd packages/session-ui test:components
         env:
           CI: true
-        timeout-minutes: ${{ (matrix.quarantine || github.base_ref == 'beta' || github.ref == 'refs/heads/beta') && 10 || 15 }}
+        timeout-minutes: 15
 
       - name: Run app component tests
         if: matrix.suite.id == 'app-components'
-        run: bun --cwd packages/app test:components ${{ env.PLAYWRIGHT_ARGS }}
+        run: bun --cwd packages/app test:components
         env:
           CI: true
-        timeout-minutes: ${{ (matrix.quarantine || github.base_ref == 'beta' || github.ref == 'refs/heads/beta') && 10 || 15 }}
+        timeout-minutes: 15
 
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-${{ matrix.settings.name }}-${{ matrix.suite.id }}${{ matrix.quarantine && '-quarantine' || '' }}-${{ github.run_attempt }}
+          name: playwright-${{ matrix.settings.name }}-${{ matrix.suite.id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 7
           path: |
@@ -331,7 +322,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.os }})
     needs: [affected, e2e-suite]
-    if: ${{ !cancelled() && !inputs.quarantine && !github.event.pull_request.draft }}
+    if: ${{ !cancelled() && !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
@@ -344,9 +335,5 @@ jobs:
           SUITES: ${{ needs.e2e-suite.result }}
           EXPECTED: ${{ needs.affected.outputs.e2e == 'true' && 'success' || 'skipped' }}
         run: |
-          if [ "${{ matrix.os }}" = windows ] && [ "${{ github.base_ref }}" = beta ]; then
-            echo "Windows browser tests run on beta pushes and nightly, not on beta pull requests"
-            exit 0
-          fi
           echo "affected packages: $AFFECTED, browser test legs: $SUITES (expected $EXPECTED)"
           test "$AFFECTED" = success && test "$SUITES" = "$EXPECTED"

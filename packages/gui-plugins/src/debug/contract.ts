@@ -25,7 +25,7 @@ export const HeapSnapshots = Ipc.define({
 })
 
 /**
- * Memory diagnostics, offered only in debug builds (the dev server and Beta) and off until turned on: a JSONL memory
+ * Memory diagnostics, offered only in debug builds (the dev server) and off until turned on: a JSONL memory
  * log in the desktop logs, and SIGUSR2 heap snapshots when `OPENCODE_DESKTOP_HEAP_DIRECTORY` names an absolute folder.
  * The debug bar's toggle turns them on and remembers it; `OPENCODE_DESKTOP_MEMORY_LOG=<seconds>` turns them on for one
  * launch, and the toggle cannot turn that off.

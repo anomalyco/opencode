@@ -6,10 +6,9 @@ import { HeapSnapshots, MemoryDiagnostics } from "./contract"
 
 const setup: Plugin.Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
-  // Motion tuning lives only in the debug bar, on the dev server and in Beta. Both are fixed at build time, so other
-  // builds, prod included, drop the import and never contain knobs.
-  const motionTools = import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
-  const Motion = motionTools ? lazy(() => import("./motion")) : undefined
+  // Motion tuning lives only in the debug bar, on the dev server. It is fixed at build time, so other builds drop the
+  // import and never contain knobs.
+  const Motion = import.meta.env.DEV ? lazy(() => import("./motion")) : undefined
   const bar = ctx.stores.bar
   const visible = () => bar.value.visible
   const motion = () => bar.value.motion

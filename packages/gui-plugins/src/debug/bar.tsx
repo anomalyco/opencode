@@ -737,8 +737,8 @@ export default function DebugBar(props: {
         </Show>
         <Show when={props.motion}>
           <div class="ms-auto flex items-center gap-[9px]">
-            {/* The lab's route exists only on the dev server and in Beta. */}
-            {(import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta") && (
+            {/* The lab's route exists only on the dev server. */}
+            {import.meta.env.DEV && (
               <Tooltip appearance="compact" value={ctx.t("components.tip")} placement="top">
                 <a
                   href="/components"

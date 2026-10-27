@@ -1,9 +1,9 @@
 /**
- * Builds with the debug tools: the dev server and Beta, as for the debug bar's Motion tools. Stable builds never run
- * memory diagnostics or open a debugging port, whatever the environment says.
+ * Builds with the debug tools: the dev server, as for the debug bar's Motion tools. Packaged builds never run memory
+ * diagnostics or open a debugging port, whatever the environment says.
  */
 export function debugBuild(build: { readonly packaged: boolean; readonly channel: string }) {
-  return !build.packaged || build.channel === "beta"
+  return !build.packaged
 }
 
 /** Invalid values disable diagnostics rather than turning a bad interval into a hot timer. */

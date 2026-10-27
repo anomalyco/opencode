@@ -184,9 +184,9 @@ function publishClaims(ref: string, event_name = "push", environment = "release"
 test.each([
   ["refs/heads/dev", "push", ["dev"]],
   ["refs/heads/dev", "workflow_dispatch", ["dev", "latest"]],
-  ["refs/heads/beta", "push", ["beta"]],
-  ["refs/heads/beta", "workflow_dispatch", ["beta"]],
-  // These branches no longer publish (v2 was merged into dev).
+  // These branches no longer publish (v2 was merged into dev, beta was retired).
+  ["refs/heads/beta", "push", []],
+  ["refs/heads/beta", "workflow_dispatch", []],
   ["refs/heads/v1", "push", []],
   ["refs/heads/v2", "push", []],
   ["refs/heads/ci", "push", []],

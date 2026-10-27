@@ -23,28 +23,16 @@ Both read the same environment as every other release package:
 
 | Variable           | Meaning                                                                                                         |
 | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
+| `OPENCODE_CHANNEL` | `dev` (default) or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                               |
 | `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
 | `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
 The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
 `bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)
-downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`latest` fail.
+downloads the published dev CLI, and `prod`/`latest` fail.
 
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
-
-## Beta channel
-
-Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to
-the `beta` update channel. Beta publishes only the desktop app and `beta.opencode.ai`; the CLI and SDK packages ship
-from `dev`. Install it from `https://opencode.ai/download/beta/<platform>`, for example `darwin-aarch64-dmg` or
-`windows-x64-nsis`. Installed builds update in place on every platform.
-
-Each beta build compiles in its commit and the `feat`, `fix` and `perf` commits among its newest 200
-(`script/beta-notes.ts`, embedded by `electron.vite.config.ts`; run `bun script/beta-notes.ts` to preview them). After an
-update, the beta app lists the ones after the commit of the build the user saw last in a "What's new in beta" dialog,
-unless release notes are turned off in Settings.
 
 ## Startup benchmark
 
@@ -78,6 +66,6 @@ log line. Renderer idle is the start of the first 500 ms window with under 10 % 
 for `--settle-ms`; `rendererTaskMs` is the renderer's total main-thread task time until then. Raw samples are
 written to `dist/bench-startup`.
 
-A packaged beta or prod build registers itself as the `opencode://` handler when it starts, even from the bench; the
-installed app takes the registration back on its next launch. Those channels run with `HTTPS_PROXY` pointed at a
+A packaged prod build registers itself as the `opencode://` handler when it starts, even from the bench; the
+installed app takes the registration back on its next launch. That channel runs with `HTTPS_PROXY` pointed at a
 closed port (`--offline` forces it for dev) so the updater's first check fails fast instead of reaching GitHub.

@@ -3,16 +3,15 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 
 describe("cli-version", () => {
   test.each([
-    { channel: "beta" as const, isolated: false, mode: "initial" as const, version: "0.0.0-beta-2", expected: undefined },
-    { channel: "beta" as const, isolated: true, mode: "initial" as const, version: "0.0.0-beta-2", expected: "0.0.0-beta-2" },
-    { channel: "prod" as const, isolated: false, mode: "initial" as const, version: "2.0.32", expected: "2.0.32" },
-  ])("serviceVersion($channel, isolated=$isolated) -> $expected", (input) => {
+    { mode: "initial" as const, version: "2.0.32", expected: "2.0.32" },
+    { mode: "reconnect" as const, version: "2.0.32", expected: undefined },
+  ])("serviceVersion($mode) -> $expected", (input) => {
     expect(serviceVersion(input)).toBe(input.expected)
   })
 
   test.each([
-    { bundled: "0.0.0-beta-2", running: "0.0.0-beta-1", expected: ["0.0.0-beta-2-arm64", "0.0.0-beta-1-arm64"] },
-    { bundled: "0.0.0-beta-2", running: "0.0.0-beta-2", expected: ["0.0.0-beta-2-arm64"] },
+    { bundled: "0.0.0-dev-2", running: "0.0.0-dev-1", expected: ["0.0.0-dev-2-arm64", "0.0.0-dev-1-arm64"] },
+    { bundled: "0.0.0-dev-2", running: "0.0.0-dev-2", expected: ["0.0.0-dev-2-arm64"] },
     { bundled: "2.0.32", running: undefined, expected: ["2.0.32-arm64"] },
   ])("keptStages($bundled, $running)", (input) => {
     expect(keptStages(input.bundled, input.running, "arm64")).toEqual(input.expected)

@@ -88,7 +88,7 @@ electron-builder filenames and include `.app.tar.gz` bundles.
 The jobs derive S3 credentials from the `CLOUDFLARE_API_TOKEN` secret and set
 the content type, download filename, and immutable cache headers.
 
-They register `cli`, `cli-node` (dev builds), and `desktop` (beta and versioned
+They register `cli`, `cli-node` (dev builds), and `desktop` (dev and versioned
 releases) with distribution `opencode`, each only after all of its files have
 uploaded. Every `metadata.files` entry contains the direct CDN `url`, SHA-256
 checksum, and byte size. Desktop `metadata.manifests` use those CDN URLs with

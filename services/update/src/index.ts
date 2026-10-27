@@ -595,7 +595,6 @@ export function validGitHubClaims(claims: JWTPayload): claims is GitHubClaims {
 // Pushes to dev ship dev builds. Only a manual dispatch of a versioned release may ship to latest.
 export function allowedChannels(claims: Pick<GitHubClaims, "ref" | "event_name">) {
   if (claims.ref === "refs/heads/dev") return claims.event_name === "workflow_dispatch" ? ["dev", "latest"] : ["dev"]
-  if (claims.ref === "refs/heads/beta") return ["beta"]
   return []
 }
 

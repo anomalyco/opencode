@@ -8,7 +8,6 @@ import type definition from "./index"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   whatsNew(ctx)
-  betaNotes(ctx)
 
   if (!ctx.desktop) return
   const updater = ctx.main(Updater)
@@ -69,42 +68,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   })
 
   ctx.add(Command, (): Command => ({ id: "check", title: ctx.t("menu.check"), hidden: true, run: () => act("check") }))
-
-  // Beta builds answer the app menu's Check for Updates in the focused window instead of a native dialog. The
-  // listener follows main's updater across restarts.
-  updater.on("check", () => act("check"))
 }
 
 /**
- * What's new in beta as a settings page, to come back to after its dialog closes. Only builds that embed the notes
- * have it: beta builds and the desktop dev server.
- */
-function betaNotes(ctx: SetupContext<typeof definition>) {
-  if (!import.meta.env.OPENCODE_BETA_NOTES) return
-
-  const Page = lazy(() => import("./beta-page"))
-
-  ctx.add(SettingsPage, {
-    id: "whats-new",
-    icon: "flask",
-    group: "about",
-    get title() {
-      return ctx.t("beta.title")
-    },
-    get entries() {
-      return [{ id: "whats-new", title: ctx.t("beta.title"), keywords: "changelog release notes beta" }]
-    },
-    render: () => (
-      <Suspense>
-        <Page />
-      </Suspense>
-    ),
-  })
-}
-
-/**
- * What's New after an update, on every platform: the release highlights since the version last seen, or on beta the
- * features and fixes of the beta builds since then. The first run and a disabled What's New only remember the version.
+ * What's New after an update, on every platform: the release highlights since the version last seen. The first run and
+ * a disabled What's New only remember the version.
  */
 function whatsNew(ctx: SetupContext<typeof definition>) {
   const version = ctx.app.version
@@ -113,28 +81,12 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
 
   if (!version || previous === version) return
 
-  const commit = import.meta.env.OPENCODE_COMMIT
-  const previousCommit = seen.value.commit
-
   const markSeen = () =>
     seen.update((draft) => {
       draft.version = version
-
-      // Beta remembers the build's commit even when nothing shows, so the next update lists what came after it.
-      if (commit) draft.commit = commit
     })
 
   if (!previous || !ctx.stores.releaseNotes.value.enabled) return markSeen()
-
-  if (ctx.app.channel === "beta") {
-    void import("./beta-dialog").then((module) => {
-      if (ctx.signal.aborted) return
-
-      module.showBetaNotes(ctx, { previous, previousCommit, markSeen })
-    })
-
-    return
-  }
 
   void import("./whats-new").then((module) => {
     if (ctx.signal.aborted) return

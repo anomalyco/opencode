@@ -111,11 +111,8 @@ const setup: Plugin.MainSetup = async (ctx) => {
       label: ctx.t("menu.check"),
       after: "about",
       enabled: () => enabled,
-      run(window) {
-        // Beta builds check in the focused window, which reports the result in-app.
-        if (build.channel !== "beta") return void runFork(show)
-
-        if (window) provider.emit("check", null, window.id)
+      run() {
+        runFork(show)
       },
     }),
   )

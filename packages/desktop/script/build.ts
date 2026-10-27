@@ -5,8 +5,8 @@ import path from "node:path"
 import { copyBuiltCliToResources, downloadCliToResources, getCurrentCli, resolveChannel } from "./utils"
 
 // Prepares resources/ (icons, metainfo, the bundled CLI) for OPENCODE_CHANNEL and builds the app into out/.
-// The CLI comes from ../cli/dist when it holds the target; otherwise dev downloads the published dev CLI,
-// beta the beta CLI, and prod fails.
+// The CLI comes from ../cli/dist when it holds the target; otherwise dev downloads the published dev CLI and prod
+// fails.
 const dir = path.resolve(import.meta.dir, "..")
 
 const cli = path.resolve(dir, "../cli/dist")
@@ -26,6 +26,6 @@ if (channel === "prod" && !built)
 
 if (built) await copyBuiltCliToResources(cli)
 
-if (!built) await downloadCliToResources(channel === "beta" ? "beta" : undefined)
+if (!built) await downloadCliToResources()
 
 await $`bunx electron-vite build`

@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path } from "effect"
 
 // Each version and architecture stages its own copy of the CLI, and only the current one (plus any adopted
-// beta server still running) is kept: a downgrade stages its copy anew. Windows refuses to delete an executable
+// server still running) is kept: a downgrade stages its copy anew. Windows refuses to delete an executable
 // that has not exited yet, so a failed removal is logged and retried on the next launch.
 export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (
   binary: string,

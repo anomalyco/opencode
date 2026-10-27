@@ -4,7 +4,6 @@
 #
 #   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev, desktop
 #   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only
-#   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
 #
 # Releasers are actors with the admin or maintain role on the repository (the releasers team has maintain).
@@ -15,7 +14,6 @@ if [ -n "${INPUT_BUMP:-}" ] || [ -n "${INPUT_VERSION:-}" ]; then versioned=true;
 case "$GITHUB_EVENT_NAME:$GITHUB_REF:$versioned" in
   push:refs/heads/dev:false | workflow_dispatch:refs/heads/dev:false) channel="dev" ;;
   workflow_dispatch:refs/heads/dev:true) channel="latest" ;;
-  push:refs/heads/beta:false | workflow_dispatch:refs/heads/beta:false) channel="beta" ;;
   pull_request:*:false) channel="pr" ;;
   *) die "$GITHUB_EVENT_NAME on $GITHUB_REF cannot publish (versioned: $versioned)" ;;
 esac
@@ -59,7 +57,6 @@ fi
 case "$channel" in
   latest) npm_tag=latest cli=true desktop=true node=false release=true ;;
   dev) npm_tag=dev cli=true desktop=true node=true release=false ;;
-  beta) npm_tag="" cli=false desktop=true node=false release=false ;;
   pr) npm_tag=pr cli=true desktop=true node=true release=true ;;
 esac
 dry_run=false

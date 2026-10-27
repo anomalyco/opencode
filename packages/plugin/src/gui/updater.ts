@@ -37,8 +37,4 @@ export const Updater = Ipc.define({
     /** Restarts into a staged update, or opens the installer download. */
     install: {},
   },
-  events: {
-    /** The app menu asks the focused window to check with in-app feedback (beta builds). */
-    check: Schema.Null,
-  },
 })

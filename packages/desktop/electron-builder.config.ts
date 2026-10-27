@@ -26,14 +26,14 @@ const rpmNoBuildIdLinksFpm = "--rpm-rpmbuild-define=_build_id_links none"
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
 
-// Dev and beta package every commit, so they trade about 5% (deb) and 17% (rpm) larger files for xz -1, which
+// Dev packages every commit, so it trades about 5% (deb) and 17% (rpm) larger files for xz -1, which
 // compresses the payload about 3x faster than the deb default (-3) and 5x faster than the rpm default (-9).
 const previewCompressionFpm = (target: "deb" | "rpm") => [`--${target}-compression-level`, "1"]
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
 
-  if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  if (raw === "dev" || raw === "prod") return raw
 
   if (raw === "latest") return "prod"
 
@@ -42,7 +42,6 @@ function resolveChannel() {
 
 const APP_IDS = {
   dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 } as const
 
@@ -54,7 +53,7 @@ const APP_IDS = {
 // (0x7F is the first byte of the ELF magic).
 // https://github.com/anomalyco/opencode/issues/51867
 // Strip a trailing `.desktop` so the executable can never collide with the
-// desktop-entry glob. Beta/dev appIds end in `.beta`/`.dev` and are unaffected.
+// desktop-entry glob. The dev appId ends in `.dev` and is unaffected.
 function linuxExecutableName(appId: string): string {
   return appId.replace(/\.desktop$/, "")
 }
@@ -215,25 +214,6 @@ export function getConfig() {
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
           packageName: "opencode-dev",
-          fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
-        },
-      }
-    }
-
-    case "beta": {
-      return {
-        ...base,
-        appId,
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/beta/desktop/opencode/",
-          channel: "latest",
-        },
-        deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
-        rpm: {
-          packageName: "opencode-beta",
           fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
         },
       }

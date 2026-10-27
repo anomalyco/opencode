@@ -125,7 +125,7 @@ const env = {
   XDG_CACHE_HOME: join(home, ".cache"),
   OPENCODE_DB: paths.db,
   OPENCODE_CONFIG_DIR: paths.config,
-  // Beta and prod builds check for updates on start; a closed proxy port fails that fast and offline.
+  // Prod builds check for updates on start; a closed proxy port fails that fast and offline.
   ...(args.values.offline || appId !== "ai.opencode.desktop.dev" ? { HTTPS_PROXY: "http://127.0.0.1:9" } : {}),
 }
 
@@ -571,8 +571,6 @@ function defaultExe() {
 
 function appIdFor(executable: string) {
   const name = basename(executable, ".exe")
-
-  if (/beta/i.test(name)) return "ai.opencode.desktop.beta"
 
   if (/dev/i.test(name)) return "ai.opencode.desktop.dev"
 

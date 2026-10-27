@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
-import { CHANNEL } from "../constants"
 
 // The main thread idles between showing the first window and evaluating the main bundle, waiting
 // for the renderer's asset requests. That slot is long enough to find out whether a compatible
@@ -13,7 +12,7 @@ let probe: Promise<Endpoint | undefined> | undefined
 
 export function startSidecarProbe() {
   if (!app.isPackaged) return
-  const version = CHANNEL === "beta" ? undefined : bundledVersion()
+  const version = bundledVersion()
 
   if (version === "") return
   probe = import("@opencode/client/service")

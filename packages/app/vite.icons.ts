@@ -3,7 +3,7 @@ import type { Plugin } from "vite"
 import manifest from "./manifest.json" with { type: "json" }
 
 export function icons(channel: string): Plugin {
-  const selected = channel === "beta" || channel === "prod" ? channel : "dev"
+  const selected = channel === "prod" ? channel : "dev"
   const prefix = `icons/${selected}`
 
   const files = [

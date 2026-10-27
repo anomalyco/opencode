@@ -4,7 +4,6 @@ import { debugBuild, memoryLogInterval } from "./options"
 test.each([
   [{ packaged: false, channel: "dev" }, true],
   [{ packaged: false, channel: "prod" }, true],
-  [{ packaged: true, channel: "beta" }, true],
   [{ packaged: true, channel: "dev" }, false],
   [{ packaged: true, channel: "prod" }, false],
 ] as const)("%o is a debug build: %s", (build, expected) => {
