@@ -15,6 +15,7 @@ import {
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
+import { ProviderShared } from "@opencode/ai/route"
 import type { OpenAIConfig } from "./openai-config.js"
 import { openaiFailedResponseHandler } from "./openai-error.js"
 import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter.js"
@@ -344,12 +345,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       totalTokens: number | undefined
       reasoningTokens: number | undefined
       cachedInputTokens: number | undefined
+      cacheWriteInputTokens: number | undefined
     } = {
       inputTokens: undefined,
       outputTokens: undefined,
       totalTokens: undefined,
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
+      cacheWriteInputTokens: undefined,
     }
     const logprobs: Array<z.infer<typeof LOGPROBS_SCHEMA>> = []
     let responseId: string | null = null
@@ -812,6 +815,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               usage.totalTokens = value.response.usage.input_tokens + value.response.usage.output_tokens
               usage.reasoningTokens = value.response.usage.output_tokens_details?.reasoning_tokens ?? undefined
               usage.cachedInputTokens = value.response.usage.input_tokens_details?.cached_tokens ?? undefined
+              usage.cacheWriteInputTokens = value.response.usage.input_tokens_details?.cache_write_tokens ?? undefined
               if (typeof value.response.service_tier === "string") {
                 serviceTier = value.response.service_tier
               }
@@ -876,12 +880,12 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               usage: {
                 inputTokens: {
                   total: usage.inputTokens,
-                  noCache:
-                    usage.inputTokens != null && usage.cachedInputTokens != null
-                      ? usage.inputTokens - usage.cachedInputTokens
-                      : undefined,
+                  noCache: ProviderShared.subtractTokens(
+                    usage.inputTokens,
+                    ProviderShared.sumTokens(usage.cachedInputTokens, usage.cacheWriteInputTokens),
+                  ),
                   cacheRead: usage.cachedInputTokens,
-                  cacheWrite: undefined,
+                  cacheWrite: usage.cacheWriteInputTokens,
                 },
                 outputTokens: {
                   total: usage.outputTokens,
@@ -907,7 +911,12 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
 
 const usageSchema = z.object({
   input_tokens: z.number(),
-  input_tokens_details: z.object({ cached_tokens: z.number().nullish() }).nullish(),
+  input_tokens_details: z
+    .object({
+      cached_tokens: z.number().nullish(),
+      cache_write_tokens: z.number().nullish(),
+    })
+    .nullish(),
   output_tokens: z.number(),
   output_tokens_details: z.object({ reasoning_tokens: z.number().nullish() }).nullish(),
 })
