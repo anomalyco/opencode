@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 import { describe, expect, test } from "bun:test"
 import { ClientError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../src/version"
@@ -116,10 +117,10 @@ describe("mini command", () => {
     expect(JSON.stringify(parseRunModel("openrouter/openai/gpt-5#high"))).toBe(
       JSON.stringify({ model: { providerID: "openrouter", modelID: "openai/gpt-5" }, variant: "high" }),
     )
-    expect(parseSessionTargetModel("openrouter/openai/gpt-5#high")).toEqual({
+    expect<unknown>(parseSessionTargetModel("openrouter/openai/gpt-5#high")).toEqual({
       providerID: "openrouter",
       id: "openai/gpt-5",
-      variant: "high",
+      variant: Model.VariantID.make("high", { disableChecks: true }),
     })
   })
 

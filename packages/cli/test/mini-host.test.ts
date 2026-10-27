@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { Readable } from "node:stream"
@@ -12,7 +14,10 @@ import {
 import { OPENCODE_VERSION } from "../src/version"
 import { tmpdir } from "./fixture/tmpdir"
 
-const model = { providerID: "openai", modelID: "gpt-5" }
+const model = {
+  providerID: Provider.ID.make("openai", { disableChecks: true }),
+  modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+}
 
 function stream(isTTY: boolean) {
   return Object.assign(new Readable({ read() {} }), { isTTY }) as NodeJS.ReadStream
@@ -161,14 +166,14 @@ describe("Mini CLI host", () => {
     const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
     const file = path.join(directory.path, "model.json")
 
-    await input.preferences.saveVariant(model, "high")
+    await input.preferences.saveVariant(model, Model.VariantID.make("high", { disableChecks: true }))
     expect(await input.preferences.resolveVariant(model)).toBe("high")
 
-    await input.preferences.saveVariant(model, "default")
+    await input.preferences.saveVariant(model, Model.VariantID.make("default", { disableChecks: true }))
     expect(await input.preferences.resolveVariant(model)).toBeUndefined()
 
     await Bun.write(file, "{")
-    await input.preferences.saveVariant(model, "high")
+    await input.preferences.saveVariant(model, Model.VariantID.make("high", { disableChecks: true }))
     expect(await input.preferences.resolveVariant(model)).toBe("high")
   })
 })
