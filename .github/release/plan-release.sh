@@ -2,10 +2,12 @@
 # plan-release.sh: decides version, channel and npm dist-tag from the event, ref and dispatch inputs
 # (INPUT_BUMP, INPUT_VERSION) only, and writes them to $GITHUB_OUTPUT. Nothing here reads repository files.
 #
-#   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev
-#   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest
+#   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev, desktop
+#   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only
 #   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
+#
+# Releasers are actors with the admin or maintain role on the repository (the releasers team has maintain).
 . "$(dirname "$0")/lib.sh"
 
 versioned=false
@@ -17,6 +19,16 @@ case "$GITHUB_EVENT_NAME:$GITHUB_REF:$versioned" in
   pull_request:*:false) channel="pr" ;;
   *) die "$GITHUB_EVENT_NAME on $GITHUB_REF cannot publish (versioned: $versioned)" ;;
 esac
+
+if [ "$channel" = latest ]; then
+  actor=${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}
+  [ -n "$actor" ] || die "Stable releases can only be started by releasers; the triggering actor is unknown"
+  role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$actor/permission" --jq .role_name) || role=""
+  case "$role" in
+    admin | maintain) ;;
+    *) die "Stable releases can only be started by releasers (admin or maintain on the repo); $actor has ${role:-no readable role}" ;;
+  esac
+fi
 
 if [ "$channel" = latest ] && [ -n "${INPUT_VERSION:-}" ]; then
   version=$INPUT_VERSION
@@ -46,7 +58,7 @@ fi
 # What each channel builds and publishes.
 case "$channel" in
   latest) npm_tag=latest cli=true desktop=true node=false release=true ;;
-  dev) npm_tag=dev cli=true desktop=false node=true release=false ;;
+  dev) npm_tag=dev cli=true desktop=true node=true release=false ;;
   beta) npm_tag="" cli=false desktop=true node=false release=false ;;
   pr) npm_tag=pr cli=true desktop=true node=true release=true ;;
 esac

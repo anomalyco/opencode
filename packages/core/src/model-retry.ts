@@ -71,3 +71,34 @@ export const retry = <A, R>(effect: Effect.Effect<A, AIError, R>) =>
       yield* Effect.sleep(Duration.millis(decision.delay))
     }
   })
+
+// One-shot generations (stateless text, images, decisions) can be billed per attempt, so they retry only failures
+// the provider never ran, a few times, with the same backoff and retry-after handling.
+const ONE_SHOT_RETRIES = 3
+const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"])
+
+const notRun = (error: AIError) => {
+  const override = error.reason.http?.headers["x-should-retry"]
+  if (override === "true") return true
+  if (override === "false") return false
+  const reason = error.reason
+  if (reason._tag === "RateLimit") return true
+  if (reason._tag === "ProviderInternal") return reason.http?.status === 503 || reason.http?.status === 529
+  if (reason._tag === "Transport")
+    return reason.delivery === "not-sent" || (reason.code !== undefined && NOT_SENT_CODES.has(reason.code))
+  return false
+}
+
+/** Retry a one-shot call only when the provider clearly didn't run it: rate limits, overload, unreachable hosts. */
+export const retryOneShot = <A, R>(effect: Effect.Effect<A, AIError, R>) =>
+  Effect.gen(function* () {
+    const decide = yield* policy
+    let retries = 0
+    while (true) {
+      const result = yield* Effect.result(effect)
+      if (result._tag === "Success") return result.success
+      const decision = yield* decide({ cause: result.failure, retry: notRun(result.failure) })
+      if (!decision?.retry || retries++ >= ONE_SHOT_RETRIES) return yield* result.failure
+      yield* Effect.sleep(Duration.millis(decision.delay))
+    }
+  })

@@ -104,6 +104,8 @@ export type CommandSection = typeof CommandSection.Type
 
 export interface CommandOption {
   id: string
+  /** The GUI plugin that contributes the command. Settings > Shortcuts lists it only while that plugin is installed. */
+  plugin?: string
   title: string
   description?: string
   /** Extra words the command palette matches, separated by spaces. */
@@ -174,6 +176,7 @@ export function resolveKeybindOption(candidates: CommandOption[] | undefined, ev
 export type CommandSource = "palette" | "keybind" | "slash"
 
 const CommandCatalogItem = Persistence.struct({
+  plugin: Schema.optional(Schema.String),
   title: Schema.String,
   description: Schema.optional(Schema.String),
   category: Schema.optional(Schema.String),
@@ -427,6 +430,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
           setCatalog(
             actionId(opt.id),
             reconcile({
+              plugin: opt.plugin,
               title: opt.title,
               description: opt.description,
               category: opt.category,

@@ -8,7 +8,14 @@ import { ServerFetch } from "../src/fetch"
 // The success schema declares `text` as a string, so a number fails response encoding.
 const generate = makeLocationNode({
   service: Generate.Service,
-  layer: Layer.succeed(Generate.Service, Generate.Service.of({ text: () => Effect.succeed(42 as unknown as string) })),
+  layer: Layer.succeed(
+    Generate.Service,
+    Generate.Service.of({
+      text: () => Effect.succeed(42 as unknown as string),
+      image: () => Effect.die("unused"),
+      decisions: () => Effect.die("unused"),
+    }),
+  ),
   deps: [],
 })
 

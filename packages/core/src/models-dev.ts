@@ -1,7 +1,7 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
-import { MaxTokensField } from "@opencode/schema/model-compatibility"
+import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
@@ -76,6 +76,7 @@ const SourceApi = Schema.Struct({
     Schema.Struct({
       reasoning_field: Schema.optional(Schema.String),
       max_tokens_field: Schema.optional(Schema.String),
+      media_input: Schema.optional(Schema.String),
     }),
   ),
 })
@@ -134,6 +135,7 @@ const decodeMode = Schema.decodeUnknownOption(SourceMode)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
 const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
+const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 export type Snapshot = {
@@ -153,10 +155,15 @@ type Route = {
 const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
   "@opencode/ai/providers/azure/chat",
+  "@opencode/ai/providers/azure/images",
   "@opencode/ai/providers/azure/responses",
   "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
   "@opencode/ai/providers/cloudflare-workers-ai",
+  "@opencode/ai/providers/cloudflare-workers-ai/decisions",
+  "@opencode/ai/providers/cloudflare-workers-ai/images",
   "@opencode/ai/providers/google-vertex/gemini",
+  "@opencode/ai/providers/google-vertex/images",
   "@opencode/ai/providers/google-vertex/messages",
   "aisdk:@jerome-benoit/sap-ai-provider-v2",
   "aisdk:watsonx-ai-provider",
@@ -234,11 +241,16 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
 
 function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>): Route | undefined {
   // A chat model uses its first API with a package. Other types (image, decision…) only run through
-  // opencode's own packages, so they use their first API that has one, and are skipped without one.
+  // opencode's own packages: among the ones this build can load, they prefer the entrypoint for their type
+  // (`providers/<P>/images`) over a chat API listed first, then their first API with one, and are skipped without one.
+  const apis = entries(model.api, decodeApi).map(
+    ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
+  )
   const [protocol, api, opencodeai] =
-    entries(model.api, decodeApi)
-      .map(([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const)
-      .find(([, entry, opencodeai]) => (model.type === "chat" ? opencodeai || entry.sdk?.aisdk : opencodeai)) ?? []
+    (model.type === "chat"
+      ? apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
+      : (apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`)) ??
+        apis.find(([, , opencodeai]) => opencodeai))) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
   const packageName =
@@ -252,9 +264,11 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
         Provider.aisdk(aisdk)))
   if (!packageName) return undefined
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
+  const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
   const compatibility = {
     ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
     ...(maxTokensField ? { maxTokensField } : {}),
+    ...(mediaInput ? { mediaInput } : {}),
   }
   return {
     package: packageName,

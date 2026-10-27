@@ -10,7 +10,6 @@ export type SettingsRootTab =
   | "extensions"
   | "servers"
   | "experimental"
-  | "plugins"
   | "about"
 
 declare const pluginTab: unique symbol
@@ -56,7 +55,6 @@ const rootTabs: Record<SettingsRootTab, true> = {
   extensions: true,
   servers: true,
   experimental: true,
-  plugins: true,
   about: true,
 }
 
@@ -90,6 +88,10 @@ export function parseSettingsView(
 
   // Links to a server's own page, which the Servers page replaced, name a server without a tab.
   if (!project && server && !params.has("tab")) return { type: "root", tab: "servers", server, ...transient }
+
+  // The desktop's Plugins page is now the Plugins tab of Extensions, so links to it and `layout.settings("plugins")`
+  // land there.
+  if (!project && tab === "plugins") return { type: "root", tab: "extensions", server, subtab: "plugins", ...transient }
 
   if (!project && isRootTab(tab))
     return { type: "root", tab, server, subtab: nested === "lsps" ? undefined : nested, ...transient }

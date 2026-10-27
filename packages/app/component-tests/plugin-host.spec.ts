@@ -1,4 +1,5 @@
 import type { Component, Owner } from "solid-js"
+import type { PluginInfo } from "@opencode/client/promise"
 import type { Context, Contract, DialogHandle, Dialogs, Live, SessionRef, SessionScreen } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
@@ -1084,18 +1085,31 @@ story("a contract component reads its provider context and preserves reactive pr
   expect(result).toEqual({ context: "provider", mounts: 1, before: "before", after: "after" })
 })
 
-story("Settings > Plugins shows where each part of a plugin from the config is turned off", async ({ page }, info) => {
-  await page.evaluate(async (fixture) => {
+story("Extensions › Plugins merges the own server's plugins with the desktop GUIs they run", async ({ page }, info) => {
+  const calls = await page.evaluateHandle(async (fixture) => {
     const { mountPlugins, until } = await import(fixture)
+    const calls: string[] = []
 
     const installed: Installed[] = [
+      // A built-in that runs stays hidden; one that failed keeps a row, as nothing else reports it.
+      { id: "review", builtin: true, enabled: true },
       { id: "terminal", builtin: true, enabled: true },
       { id: "acme", builtin: false, enabled: true, server: true, tui: true },
-      // A package with only a GUI part has no other part to tag.
+      // A package with only a GUI part has no other part to tag, and here the server list does not name it.
       { id: "notes", builtin: false, enabled: false, server: false, tui: false },
       // A plugin whose `os` leaves out this system keeps a row that says so, and never loads.
       { id: "windows-only", builtin: false, enabled: true, server: true, unsupported: true },
+      // A bundle main could not read never reaches the window.
+      { id: "garbled", builtin: false, enabled: true, error: "SyntaxError: garbled bundle" },
+      { id: "flaky", builtin: false, enabled: true },
     ]
+
+    const listed = (id: string, features: PluginInfo["features"]): PluginInfo => ({
+      id,
+      source: { type: "package", target: id },
+      features,
+      state: { status: "active" },
+    })
 
     const bridge: Bridge = {
       packaged: false,
@@ -1110,33 +1124,81 @@ story("Settings > Plugins shows where each part of a plugin from the config is t
       manager: {
         initial: Promise.resolve(installed),
         list: async () => installed,
-        enable: async () => {},
-        disable: async () => {},
-        reload: async () => {},
+        enable: async (id) => void calls.push(`enable ${id}`),
+        disable: async (id) => void calls.push(`disable ${id}`),
+        reload: async (id) => void calls.push(`reload ${id}`),
       },
     }
 
-    const host = mountPlugins({
-      settings: true,
-      bridge,
-      definitions: installed.flatMap((item) =>
-        item.unsupported ? [] : [{ id: item.id, windowEntry: async () => ({ default: () => {} }) }],
-      ),
+    const fails = (message: string) => async () => ({
+      default: () => {
+        throw new Error(message)
+      },
     })
 
-    await until(() => !!host.container.textContent?.includes("cli.json"))
+    const host = mountPlugins({
+      bridge,
+      plugins: [
+        listed("acme", { gui: true, server: true, tui: true }),
+        listed("windows-only", { gui: true, server: true }),
+        listed("flaky", { gui: true }),
+        // A plugin without a GUI lists its name only.
+        listed("lint-rules", { server: true }),
+        // The server's own built-ins are not listed, as on every server.
+        { ...listed("opencode-builtin", { server: true }), source: { type: "builtin" } },
+      ],
+      definitions: [
+        { id: "review", windowEntry: async () => ({ default: () => {} }) },
+        { id: "terminal", windowEntry: fails("terminal broke") },
+        { id: "acme", windowEntry: async () => ({ default: () => {} }) },
+        { id: "notes", windowEntry: async () => ({ default: () => {} }) },
+        { id: "flaky", windowEntry: fails("flaky broke") },
+      ],
+    })
+
+    await until(() => !!host.container.textContent?.includes("cli.json") && host.status("flaky") === "failed")
+
+    return calls
   }, fixture)
-  const settings = page.getByRole("region", { name: "Plugins", exact: true })
-  await settings.screenshot({ path: info.outputPath("plugin-parts.png") })
+
+  const plugins = page.getByTestId("extension-plugins")
+  await plugins.screenshot({ path: info.outputPath("extension-plugins.png") })
+  // One row per plugin id, in the server's order, then what only main reports, then failed built-ins.
+  await expect(plugins.locator(".settings-extension-name")).toHaveText([
+    "acme",
+    "windows-only",
+    "flaky",
+    "lint-rules",
+    "notes",
+    "garbled",
+    "terminal",
+  ])
   // Only plugins from the config tag their other parts, and one note says how to turn those off.
-  await expect(settings.getByText("Server", { exact: true })).toHaveCount(1)
-  await expect(settings.getByText("TUI", { exact: true })).toHaveCount(1)
-  await expect(settings.getByText(/Switches turn off only a plugin's desktop UI/)).toHaveCount(1)
-  await expect(settings.getByText("Not available on this system.", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Server", { exact: true })).toHaveCount(1)
+  await expect(plugins.getByText("TUI", { exact: true })).toHaveCount(1)
+  await expect(plugins.getByText(/Switches turn off only a plugin's desktop UI/)).toHaveCount(1)
+  await expect(plugins.getByText("Not available on this system.", { exact: true })).toBeVisible()
+  // An error shows its first line; the rest, such as a stack trace, is behind a toggle that a one-line error lacks.
+  await expect(plugins.getByText("SyntaxError: garbled bundle", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Error: flaky broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Error: terminal broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByRole("button", { name: "Show details" })).toHaveCount(2)
+  const flaky = plugins.locator(".settings-extension-row").filter({ hasText: "flaky" })
+  await flaky.getByRole("button", { name: "Show details" }).press("Enter")
+  await expect(flaky.locator("pre")).toHaveText(/^Error: flaky broke\s+at /)
+  await expect(flaky.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true")
+  await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(2)
+  await expect(plugins.getByText("Built-in", { exact: true })).toHaveCount(1)
   // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
-  await expect(settings.getByRole("switch")).toHaveCount(2)
-  await expect(settings.getByRole("switch", { name: "terminal" })).toHaveCount(0)
-  await expect(settings.getByText("Active", { exact: true })).toHaveCount(0)
+  await expect(plugins.getByRole("switch")).toHaveCount(3)
+  await expect(plugins.getByRole("switch", { name: "terminal" })).toHaveCount(0)
+  await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(4)
+  await expect(plugins.getByText("Active", { exact: true })).toHaveCount(0)
+
+  // The fixture mounts below the story, out of the viewport, so the controls are driven from the keyboard.
+  await plugins.getByRole("switch", { name: "acme" }).press("Space")
+  await plugins.getByRole("button", { name: "Reload" }).nth(1).press("Enter")
+  expect(await calls.jsonValue()).toEqual(["disable acme", "reload flaky"])
 })
 
 const invalidSetups = ["promise", "thenable"]

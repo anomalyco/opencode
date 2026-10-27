@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # sign-desktop-macos.sh <out dir> <app tarball>...: signs each unsigned .app inside-out with hardened runtime,
 # notarizes them in one submission, staples them, and only then builds opencode-desktop-mac-<arch>.{zip,dmg,app.tar.gz}
-# from the stapled apps. Dry runs sign ad-hoc and skip notarization. Beta trades larger files for faster packaging
-# (zip and dmg at zlib level 1) and skips the .app.tar.gz, which only the retired Tauri updater feed read.
+# from the stapled apps. Dry runs sign ad-hoc and skip notarization. Dev and beta trade larger files for faster
+# packaging (zip and dmg at zlib level 1) and skip the .app.tar.gz, which only the retired Tauri updater feed read.
 # Notarization reads APPLE_API_KEY_CONTENT, APPLE_API_KEY_ID and APPLE_API_ISSUER.
 . "$(dirname "$0")/lib.sh"
 
@@ -11,8 +11,9 @@ shift
 mkdir -p "$out"
 apps=$(mktemp -d)
 identity=- timestamp=--timestamp=none
-zip_level=() dmg_level=()
-if [ "$OPENCODE_CHANNEL" = beta ]; then zip_level=(--zlibCompressionLevel 1) dmg_level=(-imagekey zlib-level=1); fi
+zip_level=() dmg_level=() preview=false
+case "$OPENCODE_CHANNEL" in dev | beta) preview=true ;; esac
+if [ "$preview" = true ]; then zip_level=(--zlibCompressionLevel 1) dmg_level=(-imagekey zlib-level=1); fi
 if ! dry_run; then
   identity=$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)
   [ -n "$identity" ] || die "Developer ID Application identity not found"
@@ -82,6 +83,6 @@ for dir in "$apps"/*; do
   ditto "$app" "$staging/$name"
   ln -s /Applications "$staging/Applications"
   hdiutil create -volname "${name%.app}" -srcfolder "$staging" -fs HFS+ -format UDZO ${dmg_level[@]+"${dmg_level[@]}"} -ov "$out/opencode-desktop-mac-$arch.dmg"
-  if [ "$OPENCODE_CHANNEL" = beta ]; then continue; fi
+  if [ "$preview" = true ]; then continue; fi
   COPYFILE_DISABLE=1 tar --no-mac-metadata -czf "$out/opencode-desktop-mac-$arch.app.tar.gz" -C "$dir" "$name"
 done

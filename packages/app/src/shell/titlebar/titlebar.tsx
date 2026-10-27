@@ -556,19 +556,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
                   },
                 },
-                // A draft registers its own, which searches projects in place.
-                layout.route().type === "draft"
-                  ? undefined
-                  : {
-                      ...projectSearchCommand,
-                      title: language.t("session.new.project.search"),
-                      category: language.t("command.category.project"),
-                      onSelect: () => {
-                        layout.draft.projectSearch.request()
-
-                        if (!openNewTab()) layout.draft.projectSearch.take()
-                      },
-                    },
                 {
                   id: "tab.reopenClosed",
                   category: language.t("command.category.file"),
@@ -578,6 +565,21 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 },
               ].filter((v) => v !== undefined)
             })
+
+            // A draft registers this command under the same key and shadows it while mounted, searching projects in place.
+            // Sharing the key, not checking the route, keeps exactly one owner while the router commits a transition.
+            command.register(projectSearchCommand.id, () => [
+              {
+                ...projectSearchCommand,
+                title: language.t("session.new.project.search"),
+                category: language.t("command.category.project"),
+                onSelect: () => {
+                  layout.draft.projectSearch.request()
+
+                  if (!openNewTab()) layout.draft.projectSearch.take()
+                },
+              },
+            ])
 
             const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
 

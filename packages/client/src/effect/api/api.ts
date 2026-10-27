@@ -26,6 +26,7 @@ import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
 import type { Form } from "@opencode/schema/form"
+import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
@@ -1427,8 +1428,31 @@ export type GenerateTextInput = { readonly prompt: string; readonly model?: Mode
 export type GenerateTextOutput = { readonly text: string }
 export type GenerateTextOperation<E = never> = (input: GenerateTextInput) => Effect.Effect<GenerateTextOutput, E>
 
+export type GenerateImageInput = {
+  readonly model: Model.Ref
+  readonly prompt: string
+  readonly images?: ReadonlyArray<Generate.File> | undefined
+  readonly n?: number | undefined
+  readonly aspect?: Generate.ImageAspect | undefined
+  readonly resolution?: Generate.ImageResolution | undefined
+}
+export type GenerateImageOutput = Generate.ImageResult
+export type GenerateImageOperation<E = never> = (input: GenerateImageInput) => Effect.Effect<GenerateImageOutput, E>
+
+export type GenerateDecisionsInput = {
+  readonly model: Model.Ref
+  readonly input: ReadonlyArray<Generate.DecisionPart>
+  readonly questions: ReadonlyArray<Generate.DecisionQuestion>
+}
+export type GenerateDecisionsOutput = Generate.DecisionResult
+export type GenerateDecisionsOperation<E = never> = (
+  input: GenerateDecisionsInput,
+) => Effect.Effect<GenerateDecisionsOutput, E>
+
 export interface GenerateApi<E = never> {
   readonly text: GenerateTextOperation<E>
+  readonly image: GenerateImageOperation<E>
+  readonly decisions: GenerateDecisionsOperation<E>
 }
 
 export type VoiceModelsOutput = {

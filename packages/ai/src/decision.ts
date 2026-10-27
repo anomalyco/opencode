@@ -2,7 +2,15 @@ import { Effect, Schema } from "effect"
 import { DecisionClient, Service, type Execute } from "./decision-client.js"
 import { Media } from "./media.js"
 import { tryRequest } from "./media-model.js"
-import { AIError, HttpOptions, ModelID, ProviderID, ProviderMetadata, ProviderOptions, Usage } from "./schema/index.js"
+import {
+  AIError,
+  HttpOptions,
+  ModelID,
+  ProviderID,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+} from "./schema/index.js"
 
 // ---------------------------------------------------------------------------
 // Input
@@ -100,11 +108,16 @@ export const ScoreAnswer = Schema.Struct({
 })
 export type ScoreAnswer = Schema.Schema.Type<typeof ScoreAnswer>
 
-/** The host declined this one question; the other answers still came back. */
+/** Why a question has no answer; hosts may report reasons beyond these. */
+export type ErrorReason = OpenString<"refusal">
+export const ErrorReason: Schema.Codec<ErrorReason> = Schema.Union([Schema.Literal("refusal"), Schema.String])
+
+/** This one question has no answer; the other answers still came back. */
 export const ErrorAnswer = Schema.Struct({
   name: Schema.String,
   type: Schema.Literal("error"),
-  reason: Schema.Literal("refusal"),
+  reason: ErrorReason,
+  message: Schema.optional(Schema.String),
 })
 export type ErrorAnswer = Schema.Schema.Type<typeof ErrorAnswer>
 
@@ -255,9 +268,18 @@ export type DecisionRequestInput<
   readonly http?: HttpOptions.Input
 }
 
+/** What decision hosts report; their raw usage stays in the response's `providerMetadata`. */
+export class DecisionUsage extends Schema.Class<DecisionUsage>("Decision.Usage")({
+  inputTokens: Schema.optional(Schema.Number),
+  outputTokens: Schema.optional(Schema.Number),
+  totalTokens: Schema.optional(Schema.Number),
+  /** USD the host says it charged for this request. */
+  cost: Schema.optional(Schema.Number),
+}) {}
+
 export class DecisionResponse extends Schema.Class<DecisionResponse>("Decision.Response")({
   answers: Schema.Array(DecisionAnswer),
-  usage: Schema.optional(Usage),
+  usage: Schema.optional(DecisionUsage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 

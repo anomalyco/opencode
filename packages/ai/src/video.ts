@@ -113,7 +113,6 @@ export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<
 export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")({
   videos: Schema.Array(Media.AssetSchema),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   get video() {
@@ -130,7 +129,6 @@ export const VideoOutputEvent = Schema.Struct({
 export const VideoFinishEvent = Schema.Struct({
   type: Schema.tag("finish"),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Video.Event.Finish" })
 
@@ -155,7 +153,6 @@ const collectResponse = (events: ReadonlyArray<VideoEvent>): Effect.Effect<Video
     new VideoResponse({
       videos: events.filter(VideoEvent.is.video).map((event) => event.video),
       usage: finish.usage,
-      notices: finish.notices,
       providerMetadata: finish.providerMetadata,
     }),
   )

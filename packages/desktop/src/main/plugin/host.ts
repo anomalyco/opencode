@@ -91,15 +91,17 @@ type ListedPlugin = {
 
 /**
  * What main keeps of the plugin listing besides the plugins: the ids a built-in claims, the plugins with a server
- * part and those that export `./tui` (Settings › Plugins shows that part's switch), and the follow of the server.
+ * part and those that export `./tui` (Extensions › Plugins tags those parts), and the follow of the server.
  */
 type Inventory = {
   reserved: readonly string[]
   server: ReadonlySet<string>
   tui: ReadonlySet<string>
-  /** Plugins whose `os` leaves out this system: listed in Settings, never run. */
+  /** Plugins whose `os` leaves out this system: listed in Extensions › Plugins, never run. */
   unsupported: ReadonlySet<string>
-  /** New plugins whose bundle main could not read, with why: listed in Settings until a listing reads them. */
+  /**
+   * New plugins whose bundle main could not read, with why: listed in Extensions › Plugins until a listing reads them.
+   */
   unreadable: ReadonlyMap<string, string>
   /** Aborts the current follow of the app's own server. */
   watch?: AbortController

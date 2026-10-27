@@ -4,4 +4,4 @@ packages/desktop/  @Hona @Brendonovich
 
 # CI and releases. Release jobs that hold secrets run only .github/workflows/release.yml and .github/release/,
 # which makes this path the release security boundary.
-/.github/ @anomalyco/ci-owners
+/.github/ @anomalyco/releasers

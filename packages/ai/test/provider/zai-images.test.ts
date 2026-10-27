@@ -38,13 +38,6 @@ describe("Z.ai Images", () => {
         url: "https://cdn.z.ai/generated.png",
         expiresAt: 30 * 24 * 60 * 60 * 1000,
       })
-      expect(response.notices).toEqual([
-        {
-          type: "moderated",
-          message: "Z.ai Images applied a content filter for future-role at level 4.5",
-          providerMetadata: { zai: { role: "future-role", level: 4.5 } },
-        },
-      ])
       expect(response.providerMetadata).toEqual({
         zai: {
           created: 1_760_335_349,
