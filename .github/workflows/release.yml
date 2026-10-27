@@ -76,7 +76,7 @@ jobs:
   tag:
     needs: plan
     runs-on: ubuntu-24.04
-    # Stable tags are pushed with the release deploy key, the only non-ci-owners actor the v* tag ruleset admits.
+    # Stable tags are pushed with the release deploy key, the only non-releasers actor the v* tag ruleset admits.
     environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
       contents: read
