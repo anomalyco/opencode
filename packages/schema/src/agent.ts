@@ -29,6 +29,8 @@ export const Info = Schema.Struct({
   description: Schema.String.pipe(optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   hidden: Schema.Boolean,
+  // Built-in agent shipped by opencode rather than defined by config or a plugin.
+  native: Schema.Boolean.pipe(optional),
   color: Color.pipe(optional),
   steps: PositiveInt.pipe(optional),
   permissions: Permission.Ruleset,

@@ -172,6 +172,31 @@ permissions:
     }),
   )
 
+  it.effect("distinguishes built-in agents from configured agents", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      yield* AgentPlugin.Plugin.effect(host({ agent: agentHost(agents) }))
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(
+          Config.testLayer([
+            new Document({
+              type: "document",
+              info: decode({
+                agents: {
+                  build: { description: "Configured build" },
+                  reviewer: { description: "Reviews changes" },
+                },
+              }),
+            }),
+          ]),
+        ),
+      )
+
+      expect(yield* agents.get(Agent.defaultID)).toMatchObject({ description: "Configured build", native: true })
+      expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ native: false })
+    }),
+  )
+
   it.effect("applies remote permission defaults before explicit global and build rules", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service

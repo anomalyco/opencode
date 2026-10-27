@@ -18,6 +18,7 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
     description: agent.description,
     mode: agent.mode,
     hidden: agent.hidden,
+    native: agent.native,
     temperature:
       typeof agent.request.settings.temperature === "number" ? agent.request.settings.temperature : undefined,
     topP: typeof agent.request.settings.topP === "number" ? agent.request.settings.topP : undefined,

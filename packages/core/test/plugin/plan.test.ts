@@ -40,10 +40,10 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
   const defaults = Agent.Info.default(plan)
-  const planAgent = {
+  const planAgent: Types.DeepMutable<Agent.Info> = {
     ...defaults,
     permissions: [...defaults.permissions],
-  } satisfies Types.DeepMutable<Agent.Info>
+  }
   const driver = Environment.makeMemoryDriver()
   yield* PlanPlugin.Plugin.effect(
     host({
@@ -243,6 +243,13 @@ describe("plan plugin mutations", () => {
     Effect.gen(function* () {
       const { files } = yield* run()
       expect(Option.isNone(yield* files.stat(planDirectory).pipe(Effect.option))).toBe(true)
+    }),
+  )
+
+  it.effect("marks the Plan agent as built in", () =>
+    Effect.gen(function* () {
+      const { planAgent } = yield* run()
+      expect(planAgent.native).toBe(true)
     }),
   )
 

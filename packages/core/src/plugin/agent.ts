@@ -57,6 +57,7 @@ export const Plugin = define({
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
+        item.native = true
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       })
 
@@ -65,6 +66,7 @@ export const Plugin = define({
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
+        item.native = true
         item.permissions.push(
           { action: "question", resource: "*", effect: "deny" },
           { action: "subagent", resource: "*", effect: "deny" },
@@ -77,6 +79,7 @@ export const Plugin = define({
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
         item.mode = "subagent"
+        item.native = true
         item.permissions.push(
           { action: "*", resource: "*", effect: "deny" },
           { action: "shell", resource: "*", effect: "allow" },
@@ -96,12 +99,14 @@ export const Plugin = define({
       editor.update(Agent.ID.make("compaction"), (item) => {
         item.name = Agent.Name.make("Compaction")
         item.mode = "primary"
+        item.native = true
         item.hidden = true
       })
 
       editor.update(Agent.ID.make("title"), (item) => {
         item.name = Agent.Name.make("Title")
         item.mode = "primary"
+        item.native = true
         item.hidden = true
         item.system = PROMPT_TITLE
         item.permissions.push({ action: "*", resource: "*", effect: "deny" })
@@ -110,6 +115,7 @@ export const Plugin = define({
       editor.update(Agent.ID.make("summary"), (item) => {
         item.name = Agent.Name.make("Summary")
         item.mode = "primary"
+        item.native = true
         item.hidden = true
         item.system = PROMPT_SUMMARY
         item.permissions.push({ action: "*", resource: "*", effect: "deny" })
