@@ -54,7 +54,8 @@ export type IntegrationOAuthAuthorization = {
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Promise<Credential.OAuth | Credential.Key>
+      /** Use a function for setup prompts so they start after authorize returns. */
+      readonly callback: Promise<Credential.OAuth | Credential.Key> | (() => Promise<Credential.OAuth | Credential.Key>)
     }
   | {
       readonly mode: "code"
@@ -62,7 +63,7 @@ export type IntegrationOAuthAuthorization = {
     }
 )
 
-/** Ask sequential setup steps from an automatic authorization callback, after browser sign-in. Code-mode callbacks cannot prompt. */
+/** Ask sequential setup steps from a lazy automatic authorization callback, after browser sign-in. Code-mode callbacks cannot prompt. */
 export type IntegrationOAuthPrompt = (input: {
   readonly title: string
   readonly fields: Form.Fields

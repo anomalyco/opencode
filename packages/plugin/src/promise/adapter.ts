@@ -2,7 +2,7 @@ import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
 import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
-import { Deferred, Effect, Schema, SchemaAST, Stream } from "effect"
+import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
@@ -415,28 +415,23 @@ export function fromPromise(plugin: Plugin) {
                             Effect.gen(function* () {
                               const controller = new AbortController()
                               yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
-                              const ready = yield* Deferred.make<void>()
                               const authorization = yield* Effect.promise(() =>
                                 input.authorize(answer, (input) =>
-                                  Effect.runPromiseWith(runtime)(
-                                    Deferred.await(ready).pipe(Effect.andThen(prompt(input))),
-                                    { signal: controller.signal },
-                                  ),
+                                  Effect.runPromiseWith(runtime)(prompt(input), { signal: controller.signal }),
                                 ),
                               )
-                              if (authorization.mode === "auto")
+                              if (authorization.mode === "auto") {
+                                const callback = authorization.callback
                                 return {
                                   ...authorization,
-                                  callback: Deferred.succeed(ready, undefined).pipe(
-                                    Effect.andThen(Effect.promise(() => authorization.callback)),
+                                  callback: Effect.promise(() =>
+                                    typeof callback === "function" ? callback() : callback,
                                   ),
                                 }
+                              }
                               return {
                                 ...authorization,
-                                callback: (code: string) =>
-                                  Deferred.succeed(ready, undefined).pipe(
-                                    Effect.andThen(Effect.promise(() => authorization.callback(code))),
-                                  ),
+                                callback: (code: string) => Effect.promise(() => authorization.callback(code)),
                               }
                             }),
                           refresh:
