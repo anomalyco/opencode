@@ -23,6 +23,10 @@ import { useMenubarItems } from "@/runtime/plugin/menubar-items"
 // Keep the submenu through that crossing and close it only after the pointer leaves both menus.
 const SUBMENU_CLOSE_DELAY = 300
 
+// A sibling's open request is held while the pointer is crossing the parent menu toward the active
+// submenu. It is accepted after the pointer rests on the sibling.
+const SUBMENU_OPEN_SETTLE = 150
+
 const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) => {
   if (entry.type === "separator" || !entry.action || !entry.accelerator?.windows) return []
 
@@ -36,6 +40,60 @@ export function windowsMenuAccelerator(event: KeyboardEvent) {
   return accelerators.find((entry) => matchKeybind(entry.keybind, event))?.action
 }
 
+function pointInPolygon(x: number, y: number, polygon: readonly (readonly [number, number])[]) {
+  let inside = false
+
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const [xi, yi] = polygon[index]!
+    const [xj, yj] = polygon[previous]!
+
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+
+  return inside
+}
+
+// The corridor between a trigger and its submenu content. It starts at the trigger's far edge so a
+// normal diagonal from the parent item into the last row stays inside it.
+function intentPolygon(trigger: DOMRect, content: DOMRect): [number, number][] {
+  const triggerX = trigger.left + trigger.width / 2
+  const triggerY = trigger.top + trigger.height / 2
+  const contentX = content.left + content.width / 2
+  const contentY = content.top + content.height / 2
+
+  if (Math.abs(contentX - triggerX) >= Math.abs(contentY - triggerY)) {
+    if (contentX >= triggerX)
+      return [
+        [trigger.left, trigger.top],
+        [trigger.left, trigger.bottom],
+        [content.left, content.bottom],
+        [content.left, content.top],
+      ]
+
+    return [
+      [trigger.right, trigger.top],
+      [trigger.right, trigger.bottom],
+      [content.right, content.bottom],
+      [content.right, content.top],
+    ]
+  }
+
+  if (contentY >= triggerY)
+    return [
+      [trigger.left, trigger.top],
+      [trigger.right, trigger.top],
+      [content.right, content.top],
+      [content.left, content.top],
+    ]
+
+  return [
+    [trigger.left, trigger.bottom],
+    [trigger.right, trigger.bottom],
+    [content.right, content.bottom],
+    [content.left, content.bottom],
+  ]
+}
+
 export function WindowsAppMenu(props: {
   command: ReturnType<typeof useCommand>
   platform: ReturnType<typeof usePlatform>
@@ -45,10 +103,15 @@ export function WindowsAppMenu(props: {
   const menubar = useMenubarItems()
   const [activeSubmenu, setActiveSubmenu] = createSignal<string>()
   const submenuContents = new Map<string, HTMLElement>()
+  const submenuTriggers = new Map<string, HTMLElement>()
   let menuContent: HTMLElement | undefined
   let pointer = { x: -1, y: -1 }
   let lastInput: "pointer" | "keyboard" = "pointer"
+  let lastPointerDownAt = Number.NEGATIVE_INFINITY
+  let pressedSubmenu: string | undefined
   let closeTimer: number | undefined
+  let pendingSubmenu: string | undefined
+  let openTimer: number | undefined
 
   const pointerInside = (element: HTMLElement | undefined) => {
     if (!element?.isConnected) return false
@@ -66,6 +129,38 @@ export function WindowsAppMenu(props: {
     return active !== undefined && pointerInside(submenuContents.get(active))
   }
 
+  const pointerInsideIntent = (id: string) => {
+    const trigger = submenuTriggers.get(id)
+    const content = submenuContents.get(id)
+
+    if (!trigger?.isConnected || !content?.isConnected) return false
+
+    const triggerRect = trigger.getBoundingClientRect()
+    const contentRect = content.getBoundingClientRect()
+
+    if (!triggerRect.width || !contentRect.width) return false
+
+    return pointInPolygon(pointer.x, pointer.y, intentPolygon(triggerRect, contentRect))
+  }
+
+  const cancelPendingOpen = () => {
+    if (openTimer !== undefined) window.clearTimeout(openTimer)
+    openTimer = undefined
+    pendingSubmenu = undefined
+  }
+
+  const schedulePendingOpen = () => {
+    if (openTimer !== undefined) window.clearTimeout(openTimer)
+    openTimer = window.setTimeout(() => {
+      openTimer = undefined
+
+      const pending = pendingSubmenu
+      pendingSubmenu = undefined
+
+      if (pending && pointerInside(submenuTriggers.get(pending))) openSubmenu(pending)
+    }, SUBMENU_OPEN_SETTLE)
+  }
+
   const cancelSubmenuClose = () => {
     if (closeTimer !== undefined) window.clearTimeout(closeTimer)
     closeTimer = undefined
@@ -73,6 +168,7 @@ export function WindowsAppMenu(props: {
 
   const closeSubmenu = () => {
     cancelSubmenuClose()
+    cancelPendingOpen()
     setActiveSubmenu(undefined)
   }
 
@@ -87,10 +183,13 @@ export function WindowsAppMenu(props: {
 
   const openSubmenu = (id: string) => {
     cancelSubmenuClose()
+    cancelPendingOpen()
     setActiveSubmenu(id)
   }
 
   const requestSubmenuClose = (id: string) => {
+    if (pendingSubmenu === id) cancelPendingOpen()
+
     if (activeSubmenu() !== id) return
 
     if (lastInput === "keyboard") return closeSubmenu()
@@ -98,6 +197,24 @@ export function WindowsAppMenu(props: {
     if (pointerInsideMenu()) return cancelSubmenuClose()
 
     scheduleSubmenuClose()
+  }
+
+  const requestSubmenuOpen = (id: string) => {
+    if (activeSubmenu() === id) return
+
+    const active = activeSubmenu()
+
+    if (
+      active === undefined ||
+      lastInput === "keyboard" ||
+      (pressedSubmenu === id && performance.now() - lastPointerDownAt < 500)
+    )
+      return openSubmenu(id)
+
+    if (!pointerInsideIntent(active)) return openSubmenu(id)
+
+    pendingSubmenu = id
+    schedulePendingOpen()
   }
 
   const entries = (menu: DesktopMenu) =>
@@ -172,6 +289,15 @@ export function WindowsAppMenu(props: {
         pointer = { x: event.clientX, y: event.clientY }
         lastInput = "pointer"
 
+        if (pendingSubmenu !== undefined) {
+          const pending = pendingSubmenu
+          const active = activeSubmenu()
+
+          if (!pointerInside(submenuTriggers.get(pending))) cancelPendingOpen()
+          else if (active !== undefined && !pointerInsideIntent(active)) openSubmenu(pending)
+          else schedulePendingOpen()
+        }
+
         if (activeSubmenu() === undefined) return
 
         if (pointerInsideMenu()) return cancelSubmenuClose()
@@ -181,15 +307,46 @@ export function WindowsAppMenu(props: {
       { capture: true },
     )
 
-    makeEventListener(window, "pointerdown", () => (lastInput = "pointer"), { capture: true })
-    makeEventListener(window, "keydown", () => (lastInput = "keyboard"), { capture: true })
+    makeEventListener(
+      window,
+      "pointerdown",
+      (event) => {
+        const target = event.target
+
+        pointer = { x: event.clientX, y: event.clientY }
+        lastInput = "pointer"
+        lastPointerDownAt = performance.now()
+        pressedSubmenu =
+          target instanceof Node
+            ? Array.from(submenuTriggers).find(([, trigger]) => trigger.contains(target))?.[0]
+            : undefined
+
+        if (pendingSubmenu !== undefined && pointerInside(submenuTriggers.get(pendingSubmenu)))
+          openSubmenu(pendingSubmenu)
+      },
+      { capture: true },
+    )
+
+    makeEventListener(
+      window,
+      "keydown",
+      () => {
+        lastInput = "keyboard"
+        cancelPendingOpen()
+      },
+      { capture: true },
+    )
 
     // The pointer left the window; no further move can keep the submenu open.
     makeEventListener(
       window,
       "pointerout",
       (event) => {
-        if (event.relatedTarget === null && activeSubmenu() !== undefined) scheduleSubmenuClose()
+        if (event.relatedTarget !== null) return
+
+        cancelPendingOpen()
+
+        if (activeSubmenu() !== undefined) scheduleSubmenuClose()
       },
       { capture: true },
     )
@@ -228,10 +385,14 @@ export function WindowsAppMenu(props: {
                 <DesktopMenuSubmenu
                   label={language.t(menu.labelKey)}
                   open={activeSubmenu() === menu.id}
-                  onOpenChange={(open) => (open ? openSubmenu(menu.id) : requestSubmenuClose(menu.id))}
+                  onOpenChange={(open) => (open ? requestSubmenuOpen(menu.id) : requestSubmenuClose(menu.id))}
                   onContent={(element) => {
                     if (element) submenuContents.set(menu.id, element)
                     else submenuContents.delete(menu.id)
+                  }}
+                  onTrigger={(element) => {
+                    if (element) submenuTriggers.set(menu.id, element)
+                    else submenuTriggers.delete(menu.id)
                   }}
                 >
                   <For each={entries(menu)}>
@@ -284,11 +445,12 @@ function DesktopMenuSubmenu(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onContent: (element: HTMLElement | undefined) => void
+  onTrigger: (element: HTMLElement | undefined) => void
   children: JSX.Element
 }) {
   return (
     <Menu.Sub open={props.open} onOpenChange={props.onOpenChange}>
-      <Menu.SubTrigger>{props.label}</Menu.SubTrigger>
+      <Menu.SubTrigger ref={(element: HTMLElement) => props.onTrigger(element)}>{props.label}</Menu.SubTrigger>
       <Menu.Portal>
         <Menu.SubContent
           ref={(element: HTMLElement) => props.onContent(element)}
