@@ -88,14 +88,14 @@ describe("ShellParse malformed native syntax", () => {
     expect(await Effect.runPromise(Effect.result(ShellParse.scanPortable(command, shell, "/workspace")))).toMatchObject(
       {
         _tag: "Failure",
-        failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
+        failure: { message: ShellParse.opaqueMessage(reason) },
       },
     )
     expect(
       await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace", { portable: true }))),
     ).toMatchObject({
       _tag: "Failure",
-      failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
+      failure: { message: ShellParse.opaqueMessage(reason) },
     })
   })
 })

@@ -41,7 +41,7 @@ describe("ShellParse", () => {
         reasons: [
           {
             _tag: "Fail",
-            error: { message: expect.stringContaining("Portable shell scanner cannot analyze command") },
+            error: { message: expect.stringContaining("the shell permission scanner cannot analyze it") },
           },
         ],
       },
@@ -76,6 +76,33 @@ describe("ShellParse", () => {
     expect(await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))).toEqual(
       legacy,
     )
+  })
+
+  test("portable scanning checks a double-quoted substitution as its own command", async () => {
+    const command = 'note add --body "$(cat notes.md)" Title'
+    for (const shell of ["/bin/sh", "/bin/bash", "/bin/zsh"])
+      expect(await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))).toEqual({
+        commands: [
+          { resource: command, save: "note *" },
+          { resource: "cat notes.md", save: "cat *" },
+        ],
+        directories: [],
+      })
+  })
+
+  test("portable scanning explains Markdown backticks that are not a command", async () => {
+    for (const shell of ["/bin/sh", "/bin/bash", "/bin/zsh"]) {
+      const result = await Effect.runPromise(
+        Effect.result(
+          ShellParse.scan('note add --body "uses `vec3(1.0)` here" Title', shell, "/workspace", { portable: true }),
+        ),
+      )
+      expect(result).toMatchObject({
+        _tag: "Failure",
+        failure: { message: ShellParse.opaqueMessage("command-substitution") },
+      })
+      expect(ShellParse.opaqueMessage("command-substitution")).toContain("use single quotes, escape each backtick")
+    }
   })
 
   test.each(['c"\\d" relative', "'cd' /tmp", "c''d /tmp", "c\\\nd /tmp"])(
