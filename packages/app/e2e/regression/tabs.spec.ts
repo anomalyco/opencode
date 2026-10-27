@@ -1246,6 +1246,46 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
 
+// A submenu must survive the pointer taking the natural path to its last item: down the parent menu
+// first, then across. Moving down crosses the parent's other items, which closes the submenu before
+// the pointer reaches the last row.
+test("the Windows titlebar menu keeps a submenu open while the pointer moves to its last item", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenuHover", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  await edit.hover()
+
+  const selectAll = page.getByRole("menuitem", { name: /^Select All/ })
+  await expect(selectAll).toBeVisible()
+
+  const trigger = await edit.boundingBox()
+  const last = await selectAll.boundingBox()
+
+  if (!trigger || !last) throw new Error("Expected visible Edit trigger and Select All item")
+
+  const x = trigger.x + trigger.width / 2
+  const y = last.y + last.height / 2
+
+  await page.mouse.move(x, trigger.y + trigger.height / 2)
+  await page.mouse.move(x, y, { steps: 10 })
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+
+  await page.mouse.move(last.x + last.width / 2, y, { steps: 10 })
+  await expect(selectAll).toBeVisible()
+  await expect(selectAll).toHaveAttribute("data-highlighted", "")
+
+  // Leaving the menu still closes the submenu; the grace belongs to the traversal, not a pinned menu.
+  const outside = await page.getByRole("main").boundingBox()
+
+  if (!outside) throw new Error("Expected visible main content")
+
+  await page.mouse.move(outside.x + outside.width / 2, outside.y + outside.height / 2)
+  await expect(edit).toHaveAttribute("aria-expanded", "false")
+  await expect(selectAll).toBeHidden()
+})
+
 // Server A is the default origin; B is a remote that answers only for its own directories.
 async function twoServers(
   page: Page,
