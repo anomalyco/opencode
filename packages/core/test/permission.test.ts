@@ -148,12 +148,39 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("denies a read whose rule is written with a leading ./", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "read", resource: "*", effect: "allow" },
+        { action: "read", resource: "./Workshop/Checklist.md", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      const blocked = yield* service.assert(assertion({ resources: ["Workshop/Checklist.md"] })).pipe(Effect.flip)
+      expect(blocked).toBeInstanceOf(Permission.BlockedError)
+      expect(yield* service.ask(assertion({ resources: ["Workshop/Other.md"] }))).toMatchObject({ effect: "allow" })
+    }),
+  )
+
   test("matches Windows rule resources against slash-normalized file access resources", () => {
     const rules: Permission.Ruleset = [
       { action: "external_directory", resource: "C:\\Users\\x\\proj\\*", effect: "allow" },
     ]
     expect(Permission.evaluate("external_directory", "C:/Users/x/proj/src/*", rules).effect).toBe("allow")
     expect(Permission.evaluate("external_directory", "C:/Users/x/other/*", rules).effect).toBe("ask")
+  })
+
+  test("treats a leading ./ on read and edit rules as the project-relative path", () => {
+    const deny = (action: string, resource: string, pattern: string) =>
+      Permission.evaluate(action, resource, [{ action, resource: pattern, effect: "deny" }]).effect
+
+    expect(deny("read", "Workshop/Checklist.md", "./Workshop/Checklist.md")).toBe("deny")
+    expect(deny("edit", "Workshop/Checklist.md", "./Workshop/Checklist.md")).toBe("deny")
+    expect(deny("read", "Workshop/Checklist.md", "./Workshop/*")).toBe("deny")
+    expect(deny("shell", "printf hello", "./printf hello")).toBe("ask")
+    expect(
+      Permission.evaluate("shell", "./printf hello", [{ action: "shell", resource: "./printf hello", effect: "deny" }])
+        .effect,
+    ).toBe("deny")
   })
 
   it.effect("allows managed output reads without granting external directory access", () =>

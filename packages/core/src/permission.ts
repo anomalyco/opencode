@@ -72,15 +72,29 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 export type Error = BlockedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
+  const candidate = fileResource(action, resource)
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      .findLast(
+        (rule) => Wildcard.match(action, rule.action) && Wildcard.match(candidate, fileResource(action, rule.resource)),
+      ) ?? {
       action,
       resource: "*",
       effect: "ask",
     }
   )
+}
+
+// Read and edit authorize the location-relative path (`Workshop/Checklist.md`).
+// A rule written as `./Workshop/Checklist.md` is that same path. Shell commands
+// and search patterns stay literal, because a leading `./` can be part of the text.
+function fileResource(action: string, value: string) {
+  if (action !== "read" && action !== "edit") return value
+  const slashed = value.replaceAll("\\", "/")
+  if (!slashed.startsWith("./")) return value
+  const rest = slashed.replace(/^(?:\.\/)+/, "").replace(/^\/+/, "")
+  return rest.length === 0 ? "." : rest
 }
 
 export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
