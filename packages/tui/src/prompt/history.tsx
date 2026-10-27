@@ -17,7 +17,8 @@ export type PastedText = {
   }
 }
 
-export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "files" | "agents" | "skills">> & {
+export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "agents" | "skills">> & {
+  files?: (Types.DeepMutable<NonNullable<PromptInput.Prompt["files"]>[number]> & { pastedPath?: string })[]
   pasted: PastedText[]
   mode?: "normal" | "shell"
 }
