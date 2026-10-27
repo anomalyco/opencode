@@ -135,7 +135,11 @@ export function DialogIntegration(
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
+        footer: status
+          ? integration.id === "vercel"
+            ? "Key needs replacement →"
+            : "Sign in required →"
+          : connectionSummary(integration) || undefined,
         footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
@@ -218,12 +222,29 @@ function manageConnections(
                   ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
                   : connection.label,
                 value: connection.id,
-                footer: connection.status ? "Sign in required →" : undefined,
+                footer: connection.status
+                  ? integration.id === "vercel"
+                    ? "Replace key →"
+                    : "Sign in required →"
+                  : undefined,
+                description: connection.status?.message,
                 footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: "Connected accounts",
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
                 fg: confirming ? theme.text.action.destructive.focused : undefined,
                 onSelect: () => {
+                  if (connection.status && integration.id === "vercel") {
+                    const method = methods.find((method) => method.type === "oauth" && method.id === "gateway-setup")
+                    if (method?.type === "oauth")
+                      return void beginOAuth(
+                        current() ?? integration,
+                        method,
+                        location,
+                        dialog,
+                        () => dialog.clear(),
+                        connection.id,
+                      )
+                  }
                   if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
                   if (connection.status)
                     return selectMethod(current() ?? integration, methods, location, dialog, onConnected)
@@ -587,9 +608,11 @@ async function beginOAuth(
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
+  credentialID?: string,
 ) {
-  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
-  if (answer === null) return
+  const fields = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
+  if (fields === null) return
+  const answer = credentialID ? { ...fields, credentialID } : fields
   dialog.replace(() => (
     <OAuthStarting
       integration={integration}
@@ -652,6 +675,57 @@ function OAuthStarting(props: {
   return <OAuthView title={props.method.label} message="Starting authorization…" />
 }
 
+function OAuthSubmitting(props: {
+  integration: IntegrationInfo
+  title: string
+  attempt: IntegrationAttempt
+  location: LocationRef
+  onConnected?: OnIntegrationConnected
+  promptID: string
+  answer: FormAnswer
+}) {
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+  let disposed = false
+  let settled = false
+  const cancel = () =>
+    client.api.integration.oauth.cancel({
+      integrationID: props.integration.id,
+      attemptID: props.attempt.attemptID,
+      location: locationQuery(props.location),
+    })
+
+  onMount(() => {
+    void client.api.integration.oauth
+      .complete({
+        integrationID: props.integration.id,
+        attemptID: props.attempt.attemptID,
+        location: locationQuery(props.location),
+        promptID: props.promptID,
+        answer: props.answer,
+      })
+      .then(() => {
+        if (disposed) return
+        settled = true
+        dialog.replace(() => <OAuthAuto {...props} />)
+      })
+      .catch((cause) => {
+        if (disposed) return
+        settled = true
+        void cancel()
+        toast.show({ variant: "error", message: errorMessage(cause) })
+        dialog.clear()
+      })
+  })
+  onCleanup(() => {
+    disposed = true
+    if (!settled) void cancel()
+  })
+
+  return <OAuthView title={props.title} message="Waiting for authorization…" />
+}
+
 function OAuthAuto(props: {
   integration: IntegrationInfo
   title: string
@@ -667,6 +741,7 @@ function OAuthAuto(props: {
   const newDesigns = useNewDesigns()
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
+  let disposed = false
 
   const open = () => {
     openUrl(props.attempt.url).catch(() =>
@@ -701,13 +776,68 @@ function OAuthAuto(props: {
         location: locationQuery(props.location),
       })
       .then((result) => {
+        if (disposed) return
         const status = result.data
         if (status.status === "pending") {
+          if (status.prompt) {
+            // Ownership moves to the form until the next polling view mounts.
+            settled = true
+            const prompt = status.prompt
+            void formAnswer(dialog, prompt.title, prompt.fields)
+              .then(async (answer) => {
+                if (answer === null) {
+                  await client.api.integration.oauth.cancel({
+                    integrationID: props.integration.id,
+                    attemptID: props.attempt.attemptID,
+                    location: locationQuery(props.location),
+                  })
+                  return
+                }
+                dialog.replace(() => <OAuthSubmitting {...props} promptID={prompt.id} answer={answer} />)
+              })
+              .catch((cause) => {
+                toast.show({ variant: "error", message: errorMessage(cause) })
+                void client.api.integration.oauth.cancel({
+                  integrationID: props.integration.id,
+                  attemptID: props.attempt.attemptID,
+                  location: locationQuery(props.location),
+                })
+              })
+            return
+          }
           timer = setTimeout(poll, 500)
           return
         }
         settled = true
         if (status.status === "complete") {
+          if (status.next) {
+            const next = status.next
+            data.location.integration.invalidate(props.location)
+            data.location.model.invalidate(props.location)
+            data.location.provider.invalidate(props.location)
+            void Promise.all([
+              data.location.integration.sync(props.location),
+              data.location.model.sync(props.location),
+              data.location.provider.sync(props.location),
+            ]).catch(toast.error)
+            dialog.replace(() => (
+              <DialogSelect
+                title={`Connected ${props.integration.name}`}
+                options={[
+                  { title: "Continue", value: "continue" },
+                  { title: next.title, value: "manage", description: next.url },
+                ]}
+                onSelect={(option) => {
+                  if (option.value === "manage") {
+                    void openUrl(next.url).catch(toast.error)
+                    return
+                  }
+                  void connected(props.integration, props.location, data, dialog, toast, props.onConnected)
+                }}
+              />
+            ))
+            return
+          }
           void connected(props.integration, props.location, data, dialog, toast, props.onConnected)
           return
         }
@@ -715,6 +845,7 @@ function OAuthAuto(props: {
         dialog.clear()
       })
       .catch((cause) => {
+        if (disposed) return
         settled = true
         toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
@@ -723,6 +854,7 @@ function OAuthAuto(props: {
 
   onMount(poll)
   onCleanup(() => {
+    disposed = true
     if (timer) clearTimeout(timer)
     if (settled) return
     void client.api.integration.oauth.cancel({
@@ -922,14 +1054,24 @@ async function selectAnswer(
         }))
   return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
-      () => (
-        <DialogSelect<FormValue | undefined>
-          title={formLabel(field) || title}
-          options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
-          current={field.type === "string" ? field.default : undefined}
-          onSelect={(option) => resolve(option.value)}
-        />
-      ),
+      () => {
+        const theme = useTheme().surface("dialog")
+        return (
+          <DialogSelect<FormValue | undefined>
+            title={formLabel(field) || title}
+            footer={
+              field.description ? (
+                <text fg={theme.text.base} wrapMode="word">
+                  {field.description}
+                </text>
+              ) : undefined
+            }
+            options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
+            current={field.type === "string" ? field.default : undefined}
+            onSelect={(option) => resolve(option.value)}
+          />
+        )
+      },
       () => resolve(CANCELLED),
     )
   })

@@ -5,6 +5,7 @@ import {
   Cause,
   Clock,
   Context,
+  Deferred,
   Duration,
   Effect,
   Equal,
@@ -61,21 +62,32 @@ export type OAuthAuthorization = {
   readonly url: string
   readonly instructions: string
   readonly expiresAt?: number
+  /** Replace this integration's existing credential only after authorization succeeds. */
+  readonly replaceCredentialID?: string
+  readonly onComplete?: () => { readonly title: string; readonly url: string } | undefined
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.OAuth, unknown>
+      readonly callback: Effect.Effect<Credential.OAuth | Credential.Key, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.OAuth | Credential.Key, unknown>
     }
 )
+
+export type OAuthPrompt = (input: {
+  readonly title: string
+  readonly fields: Form.Fields
+}) => Effect.Effect<Form.Answer, unknown>
 
 export interface OAuthImplementation {
   readonly integrationID: ID
   readonly method: OAuthMethod
-  readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (
+    answer: Form.Answer,
+    prompt: OAuthPrompt,
+  ) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
@@ -238,6 +250,8 @@ export interface Interface extends State.Transformable<Editor> {
       readonly integrationID: ID
       readonly attemptID: AttemptID
       readonly code?: string
+      readonly promptID?: Form.ID
+      readonly answer?: Form.Answer
     }) => Effect.Effect<void, CodeRequiredError | AuthorizationError | AttemptNotFoundError>
     /** Cancels an attempt and releases its resources. */
     readonly cancel: (input: { readonly integrationID: ID; readonly attemptID: AttemptID }) => Effect.Effect<void>
@@ -273,6 +287,7 @@ type PendingAttempt = {
   label?: string
   scope: Scope.Closeable
   time: AttemptTime
+  prompt?: Integration.Prompt & { deferred: Deferred.Deferred<Form.Answer> }
 }
 type TerminalAttempt = {
   status: "complete" | "failed" | "expired"
@@ -280,6 +295,7 @@ type TerminalAttempt = {
   message?: string
   removeAt: number
   time: AttemptTime
+  next?: { title: string; url: string }
 }
 type AttemptEntry = PendingAttempt | TerminalAttempt
 
@@ -445,7 +461,10 @@ const layer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.OAuth, unknown>) {
+    const settle = Effect.fnUntraced(function* (
+      attemptID: AttemptID,
+      exit: Exit.Exit<Credential.OAuth | Credential.Key, unknown>,
+    ) {
       const now = yield* Clock.currentTimeMillis
       const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
         const match = current.get(attemptID)
@@ -473,9 +492,28 @@ const layer = Layer.effect(
             .get()
             .integrations.get(attempt.integrationID)
             ?.implementations.get(attempt.methodID)
+          const replacementID = attempt.authorization.replaceCredentialID
+          if (replacementID)
+            return Effect.gen(function* () {
+              const id = Credential.ID.make(replacementID)
+              const existing = yield* credentials.get(id)
+              if (!existing || existing.integrationID !== attempt.integrationID)
+                return yield* new AuthorizationError({ cause: new Error("The connection to renew no longer exists") })
+              yield* credentials.update(id, { value: exit.value })
+              statuses.delete(
+                statusKey(attempt.integrationID, {
+                  type: "credential",
+                  id,
+                  label: existing.label,
+                  method: existing.value.type,
+                }),
+              )
+              yield* bus.publish(Integration.Event.Updated, {})
+              yield* bus.publish(Credential.Event.Updated, {}, { global: true })
+            })
           return createCredential({
             integrationID: attempt.integrationID,
-            label: attempt.label ?? implementation?.label?.(exit.value),
+            label: attempt.label ?? (exit.value.type === "oauth" ? implementation?.label?.(exit.value) : undefined),
             value: exit.value,
           })
         }).pipe(Effect.asVoid, Effect.exit)
@@ -486,6 +524,7 @@ const layer = Layer.effect(
               integrationID: attempt.integrationID,
               time: attempt.time,
               removeAt: settledAt + terminalRetention,
+              next: attempt.authorization.onComplete?.(),
             }
           : {
               status: "failed",
@@ -620,11 +659,36 @@ const layer = Layer.effect(
         if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
       }
       const attemptScope = yield* Scope.fork(scope)
-      const authorization = yield* authorize(method.authorize(answer)).pipe(
+      const id = AttemptID.create()
+      const prompt: OAuthPrompt = (input) =>
+        Effect.gen(function* () {
+          const invalid = Form.validateFields(input.fields)
+          if (invalid) return yield* Effect.fail(new Error(invalid))
+          const deferred = yield* Deferred.make<Form.Answer>()
+          const published = yield* SynchronizedRef.modify(attempts, (current) => {
+            const attempt = current.get(id)
+            if (!attempt || attempt.status !== "pending" || attempt.authorization.mode !== "auto" || attempt.prompt)
+              return [false, current]
+            return [
+              true,
+              new Map(current).set(id, {
+                ...attempt,
+                prompt: { ...input, id: Form.ID.create(), deferred },
+              }),
+            ]
+          })
+          if (!published)
+            return yield* Effect.fail(
+              new Error(
+                "Setup prompts require automatic authorization and must be asked sequentially from its callback",
+              ),
+            )
+          return yield* Deferred.await(deferred)
+        })
+      const authorization = yield* authorize(method.authorize(answer, prompt)).pipe(
         Scope.provide(attemptScope),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
       )
-      const id = AttemptID.create()
       const created = yield* Clock.currentTimeMillis
       const time = { created, expires: authorization.expiresAt ?? created + attemptLifetime }
       yield* SynchronizedRef.update(attempts, (current) =>
@@ -842,9 +906,45 @@ const layer = Layer.effect(
           if (attempt.status === "failed") {
             return { status: attempt.status, message: attempt.message ?? "Authorization failed", time: attempt.time }
           }
+          if (attempt.status === "pending" && attempt.prompt) {
+            const prompt = attempt.prompt
+            return {
+              status: attempt.status,
+              time: attempt.time,
+              prompt: { id: prompt.id, title: prompt.title, fields: prompt.fields },
+            }
+          }
+          if (attempt.status === "complete" && attempt.next)
+            return { status: attempt.status, time: attempt.time, next: attempt.next }
           return { status: attempt.status, time: attempt.time }
         }),
         complete: Effect.fn("Integration.oauth.complete")(function* (input) {
+          if (input.promptID !== undefined) {
+            const result = yield* SynchronizedRef.modify(
+              attempts,
+              (
+                current,
+              ): readonly [
+                { error: string } | { deferred: Deferred.Deferred<Form.Answer> },
+                Map<AttemptID, AttemptEntry>,
+              ] => {
+                const attempt = current.get(input.attemptID)
+                if (!attempt || attempt.integrationID !== input.integrationID)
+                  return [{ error: "Attempt not found" } as const, current]
+                if (attempt.status !== "pending" || !attempt.prompt || attempt.prompt.id !== input.promptID)
+                  return [{ error: "Setup step is no longer active" } as const, current]
+                const invalid = Form.validateAnswer(attempt.prompt.fields, input.answer ?? {})
+                if (invalid) return [{ error: invalid } as const, current]
+                return [
+                  { deferred: attempt.prompt.deferred } as const,
+                  new Map(current).set(input.attemptID, { ...attempt, prompt: undefined }),
+                ]
+              },
+            )
+            if ("error" in result) return yield* new AuthorizationError({ cause: new Error(result.error) })
+            yield* Deferred.succeed(result.deferred, input.answer ?? {})
+            return
+          }
           const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
             const match = current.get(input.attemptID)
             if (!match || match.integrationID !== input.integrationID) return [undefined, current]
