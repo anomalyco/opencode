@@ -2,6 +2,7 @@ export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { PtyHandoff } from "@opencode/client/pty-handoff"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
@@ -46,18 +47,8 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 })
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
-  const inherited = process.env.OPENCODE_PTY_HANDOFF
+  let inherited = process.env.OPENCODE_PTY_HANDOFF
   delete process.env.OPENCODE_PTY_HANDOFF
-  const handoff =
-    inherited === undefined
-      ? undefined
-      : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PersistentPty.Handoff))(inherited).pipe(
-          Effect.catch(() =>
-            Effect.logWarning("Ignoring invalid PTY restart handoff; persistent terminals will start fresh").pipe(
-              Effect.as(undefined),
-            ),
-          ),
-        )
   const global = yield* Global.Service
   // A sandbox may deny $HOME; the service then keeps the cwd it was launched from.
   if (options.mode === "service")
@@ -76,21 +67,33 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
       // Legacy discovery may advertise a different default port.
-      if (options.port === undefined && options.hostname === undefined && serviceOptions?.legacyURL !== undefined) {
+      if (serviceOptions?.legacyURL !== undefined) {
         const legacy = yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })
         if (legacy !== undefined) {
           if (
-            (config.hostname === undefined && config.port === undefined) ||
+            (options.port === undefined &&
+              options.hostname === undefined &&
+              config.hostname === undefined &&
+              config.port === undefined) ||
             (findIncumbent !== undefined && (yield* findIncumbent) !== undefined)
           )
             return
-          // A successor must inherit the handoff prepared after this process started.
+          // Read the ticket after stopping its owner, then continue in this process.
           yield* Service.stop({ file: serviceOptions.file, pty: legacy.state === "ready" ? "handoff" : "clear" })
-          yield* Service.ensure(serviceOptions)
-          return
+          inherited = (yield* Effect.tryPromise(() => PtyHandoff.environment(serviceOptions.file))).OPENCODE_PTY_HANDOFF
         }
       }
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
+      const handoff =
+        inherited === undefined
+          ? undefined
+          : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PersistentPty.Handoff))(inherited).pipe(
+              Effect.catch(() =>
+                Effect.logWarning("Ignoring invalid PTY restart handoff; persistent terminals will start fresh").pipe(
+                  Effect.as(undefined),
+                ),
+              ),
+            )
       // Desktop can launch the service directly without injecting its saved environment.
       Object.assign(process.env, ServiceConfig.processEnv(config.env))
       // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.
@@ -222,6 +225,10 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         )
       }
       const url = HttpServer.formatAddress(server.address)
+      if (serviceOptions !== undefined)
+        yield* Effect.tryPromise(() =>
+          PtyHandoff.complete(serviceOptions.file, { id: instanceID, pid: process.pid, url }),
+        ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to clear persistent terminal restart handoff", cause)))
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
       return yield* options.mode === "service"

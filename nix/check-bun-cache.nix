@@ -1,11 +1,18 @@
-{ pkgs, bun2nix }:
+{
+  pkgs,
+  bun2nix,
+  bun ? pkgs.bun,
+}:
 let
   fixture = ./fixtures/cache-package.tgz;
-  hash = builtins.convertHash {
-    hash = builtins.hashFile "sha256" fixture;
-    hashAlgo = "sha256";
-    toHashFormat = "sri";
-  };
+  integrity =
+    algorithm:
+    builtins.convertHash {
+      hash = builtins.hashFile algorithm fixture;
+      hashAlgo = algorithm;
+      toHashFormat = "sri";
+    };
+  hash = integrity "sha256";
   cases = [
     {
       name = "registry";
@@ -47,6 +54,24 @@ let
       ];
     }
     {
+      name = "http-sha512";
+      dependency = "https://cdn.example.invalid/archive?rev=sha512";
+      entry = [
+        "cache-fixture@https://cdn.example.invalid/archive?rev=sha512"
+        { }
+        (integrity "sha512")
+      ];
+    }
+    {
+      name = "http-sha1";
+      dependency = "https://cdn.example.invalid/archive?rev=sha1";
+      entry = [
+        "cache-fixture@https://cdn.example.invalid/archive?rev=sha1"
+        { }
+        (integrity "sha1")
+      ];
+    }
+    {
       name = "github";
       dependency = "github:review/cache-fixture#0123456";
       entry = [
@@ -73,34 +98,29 @@ let
         };
         packages.cache-fixture = case.entry;
       };
-      cache = bun2nix.fetchBunDeps {
-        bunNix =
-          { fetchurl, ... }:
-          import ./fetch-bun-sources.nix
-            (
+      cache =
+        pkgs.callPackage ./bun-cache.nix
+          {
+            inherit bun bun2nix;
+            fetchurl =
               source:
               let
-                archive = fetchurl source;
+                archive = pkgs.fetchurl source;
               in
-              # Local transport must preserve the source name, integrity and host metadata.
-              (archive.overrideAttrs (_: {
+              # Local transport preserves the source name and complete integrity.
+              archive.overrideAttrs (_: {
                 urls = [ "file://${fixture}" ];
-              }))
-              // {
-                inherit (archive) passthru;
-              }
-            )
-            (
-              import ./bun-lock.nix {
-                os = if pkgs.stdenv.hostPlatform.isLinux then "linux" else "darwin";
-                cpu = if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "x64";
-              } lock
-            );
-        patchShebangs = false;
-      };
+              });
+          }
+          (
+            import ./bun-lock.nix {
+              os = if pkgs.stdenv.hostPlatform.isLinux then "linux" else "darwin";
+              cpu = if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "x64";
+            } lock
+          );
       frozen = pkgs.writeText "cache-fixture-${case.name}.lock" (builtins.toJSON lock);
     in
-    pkgs.runCommand "opencode-bun-cache-${case.name}" { nativeBuildInputs = [ pkgs.bun ]; } ''
+    pkgs.runCommand "opencode-bun-cache-${case.name}" { nativeBuildInputs = [ bun ]; } ''
       export HOME="$TMPDIR/home"
       export XDG_CONFIG_HOME="$HOME/config" XDG_DATA_HOME="$HOME/data"
       export XDG_STATE_HOME="$HOME/state" XDG_CACHE_HOME="$HOME/cache"

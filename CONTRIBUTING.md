@@ -77,7 +77,9 @@ Follow the repository [style guide](./AGENTS.md).
 
 Nix uses archive URLs and integrity hashes from `bun.lock`. Bun installs workspaces, peer dependencies and patches from bun2nix's offline cache, shared by CLI and Desktop. Updating `bun.lock` requires no additional dependency lockfile or aggregate `node_modules` hash.
 
-The lock reader supports Bun lockfile v1 registry, GitHub and HTTP sources with recorded integrity.
+The lock reader supports Bun lockfile v1 registry, GitHub and HTTP sources with recorded integrity. HTTP cache entries use the format required by the selected Bun version.
+
+Released TUI storage imports missing JSON files from `prod/tui` into `latest/tui`. Existing destination files take precedence; source files remain unchanged.
 
 Build the packages and run the cache and runtime checks:
 

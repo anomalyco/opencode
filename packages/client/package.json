@@ -20,6 +20,7 @@
     "./promise": "./src/promise/index.ts",
     "./promise/api": "./src/promise/api.ts",
     "./service": "./src/promise/service.ts",
+    "./pty-handoff": "./src/pty-handoff.ts",
     "./solid": "./src/solid/index.ts",
     "./effect": "./src/effect/index.ts",
     "./effect/api": "./src/effect/api.ts",

@@ -1,7 +1,7 @@
 import { batch, createContext, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createStore, produce, reconcile, type Store } from "solid-js/store"
 import path from "path"
-import { mkdirSync, readFileSync } from "fs"
+import { constants, copyFileSync, mkdirSync, readdirSync, readFileSync } from "fs"
 import { Flock } from "@opencode/util/flock"
 import { writeJsonAtomic } from "../util/persistence"
 import { safeWatch } from "../util/watch"
@@ -52,6 +52,7 @@ export function createStorage(root: string, channel: string) {
   const directory = path.join(root, segment(channel), "tui")
   const locks = path.join(root, segment(channel), "locks")
   mkdirSync(directory, { recursive: true })
+  if (channel === "latest") migrateProdStorage(root, directory)
 
   const storage: Storage = {
     store<Value extends object>(key: string, options: Options<Value>) {
@@ -128,6 +129,27 @@ export function createStorage(root: string, channel: string) {
       clearTimeout(reloadTimer)
       watcher?.close()
     },
+  }
+}
+
+function migrateProdStorage(root: string, destination: string) {
+  const source = path.join(root, "prod", "tui")
+  const files = (() => {
+    try {
+      return readdirSync(source, { withFileTypes: true })
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return []
+      throw error
+    }
+  })()
+  for (const file of files.filter((entry) => entry.isFile() && path.extname(entry.name) === ".json")) {
+    try {
+      // Existing latest state wins; prod remains available to older clients.
+      copyFileSync(path.join(source, file.name), path.join(destination, file.name), constants.COPYFILE_EXCL)
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") continue
+      throw error
+    }
   }
 }
 
