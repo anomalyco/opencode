@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { LanguageModel } from "@opencode/ai"
+import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
@@ -554,6 +554,138 @@ describe("SubagentTool", () => {
           yield* Fiber.join(first.fiber)
 
           expect(yield* gate.peak).toBe(1)
+        }),
+      ),
+    ),
+  )
+
+  concurrencyIt.live("runs a nested subagent under the permit of the child it descends from", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_depth: 2, subagent_concurrency: 1 } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const gate = yield* ExecutionGateService
+
+          // The top-level child holds the only permit for as long as it runs.
+          const created = yield* Deferred.make<Tool.Metadata>()
+          const first = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            progress: (update) => Deferred.succeed(created, update),
+            call: {
+              type: "tool-call" as const,
+              id: "call-nested-concurrency-outer",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "nested parent", prompt: "work", background: true },
+            },
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          const child = outputSessionID(yield* Deferred.await(created))
+          yield* gate.started(child)
+
+          // A nested call from the running child runs under that permit. Waiting for a second
+          // one deadlocks: the child cannot settle while its own tool call is outstanding.
+          const nested = yield* executeTool(registry, {
+            sessionID: child,
+            ...toolIdentity,
+            call: {
+              type: "tool-call" as const,
+              id: "call-nested-concurrency-inner",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "nested", prompt: "nested", background: true },
+            },
+          })
+          expect(nested).toMatchObject({ status: "completed", metadata: { status: "running" } })
+          const grandchild = outputSessionID(nested.metadata)
+          yield* gate.started(grandchild)
+
+          yield* gate.release(grandchild)
+          yield* gate.release(child)
+          yield* Fiber.join(first)
+        }),
+      ),
+    ),
+  )
+
+  concurrencyIt.live("steers a running child without taking a second permit", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_concurrency: 1 } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const gate = yield* ExecutionGateService
+          const bus = yield* Bus.Service
+
+          const created = yield* Deferred.make<Tool.Metadata>()
+          const first = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            progress: (update) => Deferred.succeed(created, update),
+            call: {
+              type: "tool-call" as const,
+              id: "call-steer-concurrency-first",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+            },
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          const child = outputSessionID(yield* Deferred.await(created))
+          yield* gate.started(child)
+
+          const steered = yield* Deferred.make<SessionMessage.ID>()
+          yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+            Effect.gen(function* () {
+              if (event.data.sessionID !== child || event.data.item.type !== "user") return
+              yield* Deferred.succeed(steered, event.data.inboxID)
+            }),
+          )
+          const steer = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call" as const,
+              id: "call-steer-concurrency-second",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", sessionID: child, description: "steer", prompt: "keep going" },
+            },
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+
+          // The steer reaches the running child while its own permit is still held.
+          yield* Deferred.await(steered)
+          yield* gate.release(child)
+
+          expect(yield* Fiber.join(steer)).toMatchObject({
+            status: "completed",
+            metadata: { sessionID: child, status: "completed" },
+          })
+          // Steering joins the running job instead of starting a second execution.
+          expect(yield* gate.peak).toBe(1)
+          yield* Fiber.join(first)
         }),
       ),
     ),

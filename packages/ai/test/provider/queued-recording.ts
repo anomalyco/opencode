@@ -1,4 +1,4 @@
-import type { Poll } from "../../src/index.js"
+import type { Poll } from "../../src/effect.js"
 
 /**
  * Queued generations take minutes live, so record with a realistic interval. Replay consumes the recorded polls in

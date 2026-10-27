@@ -190,7 +190,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(პასუხი არ არის)",
   "ui.question.review.notAnswered": "(უპასუხა)",
   "ui.question.multiHint": "აირჩიეთ ყველა შესაბამისი პასუხი",
-  "ui.question.singleHint": "აირჩიეთ ერთი პასუხი",
   "ui.question.custom.placeholder": "აკრიფეთ თქვენი პასუხი…",
   "ui.messagePart.context.match.one": "({{count}} დამთხვევა)",
   "ui.messagePart.context.match.other": "({{count}} დამთხვევა)",

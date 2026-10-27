@@ -1,7 +1,7 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { LLMClient, Message, type AIError } from "@opencode/ai"
+import { LLMClient, Message, type AIError } from "@opencode/ai/effect"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
@@ -10,7 +10,6 @@ import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
 import type { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
-import { SessionProviderContext } from "./provider-context.js"
 import { SessionModelRequest } from "./model-request.js"
 import { ModelRetry } from "../model-retry.js"
 import type { SessionRunnerModel } from "./runner/model.js"
@@ -37,12 +36,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
     const model = yield* context.resolveModel(selection.session)
-    const history = yield* SessionHistory.preview(
-      database.db,
-      selection.session.id,
-      selection.instructions,
-      SessionProviderContext.provenance(model) ?? "local",
-    )
+    const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions, model.ref)
     const transcript = SessionModelRequest.baseTranscript({
       agent: selection.agent.info,
       model,

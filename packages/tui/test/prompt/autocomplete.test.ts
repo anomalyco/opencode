@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { measureEditText } from "@opentui/core"
 import path from "path"
 import type { KeymapCommand } from "@opencode/plugin/tui/context"
 import {
@@ -87,27 +88,21 @@ const argumentAutocomplete = (command: KeymapCommand) =>
   command.id === "session.cd" ? ("directory" as const) : undefined
 
 describe("slashArgumentAutocomplete", () => {
-  test("starts after the command separator", () => {
-    expect(slashArgumentAutocomplete("/cd ", 4, commands, argumentAutocomplete)).toEqual({
+  test.each([
+    ["/cd ", "/cd "],
+    ["/cd src", "/cd "],
+    ["/chdir src", "/chdir "],
+    ["/cd\t中文", "/cd\t"],
+  ])("starts %j after the command separator", (beforeCursor, head) => {
+    expect(slashArgumentAutocomplete(beforeCursor, "unicode", commands, argumentAutocomplete)).toEqual({
       type: "directory",
-      index: 4,
-    })
-    expect(slashArgumentAutocomplete("/cd src", 7, commands, argumentAutocomplete)).toEqual({
-      type: "directory",
-      index: 4,
-    })
-  })
-
-  test("supports aliases", () => {
-    expect(slashArgumentAutocomplete("/chdir src", 10, commands, argumentAutocomplete)).toEqual({
-      type: "directory",
-      index: 7,
+      index: measureEditText(head, { widthMethod: "unicode" }),
     })
   })
 
   test("does not complete the command token", () => {
-    expect(slashArgumentAutocomplete("/cd", 3, commands, argumentAutocomplete)).toBeUndefined()
-    expect(slashArgumentAutocomplete("/other ", 7, commands, argumentAutocomplete)).toBeUndefined()
+    expect(slashArgumentAutocomplete("/cd", "unicode", commands, argumentAutocomplete)).toBeUndefined()
+    expect(slashArgumentAutocomplete("/other ", "unicode", commands, argumentAutocomplete)).toBeUndefined()
   })
 })
 

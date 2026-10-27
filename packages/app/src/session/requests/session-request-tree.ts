@@ -9,7 +9,7 @@ function sessionTreeRequest<T>(
   const ids = sessionTreeIDs(session, sessionID)
 
   if (!ids.length) return
-  const list = (id: string) => (typeof request === "function" ? request(id) : request[id])
+  const list = (id: string) => (request instanceof Function ? request(id) : request[id])
   const id = ids.find((id) => list(id)?.some(include))
 
   if (!id) return
@@ -67,6 +67,9 @@ export function sessionFormRequest(
     session,
     request,
     sessionID,
-    (item) => item.metadata?.kind === "question" || item.metadata?.kind === "websearch.provider",
+    (item) =>
+      item.metadata?.kind === "question" ||
+      item.metadata?.kind === "websearch.provider" ||
+      item.metadata?.kind === "mcp-elicitation",
   )
 }

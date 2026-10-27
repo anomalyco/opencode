@@ -157,6 +157,19 @@ describe("internal notifications TUI plugin", () => {
     harness.emit(executionStarted("retry"))
     harness.emit(executionFailed("failed-again"))
     expect(harness.toasts).toHaveLength(2)
+
+    harness.emit(executionStarted("free-limit"))
+    harness.emit({
+      id: "free-limit-failed",
+      created: 0,
+      type: "session.execution.failed",
+      data: {
+        sessionID: "session",
+        error: { type: "provider.free-limit", message: "Free usage limit reached." },
+      },
+    } as OpenCodeEvent)
+    expect(harness.toasts).toHaveLength(2)
+    expect(harness.notifications).toHaveLength(2)
   })
 
   test.each<Route>([{ type: "home" }, { type: "session", sessionID: "other" }])(

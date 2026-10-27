@@ -7,7 +7,8 @@
     "build": "wrangler deploy --dry-run --env dev --outdir dist",
     "dev": "wrangler dev --env dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",

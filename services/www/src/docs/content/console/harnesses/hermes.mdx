@@ -4,7 +4,7 @@ description: "Use Console and Go models from Hermes Agent."
 ---
 
 [Hermes Agent](https://hermes-agent.nousresearch.com) includes OpenCode providers for pay-as-you-go and Go. It picks the
-right API for each model, so every Console model works.
+right API for each paid or Go model. Free-tier chat models require OpenCode and return HTTP `403` from Hermes.
 
 | Provider       | Plan          | Key variable           |
 | -------------- | ------------- | ---------------------- |
@@ -19,7 +19,7 @@ Run the model setup and select **OpenCode Zen** for pay-as-you-go or **OpenCode 
 hermes model
 ```
 
-Paste a key created under **Keys** in the [Console](https://opencode.ai/console), then choose a model. Hermes saves the
+Paste a [personal API key](/console/harnesses#get-an-api-key), then choose a model. Hermes saves the
 key to `~/.hermes/.env` and the selection to `~/.hermes/config.yaml`.
 
 ```yaml title="~/.hermes/config.yaml"

@@ -1,16 +1,8 @@
 /// <reference lib="webworker" />
 
-import { ShikiStreamTokenizer } from "@shikijs/stream"
+import { codeToTokens, isSupportedLanguage, LiveTokenizer, type ThemedToken } from "@pierre/highlights"
 import { createMarkdownParser } from "@opencode/ui/context/marked-parser"
-import { OpenCodeTheme } from "@opencode/ui/context/marked-theme"
-import {
-  bundledLanguages,
-  createHighlighter,
-  getTokenStyleObject,
-  stringifyTokenStyle,
-  type BundledLanguage,
-  type ThemedToken,
-} from "shiki"
+import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
 import type { MarkdownToken, MarkdownWorkerRequest, MarkdownWorkerResponse } from "./markdown-worker-protocol"
 import { createLatestWorkerQueue } from "./markdown-worker-queue"
 import { project, type Projection } from "./markdown-stream"
@@ -18,37 +10,25 @@ import { project, type Projection } from "./markdown-stream"
 type Stream = {
   language: string
   source: string
-  tokenizer: ShikiStreamTokenizer
+  tokenizer: LiveTokenizer
 }
 
 const streams = new Map<string, Stream>()
 
 const projections = new Map<string, Projection>()
 
-let highlighter: ReturnType<typeof createHighlighter> | undefined
+const parser = createMarkdownParser()
 
 const highlightQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
   run: highlight,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
-  dispose: (key) => void streams.delete(key),
+  dispose: closeStream,
 })
 
 const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "project" }>>({
   run: runProject,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
   dispose: (key) => void projections.delete(key),
-})
-
-const parser = createMarkdownParser(async (code, language) => {
-  const instance = await getHighlighter()
-  const name = language in bundledLanguages ? language : "text"
-
-  if (!instance.getLoadedLanguages().includes(name))
-    await instance.loadLanguage(bundledLanguages[name as BundledLanguage])
-
-  return instance
-    .codeToHtml(code, { lang: name as BundledLanguage, theme: "OpenCode", tabindex: false })
-    .replace("<code>", `<code class="language-${name}">`)
 })
 
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
@@ -99,15 +79,13 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
 
 async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
   try {
-    const instance = await getHighlighter()
-    const language = request.language in bundledLanguages ? request.language : "text"
-
-    if (!instance.getLoadedLanguages().includes(language))
-      await instance.loadLanguage(bundledLanguages[language as BundledLanguage])
+    // Report the requested language so the viewer can label the block and spot Mermaid; lex unknown ones as text.
+    const language = request.language
+    const lang = isSupportedLanguage(language) ? language : "text"
 
     if (request.complete) {
-      const result = instance.codeToTokens(request.text, { lang: language as BundledLanguage, theme: "OpenCode" })
-      streams.delete(request.key)
+      const result = codeToTokens(request.text, { lang, theme: OpenCodeTheme })
+      closeStream(request.key)
       post({
         type: "highlight",
         id: request.id,
@@ -128,25 +106,39 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
     const previous = streams.get(request.key)
     const reset = !previous || previous.language !== language || !request.text.startsWith(previous.source)
 
-    const stream = reset
-      ? {
-          language,
-          source: "",
-          tokenizer: new ShikiStreamTokenizer({ highlighter: instance, lang: language, theme: "OpenCode" }),
-        }
-      : previous
+    if (reset) closeStream(request.key)
 
-    const result = await stream.tokenizer.enqueue(request.text.slice(stream.source.length))
+    const stream =
+      reset || !previous
+        ? { language, source: "", tokenizer: new LiveTokenizer({ lang, theme: OpenCodeTheme }) }
+        : previous
+
+    // Lines before the last are final because a lexer only carries state forward; the last line can still grow.
+    const start = stream.tokenizer.lineCount - 1
+    const end = { line: start, character: stream.tokenizer.getLineLength(start) }
+    stream.tokenizer.applyEdits([{ range: { start: end, end }, newText: request.text.slice(stream.source.length) }])
     stream.source = request.text
     streams.set(request.key, stream)
+
+    const last = stream.tokenizer.lineCount - 1
+
     post({
       type: "highlight",
       id: request.id,
       key: request.key,
       language,
       reset,
-      stable: result.stable.filter((token) => token.content.length > 0).map(token),
-      unstable: result.unstable.filter((token) => token.content.length > 0).map(token),
+      stable: Array.from({ length: last - start }, (_, index) => [
+        ...stream.tokenizer.getLineTokens(start + index).tokens,
+        { content: "\n", offset: 0 },
+      ])
+        .flat()
+        .filter((token) => token.content.length > 0)
+        .map(token),
+      unstable: stream.tokenizer
+        .getLineTokens(last)
+        .tokens.filter((token) => token.content.length > 0)
+        .map(token),
     })
   } catch (error) {
     post({
@@ -158,8 +150,9 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
   }
 }
 
-function getHighlighter() {
-  return (highlighter ??= createHighlighter({ themes: [OpenCodeTheme], langs: [] }))
+function closeStream(key: string) {
+  streams.get(key)?.tokenizer.dispose()
+  streams.delete(key)
 }
 
 function post(response: MarkdownWorkerResponse) {
@@ -167,5 +160,16 @@ function post(response: MarkdownWorkerResponse) {
 }
 
 function token(value: ThemedToken): MarkdownToken {
-  return [value.content, stringifyTokenStyle(value.htmlStyle ?? getTokenStyleObject(value))]
+  const fontStyle = value.fontStyle ?? 0
+
+  return [
+    value.content,
+    [
+      value.color && `color:${value.color}`,
+      fontStyle & 1 && "font-style:italic",
+      fontStyle & 2 && "font-weight:bold",
+    ]
+      .filter(Boolean)
+      .join(";"),
+  ]
 }

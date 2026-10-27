@@ -23,7 +23,7 @@ Create `.opencode/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ Use the `command` option in your OpenCode [config](/docs/config):
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ You can also define commands using markdown files. Place them in:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -302,7 +302,7 @@ Use the `model` config to override the default model for this command.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

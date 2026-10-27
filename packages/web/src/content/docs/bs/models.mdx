@@ -53,7 +53,7 @@ OpenCode config.
 }
 ```
 
-Ovdje je puni ID `provider_id/model_id`. Na primjer, ako koristite [OpenCode Zen](https://opencode.ai/v2/docs/console/), koristili biste `opencode/gpt-5.1-codex` za GPT 5.1 Codex.
+Ovdje je puni ID `provider_id/model_id`. Na primjer, ako koristite [OpenCode Zen](https://opencode.ai/v2/docs/console/), koristili biste `opencode/gpt-6.1-sol` za GPT-6.1 Sol.
 Ako ste konfigurirali [prilagođenog provajdera](/docs/providers#custom), `provider_id` je ključ iz `provider` dijela vaše konfiguracije, a `model_id` je ključ iz `provider.models`.
 
 ---
@@ -68,7 +68,7 @@ Možete globalno konfigurirati opcije modela kroz config.
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -80,7 +80,7 @@ Možete globalno konfigurirati opcije modela kroz config.
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -94,7 +94,7 @@ Možete globalno konfigurirati opcije modela kroz config.
 }
 ```
 
-Ovdje konfiguriramo globalne postavke za dva ugrađena modela: `gpt-5` kada se pristupa preko `openai` provajdera i `claude-sonnet-4-20250514` kada se pristupa preko `anthropic` provajdera.
+Ovdje konfiguriramo globalne postavke za dva ugrađena modela: `gpt-6.1-sol` kada se pristupa preko `openai` provajdera i `claude-sonnet-5-5` kada se pristupa preko `anthropic` provajdera.
 Ugrađeni dobavljač i nazivi modela mogu se naći na [Models.dev](https://models.dev).
 Također možete konfigurirati ove opcije za sve agente koje koristite. Konfiguracija agenta poništava sve globalne opcije ovdje. [Saznajte više](/docs/agents/#additional).
 Također možete definirati prilagođene varijante koje proširuju ugrađene. Varijante vam omogućavaju da konfigurirate različite postavke za isti model bez stvaranja duplih unosa:
@@ -105,7 +105,7 @@ Također možete definirati prilagođene varijante koje proširuju ugrađene. Va
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -163,7 +163,7 @@ Možete nadjačati postojeće varijante ili dodati svoje:
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -194,7 +194,7 @@ Kada se OpenCode pokrene, on provjerava modele u sljedećem prioritetnom redosli
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-20250514"
+  "model": "anthropic/claude-sonnet-5-5"
 }
 ```
 

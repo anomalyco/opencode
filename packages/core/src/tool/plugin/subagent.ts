@@ -1,6 +1,6 @@
 export * as SubagentTool from "./subagent.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect, Predicate, Schema, Semaphore, Scope } from "effect"
@@ -192,7 +192,7 @@ export const Plugin = {
                   .create({
                     parentID: context.sessionID,
                     title: input.description,
-                    agent: Agent.ID.make(input.agent),
+                    agent: agent.id,
                     model,
                   })
                   .pipe(
@@ -213,11 +213,17 @@ export const Plugin = {
               }
               // A child executes from prompt admission until its job settles. Settlement outlives
               // background calls, so the permit releases on settlement rather than the tool call.
-              const concurrency = experimental?.subagent_concurrency
-              if (concurrency !== undefined) {
-                yield* gate.resize(concurrency)
-                yield* gate.take(1)
-              }
+              // Only top-level calls take a permit: a nested call runs under the permit of the
+              // subagent it descends from, and waiting for a second one deadlocks, because that
+              // ancestor cannot settle until this call returns.
+              const concurrency = depth === 0 ? experimental?.subagent_concurrency : undefined
+              if (concurrency !== undefined) yield* gate.resize(concurrency)
+              // Steering a child that is already running starts no run, so it needs no permit and
+              // must not count twice against the limit.
+              const holding =
+                concurrency !== undefined &&
+                (existing === undefined || (yield* jobs.get(existing.id))?.status !== "running")
+              if (holding) yield* gate.take(1)
               yield* Effect.gen(function* () {
                 // Standard prompt admission outside the job: Job.start joining a running child skips
                 // its run effect, and the default wake starts an idle child or steers a running one.
@@ -236,7 +242,7 @@ export const Plugin = {
                     ),
                   )
                 yield* subagents.start(recovery)
-                if (concurrency !== undefined)
+                if (holding)
                   yield* Effect.gen(function* () {
                     yield* jobs.wait({ id: child.id })
                     yield* gate.release(1)
@@ -245,7 +251,7 @@ export const Plugin = {
                 // An admission failure before the job starts would otherwise strand the permit.
                 Effect.catchCause((cause) =>
                   Effect.gen(function* () {
-                    if (concurrency !== undefined) yield* gate.release(1)
+                    if (holding) yield* gate.release(1)
                     return yield* Effect.failCause(cause)
                   }),
                 ),

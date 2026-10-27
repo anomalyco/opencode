@@ -174,6 +174,8 @@ const layer = () =>
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(command.done, new NotFoundError({ id }))
         yield* Effect.promise(() => unlink(command.file).catch(() => {}))
+        // Every shell reports exactly one exit; removing a running one ends it as killed.
+        if (command.info.status === "running") yield* bus.publish(Shell.Event.Exited, { id, status: "killed" })
         yield* bus.publish(Shell.Event.Deleted, { id })
       })
 
@@ -407,6 +409,8 @@ const layer = () =>
                   // Report the terminal status only once captured output is complete, so a reader that
                   // sees it never reads a partial file.
                   yield* outputDone.await
+                  // A removed command already failed its waiters and published its exit and deletion.
+                  if (commands.get(id) !== command) return
                   command.info = produce(command.info, (draft) => {
                     draft.status = outcome.status
                     if (outcome.exit !== undefined) draft.exit = outcome.exit

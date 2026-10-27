@@ -86,7 +86,6 @@ const GeminiInlineDataPart = Schema.Struct({
 })
 type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
-/** Gemini Files API reference; the only remote input Gemini accepts. */
 const GeminiFileDataPart = Schema.Struct({
   fileData: Schema.Struct({
     mimeType: Schema.String,
@@ -230,6 +229,7 @@ const GeminiUsage = Schema.Struct({
   promptTokenCount: optionalNull(Schema.Number),
   candidatesTokenCount: optionalNull(Schema.Number),
   totalTokenCount: optionalNull(Schema.Number),
+  ...ProviderShared.ReportedBilling.fields,
 })
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
@@ -248,8 +248,17 @@ const GeminiPromptFeedback = Schema.StructWithRest(
 )
 type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
 
+const GeminiError = Schema.StructWithRest(
+  Schema.Struct({
+    code: lenient(Schema.Number),
+    message: lenient(Schema.String),
+    status: lenient(Schema.String),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+
 const GeminiEvent = Schema.Struct({
-  error: Schema.optional(Schema.Unknown),
+  error: Schema.optional(GeminiError),
   candidates: optionalNull(Schema.Array(GeminiCandidate)),
   promptFeedback: optionalNull(GeminiPromptFeedback),
   usageMetadata: optionalNull(GeminiUsage),
@@ -302,9 +311,7 @@ const providerMetadata = (key: string, metadata: Record<string, unknown>): Provi
 
 const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
   const value = metadata?.[key]
-  return ProviderShared.isRecord(value) && typeof value.thoughtSignature === "string"
-    ? value.thoughtSignature
-    : undefined
+  return typeof value?.thoughtSignature === "string" ? value.thoughtSignature : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string) => ({
@@ -314,10 +321,10 @@ const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string
 
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
-  const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const metadataKey = request.model.route.providerMetadataKey ?? request.model.provider
   const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
-  let pendingMedia: GeminiInlineDataPart[] | undefined
+  let pendingMedia: Array<GeminiInlineDataPart | typeof GeminiFileDataPart.Type> | undefined
   const flushMedia = () => {
     if (!pendingMedia) return
     contents.push({ role: "user", parts: [{ text: "Attached media from tool result:" }, ...pendingMedia] })
@@ -419,10 +426,11 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
       const media: GeminiInlineDataPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = yield* ProviderShared.requireInlineMedia("Gemini", ProviderShared.toolFileMedia(item).media)
-        media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
+        const value = yield* GeminiGenerateContent.mediaPart("Gemini", GeminiGenerateContent.toolMedia(item))
+        // Nested fileData can be accepted without the model seeing the video, even on newer Gemini models.
+        if (legacyToolMedia || "fileData" in value) (pendingMedia ??= []).push(value)
+        else media.push(value)
       }
-      if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
       parts.push({
         functionResponse: {
           ...(omitCallIds ? {} : { id: part.id }),
@@ -431,7 +439,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
             name: part.name,
             content: text.join("\n"),
           },
-          parts: legacyToolMedia || media.length === 0 ? undefined : media,
+          parts: media.length === 0 ? undefined : media,
         },
       })
     }
@@ -532,6 +540,7 @@ const mapUsage = (
     cacheReadInputTokens: cached,
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
+    cost: usage.cost,
     providerMetadata: providerMetadata(metadataKey, metadata),
   })
 }
@@ -548,6 +557,8 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
       cachedContentTokenCount: requests[0].cachedContentTokenCount,
       candidatesTokenCount: sum("candidatesTokenCount"),
       thoughtsTokenCount: sum("thoughtsTokenCount"),
+      // Every continued request is billed on its own.
+      cost: sum("cost"),
     },
     metadataKey,
     {
@@ -637,27 +648,18 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       },
       [],
     ] as const)
-  if (ProviderShared.isRecord(event.error)) {
+  if (event.error) {
     const body = ProviderShared.encodeJson(event)
     return Effect.fail(
       new AIError({
         reason: classifyProviderFailure({
-          message:
-            typeof event.error.message === "string" && event.error.message.length > 0
-              ? event.error.message
-              : typeof event.error.status === "string" && event.error.status.length > 0
-                ? event.error.status
-                : "Gemini provider error",
-          status: typeof event.error.code === "number" ? event.error.code : undefined,
+          message: event.error.message || event.error.status || "Gemini provider error",
+          status: event.error.code,
           rawBody: body,
         }),
       }),
     )
   }
-  if ("error" in event)
-    return Effect.fail(
-      ProviderShared.eventError(state.route, `Invalid ${state.route} stream event`, ProviderShared.encodeJson(event)),
-    )
   const candidate = event.candidates?.[0]
   const nextState = {
     ...state,
@@ -962,7 +964,7 @@ export const protocol = Protocol.make({
     event: Schema.Union([Schema.instanceOf(NextRequest), GeminiEvent]),
     initial: (request): ParserState => ({
       route: `${request.model.provider}/${request.model.route.id}`,
-      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
       nextReasoningId: 0,

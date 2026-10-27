@@ -1,0 +1,21 @@
+name: Download release artifacts
+description: Downloads artifacts into $RUNNER_TEMP/in/<name> and verifies each against its SHA256SUMS.
+inputs:
+  pattern:
+    description: Artifact name pattern
+    required: true
+  digests:
+    description: Space-separated name=digest pairs for artifacts made by sign jobs, from their job outputs
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        pattern: ${{ inputs.pattern }}
+        path: ${{ runner.temp }}/in
+    - shell: bash
+      run: bash "${GITHUB_ACTION_PATH//\\//}/../verify-artifacts.sh" "$RUNNER_TEMP/in"
+      env:
+        OPENCODE_DIGESTS: ${{ inputs.digests }}

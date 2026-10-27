@@ -39,7 +39,7 @@ Or you can set it up manually.
 
    Add the following workflow file to `.github/workflows/opencode.yml` in your repo. Make sure to set the appropriate `model` and required API keys in `env`.
 
-   ```yml title=".github/workflows/opencode.yml" {24,26}
+   ```yml title=".github/workflows/opencode.yml" {28,30}
    name: opencode
 
    on:
@@ -56,6 +56,7 @@ Or you can set it up manually.
        runs-on: ubuntu-latest
        permissions:
          id-token: write
+         contents: read
        steps:
          - name: Checkout repository
            uses: actions/checkout@v6
@@ -68,8 +69,10 @@ Or you can set it up manually.
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
-             model: anthropic/claude-sonnet-4-20250514
+             model: anthropic/claude-sonnet-5-5
    ```
+
+   `contents: read` lets checkout read private repositories. `id-token: write` lets OpenCode exchange an OIDC token for a GitHub App token, which supplies the permissions used to comment and push changes.
 
 3. **Store the API keys in secrets**
 
@@ -96,16 +99,22 @@ Or you can set it up manually.
     issues: write
 
   steps:
+    - uses: actions/checkout@v6
+    - run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
     - uses: anomalyco/opencode/github@latest
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        model: anthropic/claude-sonnet-4-20250514
+        model: anthropic/claude-sonnet-5-5
         use_github_token: true
   ```
 
-  `id-token: write` is not required in this mode because OIDC exchange is skipped. To use a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or another GitHub App token, store it as a secret and pass that secret as `GITHUB_TOKEN` instead.
+  `id-token: write` is not required in this mode because OIDC exchange is skipped. Keep checkout's default `persist-credentials: true` for Git authentication, and configure a Git user name and email if OpenCode will commit changes. OpenCode only configures these in OIDC mode.
+
+  To use a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or another GitHub App token, store it as a secret and pass that secret as both `GITHUB_TOKEN` and checkout's `token` input.
 
 ---
 
@@ -138,9 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -152,13 +159,13 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review the codebase for any TODO comments and create a summary.
             If you find issues worth addressing, open an issue to track them.
 ```
 
-For scheduled events, the `prompt` input is **required** since there's no comment to extract instructions from. Scheduled workflows run without a user context to permission-check, so the workflow must grant `contents: write` and `pull-requests: write` if you expect OpenCode to create branches or PRs.
+For scheduled events, the `prompt` input is **required** since there's no comment to extract instructions from. Scheduled workflows run without a user context to permission-check. With `use_github_token: true`, grant `contents: write` and `pull-requests: write` to create branches or PRs, and use the checkout and Git setup shown in [Configuration](#configuration). The default OIDC mode uses the OpenCode GitHub App's permissions instead.
 
 ---
 
@@ -177,20 +184,17 @@ jobs:
   review:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
       pull-requests: read
-      issues: read
+      issues: write
     steps:
       - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
       - uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -200,6 +204,8 @@ jobs:
 ```
 
 For `pull_request` events, if no `prompt` is provided, OpenCode defaults to reviewing the pull request.
+
+`issues: write` lets OpenCode react to and comment on the PR, since GitHub handles PR comments through the issues API. This example is intended for PRs from branches in the same repository; PRs from forks normally get a read-only `GITHUB_TOKEN` and no secrets.
 
 ---
 
@@ -219,9 +225,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
     steps:
       - name: Check account age
         id: check
@@ -246,7 +250,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review this issue. If there's a clear fix or relevant docs:
             - Provide documentation links
@@ -265,7 +269,7 @@ Override the default prompt to customize OpenCode's behavior for your workflow.
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Review this pull request:
       - Check for code quality issues

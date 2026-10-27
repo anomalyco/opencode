@@ -238,7 +238,13 @@ With CIMD, OpenCode sends its metadata document URL as the `client_id` and skips
 https://opencode.ai/oauth/opencode/client.json
 ```
 
-The document allows the loopback redirects `http://127.0.0.1/callback` and `http://localhost/callback` without a port. Authorization servers accept any loopback port for these redirects, as [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3) requires, so `callback_port` works with CIMD. A custom `redirect_uri` does not, so OpenCode falls back to DCR.
+The document allows these loopback redirects without a port:
+
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- `http://127.0.0.1/mcp/oauth/callback` for older clients
+
+Authorization servers accept any loopback port for these redirects, as [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3) requires, so `callback_port` works with CIMD. A custom `redirect_uri` does not, so OpenCode falls back to DCR.
 
 If the authorization server supports neither CIMD nor DCR, configure a pre-registered client.
 

@@ -179,7 +179,6 @@ export const dict = {
   "ui.question.answer.none": "(답변 없음)",
   "ui.question.review.notAnswered": "(답변하지 않음)",
   "ui.question.multiHint": "해당하는 항목 모두 선택",
-  "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력…",
 
   "ui.fileSearch.placeholder": "찾기",
