@@ -19,7 +19,6 @@ import { Watcher } from "../filesystem/watcher.js"
 
 export const make = Effect.fn("PluginModule.make")(function* () {
   const config = yield* Config.Service
-  const managed = yield* ManagedPolicy.Service
   const watcher = yield* Watcher.Service
   const scope = yield* Effect.scope
   const runPromise = yield* FiberSet.makeRuntimePromise()
@@ -53,7 +52,7 @@ export const make = Effect.fn("PluginModule.make")(function* () {
           path.isAbsolute(operation.target) || version <= 0 ? operation.target : operation.target.slice(0, version)
         if (
           ManagedPolicy.decision(
-            ManagedPolicy.statements(yield* config.entries(), managed.current()),
+            ManagedPolicy.statements(yield* config.entries()),
             "integration.use",
             `plugin:${target}`,
           ) === "deny"

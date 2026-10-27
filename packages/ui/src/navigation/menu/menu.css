@@ -23,9 +23,6 @@
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
 
-  transform-origin: var(--kb-menu-content-transform-origin);
-  animation: menu-v2-in 120ms ease-out;
-
   &:focus-visible {
     outline: none;
   }
@@ -196,11 +193,6 @@
   background-clip: padding-box;
   box-shadow: var(--shadow-md);
   z-index: 60;
-  animation: dropdown-menu-open 150ms ease-out;
-
-  &[data-closed] {
-    animation: dropdown-menu-close 150ms ease-out;
-  }
 
   [data-component="menu-v2-item"] {
     position: relative;
@@ -282,28 +274,6 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     font-variant-numeric: normal;
-  }
-}
-
-@keyframes dropdown-menu-open {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes dropdown-menu-close {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.96);
   }
 }
 

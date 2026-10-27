@@ -452,6 +452,7 @@ function restoreSubmission(
       }
     }),
   )
+  submission.sources.forEach((item) => restored.target.quoteSource.add(item.key, item.source))
   restored.context.forEach((item) => {
     if (item.type === "file" && !item.comment?.trim())
       restored.target.context.add({

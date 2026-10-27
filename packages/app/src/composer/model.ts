@@ -62,6 +62,13 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const platform = usePlatform()
   const serverSDK = useServerSDK()
   const prompt = adapter.state
+  // Editor actions write the captured store directly, rather than going through the context methods.
+  createEffect(
+    on(
+      () => prompt.context.items(),
+      (items) => prompt.quoteSource.retain(items.map((item) => item.key)),
+    ),
+  )
   let editor: HTMLDivElement | undefined
   // A path attachment's image is read through the server, which can see both local and uploaded paths.
   const pathImages = new Map<string, Promise<string | undefined>>()
@@ -416,6 +423,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       })),
     onQuoteComment: (item, comment) => prompt.context.updateComment(item.commentID, { comment }),
     quoteComment: prompt.quoteComment,
+    quoteSource: prompt.quoteSource,
     onContextRemove(item) {
       if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
