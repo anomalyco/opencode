@@ -1557,6 +1557,8 @@ function ReadImage(props: { path: string; onContentRendered?: () => void }) {
       <img
         data-local-image={props.path}
         alt={getFilename(props.path)}
+        loading="lazy"
+        decoding="async"
         onLoad={() => props.onContentRendered?.()}
         onError={() => props.onContentRendered?.()}
       />

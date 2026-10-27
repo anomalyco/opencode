@@ -65,11 +65,68 @@ function decodePath(value: string) {
 
 type ImageEntry = { controller: AbortController; result: Promise<string | undefined>; url?: string }
 
+const VIEWPORT_ROOT_MARGIN = "1500px 0px"
+
 export function createMarkdownImages(read: ReadMarkdownImage) {
   const entries = new Map<string, ImageEntry>()
+  const observed = new WeakMap<Element, HTMLImageElement>()
+  let currentRoot: HTMLElement | undefined
+
+  const loadImage = (image: HTMLImageElement) => {
+    const path = image.dataset.localImage
+
+    if (!path || !currentRoot) return
+    const root = currentRoot
+    const existing = entries.get(path)
+
+    const entry: ImageEntry = existing ?? {
+      controller: new AbortController(),
+      result: Promise.resolve(undefined),
+    }
+
+    if (!existing) {
+      entries.set(path, entry)
+      entry.result = read(path, entry.controller.signal)
+        .then(async (blob) => {
+          if (!blob || entry.controller.signal.aborted) return
+
+          // SVG documents must not inherit the app origin if opened outside the image element.
+          if (blob.type === "image/svg+xml")
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`
+          entry.url = URL.createObjectURL(blob)
+
+          return entry.url
+        })
+        .catch(() => undefined)
+    }
+
+    void entry.result.then((url) => {
+      if (!url || entry.controller.signal.aborted || !root.contains(image) || image.dataset.localImage !== path)
+        return
+      image.src = url
+    })
+  }
+
+  const observer =
+    "IntersectionObserver" in globalThis
+      ? new globalThis.IntersectionObserver(
+          (items) => {
+            items.forEach((item) => {
+              if (!item.isIntersecting) return
+              const target = observed.get(item.target)
+
+              if (!target) return
+              observer?.unobserve(target)
+              loadImage(target)
+            })
+          },
+          { rootMargin: VIEWPORT_ROOT_MARGIN },
+        )
+      : undefined
 
   return {
     update(root: HTMLElement) {
+      currentRoot = root
       const images = Array.from(root.querySelectorAll<HTMLImageElement>("img[data-local-image]"))
       const paths = new Set(images.map((image) => image.dataset.localImage))
       entries.forEach((entry, path) => {
@@ -83,37 +140,22 @@ export function createMarkdownImages(read: ReadMarkdownImage) {
         const path = image.dataset.localImage
 
         if (!path) return
-        const existing = entries.get(path)
+        image.loading = "lazy"
+        image.decoding = "async"
 
-        const entry: ImageEntry = existing ?? {
-          controller: new AbortController(),
-          result: Promise.resolve(undefined),
+        if (entries.has(path) || !observer) {
+          loadImage(image)
+
+          return
         }
 
-        if (!existing) {
-          entries.set(path, entry)
-          entry.result = read(path, entry.controller.signal)
-            .then(async (blob) => {
-              if (!blob || entry.controller.signal.aborted) return
-
-              // SVG documents must not inherit the app origin if opened outside the image element.
-              if (blob.type === "image/svg+xml")
-                return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`
-              entry.url = URL.createObjectURL(blob)
-
-              return entry.url
-            })
-            .catch(() => undefined)
-        }
-
-        void entry.result.then((url) => {
-          if (!url || entry.controller.signal.aborted || !root.contains(image) || image.dataset.localImage !== path)
-            return
-          image.src = url
-        })
+        if (observed.has(image)) return
+        observed.set(image, image)
+        observer.observe(image)
       })
     },
     dispose() {
+      observer?.disconnect()
       entries.forEach((entry) => {
         abort(entry.controller)
 

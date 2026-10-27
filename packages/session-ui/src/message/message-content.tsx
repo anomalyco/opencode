@@ -589,7 +589,13 @@ export function CurrentUserMessageDisplay(props: {
                       dialog.show(() => <ImagePreview src={url()} alt={name()} origin={origin} />)
                     }}
                   >
-                    <img data-slot="user-message-attachment-image" src={url()} alt={name()} />
+                    <img
+                      data-slot="user-message-attachment-image"
+                      src={url()}
+                      alt={name()}
+                      loading="lazy"
+                      decoding="async"
+                    />
                   </div>
                 }
               >
