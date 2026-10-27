@@ -9,7 +9,7 @@ import installer from "../../../../../install?raw"
 import { DesktopPaths } from "../paths"
 import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { parseCliVersion } from "./cli-version"
+import { parseCliVersion, stageName } from "./cli-version"
 
 const execFileAsync = promisify(execFile)
 
@@ -139,7 +139,9 @@ const ExecFailure = Schema.Struct({ stdout: Schema.optional(Schema.String), stde
 const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const directory = path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
+  // x64 and ARM64 installers share userData on Windows ARM64, so a same-version switch must not reuse the other copy.
+  const stage = stageName(version)
+  const directory = path.join(app.getPath("userData"), "cli", stage)
   const destination = path.join(directory, executableName())
 
   if (existsSync(destination)) {

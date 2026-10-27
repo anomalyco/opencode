@@ -157,8 +157,6 @@ OpenCode-serveren viser følgende API'er.
 | `POST`   | `/session/:id/init`                      | Analyser appen og lav `AGENTS.md`          | body: `{ messageID, providerID, modelID }`, returnerer `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Fork en eksisterende session ved en besked | body: `{ messageID? }`, returnerer <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Afbryd en kørende session                  | Returnerer `boolean`                                                                  |
-| `POST`   | `/session/:id/share`                     | Del en session                             | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
-| `DELETE` | `/session/:id/share`                     | Stop med at dele en session                | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
 | `GET`    | `/session/:id/diff`                      | Få diff for denne session                  | query: `messageID?`, returnerer <a href={typesUrl}><code>FileDiff[]</code></a>        |
 | `POST`   | `/session/:id/summarize`                 | Opsummér sessionen                         | body: `{ providerID, modelID }`, returnerer `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | Tilbagestil en besked                      | body: `{ messageID, partID? }`, returnerer `boolean`                                  |

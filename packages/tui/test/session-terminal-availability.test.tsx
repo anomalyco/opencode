@@ -12,7 +12,8 @@ test.each([
   { id: "ses_terminal_unreported", reported: undefined, offered: true },
 ])("offers persistent terminals when the server reports $reported", async (input) => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 120, height: 36, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width: 120, height: 36, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const session = {
     id: input.id,

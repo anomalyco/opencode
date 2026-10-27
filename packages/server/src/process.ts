@@ -6,6 +6,7 @@ import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
+import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
@@ -191,7 +192,8 @@ function dispatch(
     }
     if (
       !isPairingConnectURL(url) &&
-      (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
+      (!ready ||
+        (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url) && !hasMcpClientTicketURL(url))) &&
       !(yield* authorizedRequest(request, auth))
     )
       return unauthorizedResponse(request)

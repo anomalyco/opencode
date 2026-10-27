@@ -16,7 +16,8 @@ import {
   UnknownProviderError,
   ToolFailure,
   HttpContext,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
+import { RequestExecutor } from "@opencode/ai/route"
 import { Permission } from "@opencode/core/permission"
 import { ID } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -32,14 +33,23 @@ describe("toSessionError", () => {
     expect(toSessionError(llm(new RateLimitError({ message: "rate", retryAfterMs: 123 })))).toEqual({
       type: "provider.rate-limit",
       message: "rate",
+      retryAfterMs: 123,
     })
     expect(toSessionError(llm(new AuthenticationError({ message: "auth" }))).type).toBe("provider.auth")
-    expect(toSessionError(llm(new QuotaExceededError({ message: "quota" }))).type).toBe("provider.quota")
+    expect(toSessionError(llm(new QuotaExceededError({ message: "quota", retryAfterMs: 456 })))).toEqual({
+      type: "provider.quota",
+      message: "quota",
+      retryAfterMs: 456,
+    })
     expect(toSessionError(llm(new ContentPolicyError({ message: "blocked" }))).type).toBe("provider.content-filter")
     expect(
       toSessionError(llm(new TransportError({ message: "transport", transport: "http", operation: "request" }))).type,
     ).toBe("provider.transport")
-    expect(toSessionError(llm(new ProviderInternalError({ message: "internal" }))).type).toBe("provider.internal")
+    expect(toSessionError(llm(new ProviderInternalError({ message: "internal", retryAfterMs: 789 })))).toEqual({
+      type: "provider.internal",
+      message: "internal",
+      retryAfterMs: 789,
+    })
     expect(toSessionError(llm(new InvalidProviderOutputError({ message: "output" }))).type).toBe(
       "provider.invalid-output",
     )
@@ -69,6 +79,100 @@ describe("toSessionError", () => {
       ).type,
     ).toBe("provider.no-route")
     expect(toSessionError(llm(new UnknownProviderError({ message: "unknown" }))).type).toBe("provider.unknown")
+  })
+
+  test("separates the free usage limit from paid rate limits, Go quota, and other providers' 429s", () => {
+    const fail = (url: string, body: unknown, headers?: Record<string, string>) =>
+      RequestExecutor.httpFailure({
+        message: "Rate limit exceeded. Please try again later.",
+        url,
+        status: 429,
+        responseHeaders: headers,
+        responseBody: JSON.stringify(body),
+      })
+
+    const freeBody = {
+      type: "error",
+      error: { type: "FreeUsageLimitError", message: "Rate limit exceeded. Please try again later." },
+    }
+    const free = fail("https://opencode.ai/inference/openai/v1/chat/completions", freeBody, { "retry-after": "3600" })
+    expect(SessionRunnerRetry.isRetryable(free)).toBe(false)
+    expect(toSessionError(free)).toEqual({
+      type: "provider.free-limit",
+      message: "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
+      status: 429,
+      response: { body: JSON.stringify(freeBody) },
+      retryAfterMs: 3_600_000,
+    })
+
+    const paid = fail(
+      "https://opencode.ai/inference/openai/v1/chat/completions",
+      { error: { type: "server_error", message: "Upstream request failed: Rate limit exceeded." } },
+      { "retry-after": "45" },
+    )
+    expect(SessionRunnerRetry.isRetryable(paid)).toBe(true)
+    expect(toSessionError(paid)).toMatchObject({ type: "provider.rate-limit", retryAfterMs: 45_000 })
+
+    const go = fail(
+      "https://opencode.ai/inference/go/openai/v1/chat/completions",
+      { type: "error", error: { type: "GoUsageLimitError", message: "Subscription quota exceeded." } },
+      { "retry-after": "120" },
+    )
+    expect(SessionRunnerRetry.isRetryable(go)).toBe(false)
+    expect(toSessionError(go)).toMatchObject({ type: "provider.quota", retryAfterMs: 120_000 })
+
+    const other = fail(
+      "https://api.openai.com/v1/chat/completions",
+      { error: { type: "rate_limit_error", message: "Too many requests" } },
+      { "retry-after": "10" },
+    )
+    expect(SessionRunnerRetry.isRetryable(other)).toBe(true)
+    expect(toSessionError(other)).toMatchObject({ type: "provider.rate-limit", retryAfterMs: 10_000 })
+  })
+
+  test("tells a budget on the requested model from one pausing all model use", () => {
+    const refuse = (body: unknown) =>
+      RequestExecutor.httpFailure({
+        message: "A budget policy for this model has been reached.",
+        url: "https://opencode.ai/inference/openai/v1/chat/completions",
+        status: 429,
+        responseBody: JSON.stringify(body),
+      })
+    const modelBody = {
+      type: "error",
+      error: { type: "BudgetLimitError", message: "A budget policy for this model has been reached." },
+      metadata: { coverage: "models", resetsAt: "2026-11-01T00:00:00.000Z" },
+    }
+    const model = refuse(modelBody)
+    expect(SessionRunnerRetry.isRetryable(model)).toBe(false)
+    expect(toSessionError(model)).toEqual({
+      type: "provider.model-budget-limit",
+      message: "You've reached the spend limit for this model. Switch models to keep going.",
+      status: 429,
+      response: { body: JSON.stringify(modelBody) },
+    })
+
+    // Google clients get Google's envelope, with the same metadata in its ErrorInfo.
+    const all = refuse({
+      error: {
+        code: 429,
+        status: "RESOURCE_EXHAUSTED",
+        message: "Policy budget exceeded",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "BudgetLimitError",
+            domain: "opencode.ai",
+            metadata: { coverage: "all", resetsAt: "2026-11-01T00:00:00.000Z" },
+          },
+        ],
+      },
+    })
+    expect(SessionRunnerRetry.isRetryable(all)).toBe(false)
+    expect(toSessionError(all)).toMatchObject({
+      type: "provider.budget-limit",
+      message: "Workspace usage limit reached. Model use is paused until the limit resets.",
+    })
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {

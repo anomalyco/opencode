@@ -58,7 +58,7 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 }
 ```
 
-ID แบบเต็มคือ `provider_id/model_id` ตัวอย่างเช่น หากคุณใช้ [OpenCode Zen](/docs/zen) คุณจะใช้ `opencode/gpt-5.1-codex` สำหรับ GPT 5.1 Codex
+ID แบบเต็มคือ `provider_id/model_id` ตัวอย่างเช่น หากคุณใช้ [OpenCode Zen](https://opencode.ai/v2/docs/console/) คุณจะใช้ `opencode/gpt-6.1-sol` สำหรับ GPT-6.1 Sol
 
 หากคุณได้กำหนดค่า [ผู้ให้บริการที่กำหนดเอง](/docs/providers#กำหนดเอง) `provider_id` จะเป็นคีย์จากส่วน `provider` ของการกำหนดค่าของคุณ และ `model_id` จะเป็นคีย์จาก `provider.models`
 
@@ -74,7 +74,7 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
 }
 ```
 
-ที่นี่เรากำลังกำหนดการตั้งค่าส่วนกลางสำหรับโมเดลในตัวสองรุ่น: `gpt-5` เมื่อเข้าถึงผ่านผู้ให้บริการ `openai` และ `claude-sonnet-4-20250514` เมื่อเข้าถึงผ่านผู้ให้บริการ `anthropic`
+ที่นี่เรากำลังกำหนดการตั้งค่าส่วนกลางสำหรับโมเดลในตัวสองรุ่น: `gpt-6.1-sol` เมื่อเข้าถึงผ่านผู้ให้บริการ `openai` และ `claude-sonnet-5-5` เมื่อเข้าถึงผ่านผู้ให้บริการ `anthropic`
 สามารถดูผู้ให้บริการและชื่อรุ่นในตัวได้ที่ [Models.dev](https://models.dev)
 
 คุณยังสามารถกำหนดค่าตัวเลือกเหล่านี้สำหรับตัวแทนใดๆ ที่คุณใช้อยู่ได้ การกำหนดค่าตัวแทนจะแทนที่ตัวเลือกส่วนกลางใดๆ ที่นี่ [เรียนรู้เพิ่มเติม](/docs/agents/#เพิ่มเติม)
@@ -113,7 +113,7 @@ ID แบบเต็มคือ `provider_id/model_id` ตัวอย่า�
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ OpenCode มาพร้อมกับ variants เริ่มต้นสำ�
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -212,7 +212,7 @@ OpenCode มาพร้อมกับ variants เริ่มต้นสำ�
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

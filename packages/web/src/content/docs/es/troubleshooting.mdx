@@ -223,8 +223,8 @@ Se debe hacer referencia a los modelos así: `<providerId>/<modelId>`
 
 Ejemplos:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 Para saber a qué modelos tiene acceso, ejecute `opencode models`

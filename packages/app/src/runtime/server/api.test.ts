@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { authFromToken, authTokenFromCredentials } from "./api"
+import { authFromToken, authTokenFromCredentials, fileStreamUrl } from "./api"
 
 test.each([
   [btoa("opencode:secret"), { password: "secret" }],
@@ -14,4 +14,12 @@ test.each([
 test("authTokenFromCredentials ignores usernames in legacy saved credentials", () => {
   const credentials = { username: "legacy", password: "secret" }
   expect(authTokenFromCredentials(credentials)).toBe(btoa("opencode:secret"))
+})
+
+test("fileStreamUrl never puts a credential in a media URL", () => {
+  const input = { path: "clips/final cut.mp4", directory: "/work/app" }
+  expect(fileStreamUrl({ url: "http://127.0.0.1:4096", password: "secret" }, input)).toBeUndefined()
+  expect(fileStreamUrl({ url: "http://127.0.0.1:4096" }, input)).toBe(
+    "http://127.0.0.1:4096/api/fs/read/clips/final%20cut.mp4?location%5Bdirectory%5D=%2Fwork%2Fapp",
+  )
 })

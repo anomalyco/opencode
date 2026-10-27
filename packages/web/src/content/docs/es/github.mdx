@@ -57,19 +57,18 @@ O puede configurarlo manualmente.
        permissions:
          id-token: write
        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+         - name: Checkout repository
+           uses: actions/checkout@v6
+           with:
+             fetch-depth: 1
+             persist-credentials: false
 
-          - name: Run OpenCode
+         - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
-             model: anthropic/claude-sonnet-4-20250514
-             # share: true
+             model: anthropic/claude-sonnet-5-5
              # github_token: xxxx
    ```
 
@@ -83,7 +82,6 @@ O puede configurarlo manualmente.
 
 - `model`: El modelo a usar con OpenCode. Toma el formato de `provider/model`. Esto es **obligatorio**.
 - `agent`: El agente a utilizar. Debe ser un agente primario. Vuelve a `default_agent` desde la configuración o `"build"` si no se encuentra.
-- `share`: si se comparte la sesión OpenCode. El valor predeterminado es **verdadero** para repositorios públicos.
 - `prompt`: mensaje personalizado opcional para anular el comportamiento predeterminado. Utilice esto para personalizar cómo OpenCode procesa las solicitudes.
 - `token`: token de acceso GitHub opcional para realizar operaciones como crear comentarios, confirmar cambios y abrir solicitudes de extracción. De forma predeterminada, OpenCode usa el token de acceso a la instalación de la aplicación OpenCode GitHub, por lo que las confirmaciones, los comentarios y las solicitudes de extracción aparecen como provenientes de la aplicación.
 
@@ -144,7 +142,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review the codebase for any TODO comments and create a summary.
             If you find issues worth addressing, open an issue to track them.
@@ -182,7 +180,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -238,7 +236,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review this issue. If there's a clear fix or relevant docs:
             - Provide documentation links
@@ -257,7 +255,7 @@ Anule el mensaje predeterminado para personalizar el comportamiento de OpenCode 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Review this pull request:
       - Check for code quality issues

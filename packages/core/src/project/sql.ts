@@ -23,6 +23,7 @@ export const ProjectTable = sqliteTable("project", {
     .notNull()
     .default(0)
     .$defaultFn(() => Date.now()),
+  time_archived: integer(),
   sandboxes: absoluteArrayColumn().notNull(),
   commands: text({ mode: "json" }).$type<{ start?: string }>(),
 })

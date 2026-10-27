@@ -51,7 +51,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 ## OpenCode Zen
 
 OpenCode Zen — это список моделей, предоставленный командой opencode, которые были
-протестировано и проверено на хорошую работу с opencode. [Подробнее](/docs/zen).
+протестировано и проверено на хорошую работу с opencode. [Подробнее](https://opencode.ai/v2/docs/console/).
 
 :::tip
 Если вы новичок, мы рекомендуем начать с OpenCode Zen.
@@ -559,7 +559,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -757,13 +757,12 @@ GitLab Duo предоставляет агентский чат на базе и
 opencode использует небольшую модель для некоторых задач ИИ, таких как создание заголовка сеанса.
 По умолчанию он настроен на использование gpt-5-nano, размещенного на Zen. Чтобы заблокировать opencode
 чтобы использовать только свой собственный экземпляр, размещенный на GitLab, добавьте следующее в свой
-`opencode.json` файл. Также рекомендуется отключить совместное использование сеансов.
+`opencode.json` файл.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1399,7 +1398,7 @@ Ollama может автоматически настроиться для openc
 
 ### OpenCode Zen
 
-OpenCode Zen — это список протестированных и проверенных моделей, предоставленный командой opencode. [Подробнее](/docs/zen).
+OpenCode Zen — это список протестированных и проверенных моделей, предоставленный командой opencode. [Подробнее](https://opencode.ai/v2/docs/console/).
 
 1. Войдите в систему **<a href={console}>OpenCode Zen</a>** и нажмите **Создать ключ API**.
 

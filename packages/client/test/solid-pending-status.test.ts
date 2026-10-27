@@ -178,3 +178,52 @@ test("a queued prompt is queued regardless of execution state", () => {
     setup.dispose()
   }
 })
+
+test("optimistic prompt admission preserves inline data attachments before the server echo", async () => {
+  const gate = Promise.withResolvers<void>()
+  const setup = fixture()
+  try {
+    const sending = setup.data.session.prompt({
+      sessionID,
+      id: "msg_with_image",
+      text: "Inspect this screenshot",
+      files: [
+        { uri: "data:image/png;base64,YQ==", name: "shot.png" },
+        { uri: "file:///project/README.md", name: "README.md" },
+      ],
+      gate: gate.promise,
+    })
+
+    const expected = [
+      {
+        data: "YQ==",
+        mime: "image/png",
+        source: { type: "inline" as const },
+        name: "shot.png",
+      },
+    ]
+
+    expect(setup.data.session.pending.list(sessionID)).toMatchObject([
+      {
+        id: "msg_with_image",
+        type: "user",
+        payload: {
+          text: "Inspect this screenshot",
+          files: expected,
+        },
+      },
+    ])
+    expect(setup.data.session.message.get(sessionID, "msg_with_image")).toMatchObject({
+      id: "msg_with_image",
+      type: "user",
+      text: "Inspect this screenshot",
+      files: expected,
+    })
+
+    gate.resolve()
+    await sending
+  } finally {
+    gate.resolve()
+    setup.dispose()
+  }
+})

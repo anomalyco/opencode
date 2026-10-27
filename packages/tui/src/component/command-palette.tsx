@@ -61,6 +61,14 @@ export function CommandPaletteDialog() {
   }
 
   return (
-    <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} flat={true} filterThreshold={0.7} />
+    <DialogSelect
+      ref={(value) => (ref = value)}
+      title="Commands"
+      searchInTitle
+      titlePlaceholder="Search commands"
+      options={list()}
+      flat={true}
+      filterThreshold={0.7}
+    />
   )
 }

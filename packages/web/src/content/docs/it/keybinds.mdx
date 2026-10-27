@@ -24,8 +24,6 @@ OpenCode ha una lista di scorciatoie che puoi personalizzare tramite `tui.json`.
     "session_timeline": "<leader>g",
     "session_fork": "none",
     "session_rename": "none",
-    "session_share": "none",
-    "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
     "session_child_first": "<leader>down",

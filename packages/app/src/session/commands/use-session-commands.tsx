@@ -1,22 +1,24 @@
+import { createEffect, createSignal, on } from "solid-js"
+import { createEventListener } from "@solid-primitives/event-listener"
 import { useCommand, type CommandOption } from "@/shell/commands/command"
+import { adjacentTabKey } from "@/shell/titlebar/tab-order"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
 import { useComposerState } from "@/composer/persistence"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
-import { useSettings } from "@/settings/model"
+import { projectSettingsKey, useSettings } from "@/settings/model"
 import { showToast } from "@/shell/notifications/toast"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
-import { Command } from "@opencode/gui-extensions/sdk"
-import { useExtensionHost } from "@/runtime/extension/host"
-import type { Region } from "@/runtime/extension/panels"
+import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
+import type { Region } from "@/runtime/plugin/panels"
+import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
 
 type SessionCommandSource = {
   identity: SessionModel["identity"]
@@ -57,8 +59,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const data = useData()
   const settings = useSettings()
   const platform = usePlatform()
-  const layout = useLayout()
-  const host = useExtensionHost()
+  const pluginScoped = usePluginScoped()
+  const pluginClaims = usePluginClaims()
 
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
@@ -66,22 +68,53 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     owner.run(() => show(value))
   }
 
-  const shown = settings.visibility.fileTree
-
   // The file the selected side tab shows; other tabs have no line selection.
   const activeFile = () => actions.region.selected()?.tab.file
 
-  // Pinned tabs stay open.
+  // Pinned tabs stay open, and hidden side-panel tabs do not claim Close Tab while the region is collapsed.
   const closableTab = () => {
+    if (!actions.session.layout.view().side.opened()) return
+
     const entry = actions.region.selected()
 
     return entry && !entry.tab.pinned ? entry.key : undefined
   }
 
-  // Focus inside an extension command's scope belongs to that extension, which binds its own shortcuts there.
-  const extensionScoped = (target: EventTarget | null) =>
-    target instanceof Element &&
-    host.items(Command).some((item) => !!item.value.scope && !!target.closest(item.value.scope))
+  const inSide = actions.region.focus
+  // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
+  const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
+  // ⌘W on the side panel's last tab closes the panel and moves focus out of it, where one press too many would close
+  // the session tab. Until the user moves on, by clicking, focusing, another key, or another session, ⌘W closes nothing.
+  // The close moves focus synchronously, before this is set, so its own focusin does not clear it.
+  const [emptied, setEmptied] = createSignal(false)
+  const resetEmptied = () => setEmptied(false)
+  createEventListener(document, ["pointerdown", "focusin"], resetEmptied, { capture: true })
+  createEventListener(window, "blur", resetEmptied)
+  createEventListener(
+    document,
+    "keydown",
+    (event) => {
+      if (["Meta", "Control", "Shift", "Alt"].includes(event.key)) return
+
+      if (!command.matches("file.close", event)) resetEmptied()
+    },
+    { capture: true },
+  )
+  createEffect(
+    on(() => [actions.session.layout.tabKey(), actions.session.layout.view().side.opened()], resetEmptied, {
+      defer: true,
+    }),
+  )
+  const cycleSideTabs = () => actions.session.layout.view().side.opened() && actions.region.keys().length > 1
+
+  const sideFocused = (target: EventTarget | null) => {
+    const element =
+      target instanceof Element && target !== document.body && target !== document.documentElement
+        ? target
+        : document.activeElement
+
+    return element instanceof Element && !!element.closest("#review-panel") && !pluginScoped(element)
+  }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
@@ -195,10 +228,44 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
+  // In the pane holding focus; the region itself, or a key a native page handed over, means the selected tab's pane.
+  const focusedPane = () => {
+    const pane = document.activeElement?.closest("[data-pane-content]")?.getAttribute("data-pane-content")
+
+    return pane === "side" || pane === "split" ? pane : undefined
+  }
+
   const closeTab = () => {
+    if (actions.region.closeNewTab(focusedPane())) return
     const tab = closableTab()
 
     if (tab) actions.region.close(tab)
+  }
+
+  const openSideTab = () => actions.region.openNewTab(focusedPane())
+
+  const selectAdjacentSideTab = (offset: -1 | 1) => {
+    const key = adjacentTabKey(actions.region.keys(), actions.region.active(), offset)
+
+    if (key) selectSideTab(key)
+  }
+
+  const selectSideTab = (key: string) => {
+    actions.region.select(key)
+
+    const panel = document.getElementById("review-panel")
+
+    if (!panel) return
+
+    const active = document.activeElement
+
+    if (
+      active instanceof HTMLElement &&
+      panel.contains(active) &&
+      !active.closest('[role="tab"][aria-selected="false"], [inert], .hidden')
+    )
+      return
+    ;(panel.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? panel).focus({ preventScroll: true })
   }
 
   const addSelection = () => {
@@ -227,16 +294,38 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
+  const sessionProject = () => projectSettingsKey(serverSDK.scope, actions.session.data.info()?.projectID)
+
+  const autoAccepting = () => settings.permissions.autoApproves(sessionProject())
+
+  // From a session the toggle sets this project's choice, falling back to the default when they match.
   const toggleAutoAccept = () => {
-    const active = !settings.permissions.autoApprove()
-    settings.permissions.setAutoApprove(active)
+    const project = sessionProject()
+    const active = !autoAccepting()
+
+    if (!project) settings.permissions.setAutoApproveDefault(active)
+    else
+      settings.permissions.setAutoApproveOverride(
+        project,
+        active === settings.permissions.autoApproveDefault() ? undefined : active,
+      )
+
+    if (!active) {
+      showToast({
+        title: language.t("toast.permissions.autoaccept.off.title"),
+        description: language.t("toast.permissions.autoaccept.off.description"),
+      })
+
+      return
+    }
+
     showToast({
-      title: active
-        ? language.t("toast.permissions.autoaccept.on.title")
-        : language.t("toast.permissions.autoaccept.off.title"),
-      description: active
-        ? language.t("toast.permissions.autoaccept.on.description")
-        : language.t("toast.permissions.autoaccept.off.description"),
+      title: project
+        ? language.t("toast.permissions.autoaccept.project.title")
+        : language.t("toast.permissions.autoaccept.on.title"),
+      description: project
+        ? language.t("toast.permissions.autoaccept.project.description")
+        : language.t("toast.permissions.autoaccept.on.description"),
     })
   }
 
@@ -267,7 +356,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     sessionCommand({
       id: "session.new",
       title: language.t("command.session.new"),
-      keybind: "mod+shift+s",
       slash: "new",
       onSelect: (source) => command.trigger("tab.new", source),
     }),
@@ -328,6 +416,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const fileCmds = () => {
     const tab = closableTab()
+    const cycle = cycleSideTabs()
+    const side = actions.session.layout.view().side.opened()
 
     return [
       fileCommand({
@@ -338,14 +428,63 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "open",
         onSelect: openFile,
       }),
-      tab &&
+      fileCommand({
+        id: "file.close",
+        title: language.t("command.tab.close"),
+        keybind: "mod+w",
+        follows: "tab.close",
+        hidden: !tab,
+        when: (event) => (side ? sideKey(event) : emptied()),
+        onSelect: (source) => {
+          if (!side) return
+          closeTab()
+          setEmptied(source === "keybind" && !actions.session.layout.view().side.opened())
+        },
+      }),
+      side &&
         fileCommand({
-          id: "file.close",
-          title: language.t("command.tab.close"),
-          keybind: settings.keybinds.get("tab.close") ?? "mod+w",
-          when: (event) => !extensionScoped(event.target),
-          onSelect: closeTab,
+          id: "file.tab.new",
+          title: "",
+          keybind: settings.keybinds.get("tab.new") ?? "mod+t",
+          hidden: true,
+          when: sideKey,
+          onSelect: openSideTab,
         }),
+      // As in a browser: in the side panel, ⌘⇧T reopens a side tab rather than a session tab.
+      fileCommand({
+        id: "file.tab.reopen",
+        title: "",
+        keybind: settings.keybinds.get("tab.reopenClosed") ?? "mod+shift+t",
+        hidden: true,
+        when: inSide,
+        onSelect: () => actions.region.reopen(),
+      }),
+      cycle &&
+        fileCommand({
+          id: "file.tab.prev",
+          title: "",
+          keybind: settings.keybinds.get("tab.prev") ?? "mod+option+ArrowLeft,ctrl+shift+tab",
+          hidden: true,
+          when: (event) => sideFocused(event.target),
+          onSelect: () => selectAdjacentSideTab(-1),
+        }),
+      cycle &&
+        fileCommand({
+          id: "file.tab.next",
+          title: "",
+          keybind: settings.keybinds.get("tab.next") ?? "mod+option+ArrowRight,ctrl+tab",
+          hidden: true,
+          when: (event) => sideFocused(event.target),
+          onSelect: () => selectAdjacentSideTab(1),
+        }),
+      ...(actions.session.layout.view().side.opened()
+        ? sideTabShortcuts({
+            keys: actions.region.keys,
+            active: actions.region.active,
+            select: selectSideTab,
+            when: inSide,
+          }).map(fileCommand)
+        : []),
     ].filter((v) => !!v)
   }
 
@@ -374,15 +513,18 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
-      onSelect: () => actions.session.layout.view().side.toggle(),
+      onSelect: actions.region.toggle,
     }),
-    ...(shown()
+    ...(actions.region.pane("bottom").keys().length > 0
       ? [
           viewCommand({
-            id: "fileTree.toggle",
-            title: language.t("command.fileTree.toggle"),
-            keybind: "mod+\\",
-            onSelect: () => layout.fileTree.toggle(),
+            id: "bottom.toggle",
+            title: language.t("command.bottom.toggle"),
+            keybind: "mod+j",
+            onSelect: () => {
+              const bottom = actions.session.layout.view().bottom
+              bottom.setOpened(!bottom.opened())
+            },
           }),
         ]
       : []),
@@ -427,9 +569,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCmds = () => [
     permissionsCommand({
       id: "permissions.autoaccept",
-      title: settings.permissions.autoApprove()
+      title: autoAccepting()
         ? language.t("command.permissions.autoaccept.disable")
-        : language.t("command.permissions.autoaccept.enable"),
+        : sessionProject()
+          ? language.t("command.permissions.autoaccept.project")
+          : language.t("command.permissions.autoaccept.enable"),
       keybind: "mod+shift+a",
       disabled: false,
       onSelect: toggleAutoAccept,

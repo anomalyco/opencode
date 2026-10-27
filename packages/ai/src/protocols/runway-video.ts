@@ -24,7 +24,7 @@ const OUTPUT_RETENTION = Duration.hours(24)
 // ---------------------------------------------------------------------------
 
 /**
- * Provider-native options. Common fields lower to Runway's names: `aspectRatio` → `ratio` (Runway expects pixel
+ * Provider-native options. Common fields lower to Runway's names: `aspect` → `ratio` (Runway expects pixel
  * ratios such as `1280:720` for most models), `durationSeconds` → `duration`, `audio`, `negativePrompt`,
  * `resolution`, `references`, and `frames` → `promptImage`.
  */
@@ -92,7 +92,7 @@ const fromRequest = Effect.fn("RunwayVideo.fromRequest")(function* (request: Req
         promptImage: promptImage.length === 0 ? undefined : promptImage,
         videoUri,
         references: references.length === 0 ? undefined : references,
-        ratio: request.aspectRatio,
+        ratio: request.aspect,
         duration: request.durationSeconds,
         resolution: request.resolution,
         audio: request.audio,

@@ -1,52 +1,19 @@
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, onCleanup, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Schema } from "effect"
-import { SessionError } from "@opencode/schema/session-error"
-import { batch, createEffect, onCleanup } from "solid-js"
+import type { SessionInfo } from "@opencode/client/promise"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode/client/solid"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
-import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { playSoundById } from "@/shell/notifications/sound"
 import type { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
-import { sessionHref } from "@/shell/routes/session"
 import { useServer } from "@/runtime/server/current"
-
-const NotificationBase = {
-  directory: Schema.optional(Schema.String),
-  session: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Unknown),
-  time: Schema.Finite,
-  viewed: Schema.Boolean,
-}
-
-export const Notification = Schema.Union([
-  Persistence.struct({ ...NotificationBase, type: Schema.Literal("turn-complete") }),
-  Persistence.struct({ ...NotificationBase, type: Schema.Literal("error"), error: SessionError.Error }),
-])
-
-export type Notification = typeof Notification.Type
-
-export const NotificationStore = Persistence.struct({ list: Persistence.array(Notification) })
-
-type NotificationIndex = {
-  session: {
-    all: Record<string, Notification[]>
-    unseen: Record<string, Notification[]>
-    unseenCount: Record<string, number>
-    unseenHasError: Record<string, boolean>
-  }
-  project: {
-    all: Record<string, Notification[]>
-    unseen: Record<string, Notification[]>
-    unseenCount: Record<string, number>
-    unseenHasError: Record<string, boolean>
-  }
-}
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
@@ -58,69 +25,33 @@ export function openNotificationSession(tabs: NotificationTabs, server: ServerCo
   tabs.select(tab)
 }
 
-const MAX_NOTIFICATIONS = 500
+/** A session is unread when its latest terminal execution is newer than the last one any client viewed. */
+function isSessionUnread(session?: Pick<SessionInfo, "time">) {
+  const time = session?.time
 
-const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
-
-function pruneNotifications(list: Notification[]) {
-  const cutoff = Date.now() - NOTIFICATION_TTL_MS
-  const pruned = list.filter((n) => n.time >= cutoff)
-
-  if (pruned.length <= MAX_NOTIFICATIONS) return pruned
-
-  return pruned.slice(pruned.length - MAX_NOTIFICATIONS)
+  return time?.idle !== undefined && (time.viewed === undefined || time.idle > time.viewed)
 }
 
-function createNotificationIndex(): NotificationIndex {
-  return {
-    session: {
-      all: {},
-      unseen: {},
-      unseenCount: {},
-      unseenHasError: {},
-    },
-    project: {
-      all: {},
-      unseen: {},
-      unseenCount: {},
-      unseenHasError: {},
-    },
-  }
-}
+// The list Desktop kept before unread state moved to the server. Until its viewed state reaches the server, unread
+// state still honours it, so sessions read here don't light up while the server catches up.
+const LegacyNotificationStore = Persistence.struct({
+  list: Schema.optional(
+    Persistence.array(Persistence.struct({ session: Schema.optional(Schema.String), viewed: Schema.Boolean })),
+  ),
+  // When this client first found the list. Sessions that went idle later are new, whatever the list says.
+  started: Schema.optional(Schema.Finite),
+})
 
-function buildNotificationIndex(list: Notification[]) {
-  const index = createNotificationIndex()
+// The carry-over waits this long after connecting so it doesn't compete with startup requests.
+const LEGACY_MIGRATION_DELAY = 5_000
 
-  list.forEach((notification) => {
-    if (notification.session) {
-      const all = index.session.all[notification.session] ?? []
-      index.session.all[notification.session] = [...all, notification]
+const LEGACY_MIGRATION_PAGE = 200
 
-      if (!notification.viewed) {
-        const unseen = index.session.unseen[notification.session] ?? []
-        index.session.unseen[notification.session] = [...unseen, notification]
-        index.session.unseenCount[notification.session] = unseen.length + 1
+const LEGACY_MIGRATION_CONCURRENCY = 4
 
-        if (notification.type === "error") index.session.unseenHasError[notification.session] = true
-      }
-    }
+const VIEW_RETRY_DELAY = 250
 
-    if (notification.directory) {
-      const all = index.project.all[notification.directory] ?? []
-      index.project.all[notification.directory] = [...all, notification]
-
-      if (!notification.viewed) {
-        const unseen = index.project.unseen[notification.directory] ?? []
-        index.project.unseen[notification.directory] = [...unseen, notification]
-        index.project.unseenCount[notification.directory] = unseen.length + 1
-
-        if (notification.type === "error") index.project.unseenHasError[notification.directory] = true
-      }
-    }
-  })
-
-  return index
-}
+const VIEW_RETRY_MAX_DELAY = 5_000
 
 export function createServerNotificationState(input: {
   sdk: ServerSDK
@@ -132,99 +63,149 @@ export function createServerNotificationState(input: {
   const settings = useSettings()
   const language = useLanguage()
   const tabs = useTabs()
-  const empty: Notification[] = []
+  const disposed = { value: false }
+  // Idle watermarks already reported per root session, so reactive re-runs don't re-post them.
+  const acknowledged = new Map<string, number>()
+  // A failed view report re-runs the tracking caller with backoff, like the TUI.
+  const [state, setState] = createStore({ viewRetry: 0, legacyMigrated: false })
+  let viewRetryTimer: ReturnType<typeof setTimeout> | undefined
+  let viewRetryAttempt = 0
+  onCleanup(() => clearTimeout(viewRetryTimer))
 
-  const [store, setStore, _, ready] = persisted(
-    Persist.serverGlobal(input.sdk.scope, "notification"),
-    NotificationStore,
-    { list: [] },
-  )
+  const legacyTarget = Persist.serverGlobal(input.sdk.scope, "notification")
+  const [legacy, setLegacy, , legacyReady] = persisted(legacyTarget, LegacyNotificationStore, {}, platform)
+  const started = Date.now()
+  const legacyStarted = () => legacy.started ?? started
 
-  const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
+  // Sessions the old list still had unread, while its viewed state hasn't reached the server yet.
+  const legacyUnseen = createMemo(() => {
+    const list = legacy.list
 
-  const meta = { pruned: false, disposed: false }
+    if (!list || state.legacyMigrated) return
 
-  const updateUnseen = (scope: "session" | "project", key: string, unseen: Notification[]) => {
-    setIndex(scope, "unseen", key, unseen)
-    setIndex(scope, "unseenCount", key, unseen.length)
-    setIndex(
-      scope,
-      "unseenHasError",
-      key,
-      unseen.some((notification) => notification.type === "error"),
-    )
+    return new Set(list.flatMap((item) => (!item.viewed && item.session ? [item.session] : [])))
+  })
+
+  // Idle watermarks the carry-over reported, so rows drawn from an older fetched copy of a session stay read.
+  const legacyReported = new Map<string, number>()
+
+  const unread = (session?: Pick<SessionInfo, "id" | "time">) => {
+    const idle = session?.time.idle
+
+    // Until the old list is read, a session it had read could flash unread.
+    if (!legacyReady() || !session || idle === undefined || !isSessionUnread(session)) return false
+
+    if (idle <= (legacyReported.get(session.id) ?? -Infinity)) return false
+    const unseen = legacyUnseen()
+
+    return !unseen || unseen.has(session.id) || idle > legacyStarted()
   }
 
-  const appendToIndex = (notification: Notification) => {
-    if (notification.session) {
-      setIndex("session", "all", notification.session, (all = []) => [...all, notification])
+  // Carry the old list's viewed state to the server in the background: page through every root session and report
+  // the ones the server has unread but this client shows read. Then delete the list. A failure keeps it, and the
+  // next connection retries; reports already made are skipped because the server then has them read.
+  let legacyMigration: "idle" | "scheduled" | "running" = "idle"
 
-      if (!notification.viewed) {
-        setIndex("session", "unseen", notification.session, (unseen = []) => [...unseen, notification])
-        setIndex("session", "unseenCount", notification.session, (count = 0) => count + 1)
+  const migrateLegacy = async () => {
+    legacyMigration = "running"
+    let cursor: string | undefined
 
-        if (notification.type === "error") setIndex("session", "unseenHasError", notification.session, true)
+    for (;;) {
+      const page = await input.sdk.api.session.list({
+        limit: LEGACY_MIGRATION_PAGE,
+        order: "desc",
+        parentID: null,
+        cursor,
+      })
+
+      const hidden = page.data.flatMap((session) =>
+        session.time.idle !== undefined && isSessionUnread(session) && !unread(session)
+          ? [{ sessionID: session.id, idle: session.time.idle }]
+          : [],
+      )
+
+      for (let index = 0; index < hidden.length; index += LEGACY_MIGRATION_CONCURRENCY) {
+        if (disposed.value) return
+
+        await Promise.all(
+          hidden.slice(index, index + LEGACY_MIGRATION_CONCURRENCY).map(async (report) => {
+            await input.sdk.api.session.view(report)
+            legacyReported.set(report.sessionID, report.idle)
+          }),
+        )
       }
+
+      if (page.data.length === 0 || !page.cursor.next) break
+      cursor = page.cursor.next
     }
 
-    if (notification.directory) {
-      setIndex("project", "all", notification.directory, (all = []) => [...all, notification])
-
-      if (!notification.viewed) {
-        setIndex("project", "unseen", notification.directory, (unseen = []) => [...unseen, notification])
-        setIndex("project", "unseenCount", notification.directory, (count = 0) => count + 1)
-
-        if (notification.type === "error") setIndex("project", "unseenHasError", notification.directory, true)
-      }
-    }
-  }
-
-  const removeFromIndex = (notification: Notification) => {
-    if (notification.session) {
-      setIndex("session", "all", notification.session, (all = []) => all.filter((n) => n !== notification))
-
-      if (!notification.viewed) {
-        const unseen = (index.session.unseen[notification.session] ?? empty).filter((n) => n !== notification)
-        updateUnseen("session", notification.session, unseen)
-      }
-    }
-
-    if (notification.directory) {
-      setIndex("project", "all", notification.directory, (all = []) => all.filter((n) => n !== notification))
-
-      if (!notification.viewed) {
-        const unseen = (index.project.unseen[notification.directory] ?? empty).filter((n) => n !== notification)
-        updateUnseen("project", notification.directory, unseen)
-      }
-    }
+    removePersisted(legacyTarget, platform)
+    setState("legacyMigrated", true)
   }
 
   createEffect(() => {
-    if (!ready()) return
+    if (!legacyReady() || !legacyUnseen()) return
 
-    if (meta.pruned) return
-    meta.pruned = true
-    const list = pruneNotifications(store.list)
-    batch(() => {
-      setStore("list", list)
-      setIndex(reconcile(buildNotificationIndex(list), { merge: false }))
+    if (untrack(() => legacy.started) === undefined) setLegacy("started", started)
+
+    if (input.sdk.connection.status() !== "connected" || legacyMigration !== "idle") return
+    legacyMigration = "scheduled"
+
+    const timer = setTimeout(
+      () =>
+        void migrateLegacy().catch(() => {
+          legacyMigration = "idle"
+        }),
+      LEGACY_MIGRATION_DELAY,
+    )
+
+    onCleanup(() => {
+      clearTimeout(timer)
+
+      if (legacyMigration === "scheduled") legacyMigration = "idle"
     })
   })
 
-  const append = (notification: Notification) => {
-    const list = pruneNotifications([...store.list, notification])
-    const keep = new Set(list)
-    const removed = store.list.filter((n) => !keep.has(n))
+  const roots = (directory: string) =>
+    input.data.session
+      .list()
+      .filter(
+        (session) =>
+          !session.parentID && session.time.archived === undefined && session.location.directory === directory,
+      )
 
-    batch(() => {
-      if (keep.has(notification)) appendToIndex(notification)
-      removed.forEach((n) => removeFromIndex(n))
-      setStore("list", list)
-    })
+  const view = (sessionID: string) => {
+    void state.viewRetry
+    const root = input.data.session.root(sessionID)
+    const session = input.data.session.get(root)
+    const idle = session?.time.idle
+
+    if (idle === undefined || !isSessionUnread(session) || acknowledged.get(root) === idle) return
+    acknowledged.set(root, idle)
+    void input.sdk.api.session.view({ sessionID: root, idle }).then(
+      () => {
+        clearTimeout(viewRetryTimer)
+        viewRetryTimer = undefined
+        viewRetryAttempt = 0
+      },
+      () => {
+        if (acknowledged.get(root) !== idle) return
+        acknowledged.delete(root)
+
+        if (viewRetryTimer) return
+
+        const delay = Math.min(VIEW_RETRY_DELAY * 2 ** viewRetryAttempt, VIEW_RETRY_MAX_DELAY)
+        viewRetryAttempt++
+        viewRetryTimer = setTimeout(() => {
+          viewRetryTimer = undefined
+          setState("viewRetry", (value) => value + 1)
+        }, delay)
+      },
+    )
   }
 
-  const lookup = async (sessionID?: string) => {
-    if (!sessionID) return undefined
+  // Loading the session keeps a background completion visible in the server-derived unread state.
+  const lookup = async (sessionID: string) => {
     const session = input.data.session.get(sessionID)
 
     if (session) return session
@@ -235,13 +216,9 @@ export function createServerNotificationState(input: {
       .catch(() => undefined)
   }
 
-  const viewedInCurrentSession = (sessionID: string) => {
-    return typeof location !== "undefined" && location.pathname === sessionHref(input.key, sessionID)
-  }
-
-  const handleSessionIdle = (sessionID: string, eventID: string, time: number) => {
+  const handleSessionIdle = (sessionID: string, eventID: string) => {
     void lookup(sessionID).then((session) => {
-      if (meta.disposed) return
+      if (disposed.value) return
 
       if (!session) return
 
@@ -253,14 +230,6 @@ export function createServerNotificationState(input: {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.agent()))
       }
 
-      append({
-        directory: session.location.directory,
-        time,
-        viewed: viewedInCurrentSession(sessionID),
-        type: "turn-complete",
-        session: sessionID,
-      })
-
       if (hasOpenTab && settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
           platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
@@ -271,9 +240,9 @@ export function createServerNotificationState(input: {
     })
   }
 
-  const handleSessionError = (sessionID: string, error: SessionError.Error, eventID: string, time: number) => {
+  const handleSessionError = (sessionID: string, eventID: string) => {
     void lookup(sessionID).then((session) => {
-      if (meta.disposed) return
+      if (disposed.value) return
 
       if (session?.parentID) return
 
@@ -283,18 +252,7 @@ export function createServerNotificationState(input: {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.errors()))
       }
 
-      append({
-        directory: session?.location.directory,
-        time,
-        viewed: viewedInCurrentSession(sessionID),
-        type: "error",
-        session: sessionID,
-        error,
-      })
-
-      const description =
-        session?.title ??
-        (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
+      const description = session?.title ?? language.t("notification.session.error.fallbackDescription")
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
@@ -307,94 +265,38 @@ export function createServerNotificationState(input: {
   }
 
   const unsub = input.sdk.event.listen((event) => {
-    if (event.type !== "session.execution.succeeded" && event.type !== "session.execution.failed") return
-
-    const time = Date.now()
-
     if (event.type === "session.execution.failed") {
-      handleSessionError(event.data.sessionID, event.data.error, event.id, time)
+      handleSessionError(event.data.sessionID, event.id)
 
       return
     }
 
-    handleSessionIdle(event.data.sessionID, event.id, time)
+    if (event.type === "session.execution.succeeded") handleSessionIdle(event.data.sessionID, event.id)
   })
 
   onCleanup(() => {
-    meta.disposed = true
+    disposed.value = true
     unsub()
   })
 
   return {
-    ready,
     session: {
-      all(session: string) {
-        return index.session.all[session] ?? empty
+      /**
+       * Whether the session's root has an execution result no client has viewed yet. `snapshot` stands in for a root
+       * session that isn't loaded, such as a row from the fetched home index.
+       */
+      unread(sessionID: string, snapshot?: SessionInfo) {
+        return unread(input.data.session.get(input.data.session.root(sessionID)) ?? snapshot)
       },
-      unseen(session: string) {
-        return index.session.unseen[session] ?? empty
-      },
-      unseenCount(session: string) {
-        return index.session.unseenCount[session] ?? 0
-      },
-      unseenHasError(session: string) {
-        return index.session.unseenHasError[session] ?? false
-      },
-      markViewed(session: string) {
-        const unseen = index.session.unseen[session] ?? empty
-
-        if (!unseen.length) return
-
-        const projects = [
-          ...new Set(unseen.flatMap((notification) => (notification.directory ? [notification.directory] : []))),
-        ]
-
-        batch(() => {
-          setStore("list", (n) => n.session === session && !n.viewed, "viewed", true)
-          updateUnseen("session", session, [])
-          projects.forEach((directory) => {
-            const next = (index.project.unseen[directory] ?? empty).filter(
-              (notification) => notification.session !== session,
-            )
-
-            updateUnseen("project", directory, next)
-          })
-        })
-      },
+      /** Reports the session's latest idle transition to the server as viewed. */
+      markViewed: view,
     },
     project: {
-      all(directory: string) {
-        return index.project.all[directory] ?? empty
-      },
-      unseen(directory: string) {
-        return index.project.unseen[directory] ?? empty
-      },
-      unseenCount(directory: string) {
-        return index.project.unseenCount[directory] ?? 0
-      },
-      unseenHasError(directory: string) {
-        return index.project.unseenHasError[directory] ?? false
+      hasUnread(directory: string) {
+        return roots(directory).some((session) => unread(session))
       },
       markViewed(directory: string) {
-        const unseen = index.project.unseen[directory] ?? empty
-
-        if (!unseen.length) return
-
-        const sessions = [
-          ...new Set(unseen.flatMap((notification) => (notification.session ? [notification.session] : []))),
-        ]
-
-        batch(() => {
-          setStore("list", (n) => n.directory === directory && !n.viewed, "viewed", true)
-          updateUnseen("project", directory, [])
-          sessions.forEach((session) => {
-            const next = (index.session.unseen[session] ?? empty).filter(
-              (notification) => notification.directory !== directory,
-            )
-
-            updateUnseen("session", session, next)
-          })
-        })
+        roots(directory).forEach((session) => view(session.id))
       },
     },
   }

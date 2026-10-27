@@ -2,12 +2,20 @@ import { expect, test } from "bun:test"
 import { createMarkdownParser } from "./marked-parser"
 import { parseSmallMarkdown } from "./marked-base"
 
-const parser = createMarkdownParser((code, language) => `<pre data-language="${language}">${code}</pre>`)
+const parser = createMarkdownParser()
 
-test("renders links with application attributes", async () => {
-  expect(await parser.parse("[OpenCode](https://opencode.ai)")).toBe(
-    '<p><a href="https://opencode.ai" class="external-link" target="_blank" rel="noopener noreferrer">OpenCode</a></p>\n',
-  )
+test.each([
+  ["OpenCode", "OpenCode"],
+  ["**`#123`**", "<strong><code>#123</code></strong>"],
+  ["*Review* ~~draft~~", "<em>Review</em> <del>draft</del>"],
+  ["`<example>`", "<code>&lt;example&gt;</code>"],
+  ["\\*literal\\*", "*literal*"],
+])("renders link label %s with application attributes", async (label, html) => {
+  const markdown = `[${label}](https://opencode.ai)`
+  const expected = `<p><a href="https://opencode.ai" class="external-link" target="_blank" rel="noopener noreferrer">${html}</a></p>\n`
+
+  expect(await parser.parse(markdown)).toBe(expected)
+  expect(parseSmallMarkdown(markdown)).toBe(expected)
 })
 
 test("renders inline and block math", async () => {
@@ -76,12 +84,23 @@ test("lexes dollar-heavy paragraphs in near-linear time", () => {
   expect(performance.now() - startedAt).toBeLessThan(500)
 })
 
-test("uses the configured code highlighter", async () => {
-  expect(await parser.parse("```ts\nconst value = 1\n```\n")).toBe('<pre data-language="ts">const value = 1</pre>\n')
+test("highlights fenced code with the app theme variables", async () => {
+  const html = await parser.parse("```ts\nconst value = 1\n```\n")
+
+  expect(html).toStartWith('<pre class="highlights" style="background-color:var(--color-background-stronger)')
+  expect(html).toContain('<code class="language-ts">')
+  expect(html).toContain('<span style="color:var(--syntax-keyword)">const </span>')
+})
+
+test("keeps the fence language for code without a lexer", async () => {
+  const html = await parser.parse("```mermaid\ngraph TD; A-->B\n```\n")
+
+  expect(html).toContain('<code class="language-mermaid">graph TD; A--&gt;B</code>')
 })
 
 test.each(["```", "~~~"])("recognizes an empty %s fence at EOF", async (fence) => {
-  expect(await parser.parse(`foo\n${fence}`)).toBe('<p>foo</p>\n<pre data-language=""></pre>\n')
+  expect(await parser.parse(`foo\n${fence}`)).toContain('<p>foo</p>\n<pre class="highlights"')
+  expect(await parser.parse(`foo\n${fence}`)).toContain('<code class="language-text"></code>')
 })
 
 test("preserves emphasis when rejecting an outer reference link", async () => {

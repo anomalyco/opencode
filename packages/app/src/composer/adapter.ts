@@ -3,6 +3,7 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import type { Accessor } from "solid-js"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { ServerSDK } from "@/runtime/server/client"
+import type { SessionMessageHandoff } from "@/session/handoff"
 import type { ComposerStateTarget } from "./submission-state"
 import type { createComposerSubmission } from "./submission-state"
 
@@ -16,8 +17,11 @@ export type ComposerControls = {
   }
   model: {
     selection: ModelSelection
+    providerName?: string
     paid: boolean
     loading: boolean
+    /** While loading, the expected model's names from a catalog already loaded for another Location. */
+    preview?: { provider?: string; model: string; variant: string; variants: string[] }
   }
 }
 
@@ -51,8 +55,8 @@ export type ComposerQueue = {
 export type ComposerSession = {
   id: string
   directory: string
-  handoff?: {
-    set: (message: SessionMessageUser) => void
+  handoff: {
+    set: (handoff: SessionMessageHandoff) => void
     clear: (messageID: string) => void
   }
   api: {
@@ -90,6 +94,8 @@ export type ComposerSession = {
     | undefined
   >
   admitted: (messageID: string) => boolean
+  // Moves the run's blocking work to the background once a steer is admitted; undefined for another session.
+  background?: () => { move: () => Promise<void> } | undefined
 }
 
 type ComposerAdapterBase = {

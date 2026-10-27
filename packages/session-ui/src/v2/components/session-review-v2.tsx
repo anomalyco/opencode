@@ -7,7 +7,6 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { useLocale } from "@kobalte/core/i18n"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
@@ -125,15 +124,15 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
               }
             />
           </div>
-          <ScrollView
-            data-slot="session-review-v2-sidebar-tree"
-            class="group/file-tree-v2"
-            orientation="both"
-            thumbVisibility="scroll"
-            viewportRef={props.viewportRef}
-          >
-            {props.children}
-          </ScrollView>
+          <div data-slot="session-review-v2-sidebar-tree" class="group/file-tree-v2">
+            <div
+              data-slot="session-review-v2-sidebar-viewport"
+              data-scrollable
+              ref={(element) => props.viewportRef?.(element)}
+            >
+              {props.children}
+            </div>
+          </div>
         </aside>
       </Show>
       <Show when={props.open && props.onWidthChange}>

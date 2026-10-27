@@ -129,18 +129,20 @@ describe("WebSocket", () => {
       ),
     )
 
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const constructor = yield* Socket.WebSocketConstructor
-        const options = { headers: { authorization: "Bearer fixture" } }
-        const socket = constructor("wss://echo.example.test/options", options)
-        yield* Effect.callback<void>((resume) => {
-          socket.addEventListener("open", () => {
-            socket.close()
-            resume(Effect.void)
+    await withEnvironment("CI", undefined, () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const constructor = yield* Socket.WebSocketConstructor
+          const options = { headers: { authorization: "Bearer fixture" } }
+          const socket = constructor("wss://echo.example.test/options", options)
+          yield* Effect.callback<void>((resume) => {
+            socket.addEventListener("open", () => {
+              socket.close()
+              resume(Effect.void)
+            })
           })
-        })
-      }).pipe(Effect.scoped, Effect.provide(recorder)),
+        }).pipe(Effect.scoped, Effect.provide(recorder)),
+      ),
     )
 
     expect(received).toEqual({ headers: { authorization: "Bearer fixture" } })

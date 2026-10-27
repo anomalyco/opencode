@@ -23,10 +23,9 @@ Use only <https://opencode.ai/v2/docs/> documentation as the source of truth for
 Do not use <https://opencode.ai/docs/>, which documents V1, and do not use
 general web search to resolve a V2 documentation question when the V2 docs or
 linked pages cover it. The schema served from
-<https://opencode.ai/config.json> may describe V1 even though V2 configuration
-files include that URL for editor integration. Never use it to infer V2 field
-names or shapes. If V2 documentation is missing or contradictory, state the
-uncertainty or ask for clarification instead of falling back to V1.
+<https://opencode.ai/config.json> accepts both V2 fields and deprecated V1
+fields. Never recommend a field it marks deprecated. If V2 documentation is
+missing or contradictory, state the uncertainty or ask for clarification instead of falling back to V1.
 
 V1 documentation and syntax may be consulted only when the user explicitly
 asks about V1 or when needed as migration input. Outputs and recommendations
@@ -99,6 +98,11 @@ This configuration is distinct from `cli.json`. Use the
 [CLI settings reference](https://opencode.ai/v2/docs/cli/config) for terminal
 preferences, especially themes and keybindings.
 
+Config changes apply without a restart. OpenCode watches config files and
+reloads agents, commands, skills, MCP servers, and plugins after a save. The TUI
+does the same for `cli.json`. To force a full reload, use `/reload`. Don't tell
+the user to restart OpenCode after editing config.
+
 Do not guess field names or shapes. Fetch the V2 configuration guide and its
 linked topic guide as the source of truth, and preserve unrelated settings when
 editing an existing file. Keep the published `$schema` URL in configuration
@@ -169,7 +173,8 @@ to a background OpenCode service, which owns sessions, configuration, plugins,
 permissions, and tool execution.
 
 OpenCode normally discovers or starts the shared background service
-automatically. If the service is stuck or unhealthy, restart it:
+automatically. Restart it only if it is stuck or unhealthy, not to apply
+configuration changes:
 
 ```sh
 opencode service restart

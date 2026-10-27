@@ -50,7 +50,7 @@ export function GoPlanChart(props: { href: string }) {
         <table id={id}>
           <colgroup>
             <col style={{ width: "26%" }} />
-            <col style={{ width: "44%" }} />
+            <col />
             <col style={{ width: "16%" }} />
             <col style={{ width: "14%" }} />
           </colgroup>
@@ -69,16 +69,19 @@ export function GoPlanChart(props: { href: string }) {
                 <tr>
                   <th scope="row">
                     <bdi>{model.name}</bdi>
-                    <Show when={model.fresh || model.limitedTime || model.regions}>
+                    <Show when={model.fresh || model.bonus || model.limitedTime || model.regions}>
                       <span data-slot="labels">
                         <Show when={model.fresh}>
                           <small>{i18n.t("go.graph.new")}</small>
+                        </Show>
+                        <Show when={model.bonus}>
+                          {(bonus) => <small>{i18n.t("go.graph.bonus", { count: bonus() })}</small>}
                         </Show>
                         <Show when={model.limitedTime}>
                           <small>{i18n.t("go.graph.limitedTime")}</small>
                         </Show>
                         <Show when={model.regions}>
-                          <a href="https://ai.developer.meta.com/legal/geographic-use-policy">
+                          <a href="https://dev.meta.ai/legal/geographic-use-policy">
                             {i18n.t("go.graph.limitedRegions")}
                           </a>
                         </Show>
@@ -111,12 +114,24 @@ export function GoPlanChart(props: { href: string }) {
                     </div>
                   </td>
                   <td data-slot="number">
-                    <span>{format().format(model.requests)}</span>
-                    <span>{format().format(model.plusRequests)}</span>
+                    <span>
+                      <Show when={model.previous?.requests}>{(base) => <s>{format().format(base())}</s>}</Show>
+                      {format().format(model.requests)}
+                    </span>
+                    <span>
+                      <Show when={model.previous?.plusRequests}>{(base) => <s>{format().format(base())}</s>}</Show>
+                      {format().format(model.plusRequests)}
+                    </span>
                   </td>
                   <td data-slot="number">
-                    <span>{Number.isFinite(model.allowance) ? currency().format(model.allowance) : "∞"}</span>
-                    <span>{Number.isFinite(model.plusAllowance) ? currency().format(model.plusAllowance) : "∞"}</span>
+                    <span>
+                      <Show when={model.previous?.allowance}>{(base) => <s>{currency().format(base())}</s>}</Show>
+                      {Number.isFinite(model.allowance) ? currency().format(model.allowance) : "∞"}
+                    </span>
+                    <span>
+                      <Show when={model.previous?.plusAllowance}>{(base) => <s>{currency().format(base())}</s>}</Show>
+                      {Number.isFinite(model.plusAllowance) ? currency().format(model.plusAllowance) : "∞"}
+                    </span>
                   </td>
                 </tr>
               )}

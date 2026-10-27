@@ -1,0 +1,28 @@
+export default {
+  "command.title": "Pair device",
+  title: "Pairing",
+  description: "Connect another device to this machine's OpenCode server.",
+  "pair.title": "Pair a device",
+  "pair.description":
+    "Connect a phone, tablet, or another computer from anywhere through an end-to-end encrypted tunnel.",
+  "pair.open": "Pair device",
+  "pair.unavailable": "Pairing is unavailable right now.",
+  "dialog.description": "Scan the code with the OpenCode app on another device, or copy the link.",
+  "remote.title": "Remote access",
+  "remote.description":
+    "Paired devices reach this computer's OpenCode server over the internet. Turning it off disconnects them until you pair them again.",
+  "remote.error": "Could not update remote access. Try again.",
+  "setup.title": "Setting up remote access…",
+  "setup.description": "This can take a minute.",
+  "setup.error": "Could not set up remote access.",
+  retry: "Try again",
+  "screenActive.title": "Keep screen active",
+  "screenActive.description": "Prevent this computer’s display from sleeping while OpenCode is running.",
+  "screenActive.error": "Could not update the screen activity setting. Try again.",
+  qr: "Pairing QR code",
+  copyLink: "Copy link",
+  "copy.error": "Could not copy pairing details. Try again.",
+  error: "Could not update pairing details. Try again.",
+  expires: "Expires in {{time}}",
+  refresh: "New code",
+}

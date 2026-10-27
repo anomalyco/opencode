@@ -1,12 +1,12 @@
 import { onCleanup } from "solid-js"
 
-export type ShellOption = {
+type ShellOption = {
   path: string
   name: string
   acceptable: boolean
 }
 
-export type ShellSelectOption = {
+type ShellSelectOption = {
   id: string
   value: string
   name: string

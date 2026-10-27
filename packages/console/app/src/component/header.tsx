@@ -46,6 +46,18 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
     contextMenuPosition: { x: 0, y: 0 },
   })
 
+  let mobileToggle: HTMLButtonElement | undefined
+  createEffect(() => {
+    if (!store.mobileMenuOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setStore("mobileMenuOpen", false)
+      mobileToggle?.focus()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
+  })
+
   createEffect(() => {
     const handleClickOutside = () => {
       setStore("contextMenuOpen", false)
@@ -143,7 +155,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href={`${config.github.repoUrl}/tree/v2`} target="_blank" style="white-space: nowrap;">
+            <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
               {i18n.t("nav.github")}
             </a>
           </li>
@@ -186,7 +198,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           </li>
           <Show when={props.zen || props.go}>
             <li>
-              <a href="/auth">{i18n.t("nav.login")}</a>
+              <a href="/console">{i18n.t("nav.login")}</a>
             </li>
           </Show>
           <Show when={!props.hideGetStarted}>
@@ -215,9 +227,10 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
       </nav>
       <nav data-component="nav-mobile">
         <button
+          ref={mobileToggle}
           type="button"
           data-component="nav-mobile-toggle"
-          aria-expanded="false"
+          aria-expanded={store.mobileMenuOpen}
           aria-controls="nav-mobile-menu"
           class="nav-toggle"
           onClick={() => setStore("mobileMenuOpen", !store.mobileMenuOpen)}
@@ -265,7 +278,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                   <A href={language.route("/")}>{i18n.t("nav.home")}</A>
                 </li>
                 <li>
-                  <a href={`${config.github.repoUrl}/tree/v2`} target="_blank" style="white-space: nowrap;">
+                  <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
                     {i18n.t("nav.github")}
                   </a>
                 </li>
@@ -311,7 +324,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                 </li>
                 <Show when={props.zen || props.go}>
                   <li>
-                    <a href="/auth">{i18n.t("nav.login")}</a>
+                    <a href="/console">{i18n.t("nav.login")}</a>
                   </li>
                 </Show>
                 <Show when={!props.hideGetStarted}>

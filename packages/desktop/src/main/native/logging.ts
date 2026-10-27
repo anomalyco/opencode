@@ -9,8 +9,6 @@ import { marks } from "../lifecycle/marks"
 
 const MAX_LOG_AGE_DAYS = 7
 
-const TAIL_LINES = 1000
-
 const EXPORT_WINDOW = 24 * 60 * 60 * 1000
 
 const MAX_EXPORT_FILE_SIZE = 50 * 1024 * 1024
@@ -77,10 +75,9 @@ const nativeLogger = Logger.make((options) => {
     }
 
     const messages = Array.isArray(options.message) ? options.message : [options.message]
-    log.scope(safeLogName(scope))[methods[options.logLevel]](
-      ...messages,
-      ...(Object.keys(context).length === 0 ? [] : [context]),
-    )
+    log
+      .scope(safeLogName(scope))
+      [methods[options.logLevel]](...messages, ...(Object.keys(context).length === 0 ? [] : [context]))
   } catch {
     // Logging must not interrupt application work.
   }
@@ -137,9 +134,9 @@ function startNetLog(path: Path.Path) {
   const target = path.join(run, "network.netlog")
   netLogPath = target
 
-  return Effect.tryPromise(() => netLog.startLogging(target, { captureMode: "default", maxFileSize: NET_LOG_SIZE })).pipe(
-    Effect.tap(() => scoped("network", Effect.logInfo("net log started", { path: target }))),
-  )
+  return Effect.tryPromise(() =>
+    netLog.startLogging(target, { captureMode: "default", maxFileSize: NET_LOG_SIZE }),
+  ).pipe(Effect.tap(() => scoped("network", Effect.logInfo("net log started", { path: target }))))
 }
 
 function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
@@ -175,27 +172,13 @@ function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
       Effect.ensuring(
         restartNetLog
           ? startNetLog(path).pipe(
-              Effect.catch((error) =>
-                scoped("network", Effect.logWarning("failed to restart net log", { error })),
-              ),
+              Effect.catch((error) => scoped("network", Effect.logWarning("failed to restart net log", { error }))),
             )
           : Effect.void,
       ),
     )
   })
 }
-
-export const tail = Effect.fn("DesktopLogging.tail")(function* () {
-  const fs = yield* FileSystem.FileSystem
-
-  return yield* Effect.gen(function* () {
-    const path = log.transports.file.getFile().path
-    const contents = yield* fs.readFileString(path)
-    const lines = contents.split("\n")
-
-    return lines.slice(Math.max(0, lines.length - TAIL_LINES)).join("\n")
-  }).pipe(Effect.orElseSucceed(() => ""))
-})
 
 function initRunDirectory(fs: FileSystem.FileSystem, path: Path.Path) {
   root = path.join(app.getPath("userData"), "logs")
@@ -258,9 +241,7 @@ function manifest(path: Path.Path) {
 function serverLogRoots(path: Path.Path) {
   const xdgData = process.env.XDG_DATA_HOME || path.join(homedir(), ".local", "share")
 
-  return [
-    ...new Set([path.join(xdgData, "opencode", "log"), path.join(app.getPath("userData"), "opencode", "log")]),
-  ]
+  return [...new Set([path.join(xdgData, "opencode", "log"), path.join(app.getPath("userData"), "opencode", "log")])]
 }
 
 type Entry = { name: string; path: string; offset: number } | { name: string; data: Uint8Array }

@@ -1,11 +1,8 @@
 import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
-import path from "node:path"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
@@ -14,7 +11,6 @@ import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
-import { iife } from "../../util/iife.js"
 import { which } from "../../util/which.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
@@ -52,18 +48,8 @@ const decodeManagementDeployment = Schema.decodeUnknownOption(
     }),
   }),
 )
-const ResourceQuery = Schema.Struct({
-  query: Schema.String,
-  options: Schema.optional(Schema.Struct({ $top: Schema.Number })),
-})
+const ResourceQuery = Schema.Struct({ query: Schema.String })
 const Resources = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.NonEmptyString })) })
-const ResourceListing = Schema.Struct({ data: Schema.Array(Schema.Unknown) })
-const decodeProfile = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ subscriptions: Schema.NonEmptyArray(Schema.Unknown) })),
-)
-const decodeResourceListing = Schema.decodeUnknownOption(
-  Schema.Struct({ resourceName: Schema.NonEmptyString, resourceGroup: Schema.String, location: Schema.String }),
-)
 
 type Deployment = { readonly name: string; readonly model: string }
 
@@ -78,7 +64,6 @@ export function make(
     effect: Effect.fn(function* (ctx) {
       const configured = yield* configuredSettings(Provider.ID.azure)
       const processes = yield* AppProcess.Service
-      const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
       const credentials = yield* Credential.Service
       const providers = yield* Provider.Service
@@ -133,8 +118,6 @@ export function make(
 
       const available = Boolean(which("az"))
       const configuredResource = Boolean(resolveResourceName(configured) || typeof configured?.baseURL === "string")
-      // Undefined until the Azure CLI answers; a failed lookup leaves the form to manual entry.
-      const listing: { resources?: readonly Form.Option[] } = {}
 
       yield* ctx.integration.transform((editor) => {
         // The retired azure-cognitive-services provider's env var still connects Azure.
@@ -177,16 +160,7 @@ export function make(
                     placeholder: "e.g. my-models",
                     required: true,
                     pattern: resourcePattern.source,
-                    // Resources are listed once at startup, so one created later is typed in. Without a list the field
-                    // is a plain text input.
-                    ...iife(() => {
-                      if (!listing.resources) return { description: "Requests use your `az login` session." }
-                      if (listing.resources.length === 0)
-                        return {
-                          description: "No Azure OpenAI or AI Services resources found for your `az login` account.",
-                        }
-                      return { custom: true, options: listing.resources }
-                    }),
+                    description: "Enter the name of your Azure OpenAI or AI Services resource.",
                   },
                 ]),
           },
@@ -371,42 +345,6 @@ export function make(
 
       Object.assign(loaded, yield* load())
 
-      // Lists the resources the Azure CLI account can reach in the background, so the connect form can offer them
-      // without startup waiting on Azure. The CLI's profile shows a signed-in account without running the CLI.
-      // https://learn.microsoft.com/cli/azure/azure-cli-configuration#cli-configuration-file
-      const listResources = Effect.fn("AzurePlugin.listResources")(function* () {
-        const profile = yield* fs.readFileStringSafe(
-          path.join(process.env.AZURE_CONFIG_DIR ?? path.join(Global.Path.home, ".azure"), "azureProfile.json"),
-        )
-        // The Azure CLI writes the profile with a byte order mark.
-        if (Option.isNone(decodeProfile(profile?.replace(/^\uFEFF/, "")))) return
-        const response = yield* HttpClientRequest.post(
-          `${endpoints.management}/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01`,
-        ).pipe(
-          HttpClientRequest.schemaBodyJson(ResourceQuery)({ query: resourceListQuery, options: { $top: 1000 } }),
-          Effect.flatMap(management),
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(ResourceListing)),
-          Effect.timeout("10 seconds"),
-        )
-        listing.resources = response.data.flatMap((raw): Form.Option[] => {
-          const item = Option.getOrUndefined(decodeResourceListing(raw))
-          if (!item || !resourcePattern.test(item.resourceName)) return []
-          return [
-            {
-              value: item.resourceName,
-              label: item.resourceName,
-              description: `${item.resourceGroup} · ${item.location}`,
-            },
-          ]
-        })
-        yield* ctx.integration.reload()
-      })
-      if (available && !configuredResource)
-        yield* listResources().pipe(
-          Effect.catch((cause) => Effect.logDebug("failed to list Azure resources", { cause })),
-          Effect.forkScoped,
-        )
-
       yield* ctx.provider.transform((evt) => {
         for (const item of evt.list()) {
           if (
@@ -446,9 +384,16 @@ export function make(
           )
             continue
           const resourceName = resourceFor(item.provider)
-          for (const model of models.list(item.provider.id)) {
+          if (!resourceName) continue
+          for (const model of item.models.values()) {
+            if (typeof model.settings?.baseURL !== "string") continue
+            const baseURL = expandResourceName(
+              model.settings.baseURL,
+              resolveResourceName(model.settings, resourceName) ?? resourceName,
+            )
+            if (baseURL === model.settings.baseURL) continue
             models.update(item.provider.id, model.id, (draft) => {
-              if (resourceName && typeof draft.settings?.baseURL === "string")
+              if (typeof draft.settings?.baseURL === "string")
                 draft.settings.baseURL = expandResourceName(
                   draft.settings.baseURL,
                   resolveResourceName(draft.settings, resourceName) ?? resourceName,
@@ -541,28 +486,14 @@ function expandResourceName(baseURL: string, resourceName: string) {
     .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
 }
 
-// The Azure CLI method stores the resource as credential metadata, the API key method as its form answer. API keys
-// imported from V1 keep their connect-form answer as metadata.
+// Both the API key and Azure CLI methods store their resource form answer as credential metadata.
 function credentialResource(credential: Credential.Value | undefined) {
   const resource =
-    credential?.type === "key"
-      ? (credential.configuration?.resourceName ?? credential.metadata?.resourceName)
-      : credential?.type === "external" && credential.methodID === methodID
-        ? credential.metadata?.resourceName
-        : undefined
+    credential?.type === "key" || (credential?.type === "external" && credential.methodID === methodID)
+      ? credential.metadata?.resourceName
+      : undefined
   return typeof resource === "string" && resource.trim() !== "" ? resource : undefined
 }
-
-// Entra ID authentication requires a custom subdomain, which is the resource name every endpoint uses.
-// https://learn.microsoft.com/azure/ai-services/cognitive-services-custom-subdomains
-const resourceListQuery = [
-  "resources",
-  "| where type =~ 'microsoft.cognitiveservices/accounts' and kind in~ ('AIServices', 'OpenAI')",
-  "| extend resourceName = tostring(properties.customSubDomainName)",
-  "| where isnotempty(resourceName)",
-  "| project resourceName, resourceGroup, location",
-  "| order by resourceName asc",
-].join(" ")
 
 function resourceQuery(resource: string) {
   return [

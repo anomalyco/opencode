@@ -190,7 +190,6 @@ export const dict = {
   "ui.question.answer.none": "(ҷавоб нест)",
   "ui.question.review.notAnswered": "(ҷавоб дода нашудааст)",
   "ui.question.multiHint": "Ҳамаи ҷавобҳои мувофиқро интихоб кунед",
-  "ui.question.singleHint": "Як ҷавобро интихоб кунед",
   "ui.question.custom.placeholder": "Ҷавоби худро нависед…",
   "ui.messagePart.context.match.one": "({{count}} мувофиқат)",
   "ui.messagePart.context.match.other": "({{count}} мувофиқат)",

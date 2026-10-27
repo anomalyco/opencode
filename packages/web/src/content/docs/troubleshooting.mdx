@@ -9,12 +9,12 @@ To debug issues with OpenCode, start by checking the logs and local data it stor
 
 ## Logs
 
-Log files are written to:
+CLI and server logs are written to:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/opencode/log/opencode.log`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
 
-Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
+Logs are appended to `opencode.log`. Run `opencode debug paths` to find the log directory if you use custom XDG paths.
 
 You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
 
@@ -31,9 +31,10 @@ This directory contains:
 
 - `auth.json` - Authentication data like API keys, OAuth tokens
 - `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
+- `opencode.db` - SQLite database containing projects, sessions, and messages
+- `snapshot/` - Project snapshots used for undo
+
+Run `opencode db path` to find the active database. Custom `OPENCODE_DB` settings and development channels can use a different filename.
 
 ---
 
@@ -53,7 +54,9 @@ To remove OpenCode Desktop, uninstall the application through your operating sys
 
 ## Desktop app
 
-OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
+OpenCode Desktop uses Electron and runs a local OpenCode server in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
+
+Desktop logs are stored in timestamped directories under `logs/` in the [desktop app data directory](#reset-desktop-app-storage-last-resort).
 
 ### Quick checks
 
@@ -139,14 +142,7 @@ If you have `OPENCODE_PORT` set in your environment, the desktop app will try to
 
 On Linux, some Wayland setups can cause blank windows or compositor errors.
 
-- If you're on Wayland and the app is blank/crashing, try launching with `OC_ALLOW_WAYLAND=1`.
-- If that makes things worse, remove it and try launching under an X11 session instead.
-
----
-
-### Windows: WebView2 runtime
-
-On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
+- Try launching under an X11 session to check whether the issue is specific to Wayland.
 
 ---
 
@@ -172,14 +168,16 @@ If the app won't start and you can't clear settings from inside the UI, reset th
 1. Quit OpenCode Desktop.
 2. Find and delete these files (they live in the OpenCode Desktop app data directory):
 
-- `opencode.settings.dat` (desktop default server URL)
+- `opencode.settings` (desktop settings, including the default server URL)
 - `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
 
-To find the directory quickly:
+For the stable release, the desktop app data directory is:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (then search for the filenames above)
-- **Linux**: search under `~/.local/share` for the filenames above
-- **Windows**: Press `WIN+R` -> `%APPDATA%` (then search for the filenames above)
+- **macOS**: `~/Library/Application Support/ai.opencode.desktop/`
+- **Linux**: `~/.config/ai.opencode.desktop/` (or `$XDG_CONFIG_HOME/ai.opencode.desktop/`)
+- **Windows**: `%APPDATA%\ai.opencode.desktop\`
+
+Beta and development builds use the `ai.opencode.desktop.beta` and `ai.opencode.desktop.dev` directories instead.
 
 ---
 
@@ -237,8 +235,8 @@ Models should be referenced like so: `<providerId>/<modelId>`
 
 Examples:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 To figure out what models you have access to, run `opencode models`

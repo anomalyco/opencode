@@ -8,21 +8,20 @@ import {
   sansDefault,
   sansFontFamily,
   sansInput,
+  type ReduceMotion,
   terminalDefault,
   terminalFontFamily,
   terminalInput,
   useSettings,
 } from "@/settings/model"
+import { usePlatform } from "@/runtime/platform/platform"
+import { desktopZoomLevels, type DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import { playSoundById, SOUND_OPTIONS } from "@/shell/notifications/sound"
 import { createSoundPreviewController } from "./behavior"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
-
-export { createShellOptions, createSoundPreviewController } from "./behavior"
-
-export type { ShellOption, ShellSelectOption } from "./behavior"
 
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
@@ -61,7 +60,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       actions.mutate({ ...previous, shell: value || undefined })
       void serverCtx()
         .sdk.api.config.update({ shell: value || null })
-        .catch((error: unknown) => {
+        .catch((error) => {
           actions.mutate(previous)
           showToast({
             variant: "error",
@@ -75,6 +74,8 @@ export function createServerShellController(server: Accessor<ServerConnection.An
 
 export function createAppearanceSettingsController() {
   const settings = useSettings()
+  const platform = usePlatform()
+  const language = useLanguage()
   const theme = useTheme()
   const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
@@ -89,6 +90,17 @@ export function createAppearanceSettingsController() {
       options: themes,
       current: createMemo(() => themes().find((option) => option.id === theme.themeId())),
       select: (option: { id: string } | null) => option && theme.setTheme(option.id),
+    },
+    zoom: {
+      available: () => platform.zoomLevel !== undefined,
+      options: [...desktopZoomLevels],
+      current: () => platform.zoomLevel?.() ?? 1,
+      label: (level: DesktopZoomLevel) => new Intl.NumberFormat(language.intl(), { style: "percent" }).format(level),
+      select: (level: DesktopZoomLevel) => void platform.setZoomLevel?.(level),
+    },
+    reduceMotion: {
+      current: settings.appearance.reduceMotion,
+      select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
     fonts: {
       ui: createMemo(() => ({

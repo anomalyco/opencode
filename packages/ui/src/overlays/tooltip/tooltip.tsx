@@ -77,8 +77,12 @@ export function Tooltip(props: TooltipProps) {
   }
 
   const leave = () => {
-    if (!inside()) close()
-    drop()
+    // Kobalte's own pointerleave handler runs after this one and only starts the
+    // skip-delay window for neighbouring tooltips if it still sees this one open.
+    queueMicrotask(() => {
+      if (!inside()) close()
+      drop()
+    })
   }
 
   createEffect(() => {

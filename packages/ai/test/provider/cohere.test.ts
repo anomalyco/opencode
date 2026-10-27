@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/index.js"
+import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -130,6 +130,30 @@ it.effect("Cohere rejects incomplete streams", () =>
       LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
     ).pipe(Effect.provide(fixedResponse(sseEvents({ type: "message-start" }))), Effect.flip)
     expect(error.message).toContain("without message-end")
+  }),
+)
+
+it.effect("Cohere ignores unknown stream events but rejects malformed known ones", () =>
+  Effect.gen(function* () {
+    const generate = (...events: ReadonlyArray<unknown>) =>
+      LLMClient.generate(LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" })).pipe(
+        Effect.provide(fixedResponse(sseEvents(...events))),
+      )
+    const response = yield* generate(
+      { type: "message-start" },
+      { type: "debug", detail: "new event type" },
+      { type: "content-delta", index: 0, delta: { message: { content: { text: "OK" } } } },
+      { type: "content-end", index: 0 },
+      { type: "message-end", delta: { finish_reason: "COMPLETE" } },
+    )
+    expect(response.text).toBe("OK")
+
+    const error = yield* generate(
+      { type: "message-start" },
+      { type: "content-delta", delta: { message: { content: { text: "OK" } } } },
+      { type: "message-end", delta: { finish_reason: "COMPLETE" } },
+    ).pipe(Effect.flip)
+    expect(error.reason._tag).toBe("InvalidProviderOutput")
   }),
 )
 

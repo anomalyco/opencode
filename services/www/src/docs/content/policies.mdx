@@ -1,10 +1,10 @@
 ---
 title: "Policies"
-description: "Allow or deny OpenCode actions on named resources, with organization policy taking final authority."
+description: "Allow or deny OpenCode actions on named resources, with managed and organization policy outranking user and project configuration."
 ---
 
 Policies decide whether OpenCode may perform an action on a named resource. They are
-authored under `experimental.policies` and can also be delivered by a connected
+authored under `policies` and can also be delivered by a connected
 [OpenCode Console](/console) workspace.
 
 Policies are separate from [permissions](/permissions). Permissions are per-agent tool
@@ -18,24 +18,33 @@ Deny one provider everywhere by adding a statement to `opencode.jsonc`:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
-  },
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
 }
 ```
 
 A denied provider disappears from the catalog and model selection even when it has
 valid credentials.
 
+Earlier releases read policies from `experimental.policies`. That key still works and
+merges into `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
 ## Statements
 
 Each statement has three fields:
 
-| Field      | Values                       | Meaning                                              |
-| ---------- | ---------------------------- | ---------------------------------------------------- |
-| `action`   | `provider.use`, `permission` | The operation being controlled                       |
-| `resource` | string or wildcard pattern   | What the statement applies to; depends on the action |
-| `effect`   | `allow`, `deny`              | The decision when this statement matches             |
+| Field      | Values                                        | Meaning                                              |
+| ---------- | --------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | The operation being controlled                       |
+| `resource` | string or wildcard pattern                    | What the statement applies to; depends on the action |
+| `effect`   | `allow`, `deny`                               | The decision when this statement matches             |
 
 Statements that fail validation are dropped with a warning in the server log and
 the rest of the list still applies. Check the log after editing a `deny`.
@@ -47,9 +56,7 @@ more characters and `?` matches one.
 
 ```jsonc
 {
-  "experimental": {
-    "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
-  },
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
 }
 ```
 
@@ -64,12 +71,10 @@ action is allowed.
 
 ```jsonc
 {
-  "experimental": {
-    "policies": [
-      { "action": "provider.use", "resource": "*", "effect": "deny" },
-      { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
-    ],
-  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
 }
 ```
 
@@ -89,12 +94,10 @@ provider ID: `anthropic`, `openai`, `opencode`, or a custom ID from
       "settings": { "baseURL": "https://ai.company.example/v1" },
     },
   },
-  "experimental": {
-    "policies": [
-      { "action": "provider.use", "resource": "*", "effect": "deny" },
-      { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
-    ],
-  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
 }
 ```
 
@@ -106,20 +109,18 @@ Use `provider.use` instead of the V1 `enabled_providers` and `disabled_providers
 lists. V1 files still load; see
 [Migrate from V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
 
-## Permissions
+## Tools
 
-`permission` statements hard-deny a [permission](/permissions) check. The resource is
+`tool.use` statements hard-deny a [permission](/permissions) check. The resource is
 `<action>:<value>`, matched against every resource the tool checks.
 
 ```jsonc
 {
-  "experimental": {
-    "policies": [
-      { "action": "permission", "resource": "shell:git push *", "effect": "deny" },
-      { "action": "permission", "resource": "edit:*.env", "effect": "deny" },
-      { "action": "permission", "resource": "webfetch:*", "effect": "deny" },
-    ],
-  },
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
 }
 ```
 
@@ -136,49 +137,70 @@ applies after agent rules and saved approvals, so it overrides an `ask` and an
 | `github_delete_repository:*` | One MCP tool                                |
 | `*`                          | Everything not already denied               |
 
-A `permission` statement with `allow` never grants access. It only lifts an earlier
+A `tool.use` statement with `allow` never grants access. It only lifts an earlier
 broader `deny`, after which the agent's own rules decide.
 
 ```jsonc
 {
-  "experimental": {
-    "policies": [
-      { "action": "permission", "resource": "shell:*", "effect": "deny" },
-      { "action": "permission", "resource": "shell:git status *", "effect": "allow" },
-    ],
-  },
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
 }
 ```
 
 `git status` falls back to the agent's `shell` rule; every other command is blocked.
 
+## Integrations
+
+`integration.use` controls whether an MCP server, skill, or plugin is loaded. The
+resource is the integration kind and its ID:
+
+| Resource          | Applies to                                                        |
+| ----------------- | ----------------------------------------------------------------- |
+| `mcp:<server>`    | An [MCP server](/mcp-servers) by its configured name              |
+| `skill:<id>`      | A [skill](/skills) by its ID                                      |
+| `plugin:<target>` | A [plugin](/plugins) by unversioned package name or absolute path |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+A denied MCP server or skill is removed, and a denied plugin is not loaded, however
+it was configured.
+
 ## Precedence
 
 Ordinary settings let the nearest configuration win. Policies reverse that: statements
-from broader configuration are evaluated later, so they override narrower ones.
+from broader configuration are evaluated later, so they override narrower ones. Managed
+configuration and the connected Console always outrank user and project files.
 
-| Authority   | Source                                                          |
-| ----------- | --------------------------------------------------------------- |
-| 1 (highest) | Connected OpenCode Console workspace                            |
-| 2           | Global `~/.config/opencode/opencode.json(c)`                    |
-| 3           | Direct `opencode.json(c)`; outer directories beat inner ones    |
-| 4 (lowest)  | `.opencode/opencode.json(c)`; outer directories beat inner ones |
+| Authority   | Source                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (highest) | macOS managed preferences (`/Library/Managed Preferences/ai.opencode.managed.plist`)                           |
+| 2           | System `opencode.json(c)` (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 3           | Connected OpenCode Console workspace                                                                           |
+| 4           | Global `~/.config/opencode/opencode.json(c)`                                                                   |
+| 5           | Direct `opencode.json(c)`; outer directories beat inner ones                                                   |
+| 6 (lowest)  | `.opencode/opencode.json(c)`; outer directories beat inner ones                                                |
 
 A repository cannot re-enable a provider you deny globally:
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "experimental": {
-    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
-  },
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
 }
 ```
 
 ```jsonc title="project/opencode.jsonc"
 {
-  "experimental": {
-    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
-  },
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
 }
 ```
 
@@ -187,10 +209,11 @@ A repository cannot re-enable a provider you deny globally:
 ## Console
 
 A workspace on the [OpenCode Console](/console) compiles its Providers and Tools
-policies into statements and returns them with the workspace configuration. OpenCode
-appends them after every authored statement, so they have the final say: an
-organization `deny` cannot be lifted by a repository or user `allow`, and an
-organization `allow` lifts a lower-authority `deny`.
+policies into regular `policies` statements in the workspace configuration. OpenCode
+merges that configuration like a configuration file that ranks right below managed
+preferences and the system file, so an organization `deny` cannot be lifted by a
+repository or user `allow`, and an organization `allow` lifts a lower-authority `deny`.
+Managed preferences and the system file still override the workspace.
 
 Denials from these statements name the workspace:
 

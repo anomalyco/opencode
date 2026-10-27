@@ -117,7 +117,12 @@ export const make = (
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
     const response = yield* executor.execute(
-      ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
+      ProviderShared.jsonPost({
+        url: parts.url,
+        body: parts.bodyText,
+        headers: parts.headers,
+        encoding: request.http?.encoding,
+      }),
       options?.http,
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(

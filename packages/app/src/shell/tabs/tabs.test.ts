@@ -97,10 +97,15 @@ describe("tab migration", () => {
     expect(Schema.decodeUnknownSync(TabStorage.Infos)({ tab: { title: "Title", directory: "/project" } })).toEqual({
       tab: { title: "Title", directory: "/project" },
     })
-    const regions = Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(regions).toEqual({ tab: { dock: true, dockHeight: 300 } })
-    expect(Schema.encodeSync(TabStorage.Regions)(regions)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(() => Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { terminal: "yes" } })).toThrow()
+
+    // The removed terminal dock's fields decode away.
+    const regions = Schema.decodeUnknownSync(TabStorage.Regions)({
+      tab: { review: true, sessionWidth: 300, terminal: true, terminalHeight: 300 },
+    })
+
+    expect(regions).toEqual({ tab: { side: true, sessionWidth: 300 } })
+    expect(Schema.encodeSync(TabStorage.Regions)(regions)).toEqual({ tab: { review: true, sessionWidth: 300 } })
+    expect(() => Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { review: "yes" } })).toThrow()
   })
 })
 
@@ -170,14 +175,14 @@ describe("closed tab stack", () => {
   })
 
   test("caps the stack size", () => {
-    const stack = Array.from({ length: 30 }, (_, i) => i).reduce<ClosedTab[]>(
+    const stack = Array.from({ length: 105 }, (_, i) => i).reduce<ClosedTab[]>(
       (acc, i) => pushClosedTab(acc, sessionTab(`s${i}`), i),
       [],
     )
 
-    expect(stack).toHaveLength(25)
+    expect(stack).toHaveLength(100)
     expect(stack[0]?.tab.sessionId).toBe("s5")
-    expect(stack.at(-1)?.tab.sessionId).toBe("s29")
+    expect(stack.at(-1)?.tab.sessionId).toBe("s104")
   })
 
   test("keeps only the newest close record for a session", () => {

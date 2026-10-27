@@ -58,7 +58,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 }
 ```
 
-Здесь полный идентификатор `provider_id/model_id`. Например, если вы используете [OpenCode Zen](/docs/zen), вы должны использовать `opencode/gpt-5.1-codex` для кодекса GPT 5.1.
+Здесь полный идентификатор `provider_id/model_id`. Например, если вы используете [OpenCode Zen](https://opencode.ai/v2/docs/console/), вы должны использовать `opencode/gpt-6.1-sol` для GPT-6.1 Sol.
 
 Если вы настроили [пользовательский поставщик](/docs/providers#custom), `provider_id` — это ключ из части `provider` вашей конфигурации, а `model_id` — это ключ из `provider.models`.
 
@@ -74,7 +74,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -86,7 +86,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -100,7 +100,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 }
 ```
 
-Здесь мы настраиваем глобальные параметры для двух встроенных моделей: `gpt-5` при доступе через поставщика `openai` и `claude-sonnet-4-20250514` при доступе через поставщика `anthropic`.
+Здесь мы настраиваем глобальные параметры для двух встроенных моделей: `gpt-6.1-sol` при доступе через поставщика `openai` и `claude-sonnet-5-5` при доступе через поставщика `anthropic`.
 Названия встроенных поставщиков и моделей можно найти на сайте [Models.dev](https://models.dev).
 
 Вы также можете настроить эти параметры для любых используемых вами агентов. Конфигурация агента переопределяет любые глобальные параметры здесь. [Подробнее](/docs/agents/#additional).
@@ -113,7 +113,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -178,7 +178,7 @@ opencode поставляется с вариантами по умолчани�
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -212,7 +212,7 @@ opencode поставляется с вариантами по умолчани�
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

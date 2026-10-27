@@ -3,10 +3,12 @@ import type { OpenCode } from "./client.js"
 type Client = ReturnType<typeof OpenCode.make>
 
 export type { RpcApi, RpcCallOptions, RpcClient, RpcEventPayload } from "./rpc.js"
+export type { SelectedEvent, SubscribeOptions } from "../shared-events.js"
 
 export type AgentApi = Client["agent"]
 export type CommandApi = Client["command"]
 export type ConfigApi = Client["config"]
+export type CredentialApi = Client["credential"]
 export type EventApi = Client["event"]
 export type GenerateApi = Client["generate"]
 export type IntegrationApi = Client["integration"]

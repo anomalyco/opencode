@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 
 const gateway = VercelAIGateway.configure({

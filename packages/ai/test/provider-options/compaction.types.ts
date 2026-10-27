@@ -8,7 +8,7 @@ import {
   LLMRequest,
   Message,
   ProviderID,
-} from "../../src/index.js"
+} from "../../src/effect.js"
 import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers.js"
 
 const openai = OpenAI.configure({

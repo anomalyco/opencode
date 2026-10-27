@@ -122,11 +122,11 @@ test.each(["reconnecting", "disposed"] as const)("background reads respect %s ow
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const pending = Promise.withResolvers<Response>()
   const errors: unknown[] = []
-  const state = { requests: 0 }
+  const state = { requests: 0, status: "connected" as "connected" | "reconnecting" }
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: () => {
-      state.requests++
+      if (state.requests++ === 0) return Promise.resolve(Response.json({ location: { directory: "/project" }, data: [] }))
       return pending.promise
     },
   })
@@ -141,11 +141,13 @@ test.each(["reconnecting", "disposed"] as const)("background reads respect %s ow
           return () => listeners.delete(handler)
         },
       },
-      connection: { status: () => (mode === "reconnecting" ? "reconnecting" : "connected") },
+      connection: { status: () => state.status },
       onError: (error) => errors.push(error),
     }),
     dispose,
   }))
+  await setup.data.location.command.sync()
+  state.status = mode === "reconnecting" ? "reconnecting" : "connected"
   const event: OpenCodeEvent = {
     id: "evt_refresh_owner",
     type: "command.updated",
@@ -154,7 +156,7 @@ test.each(["reconnecting", "disposed"] as const)("background reads respect %s ow
   }
   listeners.forEach((listener) => listener({ name: event.type, details: event }))
   if (mode === "reconnecting") {
-    expect(state.requests).toBe(0)
+    expect(state.requests).toBe(1)
     setup.dispose()
     return
   }
@@ -162,7 +164,7 @@ test.each(["reconnecting", "disposed"] as const)("background reads respect %s ow
   setup.dispose()
   pending.reject(new TypeError("Failed to fetch"))
   await expect(joined).rejects.toThrow("Transport")
-  expect(state.requests).toBe(1)
+  expect(state.requests).toBe(2)
   expect(errors).toEqual([])
 })
 

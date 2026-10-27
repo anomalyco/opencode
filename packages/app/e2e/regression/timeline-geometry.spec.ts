@@ -3,8 +3,10 @@ import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import {
   assistantMessage,
+  historyMessages,
   partUpdated,
   renderedPartID,
+  session,
   sessionID,
   setupTimeline,
   shell,
@@ -12,6 +14,7 @@ import {
   toolPart,
   userMessage,
   userText,
+  validateTimelineMessages,
   waitForVisualSettle,
 } from "../utils/timeline"
 import {
@@ -459,12 +462,22 @@ for (const outline of [
 for (const failed of [false, true]) {
   test(`keeps a submitted prompt in place until Working shows${failed ? " after an error" : ""}`, async ({ page }) => {
     await setupTimeline(page, {
-      seedHistory: true,
-      messages: [
-        userMessage(),
-        ...(failed
-          ? [{ ...assistantMessage([]), error: { type: "provider.error", message: "Previous request failed" } }]
-          : []),
+      sessionMessages: [
+        ...validateTimelineMessages([
+          ...historyMessages(18),
+          userMessage(),
+          ...(failed
+            ? [{ ...assistantMessage([]), error: { type: "provider.error", message: "Previous request failed" } }]
+            : []),
+        ]),
+        // The previous execution ended at an idle marker, so the submitted prompt starts a turn instead of
+        // waiting as a steer behind that one.
+        {
+          id: "msg_1002_timeline_idle",
+          type: "idle",
+          outcome: failed ? "failed" : "succeeded",
+          time: { created: 1700000003000 },
+        },
       ],
     })
     const working = page.locator('[data-component="session-working"]')
@@ -494,7 +507,7 @@ for (const failed of [false, true]) {
 
     // Records the prompt row in every frame from submission until Working has shown.
     const observation = await page.evaluateHandle((text) => {
-      const frames: { prompt?: number; working: boolean }[] = []
+      const frames: { prompt: number | undefined; working: boolean }[] = []
       let frame = 0
 
       const sample = () => {
@@ -503,7 +516,7 @@ for (const failed of [false, true]) {
         )
 
         frames.push({
-          ...(prompt ? { prompt: prompt.getBoundingClientRect().y } : {}),
+          prompt: prompt?.getBoundingClientRect().y,
           working: !!document.querySelector('[data-component="session-working"]'),
         })
         frame = requestAnimationFrame(sample)
@@ -618,3 +631,126 @@ async function captureCardEdges(page: Page, card: Locator) {
     { source: `data:image/png;base64,${screenshot.toString("base64")}`, viewport, box },
   )
 }
+
+test("scrolls the timeline behind the composer region, fading at the card, and keeps its end above the region", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    sessionMessages: [
+      ...validateTimelineMessages(historyMessages(18)),
+      { id: "msg_9000_user", type: "user", text: "Split the work.", time: { created: 1 } },
+      {
+        id: "msg_9001_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_running_subagent",
+            name: "subagent",
+            state: {
+              status: "running",
+              input: { description: "Trace frame budget", agent: "explore" },
+              metadata: { sessionID: "ses_running_subagent" },
+            },
+            time: { created: 2 },
+          },
+          { type: "text", id: "prt_timeline_end", text: "The last answer ends above the composer region." },
+        ],
+        time: { created: 2 },
+      },
+    ],
+    sessions: [
+      session(),
+      session({ id: "ses_running_subagent", parentID: sessionID, title: "Trace frame budget", agent: "explore" }),
+    ],
+    sessionStatus: { [sessionID]: { type: "busy" }, ses_running_subagent: { type: "busy" } },
+  })
+  const dock = page.locator('[data-component="session-composer-dock"]')
+  const editor = page.locator('[data-component="composer"]').getByRole("textbox")
+  await expect(page.getByRole("button", { name: "1 subagent", exact: true })).toBeVisible()
+  await expect(page.locator('[data-component="session-background-hint-row"]')).toBeVisible()
+  await expect(page.getByText("The last answer ends above the composer region.", { exact: true })).toBeVisible()
+
+  const geometry = () =>
+    page.evaluate(() => {
+      const viewport = document.querySelector<HTMLElement>('[data-slot="session-timeline-scroll"] > *')!
+      const region = document.querySelector('[data-component="session-composer-dock"]')!
+      const dock = region.getBoundingClientRect()
+      const card = region.querySelector('[data-component="composer"]')!.getBoundingClientRect()
+      const pill = region.querySelector('[data-slot="session-activity-chip"]')!.getBoundingClientRect()
+      const hint = viewport.querySelector('[data-component="session-background-hint-row"]')!.getBoundingClientRect()
+      const parts = [...viewport.querySelectorAll("[data-timeline-part-id]")]
+      const last = parts.find((element) => element.textContent?.includes("The last answer ends"))!
+
+      return {
+        // The scroll area runs on behind the composer region to the panel's bottom edge.
+        behind: Math.round(viewport.getBoundingClientRect().bottom - dock.bottom),
+        inset: Math.round(viewport.querySelector<HTMLElement>("[data-timeline-inset]")!.offsetHeight - dock.height),
+        // Content fades out where the composer card starts.
+        fade: Math.round(
+          dock.bottom - card.top - parseFloat(getComputedStyle(viewport).getPropertyValue("--session-timeline-inset")),
+        ),
+        // The pill floats above the region out of flow, so it never changes the inset the timeline scrolls above.
+        floats: pill.bottom <= dock.top,
+        // It floats in the timeline's reserved tail, below the background hint and the last answer.
+        reserved: hint.bottom <= pill.top && last.getBoundingClientRect().bottom <= hint.top,
+        atEnd: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1,
+      }
+    })
+
+  const expected = { behind: 0, inset: 0, fade: 0, floats: true, reserved: true, atEnd: true }
+  await expect.poll(geometry).toEqual(expected)
+  const before = (await dock.boundingBox())!.height
+
+  await editor.click()
+  await page.keyboard.type("A draft")
+
+  for (const line of ["that grows", "the composer", "by several lines"]) {
+    await page.keyboard.press("Shift+Enter")
+    await page.keyboard.type(line)
+  }
+
+  await expect.poll(async () => (await dock.boundingBox())!.height).toBeGreaterThan(before + 40)
+  await expect.poll(geometry).toEqual(expected)
+})
+
+test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
+  page,
+}) => {
+  const prompt = (id: string, text: string, created: number) =>
+    userMessage([userText(text, { id: `prt_${id}_text` })], { id, created })
+
+  await setupTimeline(page, {
+    messages: [
+      prompt("msg_0001_run", "Group these prompts.", 1700000000000),
+      prompt("msg_0002_run", "Like the iOS app does.", 1700000001000),
+    ],
+  })
+
+  const row = (id: string) =>
+    page.locator(`[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${id}"]`)
+
+  const first = row("msg_0001_run")
+  const last = row("msg_0002_run")
+  const bubble = (row: Locator) => row.locator('[data-slot="user-message-text"]')
+  await expect(bubble(last)).toHaveText("Like the iOS app does.")
+
+  // Bubbles of a run sit 4px apart, as in the iOS app, and only the last carries the meta line.
+  await expect
+    .poll(async () => {
+      const above = (await bubble(first).boundingBox())!
+      const below = (await bubble(last).boundingBox())!
+
+      return Math.round(below.y - above.y - above.height)
+    })
+    .toBe(4)
+  await expect(first.locator('[data-slot="user-message-meta-tail"]')).toBeHidden()
+  await expect(last.locator('[data-slot="user-message-meta-tail"]')).toBeVisible()
+
+  // The first message keeps its own actions, shown beside its bubble on hover.
+  await bubble(first).hover()
+  await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
+  await expect(first.getByRole("button", { name: "Copy message" })).toHaveCount(1)
+})

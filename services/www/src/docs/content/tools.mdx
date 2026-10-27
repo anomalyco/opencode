@@ -101,9 +101,10 @@ Use patch to rename src/old.ts to src/new.ts and update its exported name.
 OpenCode exposes `patch` for supported GPT models; other models receive `edit`
 and `write` instead. Permission: `edit` with every affected path as a resource.
 
-Paths outside the active Location or its project worktree also require
-`external_directory` approval. See [Permissions](/permissions) for path
-normalization, rule order, and saved approvals. To make outside material
+Paths outside the active Location or its project worktree are also checked
+against `external_directory`, which is allowed by default. See
+[Permissions](/permissions) for path normalization, rule order, and saved
+approvals. To make outside material
 available by name, configure [References](/references).
 
 ## Commands
@@ -212,10 +213,12 @@ results without adding every intermediate value to the model context.
 Read package.json and README.md in parallel, then return their relevant setup details.
 ```
 
-The runtime has no direct filesystem access, imports, timers, or `fetch`; it can
-only call tools in its catalog. Permission `execute` with resource `*` controls
-whether Code Mode is available. Every nested tool still enforces its own
-permission.
+The runtime has no direct filesystem access, imports, or timers. It provides
+`fetch` for HTTP requests; everything else goes through tools in its catalog.
+Denying `execute` with resource `*` removes Code Mode and every tool reached only
+through it, including MCP tools from servers that do not set `codemode: false`.
+Nested built-in and MCP tools still enforce their own permissions, and plugin
+tools enforce the permissions they assert.
 
 ### Sessions
 
@@ -276,7 +279,9 @@ browser operations do not issue individual permission prompts.
 
 [MCP servers](/mcp-servers) add tools whose names and inputs come from each
 connected server. Their permission action is `<server>_<tool>` with resource
-`*`. They are not a fixed part of the built-in catalog.
+`*`. They are not a fixed part of the built-in catalog. By default, agents reach
+them through `execute` under the server's namespace; set `codemode: false` on a
+server to list its tools directly.
 
 [Skills](/skills) add task instructions rather than new executable tools.
 [Attachments](/attachments) put user-selected content into a prompt, while

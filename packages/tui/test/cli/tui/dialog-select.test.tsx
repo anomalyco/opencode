@@ -412,8 +412,9 @@ test("footer actions run when filtering leaves no selected row", async () => {
     await app.waitForFrame((frame) => frame.includes("No results found"))
 
     app.mockInput.pressKey("d", { ctrl: true })
-    app.mockInput.pressTab()
-    app.mockInput.pressEnter()
+    const frame = app.captureCharFrame().split("\n")
+    const row = frame.findIndex((line) => line.includes("new ctrl+a"))
+    await app.mockMouse.click(frame[row]!.indexOf("new ctrl+a") + 1, row)
 
     expect(global).toBe(1)
     expect(rows).toEqual([])
@@ -621,6 +622,25 @@ test("shows no-match and still closes after a flat filter goes empty", async () 
 
     select.app.mockInput.pressEscape()
     await select.app.waitForFrame((frame) => !frame.includes("Mutable options") && !frame.includes("No results found"))
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("dialog rows do not add renderer resize listeners", async () => {
+  await using tmp = await tmpdir()
+  const options = ["first", "second", "third"].map((value) => ({ title: value, value }))
+  const select = await mountSelect(tmp.path, options)
+
+  try {
+    const count = () =>
+      (select.app.renderer as unknown as { listenerCount(event: string): number }).listenerCount("resize")
+    const before = count()
+    // Mounting 30 rows must not add one resize listener per row (Node warns
+    // past 10 listeners on one emitter).
+    select.replaceOptions(Array.from({ length: 30 }, (_, index) => ({ title: `Item ${index}`, value: `item-${index}` })))
+    await select.app.waitForVisualIdle()
+    expect(count()).toBe(before)
   } finally {
     select.app.renderer.destroy()
   }

@@ -47,7 +47,6 @@ export const configure = (input: LanguageModelOptions = {}) => {
         compatibility: {
           maxTokensField: "max_tokens",
           reasoningField: "reasoning",
-          supportsStore: false,
           supportsPromptCacheKey: true,
         },
       }),

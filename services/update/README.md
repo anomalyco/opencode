@@ -108,7 +108,7 @@ has a single public deployment.
 
 ## Publishing
 
-The publish workflow also registers direct binary downloads with distribution
+The release workflow also registers direct binary downloads with distribution
 `opencode`, after uploading every file to the public files bucket:
 
 ```sh
@@ -120,14 +120,16 @@ curl 'https://opencode.ai/update/api/latest/desktop/opencode'
 `metadata.files` maps each filename to its direct
 `https://opencode.ai/files/bin/<version>/<filename>` URL, SHA-256 checksum, and
 byte size. Desktop records additionally contain `metadata.manifests`, with
-the CDN URLs and the original Electron update checksums. Existing `npm`,
+the CDN URLs and SHA-512 checksums computed from the final signed files. Existing `npm`,
 `github`, and `aur` distributions are published independently.
 
 GitHub Actions publishes artifacts through `POST https://opencode.ai/update/api/publish`
 using a short-lived OIDC token with audience `https://update.opencode.ai`. The original
 hostname and token audience remain supported. The Worker accepts only tokens signed by
-GitHub for repository ID `975734319`, owner ID `66570915`, and `.github/workflows/publish.yml`
-on configured publishing refs.
+GitHub for repository ID `975734319`, owner ID `66570915`, `.github/workflows/release.yml`
+and environment `release`. Pushes to `dev` may publish only to `dev`; only a
+`workflow_dispatch` on `dev` (a versioned release) may publish to `latest`, and `beta`
+publishes only to `beta`.
 
 Apply migrations and deploy from this directory:
 

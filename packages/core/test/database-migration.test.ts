@@ -21,6 +21,7 @@ import executionClaimsMigration from "@opencode/core/database/migration/20260811
 import sessionInboxMigration from "@opencode/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
+import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -187,7 +188,7 @@ describe("DatabaseMigration", () => {
         )
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_pending'`),
-        ).toEqual({ name: "session_pending" })
+        ).toBeUndefined()
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: migrations.length })
       }),
     )
@@ -211,6 +212,21 @@ describe("DatabaseMigration", () => {
           idle_outcome: null,
         })
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: 1 })
+      }),
+    )
+  })
+
+  test("drops the unused session_pending table and its indexes", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session_pending (id text PRIMARY KEY, session_id text NOT NULL)`)
+        yield* db.run(sql`CREATE INDEX session_pending_session_delivery_seq_idx ON session_pending (session_id)`)
+        yield* db.run(sql`INSERT INTO session_pending VALUES ('pending', 'session')`)
+
+        yield* DatabaseMigration.applyOnly(db, [dropSessionPendingMigration])
+
+        expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'session_pending%'`)).toEqual([])
       }),
     )
   })
