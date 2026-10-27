@@ -32,7 +32,7 @@ export function Footer() {
         </a>
       </div>
       <div data-slot="cell">
-        <a href={language.route("/docs")}>{i18n.t("footer.docs")}</a>
+        <a href="/v2/docs">{i18n.t("footer.docs")}</a>
       </div>
       <div data-slot="cell">
         <a href={language.route("/changelog")}>{i18n.t("footer.changelog")}</a>
