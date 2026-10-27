@@ -2,7 +2,7 @@ export * as ConfigProvider from "./provider.js"
 
 import { Schema } from "effect"
 import { Money } from "../money.js"
-import { Capabilities, Compatibility, Family, ID, Model, VariantID } from "../model.js"
+import { Capabilities, Compatibility, Family, ID, Model, Type, VariantID } from "../model.js"
 import { ProviderCompatibility } from "../model-compatibility.js"
 import { Provider } from "../provider.js"
 import { optional } from "../schema.js"
@@ -74,6 +74,7 @@ export type Reasoning = typeof Reasoning.Type
 
 class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   modelID: ID.pipe(optional),
+  type: Type.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String.pipe(optional),
   releaseDate: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}(-\d{2})?$/u))

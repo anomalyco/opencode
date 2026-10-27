@@ -1,10 +1,11 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { Ripgrep } from "@opencode/core/ripgrep"
+import { RipgrepBinary } from "@opencode/core/ripgrep/binary"
 import { RelativePath } from "@opencode/core/schema"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -185,4 +186,19 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+})
+
+describe("RipgrepBinary.verify", () => {
+  const bytes = new TextEncoder().encode("ripgrep archive")
+  const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
+
+  test("accepts a download matching the pinned hash", () => {
+    expect(() => RipgrepBinary.verify(bytes, "ripgrep.tar.gz", hash)).not.toThrow()
+  })
+
+  test("refuses a download whose hash does not match", () => {
+    expect(() => RipgrepBinary.verify(bytes, "ripgrep.tar.gz", "0".repeat(64))).toThrow(
+      "ripgrep download ripgrep.tar.gz failed SHA-256 verification",
+    )
+  })
 })

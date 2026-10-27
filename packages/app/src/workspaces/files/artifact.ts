@@ -1,5 +1,5 @@
 import { artifactKind, artifactMime, type ArtifactKind } from "@opencode/util/artifact"
-import type { FileContent } from "@opencode/gui-extensions/sdk"
+import type { FileContent } from "@opencode/plugin/gui"
 
 /** Kinds whose raw bytes are kept so media elements and binary viewers can read them without a text round trip. */
 const binaryKinds = new Set<ArtifactKind>([

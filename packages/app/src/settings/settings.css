@@ -874,22 +874,6 @@
     display: none;
   }
 
-  .settings-search[data-expanded="false"] .settings-search-matches {
-    display: none;
-  }
-
-  .settings-search-matches {
-    position: absolute;
-    inset-block-start: calc(100% + 8px);
-    inset-inline: 0;
-    z-index: 12;
-    max-height: 45vh;
-    padding-block: 8px;
-    border-radius: 8px;
-    background: var(--v2-background-bg-base);
-    box-shadow: var(--v2-elevation-raised);
-  }
-
   .settings-screen > .settings > .settings-sidebar[data-searchable="false"] {
     display: none;
   }
@@ -2171,6 +2155,17 @@
 
 .settings-mcp-row[data-status="disabled"] .settings-extension-name {
   color: var(--v2-text-text-muted);
+}
+
+/* A quiet toggle under a plugin's error, its label lined up with the error text above it. */
+.settings-plugin-error-toggle[data-component="button-v2"][data-size="small"] {
+  height: 20px;
+  margin-inline-start: -5px;
+  padding-inline: 5px;
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 16px;
+  letter-spacing: 0.05px;
 }
 
 .settings-extension-lead {

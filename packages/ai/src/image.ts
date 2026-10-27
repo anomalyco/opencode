@@ -38,6 +38,7 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> extends Med
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
+      providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as ImageRoute,
     })
   }
@@ -98,7 +99,6 @@ export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
 export class ImageResponse extends Schema.Class<ImageResponse>("Image.Response")({
   images: Schema.Array(Media.AssetSchema),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   get image() {
@@ -122,7 +122,6 @@ export const ImageOutputEvent = Schema.Struct({
 export const ImageFinishEvent = Schema.Struct({
   type: Schema.tag("finish"),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Image.Event.Finish" })
 
@@ -152,7 +151,6 @@ const collectResponse = (events: ReadonlyArray<ImageEvent>): Effect.Effect<Image
     new ImageResponse({
       images: events.filter(ImageEvent.is.image).map((event) => event.image),
       usage: finish.usage,
-      notices: finish.notices,
       providerMetadata: finish.providerMetadata,
     }),
   )

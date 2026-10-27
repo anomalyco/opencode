@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import type { MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
+import type { MountedSession, SessionScreen } from "@opencode/plugin/gui"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -22,7 +22,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import { PluginSlot } from "@/runtime/plugin/render"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
@@ -231,7 +231,7 @@ export function SessionLocation(props: {
             <Show when={!props.compact && worktree()}>
               {(name) => (
                 <>
-                  <SessionHeaderSeparator glyph="slash" gap={0} before={0} after={0} />
+                  <SessionHeaderSeparator gap={0} before={0} after={0} />
                   <Icon
                     name="outline-worktree"
                     class="session-location-worktree-icon shrink-0 text-v2-icon-icon-muted"
@@ -266,7 +266,7 @@ export function SessionLocation(props: {
             <Show when={worktree() || git()}>
               <Show when={props.context} fallback={workspace()}>
                 {(context) => (
-                  <ExtensionSlot
+                  <PluginSlot
                     at="session.location.workspace"
                     fallback={workspace()}
                     input={{
@@ -316,7 +316,7 @@ export function SessionLocation(props: {
             </Show>
             <Show when={props.context}>
               {(context) => (
-                <ExtensionSlot
+                <PluginSlot
                   at="session.location.menu"
                   input={{
                     get session() {
@@ -377,7 +377,7 @@ export function SessionLocation(props: {
         </Menu.Portal>
       </Menu>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator glyph="slash" gap={8} before={6} after={4} />
+        <SessionHeaderSeparator gap={8} before={6} after={4} />
       </Show>
     </>
   )
@@ -444,14 +444,14 @@ export function SessionAncestorTrail(props: {
                 <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
-                <SessionHeaderSeparator before={0} after={0} />
+                <SessionHeaderSeparator gap={8} before={0} after={0} />
               </Show>
             </>
           )}
         </For>
       </div>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator before={0} />
+        <SessionHeaderSeparator gap={8} before={0} after={4} />
       </Show>
     </div>
   )

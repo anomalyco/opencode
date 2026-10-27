@@ -138,6 +138,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "appearance",
+    label: "settings.appearance.row.zoom.title",
+    target: "settings-zoom",
+    keywords: "scale size text font larger bigger accessibility",
+    available: "desktop",
+  },
+  {
+    tab: "appearance",
     label: "settings.appearance.row.reduceMotion.title",
     target: "settings-reduce-motion",
     keywords: "animation accessibility",
@@ -213,7 +220,12 @@ export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
+  {
+    tab: "extensions",
+    subtab: "plugins",
+    label: "settings.extensions.tab.plugins",
+    keywords: "extension gui built-in",
+  },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   {
     tab: "servers",

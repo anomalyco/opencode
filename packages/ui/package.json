@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -100,6 +100,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "pack": "bun run script/pack.ts",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
     "test": "bun test src --only-failures",

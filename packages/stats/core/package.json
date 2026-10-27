@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/stats-core",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",

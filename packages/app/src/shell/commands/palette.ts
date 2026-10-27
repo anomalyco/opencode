@@ -16,8 +16,8 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
-import { useExtensionHost } from "@/runtime/extension/host"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { usePluginHost } from "@/runtime/plugin/host"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
 import { createSettingsPaletteEntries } from "@/settings/palette"
 import type { SettingsSearchResult } from "@/settings/search-results"
@@ -44,7 +44,7 @@ export type CommandPaletteEntry = {
 
 const ENTRY_LIMIT = 5
 
-// The palette opens with these host commands. Featured extension commands list before the view toggles.
+// The palette opens with these host commands. Featured plugin commands list before the view toggles.
 const COMMON_COMMAND_IDS = ["session.new", "workspace.new", "session.previous", "session.next"] as const
 
 const COMMON_VIEW_COMMAND_IDS = ["review.toggle"] as const
@@ -71,11 +71,11 @@ export function createCommandPaletteFileEntry(path: string, category: string): C
 }
 
 export function createCommandPaletteFileOpener(onOpenFile?: (path: string) => void) {
-  const links = useExtensionHost().links
-  const extensions = useExtensionAttachment()
+  const links = usePluginHost().links
+  const attachment = usePluginAttachment()
 
   return (path: string) => {
-    links.open({ href: path, exact: true, background: true, session: extensions.current() })
+    links.open({ href: path, exact: true, background: true, session: attachment.current() })
     onOpenFile?.(path)
   }
 }
@@ -92,7 +92,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const serverSDK = useServerSDK()
   const serverCtx = global.ensureServerCtx(serverSDK.server)
   const appTabs = useTabs()
-  const extensions = useExtensionAttachment()
+  const attachment = usePluginAttachment()
   const openFile = createCommandPaletteFileOpener(props.onOpenFile)
   const settings = createSettingsPaletteEntries()
   const state: PaletteHighlight = { cleanup: undefined, committed: false }
@@ -129,8 +129,8 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   })
 
   const recentFileEntries = createMemo(() => {
-    const all = extensions.files.opened()
-    const active = extensions.files.active()
+    const all = attachment.files.opened()
+    const active = attachment.files.active()
     const order = active ? [active, ...all.filter((path) => path !== active)] : all
     const category = language.t("palette.group.files")
 

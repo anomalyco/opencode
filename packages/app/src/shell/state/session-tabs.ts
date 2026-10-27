@@ -24,7 +24,7 @@ const paneTabs = (tabs: SessionTabs, pane: SessionPane) => tabs.all.filter((tab)
 /**
  * Carries pane placement from `previous` into `next`, the strip and selection a tab operation just wrote. Kept tabs
  * keep their pane unless `next` places them. A new tab goes to `target` when given, else to the pane of the tab it
- * replaced in place (a preview), else to the pane of the last tab of its extension, else to the side pane. A pane
+ * replaced in place (a preview), else to the pane of the last tab of its plugin, else to the side pane. A pane
  * whose shown tab left shows that tab's nearest neighbour.
  */
 export function placeSessionTabs(previous: SessionTabs, next: SessionTabs, target?: SessionPane): SessionTabs {
@@ -38,8 +38,8 @@ export function placeSessionTabs(previous: SessionTabs, next: SessionTabs, targe
     const replaced = previous.all[index]
 
     if (replaced !== undefined && !next.all.includes(replaced)) return sessionTabPane(previous, replaced)
-    const extension = tab.slice(0, tab.indexOf(":") + 1)
-    const sibling = extension ? previous.all.findLast((item) => item.startsWith(extension)) : undefined
+    const plugin = tab.slice(0, tab.indexOf(":") + 1)
+    const sibling = plugin ? previous.all.findLast((item) => item.startsWith(plugin)) : undefined
 
     return sibling ? sessionTabPane(previous, sibling) : "side"
   }

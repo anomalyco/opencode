@@ -17,7 +17,7 @@ import {
   setPinchZoomEnabled,
   setTitlebar,
   setTrafficLightsPosition,
-  setZoomFactor,
+  setZoomLevel,
   updateTitlebar,
   windowAppearance,
   wireFocus,
@@ -63,7 +63,7 @@ export {
   setPinchZoomEnabled,
   setTitlebar,
   setTrafficLightsPosition,
-  setZoomFactor,
+  setZoomLevel,
   updateTitlebar,
 }
 

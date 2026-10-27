@@ -5,11 +5,11 @@ import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
-import { Extensions } from "./extension"
+import { Plugins } from "./plugin"
 import { DesktopFiles, openExternalURL } from "./files"
 import { appHandlers } from "./ipc-handlers/app"
 import { eventHandlers } from "./ipc-handlers/events"
-import { extensionHandlers } from "./ipc-handlers/extensions"
+import { pluginHandlers } from "./ipc-handlers/plugins"
 import { fileHandlers } from "./ipc-handlers/files"
 import { menuHandlers } from "./ipc-handlers/menu"
 import { storageHandlers } from "./ipc-handlers/storage"
@@ -21,7 +21,7 @@ import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
 import { getLastFocusedWindow } from "./windows"
 
-const services = Layer.mergeAll(DesktopFiles.layer, Extensions.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Plugins.layer)
 
 const handlers = Layer.mergeAll(
   appHandlers,
@@ -30,7 +30,7 @@ const handlers = Layer.mergeAll(
   windowHandlers,
   menuHandlers,
   eventHandlers,
-  extensionHandlers,
+  pluginHandlers,
 )
 
 export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(

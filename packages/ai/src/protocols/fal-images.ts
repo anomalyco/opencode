@@ -114,10 +114,8 @@ const decodeResult = Effect.fn("FalImages.decodeResult")(function* (
   context: MediaProtocol.PollContext<FalQueue.Token>,
 ) {
   const output = yield* decodeQueueResult(response)
-  const { images, seed, has_nsfw_concepts, ...rest } = output.value
+  const { images, seed, ...rest } = output.value
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
-  // With the safety checker on, flagged images come back blacked out rather than omitted.
-  const flagged = (has_nsfw_concepts ?? []).flatMap((value, index) => (value ? [index] : []))
   return new ImageResponse({
     images: images.map((image) => {
       const info = { width: image.width ?? undefined, height: image.height ?? undefined }
@@ -127,13 +125,6 @@ const decodeResult = Effect.fn("FalImages.decodeResult")(function* (
         Media.url(image.url, { mediaType: image.content_type ?? undefined, info })
       )
     }),
-    notices:
-      flagged.length === 0
-        ? undefined
-        : flagged.map((index) => ({
-            type: "moderated" as const,
-            message: `${route.name} flagged image ${index} as NSFW`,
-          })),
     providerMetadata: { fal: { requestId: context.token.requestID, seed: seed ?? undefined, ...rest } },
   })
 })

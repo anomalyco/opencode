@@ -131,6 +131,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         ),
         http,
         body: prepared.framing.body,
+        raw: prepared.framing.raw,
       }
     }),
 })

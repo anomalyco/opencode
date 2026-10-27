@@ -169,6 +169,48 @@ describe("Image", () => {
     }),
   )
 
+  describe("OpenAI-style url results", () => {
+    const generate = (data: unknown) =>
+      Image.generate({
+        model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("dall-e-3"),
+        prompt: "A lighthouse",
+      }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { data })))))
+
+    it.effect("keeps an http url as a URL asset", () =>
+      Effect.gen(function* () {
+        const response = yield* generate([{ url: "https://cdn.image.test/result.png" }])
+        expect(response.image.source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
+      }),
+    )
+
+    it.effect("decodes a data url inline with its media type", () =>
+      Effect.gen(function* () {
+        const response = yield* generate([{ url: "data:image/png;base64,iVBORw==" }])
+        expect(response.image.source).toEqual({ type: "base64", data: "iVBORw==", mediaType: "image/png" })
+        expect(response.image.mediaType).toBe("image/png")
+      }),
+    )
+
+    it.effect("prefers b64_json when url is null", () =>
+      Effect.gen(function* () {
+        const response = yield* generate([{ b64_json: "/9j/4AAQ", url: null }])
+        expect(response.image.source).toEqual({
+          type: "bytes",
+          data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+          mediaType: "image/jpeg",
+        })
+      }),
+    )
+
+    it.effect("rejects an item with neither b64_json nor url", () =>
+      Effect.gen(function* () {
+        const error = yield* generate([{}]).pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidProviderOutput")
+        expect(error.message).toContain("has neither image data nor a URL")
+      }),
+    )
+  })
+
   it.effect("classifies an OpenAI stream moderation error event as a content policy rejection", () =>
     Effect.gen(function* () {
       const error = yield* Image.stream({
@@ -231,7 +273,7 @@ describe("Image", () => {
     ),
   )
 
-  it.effect("lowers aspect to the nearest OpenAI size and reports the substitution", () =>
+  it.effect("lowers aspect to the nearest OpenAI size", () =>
     Effect.gen(function* () {
       const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
       const response = yield* Image.generate({
@@ -239,9 +281,6 @@ describe("Image", () => {
         prompt: "A lighthouse",
         aspect: "16:9",
       })
-      expect(response.notices).toEqual([
-        { type: "other", message: "OpenAI Images doesn't offer 16:9; used 1536x1024 (3:2)" },
-      ])
       const conflict = yield* Image.generate({
         model: openai.image("gpt-image-2"),
         prompt: "A lighthouse",
@@ -268,7 +307,6 @@ describe("Image", () => {
         prompt: "A lighthouse",
         aspect: "16:9",
       })
-      expect(response.notices).toBeUndefined()
     }).pipe(
       Effect.provide(
         layer((input) => {
@@ -737,7 +775,7 @@ describe("Image", () => {
     ),
   )
 
-  it.effect("surfaces filtered Google candidates as notices next to the returned image", () =>
+  it.effect("returns the image next to filtered Google candidates", () =>
     Image.generate({
       model: Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).image(
         "gemini-3.1-flash-image",
@@ -747,25 +785,7 @@ describe("Image", () => {
       Effect.tap((response) =>
         Effect.sync(() => {
           expect(response.images).toHaveLength(1)
-          expect(response.notices).toEqual([
-            {
-              type: "filtered",
-              message: "Google Images reported prompt feedback",
-              providerMetadata: { google: { promptFeedback: { blockReason: "OTHER" } } },
-            },
-            {
-              type: "filtered",
-              message: "Google Images candidate 1 finished with IMAGE_SAFETY: Blocked.",
-              providerMetadata: {
-                google: {
-                  candidateIndex: 1,
-                  finishReason: "IMAGE_SAFETY",
-                  finishMessage: "Blocked.",
-                  safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
-                },
-              },
-            },
-          ])
+          expect(response.providerMetadata?.google).toMatchObject({ promptFeedback: { blockReason: "OTHER" } })
         }),
       ),
       Effect.provide(
@@ -800,7 +820,7 @@ describe("Image", () => {
     ),
   )
 
-  it.effect("includes Google diagnostics when no final image is returned", () =>
+  it.effect("reports a Google safety stop as a content policy refusal, with its diagnostics", () =>
     Image.generate({
       model: Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).image(
         "gemini-3.1-flash-image",
@@ -810,8 +830,8 @@ describe("Image", () => {
       Effect.flip,
       Effect.tap((error) =>
         Effect.sync(() => {
-          expect(error.reason._tag).toBe("InvalidProviderOutput")
-          if (error.reason._tag !== "InvalidProviderOutput") return
+          expect(error.reason._tag).toBe("ContentPolicy")
+          if (error.reason._tag !== "ContentPolicy") return
           expect(error.message).toContain("finish reasons: IMAGE_SAFETY")
           expect(JSON.parse(error.reason.body ?? "")).toEqual({
             promptFeedback: { blockReason: "SAFETY" },

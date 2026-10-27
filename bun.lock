@@ -34,7 +34,7 @@
     },
     "packages/ai": {
       "name": "@opencode/ai",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@aws-sdk/credential-providers": "3.1057.0",
         "@opencode/schema": "workspace:*",
@@ -56,7 +56,7 @@
     },
     "packages/app": {
       "name": "@opencode/app",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@corvu/drawer": "catalog:",
         "@dnd-kit/abstract": "0.5.0",
@@ -65,7 +65,8 @@
         "@ibm/plex": "6.4.1",
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
-        "@opencode/gui-extensions": "workspace:*",
+        "@opencode/gui-plugins": "workspace:*",
+        "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
         "@opencode/ui": "workspace:*",
@@ -110,7 +111,7 @@
     },
     "packages/cli": {
       "name": "@opencode/cli",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "bin": {
         "opencode": "./bin/opencode.cjs",
         "opencode2": "./bin/opencode2.cjs",
@@ -177,7 +178,7 @@
     },
     "packages/client": {
       "name": "@opencode/client",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/protocol": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -203,7 +204,7 @@
     },
     "packages/codemode": {
       "name": "@opencode/codemode",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "acorn": "8.15.0",
         "effect": "catalog:",
@@ -216,7 +217,7 @@
     },
     "packages/console/app": {
       "name": "@opencode/console-app",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -256,7 +257,7 @@
     },
     "packages/core": {
       "name": "@opencode/core",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@ai-sdk/cohere": "3.0.27",
         "@ai-sdk/perplexity": "3.0.26",
@@ -322,7 +323,7 @@
     },
     "packages/desktop": {
       "name": "@opencode/desktop",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "electron-context-menu": "5.0.0",
@@ -336,11 +337,11 @@
         "@lydell/node-pty": "catalog:",
         "@opencode/app": "workspace:*",
         "@opencode/client": "workspace:*",
-        "@opencode/gui-extensions": "workspace:*",
+        "@opencode/gui-plugins": "workspace:*",
+        "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@sentry/solid": "catalog:",
-        "@sentry/vite-plugin": "catalog:",
         "@solidjs/router": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -369,7 +370,7 @@
     },
     "packages/function": {
       "name": "@opencode/function",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -383,9 +384,9 @@
         "typescript": "catalog:",
       },
     },
-    "packages/gui-extensions": {
-      "name": "@opencode/gui-extensions",
-      "version": "2.1.4",
+    "packages/gui-plugins": {
+      "name": "@opencode/gui-plugins",
+      "version": "2.2.0",
       "dependencies": {
         "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
@@ -397,6 +398,7 @@
         "@effect/platform-node": "catalog:",
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
+        "@opencode/plugin": "workspace:*",
         "@opencode/plugin-browser": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
@@ -433,7 +435,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode/http-recorder",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@effect/platform-node-shared": "catalog:",
       },
@@ -452,7 +454,7 @@
     },
     "packages/httpapi-codegen": {
       "name": "@opencode/httpapi-codegen",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "effect": "catalog:",
         "prettier": "3.6.2",
@@ -465,7 +467,7 @@
     },
     "packages/latex": {
       "name": "@opencode/latex",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -479,7 +481,7 @@
     },
     "packages/merman": {
       "name": "@opencode/merman",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -494,7 +496,7 @@
     },
     "packages/patchmark": {
       "name": "@opencode/patchmark",
-      "version": "2.0.32",
+      "version": "2.2.0",
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
@@ -507,7 +509,7 @@
     },
     "packages/plugin": {
       "name": "@opencode/plugin",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@ai-sdk/provider": "3.0.8",
         "@opencode/ai": "workspace:*",
@@ -526,25 +528,34 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native": "catalog:",
+        "electron": "44.9.1",
         "solid-js": "catalog:",
         "typescript": "catalog:",
+        "vite": "catalog:",
+        "vite-plugin-solid": "catalog:",
       },
       "peerDependencies": {
         "@opencode/theme": "workspace:*",
-        "@opentui/core": ">=0.6.8",
-        "@opentui/solid": ">=0.6.8",
+        "@opentui/core": "0.7.0",
+        "@opentui/solid": "0.7.0",
+        "electron": "*",
         "solid-js": ">=1.9.0",
+        "vite": ">=6",
+        "vite-plugin-solid": ">=2.11",
       },
       "optionalPeers": [
         "@opencode/theme",
         "@opentui/core",
         "@opentui/solid",
+        "electron",
         "solid-js",
+        "vite",
+        "vite-plugin-solid",
       ],
     },
     "packages/plugin-browser": {
       "name": "@opencode/plugin-browser",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -559,7 +570,7 @@
     },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "gray-matter": "4.0.3",
       },
@@ -589,7 +600,7 @@
     },
     "packages/protocol": {
       "name": "@opencode/protocol",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/schema": "workspace:*",
         "effect": "catalog:",
@@ -604,7 +615,7 @@
     },
     "packages/schema": {
       "name": "@opencode/schema",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@standard-schema/spec": "catalog:",
         "effect": "catalog:",
@@ -628,7 +639,7 @@
     },
     "packages/sdk": {
       "name": "@opencode/sdk",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -649,7 +660,7 @@
     },
     "packages/server": {
       "name": "@opencode/server",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
@@ -672,7 +683,7 @@
     },
     "packages/session-ui": {
       "name": "@opencode/session-ui",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@kitlangton/solid-motion": "0.2.2",
         "@kobalte/core": "catalog:",
@@ -705,7 +716,7 @@
     },
     "packages/simulation": {
       "name": "@opencode/simulation",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/ai": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -725,7 +736,7 @@
     },
     "packages/stats/app": {
       "name": "@opencode/stats-app",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@ibm/plex": "6.4.1",
         "@kobalte/core": "catalog:",
@@ -752,7 +763,7 @@
     },
     "packages/stats/core": {
       "name": "@opencode/stats-core",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@planetscale/database": "1.19.0",
         "drizzle-orm": "catalog:",
@@ -770,7 +781,7 @@
     },
     "packages/stats/server": {
       "name": "@opencode/stats-server",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@opencode/stats-core": "workspace:*",
@@ -805,7 +816,7 @@
     },
     "packages/theme": {
       "name": "@opencode/theme",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opentui/core": "catalog:",
         "effect": "catalog:",
@@ -819,7 +830,7 @@
     },
     "packages/tui": {
       "name": "@opencode/tui",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -851,7 +862,7 @@
     },
     "packages/ui": {
       "name": "@opencode/ui",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@kitlangton/solid-motion": "0.2.2",
         "@kobalte/core": "catalog:",
@@ -886,7 +897,7 @@
     },
     "packages/util": {
       "name": "@opencode/util",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -925,7 +936,7 @@
     },
     "packages/web": {
       "name": "@opencode/web",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -979,7 +990,7 @@
     },
     "services/update": {
       "name": "@opencode/update",
-      "version": "2.1.4",
+      "version": "2.2.0",
       "dependencies": {
         "jose": "6.0.11",
         "semver": "catalog:",
@@ -1033,9 +1044,9 @@
   },
   "overrides": {
     "@effect/platform-node-shared": "catalog:",
-    "@opentui/core": "catalog:",
-    "@opentui/keymap": "catalog:",
-    "@opentui/solid": "catalog:",
+    "@opentui/core": "0.7.0",
+    "@opentui/keymap": "0.7.0",
+    "@opentui/solid": "0.7.0",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "bun-types": "1.4.4",
@@ -1056,9 +1067,9 @@
     "@lydell/node-pty": "1.2.0-beta.12",
     "@npmcli/arborist": "9.4.0",
     "@octokit/rest": "22.0.0",
-    "@opentui/core": "0.6.8",
-    "@opentui/keymap": "0.6.8",
-    "@opentui/solid": "0.6.8",
+    "@opentui/core": "0.7.0",
+    "@opentui/keymap": "0.7.0",
+    "@opentui/solid": "0.7.0",
     "@pierre/diffs": "1.6.1",
     "@pierre/highlights": "0.2.0",
     "@playwright/test": "1.60.0",
@@ -2001,7 +2012,7 @@
 
     "@opencode/function": ["@opencode/function@workspace:packages/function"],
 
-    "@opencode/gui-extensions": ["@opencode/gui-extensions@workspace:packages/gui-extensions"],
+    "@opencode/gui-plugins": ["@opencode/gui-plugins@workspace:packages/gui-plugins"],
 
     "@opencode/http-recorder": ["@opencode/http-recorder@workspace:packages/http-recorder"],
 
@@ -2087,27 +2098,27 @@
 
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.43.0", "", {}, "sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg=="],
 
-    "@opentui/core": ["@opentui/core@0.6.8", "", { "dependencies": { "bun-ffi-structs": "0.3.1", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.6.8", "@opentui/core-darwin-x64": "0.6.8", "@opentui/core-linux-arm64": "0.6.8", "@opentui/core-linux-arm64-musl": "0.6.8", "@opentui/core-linux-x64": "0.6.8", "@opentui/core-linux-x64-musl": "0.6.8", "@opentui/core-win32-arm64": "0.6.8", "@opentui/core-win32-x64": "0.6.8" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-wjqLwLdYGy/6qEBTtZEifuwwVzt06o0BqBF02xJ46whGEUK/gy+h25+1GK4dE9LFnHphgsqeA31f7PHBJPp91w=="],
+    "@opentui/core": ["@opentui/core@0.7.0", "", { "dependencies": { "bun-ffi-structs": "0.3.1", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.7.0", "@opentui/core-darwin-x64": "0.7.0", "@opentui/core-linux-arm64": "0.7.0", "@opentui/core-linux-arm64-musl": "0.7.0", "@opentui/core-linux-x64": "0.7.0", "@opentui/core-linux-x64-musl": "0.7.0", "@opentui/core-win32-arm64": "0.7.0", "@opentui/core-win32-x64": "0.7.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-2iWBw9oo+ZJfPbOWeTLXfDV63yTDRfclxltI4IgTa6n7OB90x5xplLMH3y9DXhnWibzTui00GbK3ZCwKfUU1SQ=="],
 
-    "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.6.8", "", { "os": "darwin", "cpu": "arm64" }, "sha512-kmu5Rp5qC3StrGAzLvBu6SLEXd2Qq60Yf0YCmL7BmDgYt0QUZ4M2JsSS7BFg7crpk+4Yz17N1ZeOCPumE4s83w=="],
+    "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.7.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-meEyZVUeCIauqHLWo/IsSlKzZPTnGIEjRLigefSZbrSAcOiMryd3OcUWvSByIXpYb9UPOpW0YxKKfVwepb9u2A=="],
 
-    "@opentui/core-darwin-x64": ["@opentui/core-darwin-x64@0.6.8", "", { "os": "darwin", "cpu": "x64" }, "sha512-eGJcssaONQ32+xYOTRCdGGXnsMJJJLn6mHYt0W79Lck8zlMuel5dWWlCbxdM3qvX/IEHr+f56bGoojTvJjDw6w=="],
+    "@opentui/core-darwin-x64": ["@opentui/core-darwin-x64@0.7.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-hZQ4OfAua5CtUv3hpZ81zhNTTLULbg0leQ/3eupjefityGP6163eS56IzymTWuiM/mVD/7Ad5bicH0I2JXhr1g=="],
 
-    "@opentui/core-linux-arm64": ["@opentui/core-linux-arm64@0.6.8", "", { "os": "linux", "cpu": "arm64" }, "sha512-ji2LPeEX4RU6RKC0/l70hZWmqD0AvvMvnd3WvpZUNOeaIBFseSzE0QEl3apRPUqAoYiuL7uRgwSV4eewa+xXpg=="],
+    "@opentui/core-linux-arm64": ["@opentui/core-linux-arm64@0.7.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-/u+Kalzkz8NntUW5zjypgt9fnzeKohLG9YMEas7n98KvyaYScrtO4Mdj5iv/STNB3IfocJOChzYAbO6C8TmlPQ=="],
 
-    "@opentui/core-linux-arm64-musl": ["@opentui/core-linux-arm64-musl@0.6.8", "", { "os": "linux", "cpu": "arm64", "libc": "musl" }, "sha512-b+3TI8rtFBQa7T04F7XVt1I8/eL2+GX0X6x9WbDBnNmolgf1DX3ZdVPmKEP8PlxAmDYB+gek+cQAwnkwiYl5YQ=="],
+    "@opentui/core-linux-arm64-musl": ["@opentui/core-linux-arm64-musl@0.7.0", "", { "os": "linux", "cpu": "arm64", "libc": "musl" }, "sha512-BkTn+WLf9OPR4KhBnuOki+R/cgk2qwbL49eQn5fEYPeiJD4HPalGbEZDea59UjwNEJ7rqKq2yuPAXQjkDZ6y3w=="],
 
-    "@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.6.8", "", { "os": "linux", "cpu": "x64" }, "sha512-g8hOxXpff7hOnZNlJRKCqWJr/dwVK/EyEhNsgNK4jLS13BUoaYWXi878xLXJ5acC82qEyGlYWL/kR6ACkiD0YA=="],
+    "@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.7.0", "", { "os": "linux", "cpu": "x64" }, "sha512-OD2tGl1r27zcgCsuc+TYU5e+qhrbsRSI0YUBEb0ebQo8P6Ps2FL9LFenH9om4fddCh06G9Zd45ekJMhlDrGD3Q=="],
 
-    "@opentui/core-linux-x64-musl": ["@opentui/core-linux-x64-musl@0.6.8", "", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-eVQSjO5wXYiqunz/V92WweHvVTCV+LtZOnu0z6kYjwwbAvsnTxISOFAyA9H71Sy3tsibjiu1o+E27twDyM9HlA=="],
+    "@opentui/core-linux-x64-musl": ["@opentui/core-linux-x64-musl@0.7.0", "", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-HrJbcAIuayzQmWVzv+cjez37fNHL9FDoHmjwxAb4iK5GTjl89FZCxeKopyua14RA6WpP8/zUJQi8U16mm6XptA=="],
 
-    "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.6.8", "", { "os": "win32", "cpu": "arm64" }, "sha512-P4llQH8kFeiknVp0kfTydKaJC95BSW4mf3fub9HMgFx49eiF3qgcctbebZN+/WaD8Pshu0wiN1KPitqDTyrIDw=="],
+    "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.7.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-8yqBoRsDbvKl2kGX0O8t5kpnVEnbzs+2qUZlJ8sbeA3Z+73WFj36G+clUIMVxpspOu78iKXlD84NIwTxjZUPKw=="],
 
-    "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.6.8", "", { "os": "win32", "cpu": "x64" }, "sha512-6dZuSw883BDetY59G2QwWHJG1kwfPkL+lWhDQ3a6ICxW4/7nito3uPkMRaRDb8DiTHgx0wMt/RdiydjQmZd+lw=="],
+    "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.7.0", "", { "os": "win32", "cpu": "x64" }, "sha512-OfNAX7fNFHhOiiojUkIjhVOZf+IDjpbpT5G7HrxGqhlZ+n4jITrrJzACHctteWbMUYcibieJzIIoKuLdmD5I+w=="],
 
-    "@opentui/keymap": ["@opentui/keymap@0.6.8", "", { "dependencies": { "@opentui/core": "0.6.8" }, "peerDependencies": { "@opentui/react": "0.6.8", "@opentui/solid": "0.6.8", "react": ">=19.2.0", "solid-js": "1.9.12" }, "optionalPeers": ["@opentui/react", "@opentui/solid", "react", "solid-js"] }, "sha512-KGiX2EMoIcJ8jSGJ8Wp2iI1VNW3HNJEqfNayPHwda6ykE//cZmZrtczpCy+OyntZOf+6I8t3H717qo+NJZx7Wg=="],
+    "@opentui/keymap": ["@opentui/keymap@0.7.0", "", { "dependencies": { "@opentui/core": "0.7.0" }, "peerDependencies": { "@opentui/react": "0.7.0", "@opentui/solid": "0.7.0", "react": ">=19.2.0", "solid-js": "1.9.12" }, "optionalPeers": ["@opentui/react", "@opentui/solid", "react", "solid-js"] }, "sha512-2IqUnLP+SCZR7+LXRL/7/DGFyaAR6r9y16H5oQVdRTfbACxAjszOaq2iZDEzHp1HVtamQRqEfteuaLEDwmO3kg=="],
 
-    "@opentui/solid": ["@opentui/solid@0.6.8", "", { "dependencies": { "@babel/core": "7.29.7", "@babel/preset-typescript": "7.27.1", "@opentui/core": "0.6.8", "babel-plugin-module-resolver": "5.0.2", "babel-preset-solid": "1.9.12", "entities": "7.0.1", "s-js": "^0.4.9" }, "peerDependencies": { "solid-js": "1.9.12" } }, "sha512-GwLhMdGSRBX1Tlh/aUcbpDwIG/FI15y5xL2yMlNIO27q5yRTiZHeg6yvXv3HgM55ykRm9F8YBhiFcuc5M609FA=="],
+    "@opentui/solid": ["@opentui/solid@0.7.0", "", { "dependencies": { "@babel/core": "7.29.7", "@babel/preset-typescript": "7.27.1", "@opentui/core": "0.7.0", "babel-plugin-module-resolver": "5.0.2", "babel-preset-solid": "1.9.12", "entities": "7.0.1", "s-js": "^0.4.9" }, "peerDependencies": { "solid-js": "1.9.12" } }, "sha512-S6SNZGRykV02UjNbM+f/6lSeAPN3dfEbjcK1jAAdFCfa+EVhJqcJVyaJgtwHLU9fI6c/O1VKXPzbbFYj2RhNVQ=="],
 
     "@opentunnel/client": ["@opentunnel/client@0.6.1", "", { "dependencies": { "@opentunnel/protocol": "0.6.1" }, "peerDependencies": { "effect": "^4.0.0", "undici": ">=7.0.0" }, "optionalPeers": ["undici"] }, "sha512-OuVNlWywQebIXCtkixjVHebOsR3KFRxJ0DSZry6Dzj4hHaHIf3eTVmQ7VwLCjuVmw+ctU2qHIP6RxuAPr07WDw=="],
 
@@ -5365,7 +5376,11 @@
 
     "@opencode/console-app/wrangler": ["wrangler@4.50.0", "", { "dependencies": { "@cloudflare/kv-asset-handler": "0.4.0", "@cloudflare/unenv-preset": "2.7.11", "blake3-wasm": "2.1.5", "esbuild": "0.25.4", "miniflare": "4.20251118.1", "path-to-regexp": "6.3.0", "unenv": "2.0.0-rc.24", "workerd": "1.20251118.0" }, "optionalDependencies": { "fsevents": "~2.3.2" }, "peerDependencies": { "@cloudflare/workers-types": "^4.20251118.0" }, "optionalPeers": ["@cloudflare/workers-types"], "bin": { "wrangler": "bin/wrangler.js", "wrangler2": "bin/wrangler.js" } }, "sha512-+nuZuHZxDdKmAyXOSrHlciGshCoAPiy5dM+t6mEohWm7HpXvTHmWQGUf/na9jjWlWJHCJYOWzkA1P5HBJqrIEA=="],
 
-    "@opencode/gui-extensions/vite": ["vite@7.3.6", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg=="],
+    "@opencode/gui-plugins/vite": ["vite@7.3.6", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg=="],
+
+    "@opencode/plugin/vite": ["vite@7.3.6", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg=="],
+
+    "@opencode/plugin/vite-plugin-solid": ["vite-plugin-solid@2.11.10", "", { "dependencies": { "@babel/core": "^7.23.3", "@types/babel__core": "^7.20.4", "babel-preset-solid": "^1.8.4", "merge-anything": "^5.1.7", "solid-refresh": "^0.6.3", "vitefu": "^1.0.4" }, "peerDependencies": { "@testing-library/jest-dom": "^5.16.6 || ^5.17.0 || ^6.*", "solid-js": "^1.7.2", "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" }, "optionalPeers": ["@testing-library/jest-dom"] }, "sha512-Yr1dQybmtDtDAHkii6hXuc1oVH9CPcS/Zb2jN/P36qqcrkNnVPsMTzQ06jyzFPFjj3U1IYKMVt/9ZqcwGCEbjw=="],
 
     "@opencode/session-ui/vite": ["vite@7.3.6", "", { "dependencies": { "esbuild": "^0.27.0 || ^0.28.0", "fdir": "^6.5.0", "picomatch": "^4.0.3", "postcss": "^8.5.6", "rollup": "^4.43.0", "tinyglobby": "^0.2.15" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg=="],
 

@@ -37,7 +37,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
       key: ServerConnection.key(connection),
       name: servers.label(connection),
       hint: servers.hint(connection),
-      kind: servers.current(connection) ? "current" : connection.type === "extension" ? "extension" : "remote",
+      kind: servers.current(connection) ? "current" : connection.type === "plugin" ? "plugin" : "remote",
       label: connection.label,
     }
   }
@@ -45,7 +45,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
   // Servers that are down or still connecting contribute nothing.
   const ready = createMemo(() =>
     servers.list.filter((connection) => {
-      if (connection.type === "extension" && connection.state !== "ready") return false
+      if (connection.type === "plugin" && connection.state !== "ready") return false
 
       return global.servers.health[ServerConnection.key(connection)]?.healthy !== false
     }),

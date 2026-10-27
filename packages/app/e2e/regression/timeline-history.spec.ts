@@ -13,10 +13,70 @@ import {
   userMessage,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
+import { openSession } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block" })
 
 test.describe("timeline history", () => {
+  test("restoring a paged transcript waits for another upward scroll before loading history", async ({ page }) => {
+    const id = "ses_history_restore"
+    const other = "ses_history_other"
+    const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+    const messages = [
+      userMessage([textPart("prt_restore_0", "Original prompt")], { id: "msg_restore_0", created: 1 }),
+      assistantMessage([textPart("prt_restore_1", text)], { id: "msg_restore_1", created: 2 }),
+      userMessage([textPart("prt_restore_2", "Middle prompt")], { id: "msg_restore_2", created: 3 }),
+      assistantMessage([textPart("prt_restore_3", text)], { id: "msg_restore_3", created: 4 }),
+      userMessage([textPart("prt_restore_4", "Another prompt")], { id: "msg_restore_4", created: 5 }),
+      assistantMessage([textPart("prt_restore_5", text)], { id: "msg_restore_5", created: 6 }),
+      userMessage([textPart("prt_restore_6", "Latest prompt")], { id: "msg_restore_6", created: 7 }),
+      assistantMessage([textPart("prt_restore_7", text)], { id: "msg_restore_7", created: 8 }),
+    ]
+
+    const requests: (string | undefined)[] = []
+    await page.clock.install()
+    await openSession(page, {
+      name: "HistoryRestore",
+      sessions: [{ id }, { id: other, directory: "C:/OpenCode/HistoryOther" }],
+      pageMessages: (session, _limit, before) => {
+        if (session === other)
+          return { items: [userMessage([textPart("prt_other", "Other session")], { id: "msg_other" })] }
+        requests.push(before)
+
+        if (before === "oldest") return { items: messages.slice(0, 1) }
+
+        if (before === "older") return { items: messages.slice(1, -2), cursor: "oldest" }
+
+        return { items: messages.slice(-2), cursor: "older" }
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    // One upward gesture, without wheel momentum carrying across the page prepend.
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 0
+    })
+    await expect.poll(() => requests).toEqual([undefined, "older"])
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(200)
+
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(other)}"]`).click()
+    await expect(page.getByText("Other session", { exact: true })).toBeVisible()
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(id)}"]`).click()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    // Exhaust the delayed leading-turn enrichment without a real-time sleep.
+    await page.clock.runFor(1_000)
+    expect(requests).toEqual([undefined, "older"])
+
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 0
+    })
+    await expect(page.getByText("Original prompt", { exact: true })).toBeInViewport()
+    expect(requests).toEqual([undefined, "older", "oldest"])
+  })
+
   test("keeps visible rows fixed while an older page prepends", async ({ page }) => {
     const older = Promise.withResolvers<void>()
     const requests: { before?: string; phase: "start" | "end" }[] = []
@@ -149,6 +209,7 @@ test.describe("timeline history", () => {
       const roots: { sessionID: string; messageID: string }[] = []
       const sequence: string[] = []
       const messages = rootHistory()
+      // SAFETY: rootHistory ends each generated turn with an assistant message.
       const last = messages.at(-1) as SessionMessageAssistant
       await page.addInitScript(installVisibilityProbe)
 
@@ -199,8 +260,9 @@ test.describe("timeline history", () => {
       const completed = {
         ...last,
         time: { ...last.time, completed: last.time.created + 15_000 },
-        ...(scenario.error ? { error: scenario.error } : {}),
       }
+
+      if (scenario.error) completed.error = scenario.error
 
       const message = messageUpdated(completed)
       const idle = status("idle")
@@ -244,16 +306,16 @@ test.describe("timeline history", () => {
     })
   }
 
-  for (const shape of ["assistant-only", "mixed"] as const) {
-    test(`renders the ${shape} tail before parent hydration and preserves it afterward`, async ({ page }) => {
-      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${shape}` }
+  for (const composition of ["assistant-only", "mixed"] as const) {
+    test(`renders the ${composition} tail before parent hydration and preserves it afterward`, async ({ page }) => {
+      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${composition}` }
 
       // Compact's initial 40 and the next 20 begin with an assistant; page three supplies its parent.
       const messages = Array.from({ length: 61 }, (_, index): SessionMessageInfo => {
         const id = `msg_hydration_${index}`
         const time = { created: 1700000000000 + index * 1_000 }
 
-        if (index === 0 || (shape === "mixed" && index === 59))
+        if (index === 0 || (composition === "mixed" && index === 59))
           return { id, type: "user", time, text: `Prompt ${index}` }
 
         return {
@@ -324,7 +386,7 @@ test.describe("timeline history", () => {
         await expectReadyTail()
         await expect(orphan).toHaveAttribute("data-message-id", "msg_hydration_21")
 
-        if (shape === "mixed")
+        if (composition === "mixed")
           await expect(
             page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_hydration_59"]'),
           ).toBeInViewport()
@@ -490,6 +552,7 @@ function installVisibilityProbe() {
       .flatMap((part) => (part.dataset.timelinePartId ? [part.dataset.timelinePartId] : []))
   }
 
+  // SAFETY: arm populates parts with visible part IDs; settle supplies the optional final state.
   const state = {
     armed: false,
     hidden: false,

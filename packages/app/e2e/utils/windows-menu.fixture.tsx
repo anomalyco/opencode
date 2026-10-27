@@ -1,7 +1,7 @@
 import { MemoryRouter, createMemoryHistory } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
+import type { Bridge } from "@opencode/plugin/gui/host"
 import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 
@@ -21,7 +21,7 @@ export function mount(input: { server: string; path?: string }) {
       throw new Error("Unexpected fixture action")
     }
 
-    // No main-process extensions run in this fixture.
+    // No main-process plugins run in this fixture.
     const bridge: Bridge = {
       packaged: false,
       call: unused,
@@ -31,15 +31,12 @@ export function mount(input: { server: string; path?: string }) {
       capture: async () => undefined,
       runMenubarItem: () => undefined,
       configure: () => undefined,
+      pluginGuis: async () => ({ plugins: [], reserved: [] }),
       manager: {
         list: async () => [],
         enable: async () => undefined,
         disable: async () => undefined,
         reload: async () => undefined,
-        install: async () => undefined,
-        remove: async () => undefined,
-        source: async () => "",
-        asset: () => "",
       },
     }
 
@@ -51,7 +48,7 @@ export function mount(input: { server: string; path?: string }) {
       openDirectoryPickerDialog: async () => null,
       notify: async () => undefined,
       restart: unused,
-      extensions: bridge,
+      plugins: bridge,
       runDesktopMenuAction: (action) => setStore("actions", (actions) => [...actions, action]),
     }
 

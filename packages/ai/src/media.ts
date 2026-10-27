@@ -51,7 +51,7 @@ export const Source = Schema.Union([BytesSource, Base64Source, UrlSource, RefSou
 export type Source = Schema.Schema.Type<typeof Source>
 
 // ---------------------------------------------------------------------------
-// Kind, Info, Notice
+// Kind, Info
 // ---------------------------------------------------------------------------
 
 export type AspectRatio = `${number}:${number}`
@@ -83,14 +83,6 @@ export const Info = Schema.Struct({
   format: Schema.optional(Schema.String),
 }).annotate({ identifier: "Media.Info" })
 export type Info = Schema.Schema.Type<typeof Info>
-
-/** A provider-side partial result such as stripped audio or a moderated sample; never a silent drop. */
-export const Notice = Schema.Struct({
-  type: Schema.Literals(["moderated", "filtered", "other"]),
-  message: Schema.String,
-  providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "Media.Notice" })
-export type Notice = Schema.Schema.Type<typeof Notice>
 
 // ---------------------------------------------------------------------------
 // Asset

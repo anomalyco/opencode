@@ -1,21 +1,24 @@
 ---
-title: "CLI"
+title: "TUI"
+description: "Build the TUI part of an OpenCode plugin for the terminal UI using @opencode/plugin/tui."
 ---
 
-CLI plugins extend the terminal with commands, routes, slots, Markdown renderers, notifications, and local state.
+TUI plugins extend the terminal UI with commands, routes, slots, Markdown renderers, notifications, and local state. A
+TUI plugin is the `./tui` part of a [plugin package](/build/plugins), usually beside a [server
+part](/build/plugins/server).
 
-```ts title="src/tui.ts"
+```ts title="src/tui.tsx"
 import { Plugin } from "@opencode/plugin/tui"
 
 export default Plugin.define({
   id: "acme.cli",
   setup(context) {
-    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
   },
 })
 ```
 
-Import `@opencode/plugin/tui` directly. OpenCode resolves this import at runtime, so local CLI plugins do not need an
+Import `@opencode/plugin/tui` directly. OpenCode resolves this import at runtime, so local TUI plugins do not need an
 absolute path to an OpenCode checkout.
 
 ## Context
@@ -629,7 +632,7 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
 
 ## Publish and load
 
-Expose the CLI plugin through `./tui`; add OpenTUI peers when the plugin renders JSX.
+Expose the TUI plugin through `./tui`; add OpenTUI peers when the plugin renders JSX.
 
 ```json title="package.json"
 {
@@ -650,7 +653,7 @@ Expose the CLI plugin through `./tui`; add OpenTUI peers when the plugin renders
 }
 ```
 
-Export `./tui` beside the [main plugin](/build/plugins) for automatic loading.
+Export `./tui` beside a [server part](/build/plugins/server) or [GUI part](/build/plugins/gui) for automatic loading.
 
 ```ts title="src/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -661,7 +664,7 @@ export default Plugin.define({
 })
 ```
 
-Configure a CLI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
+Configure a TUI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
 
 ```json title="cli.json"
 {

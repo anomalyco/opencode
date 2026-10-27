@@ -257,8 +257,8 @@ test("closing the last restored terminal does not create a hidden replacement", 
   await expect(tab).toHaveAttribute("aria-selected", "true")
 })
 
-// A terminal tab restored open in the side panel, with the terminal in the pre-extension store, which the terminal
-// extension imports.
+// A terminal tab restored open in the side panel, with the terminal in the pre-plugin store, which the terminal
+// plugin imports.
 function restoredTerminal(pty: { id: string; title: string }) {
   const key = `terminal:${pty.id}`
 

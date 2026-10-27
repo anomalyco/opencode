@@ -316,7 +316,7 @@ for (const listed of [false, true]) {
 }
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
-  // A /btw tab saved before extensions must not linger as a hidden tab that keeps the region open.
+  // A /btw tab saved before plugins must not linger as a hidden tab that keeps the region open.
   await openSession(page, {
     name: "ReviewContextOpener",
     seed: {
@@ -1128,7 +1128,7 @@ test("shows and restores last turn changes from the session diff", async ({ page
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 })
 
-test("keeps the review state a session stored before extensions", async ({ page }) => {
+test("keeps the review state a session stored before plugins", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewLegacy"
   await openSession(page, {
     name: "ReviewLegacy",
@@ -1222,7 +1222,7 @@ test("desktop review waits for the session's stored mode before it loads changes
     .poll(() =>
       page.evaluate(() =>
         Object.entries(localStorage).some(
-          ([key, value]) => key.includes("extension.review.session") && value.includes('"branch"'),
+          ([key, value]) => key.includes("plugin.review.session") && value.includes('"branch"'),
         ),
       ),
     )
@@ -1230,7 +1230,7 @@ test("desktop review waits for the session's stored mode before it loads changes
 
   // The reopened window's review mounts before its session store has loaded.
   working.length = 0
-  await page.goto(desktop("extension.review.session"))
+  await page.goto(desktop("plugin.review.session"))
   await expectSessionTitle(page, title)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#review-panel").getByText("Loading changes…", { exact: true })).toBeVisible()
