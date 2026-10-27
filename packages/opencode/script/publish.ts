@@ -196,18 +196,29 @@ if (!Script.preview) {
     "",
   ].join("\n")
 
-  const token = process.env.GITHUB_TOKEN
-  if (!token) {
-    console.error("GITHUB_TOKEN is required to update homebrew tap")
+  const key = process.env.HOMEBREW_TAP_DEPLOY_KEY
+  if (!key) {
+    console.error("HOMEBREW_TAP_DEPLOY_KEY is required to update homebrew tap")
     process.exit(1)
   }
-  const tap = `https://x-access-token:${token}@github.com/anomalyco/homebrew-tap.git`
+  const ssh = `${process.env.RUNNER_TEMP ?? "/tmp"}/homebrew-tap-ssh`
+  await $`mkdir -p ${ssh}`
+  await Bun.write(`${ssh}/key`, key.trim() + "\n")
+  await $`chmod 600 ${ssh}/key`
+  await Bun.write(
+    `${ssh}/known_hosts`,
+    "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n",
+  )
+  const env = {
+    ...process.env,
+    GIT_SSH_COMMAND: `ssh -i ${ssh}/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${ssh}/known_hosts`,
+  }
   await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone ${tap} ./dist/homebrew-tap`
+  await $`git clone git@github.com:anomalyco/homebrew-tap.git ./dist/homebrew-tap`.env(env)
   await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
   if ((await $`cd ./dist/homebrew-tap && git diff --cached --quiet`.nothrow()).exitCode !== 0) {
     await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
-    await $`cd ./dist/homebrew-tap && git push`
+    await $`cd ./dist/homebrew-tap && git push`.env(env)
   }
 }

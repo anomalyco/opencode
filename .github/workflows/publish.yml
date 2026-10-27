@@ -48,13 +48,6 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - name: Install OpenCode
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai
@@ -63,7 +56,7 @@ jobs:
         run: |
           ./script/version.ts
         env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -85,13 +78,6 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - name: Build
         id: build
         run: |
@@ -101,7 +87,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ needs.version.outputs.repo }}
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -129,26 +115,22 @@ jobs:
       - version
     runs-on: macos-26
     if: github.repository == 'anomalyco/opencode'
+    # Apple signing secrets are moving into the release environment.
+    environment: ${{ (github.ref_name == 'v1' || inputs.bump || inputs.version) && 'release' || '' }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         with:
           keychain: build
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # Prefer the passwordless release-environment certificate, falling back to the repository one.
+          p12-file-base64: ${{ secrets.APPLE_SIGNING_CERTIFICATE || secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_SIGNING_CERTIFICATE == '' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: opencode-cli
           path: packages/opencode/dist
-
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Sign macOS CLI binaries
         run: |
@@ -186,7 +168,7 @@ jobs:
       - name: Upload signed macOS CLI release assets
         if: needs.version.outputs.release != ''
         env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.version.outputs.version }}" \
             packages/opencode/dist/opencode-darwin-arm64.zip \
@@ -225,13 +207,6 @@ jobs:
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist
-
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Azure login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
@@ -288,7 +263,7 @@ jobs:
         if: needs.version.outputs.release != ''
         shell: pwsh
         env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.version.outputs.version }}" `
             "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
@@ -343,6 +318,8 @@ jobs:
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux --arm64
     runs-on: ${{ matrix.settings.host }}
+    # Apple signing secrets are moving into the release environment. Windows keeps its existing Azure login subject.
+    environment: ${{ contains(matrix.settings.host, 'macos') && (github.ref_name == 'v1' || inputs.bump || inputs.version) && 'release' || '' }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -350,12 +327,15 @@ jobs:
         if: runner.os == 'macOS'
         with:
           keychain: build
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # Prefer the passwordless release-environment certificate, falling back to the repository one.
+          p12-file-base64: ${{ secrets.APPLE_SIGNING_CERTIFICATE || secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_SIGNING_CERTIFICATE == '' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
 
       - name: Setup Apple API Key
         if: runner.os == 'macOS'
-        run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+        run: printf '%s\n' "$APPLE_NOTARY_KEY" > "$RUNNER_TEMP/apple-api-key.p8"
+        env:
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY || secrets.APPLE_API_KEY_PATH }}
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -390,13 +370,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" rpm
           sudo chmod -R a+rw ~/apt-cache
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - name: Prepare
         run: bun ./scripts/prepare.ts
         working-directory: packages/desktop
@@ -427,11 +400,11 @@ jobs:
         timeout-minutes: 60
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           CSC_KEYCHAIN: build.keychain
           APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID || secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_NOTARY_ISSUER_ID || secrets.APPLE_API_ISSUER }}
 
       - name: Package (no publish)
         if: ${{ !needs.version.outputs.release }}
@@ -498,9 +471,13 @@ jobs:
       - build-electron
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: ${{ needs.version.outputs.release && 'release' || '' }}
+    # npm trusted publishing (previews included) only accepts the release environment.
+    environment: ${{ (github.ref_name == 'v1' || needs.version.outputs.release) && 'release' || '' }}
     steps:
+      # The release deploy key pushes the release tag and the version sync commit to v1.
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ssh-key: ${{ needs.version.outputs.release && secrets.RELEASE_TAG_KEY || '' }}
 
       - uses: ./.github/actions/setup-bun
 
@@ -563,13 +540,6 @@ jobs:
           path: /tmp/desktop
           merge-multiple: true
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - name: Cache apt packages (AUR)
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -592,7 +562,7 @@ jobs:
       - name: Upload desktop release assets
         if: needs.version.outputs.release
         env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
           files=(/tmp/desktop/*.{exe,blockmap,dmg,zip,AppImage,deb,rpm} /tmp/desktop/*.app.tar.gz)
@@ -607,7 +577,8 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
           LATEST_YML_DIR: /tmp/latest-yml
