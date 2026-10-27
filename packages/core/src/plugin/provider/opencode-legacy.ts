@@ -94,6 +94,7 @@ export const register = Effect.fn("OpencodeLegacy.register")(function* (
       })
 
       for (const [modelID, config] of Object.entries(item.models ?? {})) {
+        if (modelID === ConfigProvider.ModelWildcard) continue
         const base = source?.models.get(config.modelID ?? modelID) ?? source?.models.get(modelID)
         providers.models.update(providerID, modelID, (model) => {
           Object.assign(model, structuredClone(base ?? model))

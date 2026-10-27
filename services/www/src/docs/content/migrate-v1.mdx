@@ -456,6 +456,8 @@ The V1 provider filters do not have one-to-one native V2 config fields, but thei
 
 - `enabled_providers` becomes an internal deny-by-default provider policy followed by allows for the listed providers.
 - `disabled_providers` becomes internal deny policies for the listed providers.
+- Provider `whitelist` becomes `models["*"]: { "disabled": true }` plus `{ "disabled": false }` for each listed model,
+  and `blacklist` becomes `{ "disabled": true }` for each listed model.
 - `autoupdate` becomes `update`: `false` maps to `"disable"`, `"notify"` maps to `"notify"`, and `true` maps to `"auto"`.
 - `small_model` becomes the `model` selection for the built-in `title` agent. Native V2 configuration should use
   `agents.title.model` instead.
@@ -474,7 +476,8 @@ they are not mistaken for active configuration:
 - Agent `name` inside V1 JSON configuration.
 - An enabled-only V1 MCP entry without a `type`.
 - V1 experimental fields `batch_tool`, `openTelemetry`, `primary_tools`, and `continue_loop_on_deny`.
-- V1 provider fields `id`, `whitelist`, and `blacklist`.
+- V1 provider field `id`, and `whitelist` on `google-vertex-anthropic`, which migrates into `google-vertex` together with
+  Gemini models.
 - V1 provider-model fields `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, a non-`deprecated`
   `status`, and boolean `interleaved`.
 
