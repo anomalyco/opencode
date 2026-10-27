@@ -1,4 +1,8 @@
 const source = {
+  "ui.preview.controls": "Preview controls",
+  "ui.preview.zoomIn": "Zoom in",
+  "ui.preview.zoomOut": "Zoom out",
+  "ui.preview.fit": "Fit",
   "ui.sessionReview.title": "Session changes",
   "ui.sessionReview.title.git": "Git changes",
   "ui.sessionReview.title.branch": "Branch changes",
