@@ -384,15 +384,16 @@ export function createProviderConnectionController(options: {
   const open = async () => {
     const authorization = store.authorization
 
-    if (!authorization) return
+    if (!authorization?.url) return
     const url = authorization.url
     const generation = polling.generation
 
     // Device pages such as GitHub's ask for a code the URL does not prefill (no `user_code`). Copy it
     // before opening the browser: once the browser has focus, the app can no longer write to the clipboard.
-    const code = new URL(url).searchParams.has("user_code")
-      ? undefined
-      : authorization.instructions.match(DEVICE_CODE)?.[0]
+    const code =
+      URL.canParse(url) && new URL(url).searchParams.has("user_code")
+        ? undefined
+        : authorization.instructions.match(DEVICE_CODE)?.[0]
 
     if (code)
       await Promise.resolve()
