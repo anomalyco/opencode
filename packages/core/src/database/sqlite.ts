@@ -95,7 +95,7 @@ export const makeConnection = <Extensions extends object>(run: Run, runValues: R
     ...extensions,
   })
 
-// One key per client, so the gate only ever reads this client's transaction marker.
+// One key per client, so a gate never mistakes another client's transaction for its own.
 let transactionCounter = 0
 
 export const makeClient = <
@@ -115,53 +115,50 @@ export const makeClient = <
       SqlClient.TransactionConnection,
       SqlClient.TransactionConnection.Service
     >(`@opencode/core/database/SqliteTransaction/${transactionCounter++}`)
-    let transactionOpen = false
+    // Body statements of our own transaction carry its service and run while
+    // the transaction holds the semaphore, so both gates pass them through
+    // untouched — a BUSY_SNAPSHOT there repeats until rollback and retrying
+    // would only burn budget (see the block comment above).
     const gateStatement = <A>(attempt: Effect.Effect<A, SqlError>): Effect.Effect<A, SqlError> =>
       Effect.withFiber((fiber) => {
         if (Context.getOption(fiber.context, transactionService)._tag === "Some") return attempt
-        // Only the transaction's own control statements can reach here with
-        // the flag set. Every gated statement runs while holding the client
-        // semaphore — both acquirers take it before handing out the
-        // connection, and the statement executes inside their scope — and
-        // `transactionOpen` is true exactly while a transaction holds that
-        // semaphore. A foreign statement therefore never observes it true:
-        // it queues on the semaphore until the transaction closes, by which
-        // point the flag has flipped back. effect-sql runs BEGIN before it
-        // provides the transaction service and COMMIT/ROLLBACK after that
-        // context is withdrawn (nested savepoints run inside it, so they
-        // arrive above with the service), so exactly those three arrive here
-        // service-less while owning the semaphore; re-taking it there would
-        // deadlock, so they retry in place.
-        if (transactionOpen) return retryLockTimeout(attempt)
-        return retryLockTimeout(Effect.andThen(acquirer, attempt))
+        // The permit covers the attempt, not just handing out the connection:
+        // effect-sql runs the statement after its acquirer has already
+        // returned, so a permit dropped there would let a transaction opened
+        // in that gap swallow the attempt. A transaction holds the semaphore
+        // for its whole life, so this take waits out any that opened while a
+        // previous attempt slept.
+        return retryLockTimeout(semaphore.withPermits(1)(attempt))
       })
-    const gatedConnection: SqliteConnection = {
+    // Service-less statements on the transaction connection are exactly its
+    // BEGIN, COMMIT and ROLLBACK: effect-sql runs BEGIN after the acquirer
+    // returns and COMMIT/ROLLBACK after the body's service is withdrawn, all
+    // before the transaction's scope releases the semaphore (nested
+    // savepoints run inside the body, so they arrive above with the service).
+    // The transaction already holds the semaphore, so re-taking it would
+    // deadlock; they retry in place.
+    const gateTransactionStatement = <A>(attempt: Effect.Effect<A, SqlError>): Effect.Effect<A, SqlError> =>
+      Effect.withFiber((fiber) => {
+        if (Context.getOption(fiber.context, transactionService)._tag === "Some") return attempt
+        return retryLockTimeout(attempt)
+      })
+    const gateConnection = (
+      gate: <A>(attempt: Effect.Effect<A, SqlError>) => Effect.Effect<A, SqlError>,
+    ): SqliteConnection => ({
       ...connection,
-      execute: (query, params, transformRows) => gateStatement(connection.execute(query, params, transformRows)),
-      executeRaw: (query, params) => gateStatement(connection.executeRaw(query, params)),
-      executeValues: (query, params) => gateStatement(connection.executeValues(query, params)),
+      execute: (query, params, transformRows) => gate(connection.execute(query, params, transformRows)),
+      executeRaw: (query, params) => gate(connection.executeRaw(query, params)),
+      executeValues: (query, params) => gate(connection.executeValues(query, params)),
       executeUnprepared: (query, params, transformRows) =>
-        gateStatement(connection.executeUnprepared(query, params, transformRows)),
-    }
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(gatedConnection))
+        gate(connection.executeUnprepared(query, params, transformRows)),
+    })
+    const acquirer = semaphore.withPermits(1)(Effect.succeed(gateConnection(gateStatement)))
     const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
       const fiber = Fiber.getCurrent()!
       const scope = Context.getUnsafe(fiber.context, Scope.Scope)
       return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => {
-          transactionOpen = true
-          // Flip before releasing so a plain statement racing the close is gated.
-          return Scope.addFinalizer(
-            scope,
-            Effect.andThen(
-              Effect.sync(() => {
-                transactionOpen = false
-              }),
-              semaphore.release(1),
-            ),
-          )
-        }),
-        gatedConnection,
+        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
+        gateConnection(gateTransactionStatement),
       )
     })
     const transformRows = options.transformResultNames

@@ -1,11 +1,14 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Database } from "bun:sqlite"
+import { Database, type SQLQueryBindings } from "bun:sqlite"
 import { expect, test } from "bun:test"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
-import { Deferred, Effect, Fiber } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Reactivity } from "effect/reactivity"
 import { sql } from "drizzle-orm"
+import { SqlClient } from "effect/sql"
+import { classifySqliteError, SqlError } from "effect/sql/SqlError"
 import { Sqlite } from "@opencode/core/database/sqlite"
 import { sqliteLayer } from "@opencode/core/database/sqlite.bun"
 
@@ -257,6 +260,110 @@ test("a retrying statement waits out a transaction opened while it sleeps", asyn
 
     // B rolled back, so the update only survives if A waited B out and landed
     // in autocommit.
+    expect(await readValue(filename)).toBe("after")
+  })
+})
+
+// A driver like the bun one except that the client's first statement
+// suspends until `midflight` is done — parking the fiber that reaches a
+// statement exactly in the gap between effect-sql's acquirer returning and
+// the statement running, so the test below can order that gap against
+// another fiber's BEGIN deterministically.
+const yieldingSqliteLayer = (filename: string, midflight: Deferred.Deferred<void>) =>
+  Layer.effect(
+    SqlClient.SqlClient,
+    Effect.gen(function* () {
+      const native = new Database(filename)
+      yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
+      let parked = false
+      const firstStatementSuspends = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+        Effect.suspend(() => {
+          if (parked) return self
+          parked = true
+          return Effect.andThen(Deferred.await(midflight), () => self)
+        })
+      const run = (query: string, params: ReadonlyArray<unknown> = []) =>
+        firstStatementSuspends(
+          Effect.try({
+            try: () =>
+              native.query<Record<string, unknown>, SQLQueryBindings[]>(query).all(
+                ...(params as SQLQueryBindings[]),
+              ) ?? [],
+            catch: (cause) =>
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+          }),
+        )
+      const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
+        firstStatementSuspends(
+          Effect.try({
+            try: () =>
+              native.query<unknown, SQLQueryBindings[]>(query).values(...(params as SQLQueryBindings[])) ?? [],
+            catch: (cause) =>
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+          }),
+        )
+      return yield* Sqlite.makeClient({}, Sqlite.makeConnection(run, runValues, {}), "~test/SqliteYielding", () => ({}))
+    }),
+  ).pipe(Layer.provide(Reactivity.layer))
+
+// Regression: the permit has to cover the statement itself, not just handing
+// out the connection. effect-sql runs a plain statement after its acquirer
+// has already returned, so with the semaphore free in that gap a transaction
+// opening there swallows the statement — its write joins the transaction and
+// rolls back with it. The driver parks the write exactly in that gap, so the
+// interleaving is ordered by the test, not by timing.
+test("a plain statement does not join a transaction that opens while it runs", async () => {
+  await withDatabase("sqlite-midflight-", async (filename) => {
+    await initFile(filename, (native, text) => (native as Database).run(text))
+
+    await Effect.runPromise(
+      Deferred.make<void>().pipe(
+        Effect.flatMap((midflight) =>
+          Effect.gen(function* () {
+            const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+
+            // A: a plain autocommit write, parked mid-statement — past its
+            // acquirer, before the statement executes.
+            const writer = yield* Effect.forkChild(db.run(sql`update t set v = 'after' where id = 1`))
+            yield* Effect.sleep("1 second")
+
+            // B: open a transaction while A is parked and hold it on `inside`.
+            // With the permit released early, B opens here and A's write lands
+            // inside it; B's rollback below would erase the write.
+            const inside = yield* Deferred.make<void>()
+            const transactor = yield* Effect.forkChild(
+              db
+                .transaction(
+                  (tx) =>
+                    Effect.gen(function* () {
+                      yield* tx.get(sql`select v from t where id = 1`)
+                      yield* Deferred.await(inside)
+                      yield* Effect.fail(new Error("rollback requested"))
+                    }),
+                  { behavior: "deferred" },
+                )
+                .pipe(Effect.ignore),
+            )
+            yield* Effect.sleep("1 second")
+
+            // Let A execute, then let B finish. A's write only survives if it
+            // ran in autocommit.
+            yield* Deferred.succeed(midflight, undefined)
+            yield* Effect.sleep("1 second")
+            yield* Deferred.succeed(inside, undefined)
+            yield* Fiber.join(transactor)
+            yield* Fiber.join(writer)
+          }).pipe(Effect.provide(yieldingSqliteLayer(filename, midflight))),
+        ),
+        Effect.scoped,
+      ),
+    )
+
+    // B rolled back, so the update only survives if A ran in autocommit.
     expect(await readValue(filename)).toBe("after")
   })
 })
