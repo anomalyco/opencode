@@ -81,6 +81,8 @@ The lock reader supports Bun lockfile v1 registry, GitHub and HTTP sources with 
 
 The Nix CLI keeps the `prod` channel for service registration and TUI state. Desktop uses `OPENCODE_DESKTOP_SERVER_CHANNEL=prod` to discover that service.
 
+On Linux, Nix patches the PTY helper before embedding it through `OPENCODE_PTY_BIN`. Runtime checks exercise the embedded helper and preserve terminals across service upgrades.
+
 Build the packages and run the cache and runtime checks:
 
 ```bash

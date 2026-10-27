@@ -1,6 +1,7 @@
 {
   lib,
   stdenvNoCC,
+  callPackage,
   bun,
   nodejs,
   sysctl,
@@ -44,11 +45,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook postConfigure
   '';
 
-  env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
-  env.OPENCODE_DISABLE_MODELS_FETCH = true;
-  env.OPENCODE_VERSION = finalAttrs.version;
-  env.OPENCODE_CHANNEL = "prod";
-  env.NODE_OPTIONS = "--max-old-space-size=4096";
+  env = {
+    MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
+    OPENCODE_DISABLE_MODELS_FETCH = true;
+    OPENCODE_VERSION = finalAttrs.version;
+    OPENCODE_CHANNEL = "prod";
+    NODE_OPTIONS = "--max-old-space-size=4096";
+  }
+  // lib.optionalAttrs stdenvNoCC.hostPlatform.isLinux {
+    # Patch the helper before the CLI hashes and embeds its bytes.
+    OPENCODE_PTY_BIN = lib.getExe (callPackage ./opencode-pty.nix { inherit bun node_modules; });
+  };
 
   buildPhase = ''
     runHook preBuild

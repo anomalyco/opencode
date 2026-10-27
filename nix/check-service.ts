@@ -15,9 +15,7 @@ const settings = { disabled: true, port: 43123, password: "private", env: { NIX_
 const hashed = "service-f6c433acac2a27cc06a0625896fe3e540a275ac9.json"
 const environment = (root: string) => ({
   ...Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] => entry[0] !== "OPENCODE_CONFIG_DIR" && entry[1] !== undefined,
-    ),
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
   ),
   HOME: root,
   XDG_CONFIG_HOME: path.join(root, "config"),
@@ -25,6 +23,9 @@ const environment = (root: string) => ({
   XDG_STATE_HOME: path.join(root, "state"),
   XDG_CACHE_HOME: path.join(root, "cache"),
   OPENCODE_DB: path.join(root, "opencode.db"),
+  // The SDK merges this map over its own environment; omission does not clear host overrides.
+  OPENCODE_CONFIG_DIR: path.join(root, "config", "opencode"),
+  OPENCODE_PTY_BIN: "",
   OPENCODE_CONFIG_CONTENT: "{}",
   OPENCODE_CONFIG_PROJECT_DISABLE: "1",
   OPENCODE_DISABLE_MODELS_FETCH: "1",
@@ -72,6 +73,34 @@ for (const sample of [
   }
 }
 
+{
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-nix-shipped-pty-"))
+  const file = path.join(root, "state", "opencode", "service-prod.json")
+  let endpoint: Endpoint | undefined
+  try {
+    endpoint = await Service.ensure({
+      file,
+      version,
+      command: [binary, "serve", "--service", "--port", "0"],
+      env: environment(root),
+    })
+    const terminal = await startTerminal(endpoint, root)
+    assert.ok(terminal.pid > 0)
+    assert.equal((await api(endpoint, "/api/info")).version, version)
+    console.log("Nix compiled PTY: the shipped helper starts a real shell and produces its sentinel")
+  } finally {
+    try {
+      if (endpoint) await api(endpoint, "/api/experimental/persistent-pty/shutdown", "POST")
+    } finally {
+      try {
+        await Service.stop({ file, pty: "clear" })
+      } finally {
+        await fs.rm(root, { recursive: true, force: true })
+      }
+    }
+  }
+}
+
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-nix-upgrade-"))
 const env = environment(root)
 const file = path.join(root, "state", "opencode", "service-prod.json")
@@ -91,7 +120,7 @@ const previous = Bun.spawn(
   ],
   {
     cwd: path.resolve("packages/cli"),
-    env,
+    env: { ...env, OPENCODE_PTY_BIN: process.env.OPENCODE_NIX_PTY },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -111,23 +140,7 @@ try {
   const old = await Service.discover({ file, version: legacyVersion })
   assert.ok(old)
   active = old
-  const terminal = (
-    await api(old, "/api/experimental/session/ses_nix_terminal_handoff/terminal", "POST", {
-      command: shell,
-      args: ["-c", 'printf "nix-preserved\\n"; while IFS= read -r line; do printf "%s\\n" "$line"; done'],
-      cwd: root,
-      title: "Nix upgrade check",
-      env: {},
-      size: { cols: 80, rows: 24 },
-    })
-  ).data
-  const deadline = Date.now() + 10_000
-  while (
-    !(await api(old, `/api/experimental/persistent-pty/${terminal.id}/snapshot`)).data.text.includes("nix-preserved")
-  ) {
-    assert.ok(Date.now() < deadline, "Persistent terminal did not produce its sentinel")
-    await Bun.sleep(10)
-  }
+  const terminal = await startTerminal(old, root)
 
   const current = await Service.ensure({ file, version, command: [binary, "serve", "--service", "--port", "0"], env })
   active = current
@@ -157,14 +170,40 @@ try {
   )
 } finally {
   reader.releaseLock()
-  if (active)
-    await api(active, "/api/experimental/persistent-pty/shutdown", "POST").catch((error) =>
-      console.warn("Failed to shut down the owned terminal fixture", error),
+  try {
+    if (active) await api(active, "/api/experimental/persistent-pty/shutdown", "POST")
+  } finally {
+    try {
+      await Service.stop({ file, pty: "clear" })
+    } finally {
+      previous.kill()
+      await previous.exited
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  }
+}
+
+async function startTerminal(endpoint: Endpoint, root: string) {
+  const terminal = (
+    await api(endpoint, "/api/experimental/session/ses_nix_terminal_handoff/terminal", "POST", {
+      command: shell,
+      args: ["-c", 'printf "nix-preserved\\n"; while IFS= read -r line; do printf "%s\\n" "$line"; done'],
+      cwd: root,
+      title: "Nix packaging check",
+      env: {},
+      size: { cols: 80, rows: 24 },
+    })
+  ).data
+  const deadline = Date.now() + 10_000
+  while (
+    !(await api(endpoint, `/api/experimental/persistent-pty/${terminal.id}/snapshot`)).data.text.includes(
+      "nix-preserved",
     )
-  await Service.stop({ file, pty: "clear" })
-  previous.kill()
-  await previous.exited
-  await fs.rm(root, { recursive: true, force: true })
+  ) {
+    assert.ok(Date.now() < deadline, "Persistent terminal did not produce its sentinel")
+    await Bun.sleep(10)
+  }
+  return terminal
 }
 
 async function api(endpoint: Endpoint, route: string, method = "GET", body?: object) {

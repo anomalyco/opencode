@@ -54,6 +54,7 @@
                 nativeBuildInputs = [ pkgs.bun ];
                 OPENCODE_NIX_CLI = pkgs.lib.getExe opencode;
                 OPENCODE_NIX_VERSION = opencode.version;
+                OPENCODE_NIX_PTY = opencode.env.OPENCODE_PTY_BIN or "";
                 OPENCODE_DISABLE_MODELS_FETCH = "1";
               }
               ''
