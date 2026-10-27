@@ -130,20 +130,18 @@ export function createSessionRows(
       onCleanup(() => abort(controller))
       rebuild()
       void data.session.pending.sync(id).catch(() => undefined)
-      void retrySessionSync(async () => {
-        await data.session.message.sync(id)
-        if (controller.signal.aborted) return
-        rebuild()
-        // Restoration waits for complete boundary groups so saved group IDs resolve.
-        await completeGroupBoundary({
-          rows,
-          messages: () => data.session.message.list(id).length,
-          more: () => data.session.message.more(id),
-          loadMore: () => data.session.message.loadMore(id),
-          active: () => !controller.signal.aborted && sessionID() === id,
-        })
-      }, controller.signal)
-        .then(() => {
+      void retrySessionSync(() => data.session.message.sync(id), controller.signal)
+        .then(async () => {
+          if (controller.signal.aborted) return
+          rebuild()
+          // Restoration waits for complete boundary groups so saved group IDs resolve.
+          await completeGroupBoundary({
+            rows,
+            messages: () => data.session.message.list(id).length,
+            more: () => data.session.message.more(id),
+            loadMore: () => data.session.message.loadMore(id),
+            active: () => !controller.signal.aborted && sessionID() === id,
+          }).catch(() => undefined)
           if (!controller.signal.aborted) onSynced?.(id)
         })
         .catch((error) => {

@@ -16,25 +16,25 @@ const session = {
   time: { created: 0, updated: 0 },
 }
 const location = { directory, project: { id: "project", directory, canonical: directory } }
+const assistant = {
+  id: "message-2",
+  type: "assistant",
+  agent: "build",
+  model: { providerID: "demo", id: "demo-model" },
+  content: [{ type: "text", text: "History recovered" }],
+  finish: "stop",
+  time: { created: 2, completed: 3 },
+}
 const messages = [
   { id: "message-1", type: "user", text: "Restore this history", time: { created: 1 } },
-  {
-    id: "message-2",
-    type: "assistant",
-    agent: "build",
-    model: { providerID: "demo", id: "demo-model" },
-    content: [{ type: "text", text: "History recovered" }],
-    finish: "stop",
-    time: { created: 2, completed: 3 },
-  },
+  assistant,
 ]
 
-async function launch(options: { target: Read; failures?: number; status?: number; block?: boolean }) {
+async function launch(options: { target: Read; failures?: number; status?: number; boundary?: boolean }) {
   const reads = { session: 0, message: 0 }
-  const release = Promise.withResolvers<void>()
   const setup = await createAppFixture({
     args: { sessionID: session.id },
-    config: { animations: false, tabs: { mode: "off" }, keybinds: { "session.new": "f6" } },
+    config: { animations: false, tabs: { mode: "off" } },
     fetch: async (url) => {
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
@@ -51,32 +51,31 @@ async function launch(options: { target: Read; failures?: number; status?: numbe
             : undefined
       if (read) {
         reads[read]++
-        if (options.block && read === options.target) await release.promise
+        if (read === "message" && url.searchParams.has("cursor"))
+          return json({ message: "older page unavailable" }, { status: 401 })
         if (read === options.target && reads[read] <= (options.failures ?? 2)) {
           const status = options.status ?? 503
           return json(
             status === 404
               ? { _tag: "SessionNotFoundError", sessionID: session.id, message: `Session not found: ${session.id}` }
-              : { message: "temporarily unavailable" },
+              : { message: status === 401 ? "history access denied" : "temporarily unavailable" },
             { status },
           )
         }
-        return json(read === "session" ? { data: session } : { data: messages.toReversed(), cursor: {} })
+        if (read === "session") return json({ data: session })
+        return json({
+          data: options.boundary
+            ? [{ ...assistant, content: [{ type: "reasoning", text: "Existing thought" }, ...assistant.content] }]
+            : messages.toReversed(),
+          cursor: options.boundary ? { next: "older" } : {},
+        })
       }
       if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
       return undefined
     },
   })
   await setup.ready
-  return {
-    ...setup,
-    reads,
-    release: release.resolve,
-    async [Symbol.asyncDispose]() {
-      release.resolve()
-      await setup[Symbol.asyncDispose]()
-    },
-  }
+  return { ...setup, reads }
 }
 
 async function wait(condition: () => boolean) {
@@ -108,32 +107,22 @@ test("a missing session reports the error and returns to the actual home screen 
   expect(setup.captureCharFrame()).not.toContain("Restore this history")
 })
 
-// The shared retry tests control time and verify each delay. This case exercises the complete
-// app's real 7.5-second retry budget and the user-visible error after all five reads fail.
-test("exhausted history reads report an error instead of silently leaving an empty transcript", async () => {
-  await using setup = await launch({ target: "message", failures: Infinity })
-  await wait(() => setup.captureCharFrame().includes("Failed to load session history"))
-  expect(setup.reads.message).toBe(5)
-  expect(setup.captureCharFrame()).toContain("UnexpectedStatus: 503")
+test("a terminal history error is reported without retrying", async () => {
+  await using setup = await launch({ target: "message", failures: Infinity, status: 401 })
+  await setup.waitForFrame(
+    (frame) => frame.includes("Failed to load session history") && frame.includes("history access denied"),
+  )
+  expect(setup.reads.message).toBe(1)
   expect(setup.captureCharFrame()).not.toContain(logo.left[1])
 })
 
-test.each(["session", "message"] satisfies Read[])(
-  "leaving during an in-flight %s read cancels stale recovery",
-  async (target) => {
-    await using setup = await launch({ target, block: true, failures: Infinity })
-    await wait(() => setup.reads[target] === 1)
-    setup.mockInput.pressKey("F6")
-    await setup.waitForFrame((frame) => frame.includes(logo.left[1]))
-    setup.release()
-    // Cross the first retry boundary to catch an obsolete read starting after the route was left.
-    await Bun.sleep(600)
-    expect(setup.reads[target]).toBe(1)
-    expect(setup.captureCharFrame()).toContain(logo.left[1])
-    expect(setup.captureCharFrame()).not.toContain("UnexpectedStatus")
-    expect(setup.captureCharFrame()).not.toContain("Failed to load session history")
-  },
-)
+test("an older-page failure does not report an initial history error", async () => {
+  await using setup = await launch({ target: "message", failures: 0, boundary: true })
+  await wait(() => setup.reads.message === 2)
+  await waitForHighlightedFrame(setup, (frame) => frame.includes("History recovered"))
+  expect(setup.captureCharFrame()).not.toContain("Failed to load session history")
+  expect(setup.captureCharFrame()).not.toContain("UnexpectedStatus")
+})
 
 test("reconnecting restarts a failed history read without stale retries or errors", async () => {
   await using setup = await launch({ target: "message", failures: 1 })

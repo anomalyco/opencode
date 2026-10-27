@@ -64,3 +64,76 @@ test.each([
     jest.useRealTimers()
   }
 })
+
+test("exhausts five reads after four delays without a final backoff", async () => {
+  jest.useFakeTimers()
+  const controller = new AbortController()
+  const error = new ClientError("UnexpectedStatus", { cause: { status: 503 } })
+  const attempts: number[] = []
+  try {
+    const task = retrySessionSync(async () => {
+      attempts.push(Date.now())
+      throw error
+    }, controller.signal).catch((error) => error)
+    await Promise.resolve()
+    await Promise.resolve()
+    for (const delay of [500, 1000, 2000, 4000]) {
+      jest.advanceTimersByTime(delay)
+      await Promise.resolve()
+      await Promise.resolve()
+    }
+    expect(await task).toBe(error)
+    expect(attempts.map((time) => time - attempts[0])).toEqual([0, 500, 1500, 3500, 7500])
+    expect(jest.getTimerCount()).toBe(0)
+  } finally {
+    controller.abort()
+    jest.useRealTimers()
+  }
+})
+
+test("cancelling a read clears its pending retry", async () => {
+  jest.useFakeTimers()
+  const controller = new AbortController()
+  const reason = new Error("session left")
+  let calls = 0
+  try {
+    const task = retrySessionSync(async () => {
+      calls++
+      throw new ClientError("UnexpectedStatus", { cause: { status: 503 } })
+    }, controller.signal).catch((error) => error)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(jest.getTimerCount()).toBe(1)
+    controller.abort(reason)
+    expect(await task).toBe(reason)
+    expect(jest.getTimerCount()).toBe(0)
+    jest.runAllTimers()
+    expect(calls).toBe(1)
+  } finally {
+    controller.abort()
+    jest.useRealTimers()
+  }
+})
+
+test("leaving during an in-flight read prevents a stale retry", async () => {
+  jest.useFakeTimers()
+  const controller = new AbortController()
+  const response = Promise.withResolvers<void>()
+  const reason = new Error("session left")
+  let calls = 0
+  try {
+    const task = retrySessionSync(() => {
+      calls++
+      return response.promise
+    }, controller.signal).catch((error) => error)
+    controller.abort(reason)
+    response.reject(new ClientError("UnexpectedStatus", { cause: { status: 503 } }))
+    expect(await task).toBe(reason)
+    expect(jest.getTimerCount()).toBe(0)
+    jest.runAllTimers()
+    expect(calls).toBe(1)
+  } finally {
+    controller.abort()
+    jest.useRealTimers()
+  }
+})
