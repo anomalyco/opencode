@@ -1,6 +1,8 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source, State } from "@opencode/schema/plugin"
+export { Event, GuiBundle, ID, Info, Source, State } from "@opencode/schema/plugin"
 
+import { readFile } from "node:fs/promises"
+import { fileURLToPath } from "node:url"
 import { Plugin } from "@opencode/schema/plugin"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -40,12 +42,22 @@ const layer = Layer.effect(
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []
+    // A changed `./gui-experimental` bundle alone restarts nothing; its revision is part of what changes, so the event
+    // tells the app to reload it.
     const publish = State.changes(
-      (items: readonly Plugin.Info[]) => items,
+      (items: readonly Plugin.Info[]) => [items, Array.from(active.values(), (entry) => entry.plugin.gui?.revision)],
       () => bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid),
     )
     const list = Effect.fn("Plugin.list")(function* () {
       return inventory
+    })
+    const gui = Effect.fn("Plugin.gui")(function* (id: Plugin.ID) {
+      const gui = active.get(id)?.plugin.gui
+      if (!gui) return undefined
+      // A plugin that resolved a `./gui-experimental` file but cannot read it now is a server fault, not a missing
+      // bundle.
+      const code = yield* Effect.promise(() => readFile(fileURLToPath(gui.file), "utf8"))
+      return { code, revision: gui.revision, options: gui.options } satisfies Plugin.GuiBundle
     })
     const host = yield* PluginHost.make({ list })
     const load = Effect.fnUntraced(function* (plugin: Generation) {
@@ -255,6 +267,7 @@ const layer = Layer.effect(
       awaitActivation: ready.await,
       hold,
       list,
+      gui,
     })
   }),
 )
@@ -290,7 +303,8 @@ function slotInfo(slot: Slot): Plugin.Info {
     id: slot.plugin.id,
     source: slot.plugin.source ?? { type: "builtin" },
     state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
-    features: { server: true, ...slot.plugin.features },
+    // Built-in and SDK plugins are server parts; a package lists its own parts.
+    features: slot.plugin.features ?? { server: true },
   }
 }
 

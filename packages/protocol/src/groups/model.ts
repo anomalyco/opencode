@@ -7,8 +7,8 @@ import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
-  type: Schema.optional(Model.Type).annotate({
-    description: "Model type to list. Defaults to chat, the only type offered for sessions.",
+  types: Schema.optional(Schema.ArrayEnsure(Model.Type)).annotate({
+    description: "Only list models of these types. Defaults to chat, the only type offered for sessions.",
   }),
 })
 
@@ -25,7 +25,7 @@ export const ModelGroup = HttpApiGroup.make("server.model")
           identifier: "model.list",
           summary: "List models",
           description:
-            "Retrieve the current snapshot of available models of one type, chat by default, ordered by release date. The snapshot may precede initial plugin settlement.",
+            "Retrieve the current snapshot of available models of the requested types, chat by default, ordered by release date within each type. The snapshot may precede initial plugin settlement.",
         }),
       ),
   )

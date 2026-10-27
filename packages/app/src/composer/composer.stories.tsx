@@ -62,8 +62,13 @@ function ComposerStory(props: {
   manySuggestions?: boolean
   history?: boolean
   manyHistory?: boolean
+  /** File search waits for the story's "Return files" button, like a slow server. */
+  fileSearch?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
 }) {
+  const [fileSearch, setFileSearch] = createStore<{ pending?: string }>({})
+  let returnFiles: (() => void) | undefined
+
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
     cursor: props.prompt ? promptLength(props.prompt) : 0,
@@ -150,7 +155,15 @@ function ComposerStory(props: {
     store: [draft, setDraft],
     commands: () => commands,
     context: () => context,
-    searchContextFiles: () => [],
+    searchContextFiles: (query, signal) => {
+      if (!props.fileSearch) return []
+
+      return new Promise<ComposerSuggestion[]>((resolve) => {
+        returnFiles = () => resolve(query.includes("z") ? [] : storyFiles(query))
+        setFileSearch("pending", query)
+        signal?.addEventListener("abort", () => setFileSearch("pending", undefined), { once: true })
+      })
+    },
     history: props.history
       ? {
           entries: (mode) =>
@@ -316,6 +329,20 @@ function ComposerStory(props: {
         {story.activity}
       </output>
       <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
+      <Show when={props.fileSearch}>
+        <button
+          type="button"
+          class="self-start text-12-regular text-text-weak"
+          disabled={!fileSearch.pending}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setFileSearch("pending", undefined)
+            returnFiles?.()
+          }}
+        >
+          {fileSearch.pending === undefined ? "No file search pending" : `Return files for ${fileSearch.pending}`}
+        </button>
+      </Show>
     </div>
   )
 }
@@ -323,6 +350,19 @@ function ComposerStory(props: {
 const text = (content: string): ComposerPersistedState["prompt"] => [
   { type: "text", content, start: 0, end: content.length },
 ]
+
+const storyFiles = (query: string): ComposerSuggestion[] =>
+  ["plan.md", "notes.md", "capture.ts", "corpus.ts", "cursor.png", "claude.png"].map((name) => {
+    const path = `${query}/${name}`
+
+    return {
+      id: `file:${path}`,
+      kind: "file",
+      label: path,
+      path,
+      mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
+    }
+  })
 
 type FlowArgs = {
   prompt?: ComposerPersistedState["prompt"]
@@ -436,6 +476,8 @@ export const ModelAndVariant = { args: { prompt: text("Compare both variants") }
 export const SlashSuggestions = { args: { suggestions: "command" } }
 
 export const ContextSuggestions = { args: { suggestions: "context" } }
+
+export const SlowFileSearch = { render: () => <ComposerStory fileSearch /> }
 
 function ConstrainedCommandSuggestionsStory() {
   let boundary: HTMLDivElement | undefined

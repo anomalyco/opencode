@@ -7,7 +7,7 @@ import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
@@ -70,7 +70,7 @@ export const configure = (input: LanguageModelOptions) => {
   const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })
   // The Run API base is derived per call so a chat-only configuration without an account still constructs.
   const runDeployment = () => MediaRoute.deployment({ ...input, baseURL: runBaseURL(input) }, auth)
-  const decision = (modelID: string | ModelID) =>
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     CloudflareRunDecisions.route
       .with({
         provider: id,
@@ -79,12 +79,13 @@ export const configure = (input: LanguageModelOptions) => {
         headers: input.headers,
         http: input.http,
       })
-      .model({ id: modelID })
+      .model({ id: modelID, providerOptions })
   return {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
     decision,
-    image: (modelID: string | ModelID) => CloudflareWorkersAIImages.model({ ...runDeployment(), id: modelID }),
+    image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      CloudflareWorkersAIImages.model({ ...runDeployment(), id: modelID, providerOptions }),
     experimental: {
       extraction: (modelID: string | ModelID) => CloudflareRunExtraction.model({ ...runDeployment(), id: modelID }),
     },
@@ -94,15 +95,26 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+  configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
+
+function config(settings: Settings) {
   const { accountId: _, apiKey, baseURL: _url, body, headers, ...providerOptions } = settings
-  return configure({
+  return {
     apiKey,
     baseURL: baseURL(settings),
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  }
 }
 
 export * as CloudflareWorkersAI from "./cloudflare-workers-ai.js"

@@ -93,16 +93,9 @@
   flex-shrink: 0;
   align-items: center;
   /* The neighbouring segments' own padding counts toward the gap; 0.5px is the text's side bearing. */
-  margin-inline: calc(var(--separator-gap) - var(--separator-before, 6px) - 0.5px)
-    calc(var(--separator-gap) - var(--separator-after, 6px) - 0.5px);
-}
-
-/* The header's segments are 13px text, and the slash takes their size. */
-.session-header-separator[data-glyph="slash"] {
+  margin-inline: calc(var(--separator-gap) - var(--separator-before) - 0.5px)
+    calc(var(--separator-gap) - var(--separator-after) - 0.5px);
+  /* The header's segments are 13px text, and the slash takes their size. */
   font-size: 13px;
   line-height: var(--line-height-compact);
-}
-
-.session-header-separator[data-glyph="chevron"]:dir(rtl) > svg {
-  transform: scaleX(-1);
 }

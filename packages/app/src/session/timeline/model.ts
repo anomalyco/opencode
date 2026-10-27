@@ -8,6 +8,10 @@ const leadingTurnPageDelay = 200
 
 const leadingTurnPageLimit = 3
 
+// The store preserves the transcript array across prepends and tab switches, and replaces it on eviction.
+// Remember the original turn so interrupted enrichment can resume without chasing newly prepended turns.
+const enrichmentTurns = new WeakMap<SessionMessageInfo[], string>()
+
 export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
   const data = useData()
 
@@ -86,9 +90,13 @@ export async function enrichLeadingTurn(input: {
   pause: () => Promise<void>
   maxPages: number
 }) {
-  const assistant = input.messages().find((message) => message.type === "assistant")?.id
+  const messages = input.messages()
+
+  if (!input.current()) return
+  const assistant = enrichmentTurns.get(messages) ?? messages.find((message) => message.type === "assistant")?.id
 
   if (!assistant) return
+  enrichmentTurns.set(messages, assistant)
 
   const load = async (pages: number): Promise<void> => {
     if (

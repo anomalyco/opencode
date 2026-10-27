@@ -114,7 +114,7 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
     expected: { all: [A, T2, T1], active: T2, panes: { [T1]: "bottom" }, selected: { side: T2, bottom: T1 } },
   },
   {
-    name: "a new tab joins the pane of its extension's last tab",
+    name: "a new tab joins the pane of its plugin's last tab",
     run: () =>
       placeSessionTabs({ all: [A, T1], active: T1, panes: { [T1]: "bottom" } }, { all: [A, T1, T2], active: T2 }),
     expected: {
@@ -130,7 +130,7 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
     expected: { all: [T1, B], active: B, panes: { [B]: "split" }, selected: { split: B } },
   },
   {
-    name: "a pane's target places a new tab of another extension",
+    name: "a pane's target places a new tab of another plugin",
     run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, "split"),
     expected: { all: [A, T1], active: T1, panes: { [T1]: "split" }, selected: { side: A, split: T1 } },
   },

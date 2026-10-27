@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -76,10 +76,9 @@
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/media": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
-    "@solidjs/meta": "catalog:",
     "diff": "catalog:",
     "effect": "catalog:",
-    "dompurify": "3.4.14",
+    "dompurify": "3.4.17",
     "marked": "catalog:",
     "pele": "1.7.0",
     "solid-js": "catalog:"

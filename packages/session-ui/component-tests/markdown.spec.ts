@@ -983,3 +983,63 @@ story("loads file URLs and Windows paths, and leaves unreadable images as alt te
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })
+
+async function copySelection(page: Page, select: "markdown" | "harness") {
+  await page.evaluate((select) => {
+    const harness = document.querySelector('[data-testid="markdown-fixture"]')!
+    const range = document.createRange()
+    range.selectNodeContents(select === "markdown" ? harness.querySelector('[data-component="markdown"]')! : harness)
+    getSelection()!.removeAllRanges()
+    getSelection()!.addRange(range)
+    document.addEventListener(
+      "copy",
+      (event) => {
+        document.body.dataset.copiedText = event.clipboardData?.getData("text/plain")
+        document.body.dataset.copiedHtml = event.clipboardData?.getData("text/html")
+      },
+      { once: true },
+    )
+  }, select)
+  await page.keyboard.press("ControlOrMeta+C")
+
+  return page.evaluate(() => ({ text: document.body.dataset.copiedText, html: document.body.dataset.copiedHtml }))
+}
+
+story("copies selected Markdown as semantic HTML without theme or highlight colours", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    document.body.style.color = "rgb(237, 237, 237)"
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: "## Answer\n\nSome **bold** and [docs](https://opencode.ai/docs).\n\n- one\n- two\n\n```ts\nconst value = 42\n```",
+    })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  await expect(harness.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
+  await expect(harness.locator("pre code span[style]").first()).toBeAttached()
+
+  const copied = await copySelection(page, "markdown")
+
+  expect(copied.text).toContain("Some bold and docs.")
+  expect(copied.text).toContain("const value = 42")
+  expect(copied.html).toContain("<h2>Answer</h2>")
+  expect(copied.html).toContain('<p>Some <strong>bold</strong> and <a href="https://opencode.ai/docs">docs</a>.</p>')
+  expect(copied.html).toContain("<li>one</li>")
+  expect(copied.html).toMatch(/<pre><code>(<span>[^<]*<\/span>)+<\/code><\/pre>/)
+  expect(copied.html).not.toMatch(/style=|class=|<button|<svg/)
+})
+
+story("keeps the browser copy for selections that leave the Markdown", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Some **bold** text" })
+  }, fixture)
+  await expect(page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')).toHaveAttribute(
+    "data-markdown-ready",
+    "",
+  )
+
+  const copied = await copySelection(page, "harness")
+
+  expect(copied.html).toBe("")
+  expect(copied.text).toBe("")
+})

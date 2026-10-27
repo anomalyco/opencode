@@ -307,7 +307,9 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
   })
 }
 
-test("keyboard navigation follows the visible tab order and skips unresolved tabs", async ({ page }) => {
+test("keyboard navigation and numbered shortcuts follow the visible tab order and skip unresolved tabs", async ({
+  page,
+}) => {
   await mockWorkspace(page, { name: "Tabs", sessions: [a, c], seed: { tabs: [a.id, "ses_tab_unresolved", c.id] } })
   await page.route(
     (url) => url.pathname === "/api/session/ses_tab_unresolved",
@@ -319,6 +321,11 @@ test("keyboard navigation follows the visible tab order and skips unresolved tab
 
   await page.keyboard.press("Control+Alt+ArrowRight")
 
+  await expectPath(page, sessionHref(c.id))
+
+  await page.keyboard.press("ControlOrMeta+1")
+  await expectPath(page, sessionHref(a.id))
+  await page.keyboard.press("ControlOrMeta+2")
   await expectPath(page, sessionHref(c.id))
 })
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import { createHash } from "node:crypto"
 import { mkdir, rm } from "fs/promises"
 import path from "path"
 import { Script } from "@opencode/script"
@@ -28,7 +29,7 @@ await rm(outdir, { recursive: true, force: true })
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
-const requestedTarget = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
+const requestedTarget = process.env.OPENCODE_TARGET
 const skipInstall = process.argv.includes("--skip-install")
 const skipWebUi = process.argv.includes("--skip-web-ui")
 const solidPlugin = createSolidTransformPlugin()
@@ -58,7 +59,7 @@ const allTargets: {
 
 const targets =
   requestedTarget !== undefined
-    ? allTargets.filter((item) => targetName(item) === requestedTarget)
+    ? allTargets.filter((item) => targetName(item) === `${binary}-${requestedTarget}`)
     : singleFlag
       ? allTargets.filter((item) => {
           if (item.os !== process.platform || item.arch !== process.arch) return false
@@ -252,16 +253,31 @@ async function compileExecutable(item: (typeof allTargets)[number]) {
   const assets = await compileReleaseAssets(release)
   const url = assets.get(`${name}.zip`)
   if (!url) throw new Error(`Bun release ${release} does not include ${name}.zip`)
+  const sumsUrl = assets.get("SHASUMS256.txt")
+  if (!sumsUrl) throw new Error(`Bun release ${release} does not include SHASUMS256.txt`)
   const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
-  const response = await fetch(url, {
-    headers: { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  })
+  const headers = { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+  const [response, sums] = await Promise.all([fetch(url, { headers }), fetch(sumsUrl, { headers })])
   if (!response.ok) throw new Error(`Failed to download ${name} from Bun release ${release}: ${response.status}`)
+  if (!sums.ok) throw new Error(`Failed to download Bun release ${release} checksums: ${sums.status}`)
+  const expected = (await sums.text())
+    .split("\n")
+    .find((line) => line.trimEnd().endsWith(`  ${name}.zip`))
+    ?.split(/\s+/)[0]
+  if (!expected) throw new Error(`Missing checksum for ${name}.zip in Bun release ${release}`)
   // Stream to disk instead of `Bun.write(archive, response)`: passing the Response object
   // hangs forever if it gets GC'd mid-download (https://github.com/oven-sh/bun/issues/40278).
+  const hash = createHash("sha256")
   const sink = Bun.file(archive).writer()
-  for await (const chunk of response.body!) await sink.write(chunk)
+  for await (const chunk of response.body!) {
+    hash.update(chunk)
+    await sink.write(chunk)
+  }
   await sink.end()
+  if (hash.digest("hex") !== expected) {
+    await rm(archive)
+    throw new Error(`Checksum mismatch for ${name}.zip in Bun release ${release}`)
+  }
   await $`unzip -oq ${archive} -d ${cache}`
   await rm(archive)
   return executable

@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const packages = path.resolve(here, "..")
 const app = path.resolve(packages, "app/src")
 const mocks = path.resolve(here, "mocks")
-const roots = ["ui", "session-ui", "app", "gui-extensions"].map((name) => path.resolve(packages, name, "src"))
+const roots = ["ui", "session-ui", "app", "gui-plugins"].map((name) => path.resolve(packages, name, "src"))
 
 // Component tests import real modules by URL (`source("../src/…")`, `new URL("./x.fixture.tsx", import.meta.url)`),
 // past the mock aliases. Read those paths from the specs so the dependency optimizer crawls exactly what they load.
@@ -39,7 +39,7 @@ export default defineConfig({
     // mid-import. Crawl the stories, the workers (the scan does not follow `new Worker(new URL(…))`), the modules the
     // component tests load, and the frame, so the first browser request never discovers a new dependency.
     entries: [
-      "../{ui,session-ui,app,gui-extensions}/src/**/*.{stories.tsx,worker.ts}",
+      "../{ui,session-ui,app,gui-plugins}/src/**/*.{stories.tsx,worker.ts}",
       ...new Set(componentTestModules.map(entry)),
       "index.html",
     ],

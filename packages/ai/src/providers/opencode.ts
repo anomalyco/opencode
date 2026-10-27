@@ -1,4 +1,5 @@
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import type { ProviderPackage } from "../provider-package.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { SystemOne } from "../protocols/system-one.js"
 
@@ -11,6 +12,8 @@ export type Options = ProviderAuthOption<"optional"> & {
   readonly http?: HttpOptions.Input
 }
 
+export type Settings = ProviderPackage.Settings & { readonly apiKey?: string }
+
 export const configure = (input: Options = {}) => {
   const route = SystemOne.route.with({
     provider: id,
@@ -21,11 +24,18 @@ export const configure = (input: Options = {}) => {
     headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
     http: input.http,
   })
-  const decision = (modelID: string | ModelID) => route.model({ id: modelID })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    route.model({ id: modelID, providerOptions })
   return { id, decision, configure }
 }
 
 export const provider = configure()
 export const decision = provider.decision
+
+export const decisionModel = (modelID: string, { apiKey, baseURL, body, headers, ...providerOptions }: Settings) =>
+  configure({ apiKey, baseURL, headers, http: body === undefined ? undefined : { body } }).decision(
+    modelID,
+    providerOptions,
+  )
 
 export * as OpenCode from "./opencode.js"

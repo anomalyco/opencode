@@ -125,7 +125,7 @@ describe("buildPromptRequest", () => {
     expect(result.text).toContain("focus here")
   })
 
-  test("sends an extension note with its live subject and attaches only the files it mentions", () => {
+  test("sends a plugin note with its live subject and attaches only the files it mentions", () => {
     const note = {
       type: "note" as const,
       origin: "example",

@@ -4,6 +4,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Platform } from "@/runtime/platform/platform"
 import { clonePrompt } from "./prompt-parts"
+import { createComposerQuoteSource } from "./quote-source"
 import {
   ComposerStore,
   DEFAULT_PROMPT,
@@ -116,6 +117,7 @@ export interface ComposerStateValue {
     readonly key: Accessor<string | undefined>
     readonly set: (key?: string) => void
   }
+  readonly quoteSource: ReturnType<typeof createComposerQuoteSource>
   readonly set: (prompt: Prompt, cursorPosition?: number) => void
   readonly reset: () => void
   readonly capture: () => ComposerStateValue
@@ -128,6 +130,9 @@ function createComposerStateValue(
   const actions = createComposerActions(setStore)
   // The quote whose comment editor is open, by key; a request made before the composer shows waits for it.
   const [quoteComment, setQuoteComment] = createSignal<string>()
+  const quoteSource = createComposerQuoteSource()
+
+  const retainQuoteSources = () => quoteSource.retain(store.context.items.map((item) => item.key))
 
   const clearRetry = () => {
     if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
@@ -166,11 +171,13 @@ function createComposerStateValue(
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
+        retainQuoteSources()
         clearRetry()
       },
       /** Removes the file comment, note, or quote with this commentID. */
       removeComment(commentID: string) {
         setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
+        retainQuoteSources()
         clearRetry()
       },
       /** Edits the file comment, note, or quote with this commentID; only file comments carry a preview. */
@@ -199,6 +206,7 @@ function createComposerStateValue(
             key,
           })),
         )
+        retainQuoteSources()
         clearRetry()
       },
       replaceComments(items: ContextItem[]) {
@@ -206,10 +214,19 @@ function createComposerStateValue(
           ...current.filter((item) => !isCommentItem(item)),
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
         ])
+        retainQuoteSources()
         clearRetry()
       },
     },
-    quoteComment: { key: quoteComment, set: (key?: string) => setQuoteComment(key) },
+    quoteComment: {
+      key: quoteComment,
+      set: (key?: string) => {
+        setQuoteComment(key)
+
+        if (key !== quoteSource.state.pending) quoteSource.settle()
+      },
+    },
+    quoteSource,
     set: (prompt: Prompt, cursorPosition?: number) => actions.set(prompt, cursorPosition),
     reset: () => actions.reset(),
     capture: () => value,

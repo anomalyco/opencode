@@ -14,6 +14,122 @@ const assistant = (id: string): SessionMessageAssistant => ({
 })
 
 describe("timeline model", () => {
+  test("does not enrich a different leading turn after prepending to a retained transcript", async () => {
+    const messages: SessionMessageInfo[] = [user("msg_user"), assistant("msg_latest")]
+    let loads = 0
+
+    const input = {
+      current: () => true,
+      messages: () => messages,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+      },
+      pause: async () => undefined,
+      maxPages: 3,
+    }
+
+    await enrichLeadingTurn(input)
+    messages.unshift(assistant("msg_older"))
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(0)
+
+    // An evicted/reloaded transcript gets its own initial enrichment budget.
+    const reloaded = [...messages]
+    await enrichLeadingTurn({ ...input, messages: () => reloaded })
+    expect(loads).toBe(3)
+  })
+
+  const resumed = ["msg_previous_turn", "msg_parent", "msg_latest"]
+
+  test("resumes the original leading turn after switching away", async () => {
+    const messages: SessionMessageInfo[] = [assistant("msg_latest")]
+    let current = true
+    let loads = 0
+
+    const input = {
+      current: () => current,
+      messages: () => messages,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+        messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
+      },
+      pause: async () => {
+        current = false
+      },
+      maxPages: 3,
+    }
+
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(0)
+
+    current = true
+    await enrichLeadingTurn({ ...input, pause: async () => undefined })
+    expect(messages.map((message) => message.id)).toEqual(resumed)
+    expect(loads).toBe(1)
+
+    await enrichLeadingTurn({ ...input, pause: async () => undefined })
+    expect(loads).toBe(1)
+  })
+
+  test("resumes the original leading turn after a failed page", async () => {
+    const messages: SessionMessageInfo[] = [assistant("msg_latest")]
+    let loads = 0
+
+    const input = {
+      current: () => true,
+      messages: () => messages,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+
+        if (loads === 1) throw new Error("history failed")
+        messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
+      },
+      pause: async () => undefined,
+      maxPages: 3,
+    }
+
+    await expect(enrichLeadingTurn(input)).rejects.toThrow("history failed")
+    await enrichLeadingTurn(input)
+    expect(messages.map((message) => message.id)).toEqual(resumed)
+    expect(loads).toBe(2)
+
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(2)
+  })
+
+  test("resumes the original leading turn after the transcript reconnects", async () => {
+    const messages: SessionMessageInfo[] = [assistant("msg_latest")]
+    let loads = 0
+
+    const input = {
+      current: () => true,
+      messages: () => messages,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+        messages.unshift(assistant("msg_previous_turn"), user("msg_parent"))
+      },
+      pause: async () => undefined,
+      maxPages: 3,
+    }
+
+    await enrichLeadingTurn(input)
+    messages.splice(0, messages.length, assistant("msg_latest"))
+    await enrichLeadingTurn(input)
+    expect(messages.map((message) => message.id)).toEqual(resumed)
+    expect(loads).toBe(2)
+
+    await enrichLeadingTurn(input)
+    expect(loads).toBe(2)
+  })
+
   test.each([
     ["restores the anchor after one opaque cursor page", "ok", ["before", "load", "after", true]],
     ["does not restore an anchor after the session changes", "switch", ["before", "load"]],

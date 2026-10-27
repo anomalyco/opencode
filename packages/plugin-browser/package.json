@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin-browser",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "description": "OpenCode's desktop browser plugin",
   "type": "module",
   "license": "MIT",
@@ -23,6 +23,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "pack": "bun run script/pack.ts",
     "typecheck": "bun check --no-script -p tsconfig.test.json",
     "typecheck:tsc": "tsc --noEmit -p tsconfig.test.json",
     "test": "bun test"

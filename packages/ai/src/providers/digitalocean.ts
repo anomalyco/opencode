@@ -1,12 +1,14 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIImages } from "../protocols/openai-images.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
+import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("digitalocean")
@@ -57,7 +59,11 @@ export const configure = (input: LanguageModelOptions = {}) => {
     headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
     http: input.http,
   })
-  const decision = (modelID: string | ModelID) => decisionRoute.model({ id: modelID })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model({ id: modelID, providerOptions })
+  const media = MediaRoute.deployment({ ...input, baseURL: endpoint ?? baseURL }, auth)
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
   return {
     id,
     model: (modelID: string | ModelID) =>
@@ -67,6 +73,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
           supportsPromptCacheKey: true,
         },
       }),
+    image,
     decision,
     configure,
   }
@@ -74,17 +81,27 @@ export const configure = (input: LanguageModelOptions = {}) => {
 
 export const provider = configure()
 export const decision = provider.decision
+export const image = provider.image
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+  configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
+
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: { body },
     providerOptions,
-  }).model(modelID)
+  }
+}
 
 export * as DigitalOcean from "./digitalocean.js"

@@ -25,6 +25,7 @@ import {
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
 import type { ComposerQueue } from "../adapter"
 import { isCommentItem } from "../state"
+import type { createComposerQuoteSource } from "../quote-source"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -79,6 +80,7 @@ export function createComposerEditor(input: {
   onContextRemove?: (item: ComposerComment) => void
   onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
   quoteComment?: { key: Accessor<string | undefined>; set: (key?: string) => void }
+  quoteSource?: Pick<ReturnType<typeof createComposerQuoteSource>, "reveal">
   onEditor?: (element: HTMLElement) => void
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
@@ -161,12 +163,13 @@ export function createComposerEditor(input: {
     )
   }
 
-  const [found, setFound] = createStore<{ query: string; files: ComposerSuggestion[] }>({ query: "", files: [] })
+  const [found, setFound] = createStore<{ files: ComposerSuggestion[] }>({ files: [] })
   let fileQuery: string | undefined
   let fileAbort = new AbortController()
   onCleanup(() => abort(fileAbort))
 
   // Debounced and abortable: each keystroke or close replaces the pending file search instead of queueing behind it.
+  // The last results stay listed until the next ones arrive, so the menu keeps its rows and height while typing.
   const findFiles = (query?: string) => {
     if (query === fileQuery) return
     abort(fileAbort)
@@ -174,14 +177,16 @@ export function createComposerEditor(input: {
     fileQuery = query
     fileAbort = controller
 
-    if (query === undefined) return
+    if (query === undefined || !query.trim() || /\s/.test(query)) {
+      if (found.files.length) setFound("files", [])
 
-    if (!query.trim() || /\s/.test(query)) return
+      return
+    }
 
     const timer = setTimeout(
       () =>
         void Promise.resolve(input.searchContextFiles(query, controller.signal)).then(
-          (files) => !controller.signal.aborted && setFound({ query, files }),
+          (files) => !controller.signal.aborted && setFound("files", files),
           () => undefined,
         ),
       150,
@@ -210,9 +215,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      const files = found.query === query ? found.files : []
-
-      return [...fixed, ...sessions, ...recent, ...files.filter((item) => !seen.has(item.id))]
+      return [...fixed, ...sessions, ...recent, ...found.files.filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
@@ -261,17 +264,14 @@ export function createComposerEditor(input: {
     if (state.popover.type !== "history") return list().flat()
     const query = state.popover.query.trim().toLowerCase()
 
-    return history()
-      .filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
-      .toReversed()
+    return history().filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
   }
 
   const execute = (command: ComposerInteractionCommand) => {
     if (command.type === "history.preview") {
       const item = history().find((entry) => entry.id === command.id)
 
-      if (item?.history)
-        applyHistory(item.history, { focus: state.popover.type === "history" && !state.popover.searching })
+      if (item?.history) applyHistory(item.history, { focus: false })
 
       return
     }
@@ -321,7 +321,7 @@ export function createComposerEditor(input: {
   }
 
   function dispatch(event: ComposerInteractionEvent) {
-    if (event.type === "history.search" || event.type === "popover.close") cancelFocus()
+    if (event.type === "popover.close") cancelFocus()
 
     if (
       event.type === "history.open" ||
@@ -376,21 +376,6 @@ export function createComposerEditor(input: {
 
   const onKeyDown = (event: KeyboardEvent) => {
     flushFocus()
-
-    if (
-      state.popover.type === "history" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      !event.isComposing &&
-      event.key.toLowerCase() === "f"
-    ) {
-      event.preventDefault()
-      event.stopPropagation()
-      dispatch({ type: "history.search" })
-
-      return true
-    }
 
     if (
       state.mode === "normal" &&
@@ -587,6 +572,7 @@ export function createComposerEditor(input: {
       input.openContext?.(id)
     },
     editingQuote: () => quoteComment.key(),
+    quoteSource: input.quoteSource,
     editQuote: (key?: string) => quoteComment.set(key),
     commentQuote(id: string, comment: string) {
       const item = draft.state.context.items.find((entry) => entry.key === id)

@@ -70,6 +70,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const vcs = yield* Vcs.Service
   const websearch = yield* WebSearch.Service
   const generate = yield* Generate.Service
+  const generateText = (input: Generate.TextInput) => generate.text(input).pipe(Effect.map((text) => ({ text })))
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
@@ -230,7 +231,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
     },
     model: {
-      list: () => response(models.available()),
+      list: (input) => response(models.available(input?.types)),
       default: () => response(models.default()),
       reload: models.reload,
       transform: (callback) =>
@@ -282,9 +283,14 @@ export const make = Effect.fn("PluginHost.make")(function* (
       terminal: {
         read: (input) => persistentPty.read(input.sessionID, input.lines),
       },
+      generate: {
+        text: generateText,
+        image: generate.image,
+        decisions: generate.decisions,
+      },
     },
     generate: {
-      text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
+      text: generateText,
     },
     integration: {
       list: () => response(integration.list()),

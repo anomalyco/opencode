@@ -3,7 +3,7 @@ import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, setZoomLevel, webviewZoom, zoomLevel } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
-import { createExtensionBridge } from "../extensions"
+import { createPluginBridge } from "../plugins"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
 import { createDesktopNotify } from "./notifications"
@@ -52,7 +52,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },
-    extensions: createExtensionBridge(),
+    plugins: createPluginBridge(),
   }
 }
 

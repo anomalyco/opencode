@@ -2,6 +2,8 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
 import { Slash } from "@opencode/ui/slash"
+import { Keybind } from "@opencode/ui/keybind"
+import { useCommand } from "@/shell/commands/command"
 import { Show, createMemo, createSignal, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -221,9 +223,7 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
             class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
             onClick={open}
           >
-            <span class="truncate">
-              {language.t("home.providerTip")}
-            </span>
+            <span class="truncate">{language.t("home.providerTip")}</span>
             <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
               <Icon name="chevron-down" size="small" class="-rotate-90" />
             </span>
@@ -231,7 +231,7 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
           <Tooltip
             class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/new-session-tip:delay-[250ms] group-hover/new-session-tip:duration-150 group-hover/new-session-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
             placement="top"
-            openDelay={1000}
+            openDelay={800}
             value={language.t("common.dismiss")}
           >
             <button
@@ -249,6 +249,29 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
   )
 }
 
+// Keeps as many leading segments as fit, then "…/", then the last two segments. The cut always lands on a slash.
+function fitPath(value: string, width: number, font: string) {
+  const separator = value.includes("/") ? "/" : "\\"
+  const parts = value.split(separator)
+  const context = document.createElement("canvas").getContext("2d")
+
+  if (!context) return { text: value, minimum: 0 }
+  context.font = font
+  const fits = (text: string) => context.measureText(text).width <= width
+  const first = parts[0] === "" ? 2 : 1
+
+  const candidates = Array.from({ length: Math.max(0, parts.length - 2 - first) }, (_, index) =>
+    [...parts.slice(0, parts.length - 3 - index), "…", ...parts.slice(-2)].join(separator),
+  )
+
+  const minimum = candidates.at(-1) ?? value
+
+  return {
+    text: !width || fits(value) ? value : (candidates.find(fits) ?? minimum),
+    minimum: context.measureText(minimum).width,
+  }
+}
+
 /** The composer tray: combined location picker, Git context, and the session's directory. */
 function NewSessionLocation(props: {
   project: PromptProject
@@ -260,7 +283,8 @@ function NewSessionLocation(props: {
   onClick: () => void
 }) {
   const language = useLanguage()
-  const [truncated, setTruncated] = createSignal(false)
+  const command = useCommand()
+  const [layout, setLayout] = createStore({ width: 0, font: "" })
 
   const worktree = () => {
     if (props.workspace === "main") return
@@ -275,6 +299,8 @@ function NewSessionLocation(props: {
 
     return props.workspace === "main" ? props.root : props.workspace
   }
+
+  const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
 
   return (
     <div class="relative flex min-h-9 min-w-0 items-center gap-3 ps-2 pe-1.5 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
@@ -335,24 +361,59 @@ function NewSessionLocation(props: {
         </Tooltip>
         {props.branch}
       </div>
-      <Show when={path()}>
+      {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
+      <Show when={path()} keyed>
         {(directory) => (
-          <div class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden">
+          <div
+            class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
+            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 26}px)` }}
+          >
             <Tooltip
               placement="top"
-              value={directory()}
-              disabled={!truncated()}
-              class="flex min-w-0"
+              value={directory}
+              disabled={fitted().text === directory && fitted().minimum <= layout.width}
+              class="flex min-w-0 flex-1"
               contentClass="max-w-[calc(100vw-32px)] break-all"
             >
               <span
-                ref={(element) =>
-                  createResizeObserver(element, () => setTruncated(element.scrollWidth > element.clientWidth))
+                ref={(row) =>
+                  createResizeObserver(row, () => {
+                    const icon = row.querySelector("[data-slot=new-session-location-icon]")
+                    const style = getComputedStyle(row)
+
+                    setLayout({
+                      width: row.clientWidth - (icon?.clientWidth ?? 0) - parseFloat(style.columnGap),
+                      font: style.font,
+                    })
+                  })
                 }
-                data-slot="new-session-location-path"
-                class="block min-w-0 truncate text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                class="flex min-w-0 flex-1 items-center justify-end gap-1.5"
+                dir="ltr"
               >
-                <bdi dir="ltr">{directory()}</bdi>
+                <Tooltip
+                  placement="top"
+                  openDelay={800}
+                  value={
+                    <span class="flex items-center gap-2">
+                      {language.t("session.location.toggle")}
+                      <Keybind keys={command.keybindParts("session.location.cycle")} variant="neutral" />
+                    </span>
+                  }
+                >
+                  <span class="flex shrink-0" data-slot="new-session-location-icon">
+                    <Icon
+                      name={worktree() ? "outline-worktree" : "monitor"}
+                      size="small"
+                      class="text-v2-icon-icon-muted"
+                    />
+                  </span>
+                </Tooltip>
+                <span
+                  data-slot="new-session-location-path"
+                  class="min-w-0 overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                >
+                  <bdi dir="ltr">{fitted().text}</bdi>
+                </span>
               </span>
             </Tooltip>
           </div>

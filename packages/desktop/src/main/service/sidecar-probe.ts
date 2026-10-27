@@ -1,10 +1,8 @@
 import { readFileSync } from "node:fs"
-import { homedir } from "node:os"
 import path from "node:path"
 import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
 import { CHANNEL } from "../constants"
-import { releasedBuild, serviceFile } from "./cli-version"
 
 // The main thread idles between showing the first window and evaluating the main bundle, waiting
 // for the renderer's asset requests. That slot is long enough to find out whether a compatible
@@ -15,18 +13,11 @@ let probe: Promise<Endpoint | undefined> | undefined
 
 export function startSidecarProbe() {
   if (!app.isPackaged) return
-  const bundled = bundledVersion()
-  const version = CHANNEL === "beta" ? releasedBuild : bundled
+  const version = CHANNEL === "beta" ? undefined : bundledVersion()
 
   if (version === "") return
-
-  const file = serviceFile({
-    version: bundled,
-    stateHome: process.env.XDG_STATE_HOME ?? path.join(homedir(), ".local", "state"),
-  })
-
   probe = import("@opencode/client/service")
-    .then(({ Service }) => Service.discover({ file, version }))
+    .then(({ Service }) => Service.discover({ version }))
     .catch(() => undefined)
 }
 

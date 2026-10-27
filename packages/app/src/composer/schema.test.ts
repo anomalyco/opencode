@@ -74,7 +74,7 @@ describe("composer persistence schemas", () => {
     expect(decode({}).prompt).toEqual(DEFAULT_PROMPT)
   })
 
-  test("restores extension notes and legacy browser comments without their process-bound refs", () => {
+  test("restores plugin notes and legacy browser comments without their process-bound refs", () => {
     const durable = {
       type: "note" as const,
       origin: "example",
@@ -91,7 +91,7 @@ describe("composer persistence schemas", () => {
       live: { subject: 'the "button#save" element (browser ref @e42)', href: `${durable.href}#e42` },
     }
 
-    // A draft stored by a build before extension notes, as its composer schema encoded it.
+    // A draft stored by a build before plugin notes, as its composer schema encoded it.
     const browser = {
       type: "browser" as const,
       tabID: "tab_00000000-0000-4000-8000-000000000000",

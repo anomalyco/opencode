@@ -849,6 +849,28 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("raw events carry the event payload without decoder fields or padding", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hi" }, p: "abc" }],
+        ["messageStop", { stopReason: "end_turn" }],
+        ["metadata", { usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } }],
+      )
+      const events = Array.from(
+        yield* LLMClient.stream(LLMRequest.update(baseRequest, { includeRaw: true })).pipe(
+          Stream.runCollect,
+          Effect.provide(fixedBytes(body)),
+        ),
+      )
+
+      expect(events.filter((event) => event.type === "raw").map((event) => event.data)).toEqual([
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: "Hi" } } },
+        { messageStop: { stopReason: "end_turn" } },
+        { metadata: { usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } } },
+      ])
+    }),
+  )
+
   it.effect("rejects truncated event-stream frames after message stop", () =>
     Effect.gen(function* () {
       const partialFrames = [

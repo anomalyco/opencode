@@ -1,5 +1,6 @@
 ---
 title: "Effect"
+description: "Write server plugins with the Effect-native plugin API."
 ---
 
 `@opencode/plugin/effect` is the Effect-native version of the OpenCode plugin API. Its context operations return
@@ -122,11 +123,13 @@ interface Context {
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+    readonly generate: GenerateApi<unknown>
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: GenerateApi<unknown>
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<GenerateApi<unknown>, "text">
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly provider: ProviderDomain

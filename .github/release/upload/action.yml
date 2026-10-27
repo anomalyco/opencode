@@ -1,0 +1,26 @@
+name: Upload a release artifact
+description: Writes SHA256SUMS for a directory, uploads it, and outputs the manifest digest.
+inputs:
+  name:
+    description: Artifact name, <stage>-<target>
+    required: true
+  path:
+    description: Directory to upload
+    required: true
+outputs:
+  digest:
+    description: SHA-256 of the artifact's SHA256SUMS
+    value: ${{ steps.checksum.outputs.digest }}
+runs:
+  using: composite
+  steps:
+    - id: checksum
+      shell: bash
+      run: echo "digest=$(bash "${GITHUB_ACTION_PATH//\\//}/../write-checksums.sh" "$UPLOAD_PATH")" >> "$GITHUB_OUTPUT"
+      env:
+        UPLOAD_PATH: ${{ inputs.path }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error

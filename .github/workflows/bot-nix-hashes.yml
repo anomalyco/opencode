@@ -1,12 +1,22 @@
 name: bot-nix-hashes
 
+# Keeps nix/hashes.json in step with the lockfile through a pull request, using only GITHUB_TOKEN.
+# - hash and compute run repository code (nix build) with a read-only token and no secrets. compute uploads only the
+#   new nix/hashes.json.
+# - publish holds the write token. It runs only .github/nix-hashes/ from this commit, treats the artifact as data,
+#   validates its exact shape and commits only that file to bot/nix-hashes. It never runs repository code.
+# - check-bot-scope.yml, a required check, fails the bot's pull request unless it changes only a valid nix/hashes.json,
+#   so a tampered branch cannot auto-merge.
+# This file, check-bot-scope.yml and .github/nix-hashes/ are the security boundary.
+
 permissions:
-  contents: write
+  contents: read
 
 on:
   workflow_dispatch:
   push:
     branches: [dev]
+    # Mirrored in .github/nix-hashes/publish.sh.
     paths:
       - "bun.lock"
       - "package.json"
@@ -25,7 +35,7 @@ concurrency:
 jobs:
   # Native runners required: bun install cross-compilation flags (--os/--cpu)
   # do not produce byte-identical node_modules as native installs.
-  compute-hash:
+  hash:
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +51,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
@@ -87,36 +99,29 @@ jobs:
           path: hash.txt
           retention-days: 1
 
-  update-hashes:
-    needs: compute-hash
-    if: github.event_name != 'pull_request'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+  # Assembles nix/hashes.json from the per-system hashes and uploads it as the only input publish accepts.
+  compute:
+    needs: hash
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.update.outputs.changed }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-          ref: ${{ github.ref_name }}
-
-      - name: Setup git committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
-      - name: Pull latest changes
-        run: |
-          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
 
       - name: Download hash artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          path: hashes
+          path: ${{ runner.temp }}/hashes
           pattern: hash-*
 
       - name: Update hashes.json
+        id: update
+        env:
+          HASHES: ${{ runner.temp }}/hashes
         run: |
           set -euo pipefail
 
@@ -125,37 +130,74 @@ jobs:
           [ -f "$HASH_FILE" ] || echo '{"nodeModules":{}}' > "$HASH_FILE"
 
           for SYSTEM in x86_64-linux aarch64-linux aarch64-darwin; do
-            FILE="hashes/hash-${SYSTEM}/hash.txt"
-            if [ -f "$FILE" ]; then
-              HASH="$(tr -d '[:space:]' < "$FILE")"
-              echo "${SYSTEM}: ${HASH}"
-              jq --arg sys "$SYSTEM" --arg h "$HASH" '.nodeModules[$sys] = $h' "$HASH_FILE" > tmp.json
-              mv tmp.json "$HASH_FILE"
-            else
-              echo "::warning::Missing hash for ${SYSTEM}"
-            fi
+            HASH="$(tr -d '[:space:]' < "$HASHES/hash-${SYSTEM}/hash.txt")"
+            echo "${SYSTEM}: ${HASH}"
+            jq --arg sys "$SYSTEM" --arg h "$HASH" '.nodeModules[$sys] = $h' "$HASH_FILE" > tmp.json
+            mv tmp.json "$HASH_FILE"
           done
 
           cat "$HASH_FILE"
+          bash .github/nix-hashes/validate.sh "$HASH_FILE"
 
-      - name: Commit changes
-        run: |
-          set -euo pipefail
-
-          HASH_FILE="nix/hashes.json"
-
-          if [ -z "$(git status --short -- "$HASH_FILE")" ]; then
-            echo "No changes to commit"
+          if git diff --quiet -- "$HASH_FILE"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
             echo "Status: no changes" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
+            echo "Status: changed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          git add "$HASH_FILE"
-          git commit -m "chore: update nix node_modules hashes"
+      - name: Upload hashes.json
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nix-hashes
+          path: nix/hashes.json
+          if-no-files-found: error
+          retention-days: 1
 
-          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
-          git push origin HEAD:"$GITHUB_REF_NAME"
+  # Runs even when compute found no change, so an open bot pull request with stale hashes is closed, not merged.
+  publish:
+    needs: compute
+    if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: bot-nix-hashes-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
 
-          echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
-          echo "Status: committed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+    steps:
+      - name: Check out publish scripts
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          sparse-checkout: /.github/nix-hashes/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # Holds the push credential; only nix/hashes.json is checked out and nothing in it runs.
+      - name: Check out dev
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: dev
+          path: repo
+          sparse-checkout: /nix/hashes.json
+          sparse-checkout-cone-mode: false
+
+      - name: Download hashes.json
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nix-hashes
+          path: ${{ runner.temp }}/nix-hashes
+
+      - name: Publish
+        working-directory: repo
+        run: bash ../trusted/.github/nix-hashes/publish.sh "$RUNNER_TEMP/nix-hashes/hashes.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

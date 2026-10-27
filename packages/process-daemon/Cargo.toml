@@ -1,0 +1,45 @@
+[package]
+name = "opencode-pty"
+version = "0.3.1"
+edition = "2024"
+rust-version = "1.90"
+description = "Persistent PTY service for OpenCode"
+license = "MIT"
+repository = "https://github.com/anomalyco/opencode-pty"
+links = "ghostty-vt"
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+crossbeam-channel = "0.5"
+fs2 = "0.4"
+portable-pty = "0.9.0"
+rand = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+shell-words = "1.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+nix = { version = "0.28", features = ["process", "term", "user"] }
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console", "Win32_System_Threading"] }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"

@@ -8,12 +8,12 @@ test("SSH health is checked only with an active tunnel, and cancellation clears 
   const requests: ReturnType<typeof Promise.withResolvers<ServerHealth>>[] = []
 
   const app = createRoot((dispose) => {
-    const [state, setState] = createStore<{ state: ServerConnection.Extension["state"] }>({ state: "stopped" })
+    const [state, setState] = createStore<{ state: ServerConnection.Plugin["state"] }>({ state: "stopped" })
 
-    const connection: ServerConnection.Extension = {
-      type: "extension",
+    const connection: ServerConnection.Plugin = {
+      type: "plugin",
       key: "ssh:fixture",
-      extension: "ssh",
+      plugin: "ssh",
       connecting: false,
       authenticationRequired: false,
       managed: true,
@@ -70,10 +70,10 @@ test("a late failure from the old endpoint cannot overwrite the new endpoint che
   const app = createRoot((dispose) => {
     const [state, setState] = createStore({ url: "http://127.0.0.1:0" })
 
-    const connection: ServerConnection.Extension = {
-      type: "extension",
+    const connection: ServerConnection.Plugin = {
+      type: "plugin",
       key: "ssh:fixture",
-      extension: "ssh",
+      plugin: "ssh",
       state: "ready",
       connecting: false,
       authenticationRequired: false,
