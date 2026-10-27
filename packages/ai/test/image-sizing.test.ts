@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
+import { Media } from "../src/media.js"
 import { ImageSizing } from "../src/protocols/utils/image-sizing.js"
 import { MediaProtocol } from "../src/route/media-protocol.js"
 
@@ -47,17 +48,18 @@ describe("ImageSizing", () => {
     expect(size.width * size.height).toBeLessThanOrEqual(GPT_IMAGE_2.maxPixels)
   })
 
-  test("rejects degenerate shapes instead of producing NaN", () => {
-    for (const shape of [{ aspect: "0:0" }, { aspect: "1:0" }, { resolution: "0K" }]) {
-      const size = ImageSizing.fit(shape, { multiple: 16 })
-      expect(Number.isFinite(size.width)).toBe(true)
-      expect(Number.isFinite(size.height)).toBe(true)
-      expect(size.width).toBeGreaterThan(0)
-      expect(size.height).toBeGreaterThan(0)
-    }
-    for (const shape of [{ aspect: "0:0" }, { aspect: "1:0" }, { resolution: "0K" }]) {
-      expect(Exit.isFailure(Effect.runSync(Effect.exit(ImageSizing.exact(route, shape, { multiple: 16 }))))).toBe(true)
-    }
+  test("rejects zero-sided aspect ratios at the schema boundary", () => {
+    const decode = Schema.decodeUnknownSync(Media.AspectRatio)
+    expect(decode("16:9")).toBe("16:9")
+    expect(() => decode("0:0")).toThrow()
+    expect(() => decode("1:0")).toThrow()
+  })
+
+  test("ignores non-positive resolution tiers instead of producing NaN", () => {
+    expect(ImageSizing.fit({ resolution: "0K" }, { multiple: 16 })).toEqual({ width: 1024, height: 1024 })
+    expect(Exit.isFailure(Effect.runSync(Effect.exit(ImageSizing.exact(route, { resolution: "0K" }, { multiple: 16 }))))).toBe(
+      true,
+    )
   })
 
   test("picks the nearest listed size by aspect, then by pixel count", () => {

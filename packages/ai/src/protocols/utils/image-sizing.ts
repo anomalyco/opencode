@@ -110,10 +110,6 @@ export const nearest = (shape: Shape, sizes: ReadonlyArray<Size>): Size => {
 /** Free width and height that must honor the shape; a size that misses it fails. */
 export const exact = (route: MediaProtocol.Identity, shape: Shape, limits: Limits) => {
   if (!isRequested(shape)) return Effect.succeed(undefined)
-  if (shape.aspect !== undefined && !validAspect(shape.aspect))
-    return Effect.fail(
-      route.unsupported("media.aspect", `${route.name} needs an aspect ratio with both sides greater than zero`),
-    )
   const size = fit(shape, limits)
   const requested = missed(shape, size)
   if (requested === undefined) return Effect.succeed(size)
@@ -138,14 +134,7 @@ const missed = (shape: Shape, size: Size) => {
   return [shape.aspect, shape.resolution].filter((value) => value !== undefined).join(" at ")
 }
 
-const validAspect = (aspect: string) => {
-  const [width, height] = aspect.split(":").map(Number)
-  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
-}
-
-// A malformed shape degrades to the default rather than producing NaN; `exact` rejects it before sending.
 const aspectRatio = (shape: Shape) => {
-  if (shape.aspect !== undefined && !validAspect(shape.aspect)) return 1
   const [width, height] = (shape.aspect ?? "1:1").split(":").map(Number)
   return width / height
 }
