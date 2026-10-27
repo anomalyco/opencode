@@ -15,6 +15,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { RuntimeStats } from "./runtime-stats.js"
 
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -187,7 +188,7 @@ interface Options {
 export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
-    deps: [Database.node],
+    deps: [Database.node, RuntimeStats.node],
     layer: Layer.effect(
       Service,
       Effect.gen(function* () {
@@ -210,6 +211,15 @@ export function configured(options?: Options) {
         // Keep routing separate from the public event, and retain its snapshot
         // while a slow subscriber drains events queued before a move or deletion.
         const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
+        // An event stays in the live buffer until the slowest subscriber takes it.
+        yield* RuntimeStats.gauge("bus", () => ({
+          "live.backlog": PubSub.sizeUnsafe(pubsub.live),
+          "typed.pubsubs": pubsub.typed.size,
+          "durable.aggregates": pubsub.durable.size,
+          listeners: listeners.length,
+          projectors: [...projectors.values()].reduce((sum, list) => sum + list.length, 0),
+          "session.routes": sessions.size,
+        }))
 
         const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
           Object.hasOwn(SessionEvent.All.cases, event.type)

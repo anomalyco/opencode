@@ -1,6 +1,14 @@
-import { Clock, Effect, Semaphore } from "effect"
-import { mkdir, open } from "node:fs/promises"
+import { Clock, Effect, Schema, Semaphore } from "effect"
+import { mkdir, open, rm, stat } from "node:fs/promises"
 import path from "node:path"
+
+export class EmptySnapshotError extends Schema.TaggedError<EmptySnapshotError>()("HeapSnapshot.EmptySnapshotError", {
+  pauseMs: Schema.Number,
+}) {
+  override get message() {
+    return `The runtime wrote an empty heap snapshot after pausing ${this.pauseMs} ms; the heap is likely too large`
+  }
+}
 
 // One process-wide permit: the signal listener and the HTTP endpoint share it, so concurrent
 // requests queue instead of serializing two heaps at once.
@@ -24,8 +32,16 @@ export const write = Effect.fn("HeapSnapshot.write")(
     })
     const memory = yield* Effect.sync(() => process.memoryUsage())
     yield* Effect.logInfo("writing heap snapshot", { path: file, rss: memory.rss, heapUsed: memory.heapUsed })
-    yield* Effect.try(() => v8.writeHeapSnapshot(file))
-    yield* Effect.logInfo("heap snapshot written", { path: file })
+    const { size, pauseMs } = yield* Effect.gen(function* () {
+      const started = yield* Clock.currentTimeMillis
+      yield* Effect.try(() => v8.writeHeapSnapshot(file))
+      const pauseMs = (yield* Clock.currentTimeMillis) - started
+      // Bun writes an empty file instead of throwing when the snapshot is too large to serialize (about 2 GB of output).
+      const { size } = yield* Effect.tryPromise(() => stat(file))
+      if (size === 0) return yield* new EmptySnapshotError({ pauseMs })
+      return { size, pauseMs }
+    }).pipe(Effect.onError(() => Effect.tryPromise(() => rm(file, { force: true })).pipe(Effect.ignore)))
+    yield* Effect.logInfo("heap snapshot written", { path: file, bytes: size, pauseMs })
     return {
       path: file,
       pid: process.pid,

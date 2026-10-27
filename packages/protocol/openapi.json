@@ -12652,6 +12652,65 @@
         "summary": "Read media blob"
       }
     },
+    "/api/experimental/debug/runtime": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.debug.runtime",
+        "parameters": [
+          {
+            "name": "heap",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "DebugRuntime",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebugRuntime"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Process memory, loaded locations, and the sizes of long-lived server structures (event bus buffers, plugin registries, jobs, event feed subscribers), read from counters the server already holds. With `heap=true` it also counts objects on the heap by type, which pauses the server (about 1 s per 100 million objects) but serializes nothing, so it stays usable on heaps too large for a snapshot. Experimental: may change without compatibility guarantees.",
+        "summary": "Read runtime memory statistics"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -16570,6 +16629,136 @@
             "$ref": "#/components/schemas/Credential.External"
           }
         ]
+      },
+      "DebugRuntime": {
+        "type": "object",
+        "properties": {
+          "pid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "uptimeSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "memory": {
+            "type": "object",
+            "properties": {
+              "rss": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "heapTotal": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "heapUsed": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "external": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "arrayBuffers": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["rss", "heapTotal", "heapUsed", "external", "arrayBuffers"],
+            "additionalProperties": false
+          },
+          "objectTypes": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "enum": ["Infinity", "-Infinity", "NaN"]
+                }
+              ]
+            }
+          },
+          "locations": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "gauges": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "enum": ["Infinity", "-Infinity", "NaN"]
+                }
+              ]
+            }
+          }
+        },
+        "required": ["pid", "uptimeSeconds", "memory", "locations", "gauges"],
+        "additionalProperties": false
       },
       "Event.SeqEncoded": {
         "type": "string"

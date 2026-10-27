@@ -35,6 +35,7 @@ import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
+import { RuntimeStats } from "@opencode/core/runtime-stats"
 import { HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
@@ -79,6 +80,7 @@ const applicationServiceNodes = [
   SessionRestart.node,
   Workspace.node,
   FileWatch.node,
+  RuntimeStats.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 

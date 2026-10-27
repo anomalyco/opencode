@@ -243,6 +243,8 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalDebugRuntimeInput,
+  ExperimentalDebugRuntimeOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1541,6 +1543,12 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalDebugRuntime =
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalDebugRuntimeInput) =>
+    preserveEffect<ExperimentalDebugRuntimeOutput>()(
+      raw["debug.runtime"]({ query: { heap: input?.["heap"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1554,6 +1562,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  debug: { runtime: EndpointExperimentalDebugRuntime(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>
