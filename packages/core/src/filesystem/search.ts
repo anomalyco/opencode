@@ -6,6 +6,7 @@ import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
+import { Environment } from "../environment/index.js"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
@@ -54,6 +55,7 @@ const ripgrepLayer = Layer.effect(
   Effect.gen(function* () {
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
+    const environment = yield* Environment.Service
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
@@ -65,22 +67,50 @@ const ripgrepLayer = Layer.effect(
       const next = emptyIndex()
       const previous = index
       if (!initialized) index = next
+      const limit = location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000
+      const add = (file: string) => {
+        next.files.set(file, previous.files.get(file) ?? fuzzysort.prepare(file))
+        const parts = file.split("/")
+        parts.slice(0, -1).forEach((_, offset) => {
+          const directory = parts.slice(0, offset + 1).join("/") + path.sep
+          if (!next.directories.has(directory))
+            next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
+        })
+      }
       yield* ripgrep.find({
         cwd: location.directory,
         pattern: "*",
-        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
+        limit,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
-        onEntry: (entry) =>
-          Effect.sync(() => {
-            next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, offset) => {
-              const directory = parts.slice(0, offset + 1).join("/") + path.sep
-              if (!next.directories.has(directory))
-                next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
-            })
-          }),
+        onEntry: (entry) => Effect.sync(() => add(entry.path)),
       })
+      // `rg --files` omits every symlink unless it follows all of them, symlinked directories included.
+      // Look for links only in the directories this scan walked, and let a depth-1 `--follow` listing of
+      // those directories decide which links are visible files. It applies the scan's ignore and hidden
+      // rules, and a symlinked directory or a broken link yields nothing, so no link is ever traversed.
+      if (next.files.size < limit)
+        yield* Effect.forEach(
+          ["", ...[...next.directories.keys()].map((directory) => directory.slice(0, -1))],
+          (directory) =>
+            Effect.gen(function* () {
+              const cwd = path.join(location.directory, directory)
+              const entries = yield* environment.files.list(cwd)
+              const links = new Set(entries.filter((entry) => entry.type === "symlink").map((entry) => entry.name))
+              if (links.size === 0) return
+              yield* ripgrep.find({
+                cwd,
+                pattern: "*",
+                limit,
+                follow: true,
+                maxDepth: 1,
+                onEntry: (entry) =>
+                  Effect.sync(() => {
+                    if (links.has(entry.path)) add(directory ? `${directory}/${entry.path}` : entry.path)
+                  }),
+              })
+            }).pipe(Effect.ignore),
+          { concurrency: 16, discard: true },
+        )
       index = next
       initialized = true
     }).pipe(Effect.orDie)
@@ -235,7 +265,11 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Location.node, Ripgrep.node, Environment.node],
+  })
 }
 
 export const node = configured()

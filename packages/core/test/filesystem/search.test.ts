@@ -1,6 +1,6 @@
 import { describe, expect, spyOn } from "bun:test"
 import fuzzysort from "fuzzysort"
-import { mkdir } from "node:fs/promises"
+import { mkdir, symlink } from "node:fs/promises"
 import os from "os"
 import path from "path"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
@@ -380,5 +380,45 @@ describe("FileSystemSearch", () => {
         expect(cleanup).toHaveBeenCalledTimes(3)
       }).pipe(Effect.provide(layer))
     }),
+  )
+
+  // Symlink creation needs elevated privileges on Windows.
+  ;(process.platform === "win32" ? it.live.skip : it.live)(
+    "indexes symlinks to files without following symlinked directories",
+    () =>
+      Effect.gen(function* () {
+        const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-symlink-"))))
+          .path
+        yield* Effect.promise(async () => {
+          await Bun.write(path.join(directory, ".agents/AGENTS.md"), "rules")
+          await Bun.write(path.join(directory, "app/index.ts"), "app")
+          await Bun.write(path.join(directory, ".ignore"), "ignored.md\n")
+          await symlink(".agents/AGENTS.md", path.join(directory, "AGENTS.md"))
+          await symlink("../.agents/AGENTS.md", path.join(directory, "app/AGENTS.md"))
+          await symlink(".agents/AGENTS.md", path.join(directory, "ignored.md"))
+          await symlink("app", path.join(directory, "linked"))
+          await symlink("missing.md", path.join(directory, "broken.md"))
+          await symlink(".", path.join(directory, "loop"))
+        })
+        const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          ),
+        ])
+        yield* Effect.gen(function* () {
+          const search = yield* FileSystemSearch.Service
+          const find = (query: string, type?: "file" | "directory") =>
+            search.find({ query, type }).pipe(Effect.map((entries) => entries.map((entry) => entry.path).sort()))
+          expect(yield* find("AGENTS", "file")).toEqual([
+            RelativePath.make("AGENTS.md"),
+            RelativePath.make("app/AGENTS.md"),
+          ])
+          expect(yield* find("index", "file")).toEqual([RelativePath.make("app/index.ts")])
+          expect(yield* find("ignored", "file")).toEqual([])
+          expect(yield* find("broken", "file")).toEqual([])
+          expect(yield* find("linked")).toEqual([])
+          expect(yield* find("loop")).toEqual([])
+        }).pipe(Effect.provide(layer))
+      }),
   )
 })
