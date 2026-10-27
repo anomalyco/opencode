@@ -288,6 +288,7 @@ function ImageStage(props: MediaProps & { src: string }) {
 
   const fit = () =>
     Math.min(
+      artifactKind(props.path) === "svg" ? Infinity : 1,
       Math.max(1, view.width - 48) / (view.imageWidth || 1),
       Math.max(1, view.height - 48) / (view.imageHeight || 1),
     )
