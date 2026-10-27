@@ -59,8 +59,51 @@ function normalizeKey(key: string) {
   return key.toLowerCase()
 }
 
+function keyFromEventCode(code: string) {
+  if (code.startsWith("Key") && code.length === 4) return code.slice(3).toLowerCase()
+
+  if (code.startsWith("Digit") && code.length === 6) return code.slice(5)
+
+  switch (code) {
+    case "Space":
+      return " "
+    case "Backquote":
+      return "`"
+    case "Minus":
+      return "-"
+    case "Equal":
+      return "="
+    case "BracketLeft":
+      return "["
+    case "BracketRight":
+      return "]"
+    case "Backslash":
+      return "\\"
+    case "Semicolon":
+      return ";"
+    case "Quote":
+      return "'"
+    case "Comma":
+      return ","
+    case "Period":
+      return "."
+    case "Slash":
+      return "/"
+    default:
+      return undefined
+  }
+}
+
 export function keyFromKeyboardEvent(event: KeyboardEvent) {
   const key = normalizeKey(bracketKey(event))
+
+  // Dead-key layouts report the key itself as "Dead" (or "Unidentified"), so the
+  // physical key from event.code is the only name a keybind can match.
+  if (key === "dead" || key === "unidentified") {
+    const physical = keyFromEventCode(event.code)
+
+    return physical === undefined ? key : normalizeKey(physical)
+  }
 
   if (!event.altKey || /^[a-z0-9]$/.test(key)) return key
 
