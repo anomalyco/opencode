@@ -430,6 +430,8 @@ describe("provider error classification", () => {
     const bodies = [
       '{"message":"Too many tokens, please wait before trying again."}',
       '{"message":"Too many tokens per day, please wait before trying again."}',
+      '{"message":"Token limit reached: too many tokens per minute for this model."}',
+      '{"message":"Too many tokens per second for this model."}',
     ]
     for (const body of bodies) {
       const error = new AIError({
