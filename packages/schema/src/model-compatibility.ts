@@ -13,6 +13,12 @@ export const MaxTokensField = Schema.Literals(["max_completion_tokens", "max_tok
 })
 export type MaxTokensField = typeof MaxTokensField.Type
 
+/** Where a System One decision host reads media, from models.dev `compatibility.media_input`. */
+export const MediaInput = Schema.Literals(["assets", "state", "root"]).annotate({
+  identifier: "Model.MediaInput",
+})
+export type MediaInput = typeof MediaInput.Type
+
 export const CacheFormat = Schema.Literals(["anthropic", "alibaba"]).annotate({ identifier: "Model.CacheFormat" })
 export type CacheFormat = typeof CacheFormat.Type
 
@@ -33,6 +39,8 @@ export const Compatibility = Schema.Struct({
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
   /** Supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.Boolean.pipe(optional),
+  /** Where a System One decision host reads media. Unset keeps the route default. */
+  mediaInput: MediaInput.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 // Provider defaults inherited by its models. Model-version features stay model-only.

@@ -1,7 +1,7 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
-import { MaxTokensField } from "@opencode/schema/model-compatibility"
+import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
@@ -76,6 +76,7 @@ const SourceApi = Schema.Struct({
     Schema.Struct({
       reasoning_field: Schema.optional(Schema.String),
       max_tokens_field: Schema.optional(Schema.String),
+      media_input: Schema.optional(Schema.String),
     }),
   ),
 })
@@ -134,6 +135,7 @@ const decodeMode = Schema.decodeUnknownOption(SourceMode)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
 const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
+const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 export type Snapshot = {
@@ -262,9 +264,11 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
         Provider.aisdk(aisdk)))
   if (!packageName) return undefined
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
+  const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
   const compatibility = {
     ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
     ...(maxTokensField ? { maxTokensField } : {}),
+    ...(mediaInput ? { mediaInput } : {}),
   }
   return {
     package: packageName,

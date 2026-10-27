@@ -3,6 +3,7 @@ export * as ModelResolver from "./model-resolver.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import {
   DecisionModel,
+  DecisionModelCompatibility,
   DecisionModelSchema,
   HttpOptions,
   ImageModel,
@@ -297,8 +298,17 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
     catch: (cause) => constructionError(resolved, cause),
   })
-  if (!is(runtime)) return yield* unsupported(resolved)
-  return runtime
+  // Catalog and config compatibility tell a decision route how its host takes media, as chat does above.
+  const mediaInput = resolved.compatibility?.mediaInput
+  const adapted =
+    runtime instanceof DecisionModel && mediaInput !== undefined
+      ? new DecisionModel({
+          ...runtime,
+          compatibility: DecisionModelCompatibility.make({ ...runtime.compatibility, mediaInput }),
+        })
+      : runtime
+  if (!is(adapted)) return yield* unsupported(resolved)
+  return adapted
 })
 
 const constructionError = (model: RuntimeInfo, cause: unknown) =>
