@@ -65,6 +65,10 @@ daemon; runtime-directory/registration wiring is platform-specific. The Unix
 backend preserves half-close when completing subscriptions so queued final
 frames are not discarded on macOS. Shutdown cancellation is a separate operation
 that wakes partial requests and blocked subscription writes before joining.
+On Unix the daemon loop sleeps in `poll(2)` on the listener and a private wake
+socket pair until a connection arrives, a stop or ownership change wakes it, an
+ownership deadline is due, or a two-second safety net elapses. Windows still
+polls every 10 ms.
 
 The Windows named-pipe backend keeps protocol 7 and the registration fields
 `instance_id`, `pid`, `protocol`, `socket`, and `token`. Treat `socket` as an opaque

@@ -12,6 +12,15 @@ pub(crate) struct Handoff {
     deadline: Instant,
 }
 
+/// `phase` distinguishes `Owned(Some(h))` from `Waiting(h)`, which share generation and
+/// deadline. `Default` is only a placeholder before the main loop's first tick.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Snapshot {
+    phase: u8,
+    generation: u64,
+    deadline: Option<Instant>,
+}
+
 pub(crate) struct Ownership {
     state: State,
     generation: u64,
@@ -84,6 +93,30 @@ impl Ownership {
                 deadline: now + self.handoff_timeout,
             })
             .clone())
+    }
+
+    /// Next instant at which `tick` can change state, if any.
+    pub fn deadline(&self) -> Option<Instant> {
+        match &self.state {
+            State::Starting(deadline) => Some(*deadline),
+            State::Owned(Some(handoff)) | State::Waiting(handoff) => Some(handoff.deadline),
+            State::Owned(None) | State::Stopped => None,
+        }
+    }
+
+    /// Cheap fingerprint of everything the main loop reacts to.
+    pub fn snapshot(&self) -> Snapshot {
+        let phase = match &self.state {
+            State::Starting(_) => 0,
+            State::Owned(_) => 1,
+            State::Waiting(_) => 2,
+            State::Stopped => 3,
+        };
+        Snapshot {
+            phase,
+            generation: self.generation,
+            deadline: self.deadline(),
+        }
     }
 
     pub fn disconnect(&mut self, generation: u64, now: Instant) {
@@ -219,5 +252,35 @@ mod tests {
         owner.disconnect(generation, now);
         assert!(!owner.tick(now + handoff - Duration::from_millis(1)));
         assert!(owner.tick(now + handoff));
+    }
+
+    #[test]
+    fn deadline_tracks_each_state() {
+        let now = Instant::now();
+        let acquire = Duration::from_millis(300);
+        let handoff = Duration::from_millis(500);
+        let mut owner = Ownership::with_timeouts(now, acquire, handoff);
+        assert_eq!(owner.deadline(), Some(now + acquire));
+
+        let generation = owner.claim(None, now).unwrap();
+        assert_eq!(owner.deadline(), None);
+
+        let ticket = owner.prepare(generation, now, 1000).unwrap();
+        assert_eq!(owner.deadline(), Some(now + handoff));
+        let owned = owner.snapshot();
+
+        owner.disconnect(generation, now);
+        assert_eq!(owner.deadline(), Some(ticket.deadline));
+        // Same generation and deadline; only the phase tells Waiting from Owned.
+        assert_ne!(owner.snapshot(), owned);
+
+        assert!(owner.tick(ticket.deadline));
+        assert_eq!(owner.deadline(), None);
+
+        let mut owner = Ownership::with_timeouts(now, acquire, handoff);
+        let generation = owner.claim(None, now).unwrap();
+        owner.prepare(generation, now, 1000).unwrap();
+        assert!(!owner.tick(now + handoff));
+        assert_eq!(owner.deadline(), None);
     }
 }

@@ -82,6 +82,39 @@ impl Listener {
         self.stopped = true;
         self.pending.operation.pipe.cancel();
     }
+
+    /// Windows keeps the 10 ms poll for now; the caller then polls `accept`.
+    pub fn wait(&self, _wake: &Wake, listen: bool, timeout: Duration) -> io::Result<Readiness> {
+        thread::sleep(timeout.min(Duration::from_millis(10)));
+        // `timed_out` stays false: Windows cannot tell, and the missed-wake detector must stay off.
+        Ok(Readiness {
+            connection: listen,
+            timed_out: false,
+        })
+    }
+}
+
+/// Readiness reported by `Listener::wait`. On Windows `connection` mirrors `listen` and
+/// `timed_out` is never set.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Readiness {
+    pub connection: bool,
+    pub timed_out: bool,
+}
+
+/// Windows keeps the 10 ms poll for now, so notify is a no-op.
+pub(crate) struct Wake;
+
+impl Wake {
+    pub fn new() -> io::Result<Self> {
+        Ok(Self)
+    }
+
+    pub fn notify(&self) {}
+
+    pub fn drain(&self) -> bool {
+        false
+    }
 }
 
 struct PendingConnection {
