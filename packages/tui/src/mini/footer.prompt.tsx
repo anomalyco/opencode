@@ -50,7 +50,7 @@ import {
   promptCopy,
   pushPromptHistory,
 } from "./prompt.shared"
-import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
+import { formatFileLineRange, parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_COMPACT_WIDTH, FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
@@ -462,7 +462,7 @@ export function createPromptState(input: PromptInput): PromptState {
         const url = pathToFileURL(path.resolve(input.directory(), item))
         let filename = item
         if (next.lineRange && !item.endsWith("/")) {
-          filename = `${item}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
+          filename = formatFileLineRange(item, next.lineRange)
           url.searchParams.set("start", String(next.lineRange.startLine))
           if (next.lineRange.endLine !== undefined) {
             url.searchParams.set("end", String(next.lineRange.endLine))

@@ -7,8 +7,22 @@ export function parseFileLineRange(input: string) {
   if (!match) return { base }
 
   const startLine = Number(match[1])
-  const endLine = match[2] && startLine < Number(match[2]) ? Number(match[2]) : undefined
+  // `#12` and `#12-12` both name one line; only `#12-` runs to the end of the file. The end line has
+  // to reach the server as `?end=`, because an attachment without it covers everything from `start`.
+  const endLine =
+    match[2] === undefined ? startLine : match[2] === "" ? undefined : Math.max(startLine, Number(match[2]))
   return { base, lineRange: { startLine, endLine } }
+}
+
+/** A selection that covers one line still needs its end, or the attachment runs to the end of the file. */
+export function mentionLineRange(lineStart: number, lineEnd: number) {
+  return { startLine: lineStart, endLine: Math.max(lineStart, lineEnd) }
+}
+
+export function formatFileLineRange(file: string, range: { startLine: number; endLine?: number }) {
+  if (range.endLine === undefined) return `${file}#${range.startLine}-`
+  if (range.endLine === range.startLine) return `${file}#${range.startLine}`
+  return `${file}#${range.startLine}-${range.endLine}`
 }
 
 export function stripFileLineRange(input: string) {
