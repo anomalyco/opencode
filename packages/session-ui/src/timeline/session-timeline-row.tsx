@@ -566,7 +566,7 @@ export function createSessionTimelineRowRenderer(input: {
         label: i18n.t(outcomeNoticeKey(outcome), { actor }),
         data: message.description,
         outcome,
-        icon: source === "shell" && outcome === "completed" ? undefined : outcomeNoticeIcon(outcome),
+        icon: outcomeNoticeIcon(outcome),
       }
     }
 
@@ -1282,8 +1282,6 @@ function outcomeNoticeIcon(outcome: Outcome) {
   if (outcome === "error") return "warning"
 
   if (outcome === "cancelled") return "circle-ban-sign"
-
-  return "check"
 }
 
 function outcomeNoticeColor(outcome: Outcome | undefined) {
