@@ -154,6 +154,8 @@ export const extensionGlobals = <R>(
       } catch (reason) {
         return settle(Effect.fail(reason))
       }
+      // An Effect runs inside the execution, with the services the runtime's tools get.
+      if (Effect.isEffect(result)) return ctx.pending.createHost(settle(result as Effect.Effect<unknown, unknown, R>))
       if (!(result instanceof Promise)) return settle(Effect.succeed(result))
       return ctx.pending.createHost(settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })))
     })

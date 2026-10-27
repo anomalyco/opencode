@@ -104,6 +104,10 @@ const web = Extension.make({ name: "web", globals: { fetch: (url: string) => glo
 const runtime = CodeMode.make({ tools, extensions: [web] })
 ```
 
+A global may return an Effect instead. The program gets a promise of its result, and the Effect runs inside the
+execution with the services the runtime's tools get, so a global can read per-execution state the same way a tool
+does. It is interrupted when the execution ends.
+
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.

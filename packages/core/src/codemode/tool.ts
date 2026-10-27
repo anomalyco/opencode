@@ -10,9 +10,11 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
+import type { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
+import { CodeModeRun } from "./run.js"
 import { CodeModeWeb } from "./web.js"
 
 const ExecuteFile = Schema.Struct({
@@ -47,20 +49,11 @@ type Node<T> = {
   readonly children: Map<string, Node<T>>
 }
 
-type ToolNode = Node<Tool.Tool<Run>>
+type ToolNode = Node<Tool.Tool<CodeModeRun.Service>>
 
 type Tools = {
-  [name: string]: Tool.Tool<Run> | Namespace.Namespace<Run> | Tools
+  [name: string]: Tool.Tool<CodeModeRun.Service> | Namespace.Namespace<CodeModeRun.Service> | Tools
 }
-
-// Per-execution parts of a runtime shared by every execution against the same inventory.
-class Run extends Context.Service<
-  Run,
-  {
-    readonly executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>
-    readonly hooks: CodeMode.Hooks
-  }
->()("@opencode/CodeModeTool/Run") {}
 
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
@@ -80,6 +73,7 @@ const description = [
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
+  permission: Permission.Interface,
 ) => {
   return {
     name: "execute",
@@ -99,7 +93,9 @@ export const create = (
         const result = yield* runtime(inventory)
           .execute(code)
           .pipe(
-            Effect.provideService(Run, {
+            Effect.provideService(CodeModeRun.Service, {
+              context,
+              permission,
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
@@ -232,7 +228,7 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
-const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run>>()
+const runtimes = new WeakMap<Inventory, CodeMode.Runtime<CodeModeRun.Service>>()
 
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
@@ -246,7 +242,7 @@ function runtime(inventory: Inventory) {
       description: child.description,
       input: child.inputSchema,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
-      execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
+      execute: (input) => CodeModeRun.Service.use((run) => run.executeTool(name, registration, input)),
     })
   }
   const tools = renderTools(root)
@@ -256,11 +252,13 @@ function runtime(inventory: Inventory) {
 }
 
 const runHooks = {
-  "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
-  "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
-  "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
-  "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
-} satisfies CodeMode.Hooks<Run>
+  "tool.before": (call) => CodeModeRun.Service.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
+  "tool.after": (call, result) =>
+    CodeModeRun.Service.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
+  "extension.before": (call) => CodeModeRun.Service.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
+  "extension.after": (call, result) =>
+    CodeModeRun.Service.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
+} satisfies CodeMode.Hooks<CodeModeRun.Service>
 
 function getNode<T>(root: Node<T>, path: string) {
   return path.split(".").reduce((parent, name) => {
@@ -271,13 +269,17 @@ function getNode<T>(root: Node<T>, path: string) {
 }
 
 function renderTools(root: ToolNode) {
-  const callables = new Map<string, Tool.Tool<Run>>()
+  const callables = new Map<string, Tool.Tool<CodeModeRun.Service>>()
   const tools = renderChildren(root, [], callables)
   for (const [path, tool] of callables) tools[path] = tool
   return tools
 }
 
-function renderChildren(node: ToolNode, path: ReadonlyArray<string>, callables: Map<string, Tool.Tool<Run>>): Tools {
+function renderChildren(
+  node: ToolNode,
+  path: ReadonlyArray<string>,
+  callables: Map<string, Tool.Tool<CodeModeRun.Service>>,
+): Tools {
   return Object.fromEntries(
     Array.from(node.children).flatMap(([name, child]) => {
       const next = [...path, name]
@@ -295,7 +297,7 @@ function renderChildren(node: ToolNode, path: ReadonlyArray<string>, callables: 
 function renderEntry(
   node: ToolNode,
   path: ReadonlyArray<string>,
-  callables: Map<string, Tool.Tool<Run>>,
+  callables: Map<string, Tool.Tool<CodeModeRun.Service>>,
 ): Tools[string] {
   const tools = renderChildren(node, path, callables)
   // CodeMode merges this dotted tool path with the nested namespace entry.

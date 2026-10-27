@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { CodeMode, Extension, Tool } from "../src/index.js"
 
 const held: Array<unknown> = []
@@ -96,6 +96,35 @@ describe("extension functions", () => {
     const target = CodeMode.make({ extensions: [Extension.make({ name: "cls", globals: { Bag: class Bag {} } })] })
     expect((await failure(`Bag()`, target)).message).toContain("without")
     expect((await failure(`new Bag()`, target)).message).toContain("new Bag(...) is not supported")
+  })
+
+  test("a global that returns an Effect runs inside the execution, with its services", async () => {
+    class Greeting extends Context.Service<Greeting, string>()("test/Greeting") {}
+    const interrupted: Array<string> = []
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "effects",
+          globals: {
+            greet: (name: string) => Greeting.use((greeting) => Effect.succeed(`${greeting}, ${name}`)),
+            refuse: () => Effect.fail(new RangeError("refused")),
+            hang: () => Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(() => interrupted.push("hang")))),
+          },
+        }),
+      ],
+    })
+    const run = (code: string) => Effect.runPromise(target.execute(code).pipe(Effect.provideService(Greeting, "hi")))
+
+    expect(await run(`const p = greet("ada"); return [p instanceof Promise, await p]`)).toMatchObject({
+      ok: true,
+      value: [true, "hi, ada"],
+    })
+    expect(await run(`try { await refuse() } catch (e) { return [e.name, e.message] }`)).toMatchObject({
+      ok: true,
+      value: ["RangeError", "refused"],
+    })
+    expect(await run(`hang(); return "done"`)).toMatchObject({ ok: true, value: "done" })
+    expect(interrupted).toEqual(["hang"])
   })
 })
 

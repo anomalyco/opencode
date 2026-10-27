@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -16,8 +17,15 @@ const context = {
   progress: () => Effect.void,
 }
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context))
+const permission = (assert: Permission.Interface["assert"] = () => Effect.void) =>
+  Effect.runSync(
+    Effect.gen(function* () {
+      return yield* Permission.Service
+    }).pipe(Effect.provide(Layer.mock(Permission.Service, { assert }))),
+  )
+
+const createCodeMode = (tools: ReadonlyMap<string, Info>, assert?: Permission.Interface["assert"]) =>
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission(assert))
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -39,6 +47,35 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+test("execute asks the webfetch permission before fetching", async () => {
+  const asked: Array<unknown> = []
+  const result = await Effect.runPromise(
+    createCodeMode(new Map(), (input) =>
+      Effect.sync(() => asked.push(input)).pipe(
+        Effect.andThen(
+          Effect.fail(
+            new Permission.BlockedError({ rules: [], permission: "webfetch", resources: [], reason: "Not allowed" }),
+          ),
+        ),
+      ),
+    ).execute({ code: 'return await fetch("https://example.invalid/data", { method: "post" })' }, context),
+  )
+
+  expect(asked).toEqual([
+    {
+      action: "webfetch",
+      resources: ["https://example.invalid/data"],
+      save: ["*"],
+      metadata: { method: "POST", url: "https://example.invalid/data" },
+      sessionID: context.sessionID,
+      agent: context.agent,
+      source: { type: "tool", messageID: context.messageID, id: context.id },
+    },
+  ])
+  expect(result.output.error).toBe(true)
+  expect(result.output.output).toContain("Not allowed")
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
@@ -177,10 +214,14 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
-  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context))
+  const codeMode = CodeModeTool.create(
+    inventory,
+    (_, tool, input, context) => execute(tool, input, context),
+    permission(),
+  )
   const run = (id: string) => {
     const progress: Array<Tool.Metadata> = []
-    return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context))
+    return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), permission())
       .execute(
         { code: `return await tools.echo({ value: "${id}" })` },
         { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
