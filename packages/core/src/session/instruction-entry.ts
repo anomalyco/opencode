@@ -15,7 +15,9 @@ export const Info = InstructionEntry.Info
 export type Info = typeof Info.Type
 export const Snapshot = InstructionEntry.Snapshot
 export type Snapshot = typeof Snapshot.Type
+export const MaxKeyLength = InstructionEntry.MaxKeyLength
 export const MaxValueBytes = InstructionEntry.MaxValueBytes
+export const InvalidKeyError = InstructionEntry.InvalidKeyError
 export const ValueTooLargeError = InstructionEntry.ValueTooLargeError
 
 type DatabaseService = Database.Interface["db"]
@@ -25,17 +27,7 @@ export const snapshot = Effect.fn("InstructionEntry.snapshot")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
-  return yield* db
-    .select({
-      key: InstructionEntryTable.key,
-      value: InstructionEntryTable.value,
-      removed: InstructionEntryTable.removed,
-    })
-    .from(InstructionEntryTable)
-    .where(eq(InstructionEntryTable.session_id, sessionID))
-    .orderBy(asc(InstructionEntryTable.key))
-    .all()
-    .pipe(Effect.orDie)
+  return yield* rows(db, sessionID, true)
 })
 
 export const initialize = Effect.fn("InstructionEntry.initialize")(function* (
@@ -72,13 +64,50 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly key: Key
     readonly value: Schema.Json
-  }) => Effect.Effect<void, InstructionEntry.ValueTooLargeError>
-  readonly remove: (input: { readonly sessionID: SessionSchema.ID; readonly key: Key }) => Effect.Effect<void>
+  }) => Effect.Effect<void, InstructionEntry.InvalidKeyError | InstructionEntry.ValueTooLargeError>
+  readonly remove: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly key: Key
+  }) => Effect.Effect<void, InstructionEntry.InvalidKeyError>
   /** Produces one Instructions source per stored entry, keyed `api/<key>`. */
   readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionEntry") {}
+
+const isKey = Schema.is(Key)
+
+const invalidKey = (key: string) =>
+  new InvalidKeyError({
+    key,
+    message: `Instruction entry key "${key}" must match /^[a-z0-9][a-z0-9._-]*$/ and be at most ${MaxKeyLength} characters`,
+  })
+
+const rows = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID, includeRemoved: boolean) {
+  const stored = yield* db
+    .select({
+      key: InstructionEntryTable.key,
+      value: InstructionEntryTable.value,
+      removed: InstructionEntryTable.removed,
+    })
+    .from(InstructionEntryTable)
+    .where(
+      and(
+        eq(InstructionEntryTable.session_id, sessionID),
+        includeRemoved ? undefined : eq(InstructionEntryTable.removed, false),
+      ),
+    )
+    .orderBy(asc(InstructionEntryTable.key))
+    .all()
+    .pipe(Effect.orDie)
+  const valid = yield* Effect.forEach(stored, (row) => {
+    if (isKey(row.key)) return Effect.succeed([row])
+    return Effect.logWarning("skipping instruction entry with invalid key", { sessionID, key: row.key }).pipe(
+      Effect.as([]),
+    )
+  })
+  return valid.flat()
+})
 
 const renderValue = (value: Schema.Json) => (typeof value === "string" ? value : JSON.stringify(value, null, 2))
 
@@ -108,33 +137,15 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
 
-    const rows = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, includeRemoved: boolean) {
-      return yield* db
-        .select({
-          key: InstructionEntryTable.key,
-          value: InstructionEntryTable.value,
-          removed: InstructionEntryTable.removed,
-        })
-        .from(InstructionEntryTable)
-        .where(
-          and(
-            eq(InstructionEntryTable.session_id, sessionID),
-            includeRemoved ? undefined : eq(InstructionEntryTable.removed, false),
-          ),
-        )
-        .orderBy(asc(InstructionEntryTable.key))
-        .all()
-        .pipe(Effect.orDie)
-    })
-
     const list = Effect.fn("InstructionEntry.list")(function* (sessionID: SessionSchema.ID) {
-      return (yield* rows(sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
+      return (yield* rows(db, sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
     })
 
     const put = Effect.fn("InstructionEntry.put")(function* (input: Parameters<Interface["put"]>[0]) {
+      if (!isKey(input.key)) return yield* invalidKey(input.key)
       const actualBytes = Buffer.byteLength(JSON.stringify(input.value), "utf8")
       if (actualBytes > MaxValueBytes)
-        yield* new ValueTooLargeError({
+        return yield* new ValueTooLargeError({
           actualBytes,
           maxBytes: MaxValueBytes,
           message: `Instruction entry value is ${actualBytes} bytes; the limit is ${MaxValueBytes} bytes`,
@@ -156,6 +167,7 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("InstructionEntry.remove")(function* (input: Parameters<Interface["remove"]>[0]) {
+      if (!isKey(input.key)) return yield* invalidKey(input.key)
       yield* db
         .update(InstructionEntryTable)
         .set({ value: null, removed: true, time_updated: Date.now() })
@@ -171,7 +183,7 @@ const layer = Layer.effect(
     })
 
     const load = Effect.fn("InstructionEntry.load")(function* (sessionID: SessionSchema.ID) {
-      return Instructions.combine((yield* rows(sessionID, true)).map(source))
+      return Instructions.combine((yield* rows(db, sessionID, true)).map(source))
     })
 
     return Service.of({ list, put, remove, load })

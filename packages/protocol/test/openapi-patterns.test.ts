@@ -12,8 +12,14 @@ test("the OpenAPI document keeps string pattern constraints from protocol schema
       collect(item)
     })
   }
-  collect(OpenApi.fromApi(ClientApi))
+  const spec = OpenApi.fromApi(ClientApi)
+  collect(spec)
 
+  expect(spec.components.schemas?.["InstructionEntry.Key"]).toMatchObject({
+    type: "string",
+    maxLength: 128,
+    pattern: "^[a-z0-9][a-z0-9._-]*$",
+  })
   expect([...patterns]).toEqual(
     expect.arrayContaining([
       "^[^/#]+\\/[^#]+(?:#[^#]+)?$",

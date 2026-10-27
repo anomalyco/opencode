@@ -6,6 +6,7 @@ import { ConfigAgent } from "../src/config/agent.js"
 import { ConfigProvider } from "../src/config/provider.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Form } from "../src/form.js"
+import { InstructionEntry } from "../src/instruction-entry.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -29,6 +30,17 @@ describe("contract hygiene", () => {
     const decode = Schema.decodeUnknownSync(ConfigAgent.Color)
     expect(decode("#ff6b6b")).toBe("#ff6b6b")
     expect(() => decode("warning")).toThrow()
+  })
+
+  test("restricts instruction entry keys to slash-free lowercase identifiers up to 128 characters", () => {
+    const decode = Schema.decodeUnknownSync(InstructionEntry.Key)
+    expect(decode("deploy-target.v1_0")).toBe("deploy-target.v1_0")
+    expect(decode("a".repeat(InstructionEntry.MaxKeyLength))).toHaveLength(InstructionEntry.MaxKeyLength)
+    expect(() => decode("")).toThrow()
+    expect(() => decode("Bad Key")).toThrow()
+    expect(() => decode("a/b")).toThrow()
+    expect(() => decode("-leading")).toThrow()
+    expect(() => decode("a".repeat(InstructionEntry.MaxKeyLength + 1))).toThrow()
   })
 
   test("keeps absolute costs distinct from model rates", () => {

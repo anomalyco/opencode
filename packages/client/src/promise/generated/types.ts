@@ -146,6 +146,8 @@ export type InstructionKey = string
 
 export type InstructionHash = string
 
+export type InstructionEntrySnapshot = Array<{ key: string; value: JsonValue; removed: boolean }>
+
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
 export type SessionMessageNative1 = { [x: string]: any }
@@ -565,8 +567,6 @@ export type SessionInboxCompaction = {
 }
 
 export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue }
-
-export type InstructionEntrySnapshot = Array<{ key: InstructionEntryKey; value: JsonValue; removed: boolean }>
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq }
 

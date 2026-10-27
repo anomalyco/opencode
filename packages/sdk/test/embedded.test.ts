@@ -195,6 +195,29 @@ it.live("OpenCodeWorkerd seeds plugins before cold model resolution", () =>
   ),
 )
 
+it.live("embedded instruction entries validate keys before transport", () =>
+  withEmbedded("opencode-embedded-entry-keys-", (fixture) =>
+    Effect.gen(function* () {
+      const opencode = yield* fixture.sdk.OpenCode.create({
+        config: { directory: fixture.directory, project: false },
+        models: { fetch: false },
+        fs: { filewatcher: false },
+      })
+      const session = yield* opencode.sessions.create({ location: location(fixture) })
+      const entries = opencode.sessions.instructions.entry
+      for (const key of ["Bad Key", "a".repeat(129)]) {
+        for (const operation of [
+          entries.put({ sessionID: session.id, key, value: true }),
+          entries.remove({ sessionID: session.id, key }),
+        ]) {
+          expect(yield* Effect.flip(operation)).toMatchObject({ _tag: "ClientError", cause: { _tag: "SchemaError" } })
+        }
+      }
+      expect(yield* entries.list({ sessionID: session.id })).toEqual([])
+    }),
+  ),
+)
+
 it.live(
   "embedded client uses the real router and handlers",
   () =>

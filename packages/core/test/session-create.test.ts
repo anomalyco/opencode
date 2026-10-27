@@ -29,7 +29,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionEvent } from "@opencode/core/session/event"
-import { SessionTable } from "@opencode/core/session/sql"
+import { InstructionEntryTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { Workspace } from "@opencode/core/workspace"
@@ -702,7 +702,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("inherits instruction entries when forking", () =>
+  it.effect("inherits valid instruction entries when forking and replays legacy snapshots", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const entries = yield* InstructionEntry.Service
@@ -714,6 +714,15 @@ describe("Session.create", () => {
       yield* entries.put({ sessionID: parent.id, key: "deploy-target", value: "production" })
       yield* entries.put({ sessionID: parent.id, key: "retired", value: true })
       yield* entries.remove({ sessionID: parent.id, key: "retired" })
+      const legacyEntry = { key: "a".repeat(InstructionEntry.MaxKeyLength + 1), value: true, removed: false }
+      yield* db
+        .insert(InstructionEntryTable)
+        .values([
+          { ...legacyEntry, session_id: parent.id },
+          { session_id: parent.id, key: "Bad Key", value: "ignored", removed: false },
+        ])
+        .run()
+        .pipe(Effect.orDie)
       yield* Effect.forEach(
         Array.from({ length: 20 }, (_, index) => index),
         (index) => entries.put({ sessionID: parent.id, key: `entry-${String(index).padStart(2, "0")}`, value: index }),
@@ -723,6 +732,7 @@ describe("Session.create", () => {
       const forked = yield* session.fork({ sessionID: parent.id })
       const inheritedList = yield* entries.list(forked.id)
       const inheritedValues = yield* entries.load(forked.id).pipe(Effect.flatMap(Instructions.read))
+      const historicalEntries = [...(yield* InstructionEntry.snapshot(db, forked.id)), legacyEntry]
 
       expect(inheritedList).toHaveLength(21)
       expect(inheritedList).toContainEqual({ key: "deploy-target", value: "production" })
@@ -748,7 +758,7 @@ describe("Session.create", () => {
         aggregateID: recorded.aggregate_id,
         seq: recorded.seq,
         type: recorded.type,
-        data: recorded.data,
+        data: { ...recorded.data, instructionEntries: historicalEntries },
       })
 
       expect(yield* entries.list(forked.id)).toEqual(inheritedList)
