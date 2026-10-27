@@ -201,17 +201,27 @@ async function linuxOwnsListener(pid: number, port: number) {
 }
 
 async function windowsListeners(port: number) {
+  // Ask Windows for the socket's owner instead of parsing netstat. netstat localizes its state
+  // column ("ABHÖREN", "ÉCOUTE", ...), so matching "LISTENING" finds nothing on non-English
+  // Windows and a stuck service keeps the managed port, which makes the replacement fail to
+  // bind. The cmdlet and parameter names are not localized. This runs only while recovering an
+  // owner that has been silent past the recovery window, so the PowerShell start is not on a
+  // latency-sensitive path.
   try {
-    const result = await promisify(execFile)("netstat", ["-ano", "-p", "tcp"], {
-      timeout: 1_000,
-      maxBuffer: 1_048_576,
-      windowsHide: true,
-    })
+    const result = await promisify(execFile)(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `(Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue).OwningProcess`,
+      ],
+      { timeout: 5_000, maxBuffer: 4_096, windowsHide: true },
+    )
     return result.stdout
-      .split("\n")
-      .map((line) => line.trim().split(/\s+/))
-      .filter((fields) => fields[0] === "TCP" && fields[3] === "LISTENING" && fields[1]?.endsWith(`:${port}`))
-      .map((fields) => Number(fields[4]))
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(Number)
       .filter(Number.isInteger)
   } catch {
     return []
