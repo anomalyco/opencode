@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 for (const mode of ["hidden", "compact", "full"] as const) {
   for (const reasoning of ["blank", "heading"] as const) {

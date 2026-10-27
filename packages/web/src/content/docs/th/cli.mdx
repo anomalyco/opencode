@@ -48,16 +48,6 @@ OpenCode CLI ยังมีคำสั่งย่อยอีกมากม�
 
 ---
 
-### agent
-
-จัดการเอเจนต์สำหรับ OpenCode
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ OpenCode ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | แยกเซสชันเมื่อดำเนินการต่อ (ใช้กับ `--continue` หรือ `--session`)                           |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | รหัสผ่านการยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_PASSWORD`)                   |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | ชื่อผู้ใช้การยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_USERNAME` หรือ `opencode`) |
-
----
-
-#### create
-
-สร้างเอเจนต์ใหม่
-
-```bash
-opencode agent create
-```
-
-คำสั่งนี้จะแนะนำคุณตลอดกระบวนการสร้างเอเจนต์ใหม่ พร้อมพรอมต์ระบบและความสามารถของเครื่องมือ
-
----
-
-#### list
-
-แสดงรายชื่อเอเจนต์ที่พร้อมใช้งานทั้งหมด
-
-```bash
-opencode agent list
-```
 
 ---
 

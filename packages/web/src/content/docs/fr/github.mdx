@@ -40,36 +40,36 @@ Rendez-vous sur [**github.com/apps/opencode-agent**](https://github.com/apps/ope
 Ajoutez le fichier de workflow suivant à `.github/workflows/opencode.yml` dans votre dépôt. Assurez-vous de définir les clés `model` appropriées et les clés API requises dans `env`.
 
 ```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+name: opencode
 
-   on:
-     issue_comment:
-       types: [created]
-     pull_request_review_comment:
-       types: [created]
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
 
-   jobs:
-     opencode:
-       if: |
-         contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
-       runs-on: ubuntu-latest
-       permissions:
-         id-token: write
-       steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+jobs:
+  opencode:
+    if: |
+      contains(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
-          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
-           env:
-             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-           with:
-             model: anthropic/claude-sonnet-4-20250514
-             # github_token: xxxx
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          # github_token: xxxx
 ```
 
 3. **Stockez les clés API dans les secrets**
@@ -142,7 +142,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review the codebase for any TODO comments and create a summary.
             If you find issues worth addressing, open an issue to track them.
@@ -180,7 +180,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           use_github_token: true
           prompt: |
             Review this pull request:
@@ -236,7 +236,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-5-5
           prompt: |
             Review this issue. If there's a clear fix or relevant docs:
             - Provide documentation links
@@ -255,7 +255,7 @@ Remplacez l'invite par défaut pour personnaliser le comportement de OpenCode po
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
   with:
-    model: anthropic/claude-sonnet-4-5
+    model: anthropic/claude-sonnet-5-5
     prompt: |
       Review this pull request:
       - Check for code quality issues

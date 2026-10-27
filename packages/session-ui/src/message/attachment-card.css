@@ -36,7 +36,8 @@
     font-family: var(--v2-font-family-sans, "Inter", sans-serif);
     font-style: normal;
     font-size: 11px;
-    line-height: 12px;
+    /* Inter's descenders need 14px at 11px; a tighter line box clips them where the text truncates. */
+    line-height: 14px;
     letter-spacing: 0.05px;
     font-variation-settings: "slnt" 0;
   }
@@ -73,6 +74,42 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+  }
+}
+
+[data-component="attachment-card"] {
+  [data-slot="comment-card-quote"],
+  [data-slot="comment-card-action"] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  [data-slot="comment-card-action"] {
+    display: none;
+    color: var(--v2-text-text-base);
+  }
+}
+
+@media (hover: hover) {
+  [data-component="attachment-card"]:hover:has([data-slot="comment-card-action"]) [data-slot="comment-card-quote"] {
+    display: none;
+  }
+
+  [data-component="attachment-card"]:hover [data-slot="comment-card-action"] {
+    display: flex;
+  }
+}
+
+@media (hover: none) {
+  [data-component="attachment-card"]:has([data-slot="comment-card-action"]:not([data-commented]))
+    [data-slot="comment-card-quote"] {
+    display: none;
+  }
+
+  [data-component="attachment-card"] [data-slot="comment-card-action"]:not([data-commented]) {
+    display: flex;
   }
 }
 

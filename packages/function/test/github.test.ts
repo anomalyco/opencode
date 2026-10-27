@@ -29,6 +29,19 @@ describe("parseRepositoryClaim", () => {
     ).toEqual({ owner: "octocat", repo: "my-repo" })
   })
 
+  test("reads the repository id claim", () => {
+    expect(
+      parseRepositoryClaim({
+        repository: "octocat/my-repo",
+        repository_id: "456789",
+      }),
+    ).toEqual({ owner: "octocat", repo: "my-repo", id: 456789 })
+  })
+
+  test("ignores a non-numeric repository id claim", () => {
+    expect(parseRepositoryClaim({ repository: "octocat/my-repo", repository_id: "abc" }).id).toBeUndefined()
+  })
+
   test("rejects a missing repository claim", () => {
     expect(() => parseRepositoryClaim({})).toThrow("Repository claim is missing")
   })

@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { Auth } from "./auth.js"
 import { Endpoint, type EndpointPatch } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -94,8 +94,6 @@ export type AnyRoute<Compact extends CompactionOperations | undefined = Compacti
   Compact
 >
 
-export type HttpOptionsInput = HttpOptions.Input
-
 export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "route">
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
@@ -132,7 +130,7 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
 ) => {
   const provider = route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
   if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
-  if (!endpointBaseURL(route.endpoint))
+  if (!route.endpoint.baseURL)
     throw new ProviderConfigurationError({
       provider: ProviderID.make(provider),
       message: `Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`,
@@ -150,7 +148,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     ...base,
     ...patch,
     headers,
-    generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
+    generation: mergeGenerationOptions(base?.generation, patch.generation),
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(
       base?.http,
@@ -160,9 +158,6 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   }
 }
 
-const endpointBaseURL = <Body>(endpoint: Endpoint.Definition<Body>) =>
-  typeof endpoint.baseURL === "string" ? endpoint.baseURL : undefined
-
 const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined>) => {
   const entries = items.flatMap((item) =>
     item === undefined ? [] : Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -170,9 +165,6 @@ const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined
   if (entries.length === 0) return undefined
   return Object.fromEntries(entries)
 }
-
-export const generationOptions = (input: GenerationOptions.Input | undefined) =>
-  input === undefined ? undefined : GenerationOptions.make(input)
 
 export interface Interface {
   readonly compact: CompactMethod
@@ -343,7 +335,8 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
     let terminal = false
     return events.pipe(
       Stream.mapEffect((event) => {
-        if (terminal)
+        // Raw events carry provider frames that may trail the terminal event.
+        if (terminal && !LLMEvent.is.raw(event))
           return Effect.fail(
             ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
           )
@@ -353,6 +346,19 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
       Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
     )
   })
+
+const decodeJsonOption = Schema.decodeUnknownOption(ProviderShared.Json)
+
+// JSON text frames are parsed; non-JSON sentinels such as `[DONE]` stay strings.
+const rawFrame = (frame: unknown) =>
+  typeof frame === "string" ? Option.getOrElse(decodeJsonOption(frame), () => frame) : frame
+
+// Transports may interleave their own marker objects with provider frames, e.g. Gemini's continuation boundary.
+const isProviderFrame = (frame: unknown) =>
+  typeof frame !== "object" ||
+  frame === null ||
+  Array.isArray(frame) ||
+  Object.getPrototypeOf(frame) === Object.prototype
 
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
@@ -399,8 +405,8 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           provider: provider ?? routeInput.provider,
           providerMetadataKey:
             providerMetadataKey ??
-            (provider !== undefined && String(provider) !== String(routeInput.provider)
-              ? String(provider)
+            (provider !== undefined && provider !== routeInput.provider
+              ? provider
               : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
@@ -464,7 +470,9 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                       ),
                       Effect.map(([next, output]) => {
                         state = next
-                        return output
+                        return request.includeRaw && isProviderFrame(frame)
+                          ? [LLMEvent.raw({ data: execution.raw?.(frame) ?? rawFrame(frame) }), ...output]
+                          : output
                       }),
                       Effect.mapError(frameError(frame, event)),
                     ),
@@ -572,6 +580,20 @@ const prepareRequest = (request: LLMRequest) => {
 }
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+  const references = request.messages.flatMap((message) =>
+    message.content.flatMap((part) => {
+      if (part.type === "media") {
+        const source = part.media.source
+        return source.type === "url" ? [source.url] : source.type === "ref" ? [source.id] : []
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return []
+      return part.result.value.flatMap((item) => (item.type === "file" ? [item.uri] : []))
+    }),
+  )
+  if (references.some((reference) => /^\s*file:/i.test(reference)))
+    return yield* ProviderShared.invalidRequest(
+      "Local file references must be read with Media.file(path) before sending",
+    )
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
@@ -586,7 +608,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   }
 })
 
-/** @internal Test-only projection of the execution compiler; not exported from package barrels. */
+/** Test-only projection of the execution compiler; exported from `@opencode/ai/testing`. */
 export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request: LLMRequest) {
   const compiled = yield* compile(request)
   return {
@@ -646,13 +668,6 @@ export function compact(request: LLMRequest, options?: EndpointCompactOptions | 
     return yield* unsupportedCompaction(request, options?.mechanism)
   })
 }
-
-export const streamRequest = (request: LLMRequest, options?: StreamOptions) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      return (yield* Service).stream(request, options)
-    }),
-  )
 
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,

@@ -18,7 +18,7 @@ Araç davranışını kontrol etmek için `permission` alanını kullanın. Her 
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -45,7 +45,7 @@ opencode içinde bulunan tüm yerleşik araçlar aşağıdadır.
 
 ---
 
-### shell
+### bash
 
 Proje ortamınızda kabuk komutları çalıştırır.
 
@@ -53,7 +53,7 @@ Proje ortamınızda kabuk komutları çalıştırır.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

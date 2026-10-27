@@ -195,7 +195,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(bez odgovora)",
   "ui.question.review.notAnswered": "(bez odgovora)",
   "ui.question.multiHint": "Odaberite sve primjenjive odgovore",
-  "ui.question.singleHint": "Odaberite jedan odgovor",
   "ui.question.custom.placeholder": "Upišite svoj odgovor…",
   "ui.messagePart.context.match.one": "({{count}} podudaranje)",
   "ui.messagePart.context.match.other": "({{count}} podudaranja)",

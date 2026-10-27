@@ -1,6 +1,6 @@
 import { constructor, constants, type Method, methods } from "../interpreter/native.js"
 import { coerceToNumber, type Value } from "../interpreter/objects.js"
-import { rangeError, typeError } from "../interpreter/model.js"
+import { typeError } from "../interpreter/model.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { withPrimitives } from "../interpreter/callback.js"
 import { coerce, coercion } from "./value.js"
@@ -51,12 +51,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
     formatting("toExponential", (value, digits) => value.toExponential(digits)),
     formatting("toPrecision", (value, digits) => (digits === undefined ? value.toString() : value.toPrecision(digits))),
-    formatting("toString", (value, radix) => {
-      if (radix !== undefined && (radix < 2 || radix > 36)) {
-        throw rangeError("Number.toString radix must be between 2 and 36.")
-      }
-      return value.toString(radix)
-    }),
+    formatting("toString", (value, radix) => value.toString(radix)),
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf")],
   ])
   return number

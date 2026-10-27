@@ -4,14 +4,14 @@ import { LineCommentEditor, LineComment, LineCommentOverflowIcon } from "./line-
 import { Menu } from "../../navigation/menu/menu"
 
 const docs = `### Overview
-Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, footer line context, \`Button\` ghost + contrast actions).
+Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, small \`Button\` ghost + contrast actions).
 
 ### Display
-- \`LineComment\`: column stack (body + meta) beside optional \`actions\` (overflow).
+- \`LineComment\`: column stack (body + optional meta) beside optional \`actions\` (overflow). The body keeps its line breaks. \`onOpen\` makes a click anywhere on the card open it.
 - Use \`LineCommentOverflowIcon\` inside a \`data-slot="line-comment-v2-overflow"\` button for the Figma dots control.
 
 ### Editor
-- \`LineCommentEditor\`: optional \`heading\` above the textarea (default “Comment”), footer (selection meta + Cancel / Comment).
+- \`LineCommentEditor\`: the card is the text field (\`label\` names it, default “Comment”), footer (optional selection meta + Cancel / Comment).
 - \`Enter\` submits (Shift+Enter newline); \`Escape\` cancels. Controlled via \`value\` / \`onInput\`.
 `
 
@@ -34,7 +34,6 @@ export const Display = {
     <div style={{ width: "400px" }}>
       <LineComment
         comment="Consider guarding against empty arrays."
-        selection="Comment on line 40"
         actions={
           <Menu gutter={4}>
             <Menu.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label="Comment actions">
@@ -56,7 +55,15 @@ export const Display = {
 export const DisplayWithoutActions = {
   render: () => (
     <div style={{ width: "400px" }}>
-      <LineComment comment="Consider guarding against empty arrays." selection="Comment on line 40" />
+      <LineComment comment="Consider guarding against empty arrays." />
+    </div>
+  ),
+}
+
+export const DisplayMultiline = {
+  render: () => (
+    <div style={{ width: "400px" }}>
+      <LineComment comment={"Consider guarding against empty arrays.\n\nAn early return keeps the happy path flat."} />
     </div>
   ),
 }
@@ -72,7 +79,6 @@ export const Editor = {
           onInput={setValue}
           onCancel={() => setValue("")}
           onSubmit={() => setValue("")}
-          selection="Comment on line 40"
         />
       </div>
     )
@@ -90,7 +96,6 @@ export const EditorFilled = {
           onInput={setValue}
           onCancel={() => setValue("")}
           onSubmit={() => {}}
-          selection="Comment on line 40"
           autofocus={false}
         />
       </div>

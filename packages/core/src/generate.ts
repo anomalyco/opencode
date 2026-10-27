@@ -1,6 +1,6 @@
 export * as Generate from "./generate.js"
 
-import { LLM, LLMClient, AIError } from "@opencode/ai"
+import { LLM, LLMClient, AIError } from "@opencode/ai/effect"
 import { SessionID } from "@opencode/schema/session-id"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"

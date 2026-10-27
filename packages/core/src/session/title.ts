@@ -1,7 +1,7 @@
 export * as SessionTitle from "./title.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai"
+import { LLMClient, LLMEvent, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Database } from "../database/database.js"
@@ -30,6 +30,11 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
+// Framing the input as text to name keeps models from answering or carrying out the request instead.
+const messagePrompt = (text: string) =>
+  `Here is the first message of the conversation:\n\n<message>\n${text}\n</message>\n\nReply with only the title.`
+const conversationPrompt = (text: string) =>
+  `Here is the conversation so far:\n\n<conversation>\n${text}\n</conversation>\n\nReply with only the title.`
 export const isUntitled = (session: SessionSchema.Info) =>
   isExactRootFallback({
     title: session.title,
@@ -117,13 +122,14 @@ export const layer = Layer.effect(
                   return text ? [`Assistant: ${text}`] : []
                 })
                 .join("\n\n")
-              if (!recent) return original
+              if (!recent) return conversationPrompt(original)
               const prefix = `${original}\n\nRecent conversation:\n`
-              return `${prefix}${recent.slice(-(MAX_CONTEXT_LENGTH - prefix.length))}`
+              const budget = MAX_CONTEXT_LENGTH - conversationPrompt("").length - prefix.length
+              return conversationPrompt(`${prefix}${recent.slice(-budget)}`)
             }),
-            Effect.orElseSucceed(() => firstUser.text),
+            Effect.orElseSucceed(() => messagePrompt(firstUser.text)),
           )
-        : firstUser.text
+        : messagePrompt(firstUser.text)
       const selection = yield* context.selectTitle(session)
       if (!selection) return
       const title =

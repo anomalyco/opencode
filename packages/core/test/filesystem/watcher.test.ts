@@ -54,6 +54,16 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  it.live("ends the stream when the watched directory is missing", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        const updates = yield* watcher.subscribe({ path: path.join(directory, "missing", "a.ts"), type: "file" })
+        expect(Option.isNone(yield* Stream.runHead(updates))).toBe(true)
+      }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node))),
+    ),
+  )
+
   it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
     Effect.gen(function* () {
       const publish = yield* Deferred.make<(update: Watcher.Update) => void>()

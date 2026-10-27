@@ -11,7 +11,7 @@ Spark.
 Add Console as a model provider in `~/.codex/config.toml` and make it the default.
 
 ```toml title="~/.codex/config.toml"
-model = "gpt-5.5"
+model = "gpt-6.1-sol"
 model_provider = "opencode"
 
 [model_providers.opencode]
@@ -21,8 +21,8 @@ env_key = "OPENCODE_API_KEY"
 wire_api = "responses"
 ```
 
-Codex appends `/responses` to the base URL and reads the key from `env_key`. Create the key under **Keys** in the
-[Console](https://opencode.ai/console), then export it.
+Codex appends `/responses` to the base URL and reads the key from `env_key`. Create a
+[personal API key](/console/harnesses#get-an-api-key), then export it.
 
 ```bash
 export OPENCODE_API_KEY="oc_sk_..."

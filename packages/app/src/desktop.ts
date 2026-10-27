@@ -20,4 +20,4 @@ export { createNamespaceStorage, type NamespaceStorage } from "./runtime/persist
 
 export { flushPersisted } from "./runtime/persistence/persist"
 
-export { useExtensionServers } from "./runtime/extension/servers"
+export { usePluginServers } from "./runtime/plugin/servers"

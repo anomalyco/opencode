@@ -25,6 +25,8 @@ export const Compatibility = Schema.Struct({
   requireFinishReason: Schema.Boolean.pipe(optional),
   requireAssistantAfterTool: Schema.Boolean.pipe(optional),
   supportsPromptCacheKey: Schema.Boolean.pipe(optional),
+  /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
+  streamUsage: Schema.Boolean.pipe(optional),
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: CacheFormat.pipe(optional),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */

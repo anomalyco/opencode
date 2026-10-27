@@ -14,8 +14,9 @@ export const create = Effect.fn("Drive.create")(function* (options: CliRendererC
     : yield* Effect.acquireRelease(
         Effect.tryPromise(() => createCliRenderer(options)),
         (renderer) =>
-          Effect.sync(() => {
+          Effect.promise(async () => {
             if (!renderer.isDestroyed) renderer.destroy()
+            await renderer.closed
           }),
       )
   if (!headless && manifest.viewport) renderer.resize(manifest.viewport.cols, manifest.viewport.rows)

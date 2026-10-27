@@ -1,6 +1,8 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source, State } from "@opencode/schema/plugin"
+export { Event, GuiBundle, ID, Info, Source, State } from "@opencode/schema/plugin"
 
+import { readFile } from "node:fs/promises"
+import { fileURLToPath } from "node:url"
 import { Plugin } from "@opencode/schema/plugin"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -40,8 +42,22 @@ const layer = Layer.effect(
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []
+    // A changed `./gui-experimental` bundle alone restarts nothing; its revision is part of what changes, so the event
+    // tells the app to reload it.
+    const publish = State.changes(
+      (items: readonly Plugin.Info[]) => [items, Array.from(active.values(), (entry) => entry.plugin.gui?.revision)],
+      () => bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid),
+    )
     const list = Effect.fn("Plugin.list")(function* () {
       return inventory
+    })
+    const gui = Effect.fn("Plugin.gui")(function* (id: Plugin.ID) {
+      const gui = active.get(id)?.plugin.gui
+      if (!gui) return undefined
+      // A plugin that resolved a `./gui-experimental` file but cannot read it now is a server fault, not a missing
+      // bundle.
+      const code = yield* Effect.promise(() => readFile(fileURLToPath(gui.file), "utf8"))
+      return { code, revision: gui.revision, options: gui.options } satisfies Plugin.GuiBundle
     })
     const host = yield* PluginHost.make({ list })
     const load = Effect.fnUntraced(function* (plugin: Generation) {
@@ -115,10 +131,8 @@ const layer = Layer.effect(
                 if (entry) active.set(definition.id, { ...entry, plugin: definition })
               }
               if (prefix === definitions.length && active.size === definitions.length) {
-                const nextInventory = [...Array.from(active.values()).map(slotInfo), ...failures]
-                if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
-                inventory = nextInventory
-                yield* bus.publish(Plugin.Event.Updated, {})
+                inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
+                yield* publish(inventory)
                 return
               }
 
@@ -172,7 +186,7 @@ const layer = Layer.effect(
                   inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
                 }),
               )
-              yield* bus.publish(Plugin.Event.Updated, {})
+              yield* publish(inventory)
             }),
           ),
         (release) => release,
@@ -195,7 +209,7 @@ const layer = Layer.effect(
               // cannot disable a replacement and teardown need not wait for this worker.
               inventory = [...Array.from(active.values()).map(slotInfo), ...discovered]
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
-              yield* bus.publish(Plugin.Event.Updated, {})
+              yield* publish(inventory)
               if (Exit.isFailure(refreshed))
                 yield* Effect.logWarning("failed to refresh state after disabling plugin", {
                   "plugin.id": item.plugin.id,
@@ -253,6 +267,7 @@ const layer = Layer.effect(
       awaitActivation: ready.await,
       hold,
       list,
+      gui,
     })
   }),
 )
@@ -260,7 +275,7 @@ const layer = Layer.effect(
 // `plugin` is the requested definition; `activation` is its last activation, which may have
 // failed or be an older fallback while the requested revision keeps failing setup.
 type Slot = {
-  readonly plugin: Generation
+  readonly plugin: Generation & { readonly id: Plugin.ID }
   readonly activation?: Activation
   readonly error?: string
 }
@@ -285,10 +300,11 @@ type PendingFailure = {
 function slotInfo(slot: Slot): Plugin.Info {
   const failure = slot.activation?.failure ?? (slot.error === undefined ? undefined : { error: slot.error })
   return {
-    id: Plugin.ID.make(slot.plugin.id),
+    id: slot.plugin.id,
     source: slot.plugin.source ?? { type: "builtin" },
     state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
-    features: { server: true, ...slot.plugin.features },
+    // Built-in and SDK plugins are server parts; a package lists its own parts.
+    features: slot.plugin.features ?? { server: true },
   }
 }
 

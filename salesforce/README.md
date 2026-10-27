@@ -13,7 +13,7 @@ Lead fields to Contact on conversion. Existing records are not backfilled.
 
 New signup Leads use the lowercased email domain as Company (for example, `acme.com`).
 Recognized personal-email domains use `Individual`. This is an exact-domain list in
-`packages/console/app/src/lib/salesforce.ts`, not a legal-company-name lookup.
+the Console repo (`packages/core/src/crm.ts`), not a legal-company-name lookup.
 Signup sync preserves existing Lead companies and Contact account associations;
 Enterprise inquiries use the company supplied by the visitor.
 
@@ -28,11 +28,10 @@ sf project deploy start --source-dir force-app --target-org opencode --wait 10
 sf org assign permset --name Console_Account_Sync --target-org opencode
 ```
 
-The application integration uses the existing SST Salesforce credentials. Set the
-same `CONSOLE_CRM_TOKEN` on the SST website and Console API. The SST website
-links `CONSOLE_CRM_LOOKUP_URL` to the stage's private Console account lookup.
+The Console writes these fields when someone signs up. Enterprise inquiry Leads from
+the website no longer receive them from the website; Salesforce automation sets them.
 
 For local development, run `bun run dev:enterprise` in `packages/console/app` with
-`CONSOLE_CRM_TOKEN` set and `sf` on PATH. It serves the same Enterprise request and
-signup-sync handlers on `127.0.0.1:3101`, using the CLI's authenticated transport.
-It never sends local sales notifications or EmailOctopus subscriptions.
+`sf` on PATH. It serves the same Enterprise request handler on `127.0.0.1:3101`, using
+the CLI's authenticated transport. It never sends local sales notifications or
+EmailOctopus subscriptions.

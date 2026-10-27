@@ -56,7 +56,7 @@ OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models
 }
 ```
 
-ここでの完全な ID は `provider_id/model_id` です。たとえば、[OpenCode Zen](https://opencode.ai/v2/docs/console/) を使用している場合、GPT 5.1 Codex には `opencode/gpt-5.1-codex` を使用します。
+ここでの完全な ID は `provider_id/model_id` です。たとえば、[OpenCode Zen](https://opencode.ai/v2/docs/console/) を使用している場合、GPT-6.1 Sol には `opencode/gpt-6.1-sol` を使用します。
 
 [カスタムプロバイダー](/docs/providers#custom) を構成している場合、`provider_id` は構成の `provider` 部分のキーであり、`model_id` は `provider.models` のキーです。
 
@@ -72,7 +72,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -84,7 +84,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
     },
     "anthropic": {
       "models": {
-        "claude-sonnet-4-5-20250929": {
+        "claude-sonnet-5-5": {
           "options": {
             "thinking": {
               "type": "enabled",
@@ -98,7 +98,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
 }
 ```
 
-ここでは、2 つの組み込みモデル (`gpt-5` プロバイダー経由でアクセスする場合は `openai`、`claude-sonnet-4-20250514` プロバイダー経由でアクセスする場合は `anthropic`) のグローバル設定を構成しています。
+ここでは、2 つの組み込みモデル (`gpt-6.1-sol` プロバイダー経由でアクセスする場合は `openai`、`claude-sonnet-5-5` プロバイダー経由でアクセスする場合は `anthropic`) のグローバル設定を構成しています。
 組み込みプロバイダーとモデル名は、[Models.dev](https://models.dev) で確認できます。
 
 使用しているエージェントに対してこれらのオプションを構成することもできます。ここでエージェント設定はグローバルオプションをオーバーライドします。 [詳細はこちら](/docs/agents/#additional)。
@@ -111,7 +111,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
   "provider": {
     "opencode": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "high": {
               "reasoningEffort": "high",
@@ -176,7 +176,7 @@ OpenCode には、多くのプロバイダーのデフォルトのバリアン�
   "provider": {
     "openai": {
       "models": {
-        "gpt-5": {
+        "gpt-6.1-sol": {
           "variants": {
             "thinking": {
               "reasoningEffort": "high",
@@ -210,7 +210,7 @@ OpenCode が起動すると、次の優先順位でモデルがチェックさ�
    ```json title="opencode.json"
    {
      "$schema": "https://opencode.ai/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
+     "model": "anthropic/claude-sonnet-5-5"
    }
    ```
 

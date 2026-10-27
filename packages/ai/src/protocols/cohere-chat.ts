@@ -4,7 +4,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { LLMEvent, Usage, type FinishReasonDetails, type LLMRequest } from "../schema/index.js"
-import { ProviderShared } from "./shared.js"
+import { JsonObject, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -49,7 +49,7 @@ const Body = Schema.Struct({
         function: Schema.Struct({
           name: Schema.String,
           description: Schema.optional(Schema.String),
-          parameters: Schema.Unknown,
+          parameters: JsonObject,
         }),
       }),
     ),

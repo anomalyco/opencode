@@ -29,6 +29,23 @@ const canonical = new URL(docsHref(Astro.props.currentSlug), "https://opencode.a
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#000000" />
+    <script is:inline>
+      const applyTheme = () => {
+        const theme =
+          localStorage.getItem("docs-theme") ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+        document.documentElement.dataset.theme = theme
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#ffffff" : "#000000")
+      }
+
+      applyTheme()
+      document.addEventListener("astro:after-swap", applyTheme)
+      matchMedia("(prefers-color-scheme: light)").addEventListener("change", applyTheme)
+      document.addEventListener("click", (event) => {
+        if (!(event.target instanceof Element) || !event.target.closest("[data-theme-toggle]")) return
+        localStorage.setItem("docs-theme", document.documentElement.dataset.theme === "light" ? "dark" : "light")
+        applyTheme()
+      })
+    </script>
     <ClientRouter fallback="swap" />
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}favicon.svg`} />

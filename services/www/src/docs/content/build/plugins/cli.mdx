@@ -1,21 +1,24 @@
 ---
-title: "CLI"
+title: "TUI"
+description: "Build the TUI part of an OpenCode plugin for the terminal UI using @opencode/plugin/tui."
 ---
 
-CLI plugins extend the terminal with commands, routes, slots, Markdown renderers, notifications, and local state.
+TUI plugins extend the terminal UI with commands, routes, slots, Markdown renderers, notifications, and local state. A
+TUI plugin is the `./tui` part of a [plugin package](/build/plugins), usually beside a [server
+part](/build/plugins/server).
 
-```ts title="src/tui.ts"
+```ts title="src/tui.tsx"
 import { Plugin } from "@opencode/plugin/tui"
 
 export default Plugin.define({
   id: "acme.cli",
   setup(context) {
-    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
   },
 })
 ```
 
-Import `@opencode/plugin/tui` directly. OpenCode resolves this import at runtime, so local CLI plugins do not need an
+Import `@opencode/plugin/tui` directly. OpenCode resolves this import at runtime, so local TUI plugins do not need an
 absolute path to an OpenCode checkout.
 
 ## Context
@@ -110,9 +113,9 @@ context.data.session.permission.invalidate(sessionID)
 Forms can be listed, refreshed, replied to, or cancelled at a location.
 
 ```ts
-import type { FormCancelInput, FormReplyInput } from "@opencode/client"
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
 
-async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
   const location = context.location
   await context.data.session.form.sync(sessionID, location)
   const forms = context.data.session.form.list(sessionID, location) ?? []
@@ -217,6 +220,41 @@ Use semantic theme tokens with OpenTUI elements and pass `context.renderer` to r
 const Status = () => <text fg={context.theme.text.base}>Ready</text>
 const renderer = context.renderer
 ```
+
+An OpenTUI resource that the renderer draws needs `context.renderer.nativeScene` as its owner. For example, `<markdown>`
+and `<code>` need a `SyntaxStyle`. Destroy the resource when the renderer is idle, after the last frame that draws it.
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+To read the layout style of a renderable, call the method with the Yoga Node getter's name, such as
+`box.getPadding(Yoga.Edge.Bottom)` or `box.getMaxWidth()`. Host renderables are not part of the plugin API. Their
+structure and styles can change in any release.
+
+### Plugins built for OpenTUI 0.5
+
+OpenCode runs plugins with its own OpenTUI. Since OpenTUI 0.6:
+
+- `SyntaxStyle.create()`, `SyntaxStyle.fromStyles()`, `SyntaxStyle.fromTheme()`, `TextBuffer.create()`, and
+  `EditBuffer.create()` take an owner as their last argument. `OptimizedBuffer.create()` takes it in the `owner` option.
+  Pass `context.renderer.nativeScene`. OpenTUI 0.5 ignores the extra argument, so the plugin still runs on older
+  OpenCode releases.
+- `generateSyntax()` from `@opencode/theme/tui` takes the owner as its second argument:
+  `generateSyntax(context.theme, context.renderer.nativeScene)`. Older `@opencode/theme` versions build the style
+  without an owner, so update the package too.
+- `getLayoutNode()` is removed. Replace `getLayoutNode().getMaxWidth()` and the other style getters with the
+  renderable method of the same name, on OpenTUI 0.6.5 or later. Replace `getComputedLayout()` and the other computed
+  position and size getters with `getLayout()`, and `markDirty()` with `invalidateIntrinsicSize()`. Computed padding,
+  margin, and border have no replacement, and `getPadding(edge)` reads only the padding set for that edge. To restore a
+  style that a getter reports as unset (`Unit.Undefined`), assign `undefined` to the property, on OpenTUI 0.6.6 or
+  later.
+
+The [OpenTUI 0.6.0 release notes](https://opentui.com/docs/releases/0.6.0) list every change.
 
 ## Solid components
 
@@ -594,7 +632,7 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
 
 ## Publish and load
 
-Expose the CLI plugin through `./tui`; add OpenTUI peers when the plugin renders JSX.
+Expose the TUI plugin through `./tui`; add OpenTUI peers when the plugin renders JSX.
 
 ```json title="package.json"
 {
@@ -608,14 +646,14 @@ Expose the CLI plugin through `./tui`; add OpenTUI peers when the plugin renders
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.5.8",
-    "@opentui/solid": ">=0.5.8",
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
     "solid-js": ">=1.9.0"
   }
 }
 ```
 
-Export `./tui` beside the [main plugin](/build/plugins) for automatic loading.
+Export `./tui` beside a [server part](/build/plugins/server) or [GUI part](/build/plugins/gui) for automatic loading.
 
 ```ts title="src/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -626,7 +664,7 @@ export default Plugin.define({
 })
 ```
 
-Configure a CLI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
+Configure a TUI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
 
 ```json title="cli.json"
 {

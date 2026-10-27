@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { measureEditText } from "@opentui/core"
 import {
   createPromptHistory,
   isCompactCommand,
@@ -31,62 +32,25 @@ describe("run prompt shared", () => {
     expect(pushPromptHistory(base, prompt("two")).items.map((item) => item.text)).toEqual(["one", "two"])
   })
 
-  test("moves through history only at input boundaries and restores draft", () => {
-    const base = createPromptHistory([prompt("one"), prompt("two")])
+  test.each(["wcwidth", "unicode"] as const)("moves through history at %s input boundaries", (widthMethod) => {
+    const measure = (text: string) => measureEditText(text, { widthMethod })
+    const [wide, draft] = ["中文👨‍👩‍👧\n\t", "草稿👨‍👩‍👧\f"]
+    const base = createPromptHistory([prompt("one"), prompt(wide)])
 
-    expect(movePromptHistory(base, -1, "draft", 1)).toEqual({
-      state: base,
-      apply: false,
-    })
+    expect(movePromptHistory(base, -1, draft, 1, widthMethod)).toEqual({ state: base, apply: false })
 
-    const up = movePromptHistory(base, -1, "draft", 0)
-    expect(up.apply).toBe(true)
-    expect(up.text).toBe("two")
-    expect(up.cursor).toBe(0)
-    expect(up.state.index).toBe(1)
-    expect(up.state.draft).toBe("draft")
+    const up = movePromptHistory(base, -1, draft, 0, widthMethod)
+    expect(up).toMatchObject({ apply: true, text: wide, cursor: 0, state: { index: 1, draft } })
 
-    const older = movePromptHistory(up.state, -1, "two", 0)
-    expect(older.apply).toBe(true)
-    expect(older.text).toBe("one")
-    expect(older.cursor).toBe(0)
-    expect(older.state.index).toBe(0)
+    const older = movePromptHistory(up.state, -1, wide, 0, widthMethod)
+    expect(older).toMatchObject({ apply: true, text: "one", cursor: 0, state: { index: 0 } })
+    expect(movePromptHistory(older.state, 1, "one", 2, widthMethod)).toEqual({ state: older.state, apply: false })
 
-    const newer = movePromptHistory(older.state, 1, "one", 3)
-    expect(newer.apply).toBe(true)
-    expect(newer.text).toBe("two")
-    expect(newer.cursor).toBe(3)
-    expect(newer.state.index).toBe(1)
+    const newer = movePromptHistory(older.state, 1, "one", measure("one"), widthMethod)
+    expect(newer).toMatchObject({ apply: true, text: wide, cursor: measure(wide), state: { index: 1 } })
 
-    const draft = movePromptHistory(newer.state, 1, "two", 3)
-    expect(draft.apply).toBe(true)
-    expect(draft.text).toBe("draft")
-    expect(draft.cursor).toBe(5)
-    expect(draft.state.index).toBeNull()
-  })
-
-  test("uses display-width cursors for history restoration", () => {
-    const base = createPromptHistory([prompt("one"), prompt("中文")])
-
-    const latest = movePromptHistory(base, -1, "草稿", 0)
-    expect(latest.apply).toBe(true)
-    expect(latest.text).toBe("中文")
-    expect(latest.cursor).toBe(0)
-
-    const older = movePromptHistory(latest.state, -1, "中文", 0)
-    expect(older.apply).toBe(true)
-    expect(older.text).toBe("one")
-    expect(older.cursor).toBe(0)
-
-    const newer = movePromptHistory(older.state, 1, "one", Bun.stringWidth("one"))
-    expect(newer.apply).toBe(true)
-    expect(newer.text).toBe("中文")
-    expect(newer.cursor).toBe(Bun.stringWidth("中文"))
-
-    const draft = movePromptHistory(newer.state, 1, "中文", Bun.stringWidth("中文"))
-    expect(draft.apply).toBe(true)
-    expect(draft.text).toBe("草稿")
-    expect(draft.cursor).toBe(Bun.stringWidth("草稿"))
+    const back = movePromptHistory(newer.state, 1, wide, measure(wide), widthMethod)
+    expect(back).toMatchObject({ apply: true, text: draft, cursor: measure(draft), state: { index: null } })
   })
 
   test("recognizes exit commands", () => {
@@ -109,9 +73,9 @@ describe("run prompt shared", () => {
 })
 
 describe("promptAppend", () => {
-  test("appends on a new line and shifts part ranges by display width", () => {
+  test.each(["wcwidth", "unicode"] as const)("appends and shifts part ranges by the %s offset", (widthMethod) => {
     const output = promptAppend(
-      prompt("日本", [{ type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } }]),
+      prompt("日本👨‍👩‍👧\t", [{ type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } }]),
       {
         messageID: "m-1",
         ...prompt("@a.ts /x", [
@@ -119,16 +83,22 @@ describe("promptAppend", () => {
           { type: "skill", id: "x", source: { start: 6, end: 8, value: "/x" } },
         ]),
       },
+      widthMethod,
     )
 
+    const offset = measureEditText("日本👨‍👩‍👧\t\n\n", { widthMethod })
     expect(output).toEqual({
-      text: "日本\n\n@a.ts /x",
+      text: "日本👨‍👩‍👧\t\n\n@a.ts /x",
       parts: [
         { type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } },
-        { type: "file", url: "file:///a.ts", source: { type: "file", text: { start: 6, end: 11, value: "@a.ts" } } },
-        { type: "skill", id: "x", source: { start: 12, end: 14, value: "/x" } },
+        {
+          type: "file",
+          url: "file:///a.ts",
+          source: { type: "file", text: { start: offset, end: offset + 5, value: "@a.ts" } },
+        },
+        { type: "skill", id: "x", source: { start: offset + 6, end: offset + 8, value: "/x" } },
       ],
     })
-    expect(promptAppend(prompt(""), prompt("next"))).toEqual(prompt("next"))
+    expect(promptAppend(prompt(""), prompt("next"), widthMethod)).toEqual(prompt("next"))
   })
 })
