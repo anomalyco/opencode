@@ -107,6 +107,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.oauth.connect",
         Effect.fn(function* (ctx) {
+          yield* Plugin.awaitActivation
           const service = yield* Integration.Service
           return yield* response(
             authorize(
