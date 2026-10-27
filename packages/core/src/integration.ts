@@ -550,10 +550,10 @@ const layer = Layer.effect(
       const now = yield* Clock.currentTimeMillis
       const expired = yield* SynchronizedRef.modify(attempts, (current) => {
         const next = new Map(current)
-        const scopes: Scope.Closeable[] = []
+        const closed: { attemptID: AttemptID; integrationID: ID; scope: Scope.Closeable }[] = []
         for (const [id, attempt] of current) {
           if (attempt.status === "pending" && !attempt.persisting && attempt.time.expires <= now) {
-            scopes.push(attempt.scope)
+            closed.push({ attemptID: id, integrationID: attempt.integrationID, scope: attempt.scope })
             next.set(id, {
               status: "expired",
               integrationID: attempt.integrationID,
@@ -564,9 +564,18 @@ const layer = Layer.effect(
           }
           if (attempt.status !== "pending" && attempt.removeAt <= now) next.delete(id)
         }
-        return [scopes, next]
+        return [closed, next]
       })
-      yield* Effect.forEach(expired, close, { discard: true })
+      yield* Effect.forEach(
+        expired,
+        (attempt) =>
+          Effect.logInfo("integration oauth attempt closed", {
+            integrationID: attempt.integrationID,
+            attemptID: attempt.attemptID,
+            reason: "expired",
+          }).pipe(Effect.andThen(close(attempt.scope))),
+        { discard: true },
+      )
     })
 
     const scrubCommands = Effect.fnUntraced(function* () {
@@ -867,7 +876,13 @@ const layer = Layer.effect(
             next.delete(input.attemptID)
             return [match, next]
           })
-          if (attempt) yield* Scope.close(attempt.scope, Exit.void)
+          if (!attempt) return
+          yield* Effect.logInfo("integration oauth attempt closed", {
+            integrationID: input.integrationID,
+            attemptID: input.attemptID,
+            reason: "cancelled",
+          })
+          yield* Scope.close(attempt.scope, Exit.void)
         }),
       },
       command: {
