@@ -263,6 +263,34 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
       }) ??
         Provider.aisdk(aisdk)))
   if (!packageName) return undefined
+
+  // If the selected package is a generic chat-completions compatible package
+  // and the model is a known OpenAI GPT-5/6 or O-series model that requires
+  // the Responses API, prefer the native OpenAI responses package.
+  // Some providers (agentrouter, pioneer, etc.) only list chat-completions in
+  // the catalog but their actual API requires Responses for these models.
+  const isGenericChatCompatible = packageName === "@opencode/ai/providers/openai-compatible" ||
+    packageName === "@opencode/ai/providers/anthropic-compatible"
+  const isKnownOpenAIModel = /^gpt-(?:5|6)/i.test(model.id) || /^o[134]/.test(model.id)
+  if (isGenericChatCompatible && isKnownOpenAIModel) {
+    // Use native openai/responses pointing to api.openai.com/v1
+    const nativeOpenAIResponses = "@opencode/ai/providers/openai/responses"
+    if (Provider.builtinPackages.has(nativeOpenAIResponses)) {
+      const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
+      const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
+      const compatibility = {
+        ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
+        ...(maxTokensField ? { maxTokensField } : {}),
+        ...(mediaInput ? { mediaInput } : {}),
+      }
+      return {
+        package: nativeOpenAIResponses,
+        baseURL: "https://api.openai.com/v1",
+        ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
+      }
+    }
+  }
+
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
   const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
   const compatibility = {
