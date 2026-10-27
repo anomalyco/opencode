@@ -26,24 +26,22 @@ export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMEN
   )
 }
 
-export async function resolvePastedAttachments(text: string, platform: string) {
+export async function resolvePastedAttachments(
+  text: string,
+  platform: string,
+  pasteboardFiles?: () => Promise<string[]>,
+) {
   const pastedContent = text.trim()
   const filepath = normalizePastedFilepath(pastedContent, platform)
   if (/^(https?):\/\//.test(filepath)) return undefined
 
   const attachment = await readLocalAttachment(filepath)
-  const attachments = attachment ? [{ filepath, attachment }] : []
-  if (!attachment) {
-    const filepaths = parsePastedFilepaths(pastedContent, platform)
-    if (filepaths.length <= 1) return undefined
-    let remaining = MAX_LOCAL_ATTACHMENT_BYTES
-    for (const candidate of filepaths) {
-      const next = await readLocalAttachment(candidate, remaining)
-      if (!next) return undefined
-      remaining -= typeof next.content === "string" ? Buffer.byteLength(next.content) : next.content.byteLength
-      attachments.push({ filepath: candidate, attachment: next })
-    }
-  }
+  const parsed = attachment ? [] : parsePastedFilepaths(pastedContent, platform)
+  const attachments = attachment
+    ? [{ filepath, attachment }]
+    : ((parsed.length > 1 ? await readLocalAttachments(parsed) : undefined) ??
+      (await readLocalAttachments(await finderFilepaths(pastedContent, platform, pasteboardFiles))))
+  if (!attachments) return undefined
 
   return attachments.map((item) => {
     const filename = path.basename(item.filepath)
@@ -56,6 +54,31 @@ export async function resolvePastedAttachments(text: string, platform: string) {
       filename,
     }
   })
+}
+
+async function readLocalAttachments(filepaths: string[]) {
+  if (filepaths.length === 0) return undefined
+  const attachments: { filepath: string; attachment: LocalAttachment }[] = []
+  let remaining = MAX_LOCAL_ATTACHMENT_BYTES
+  for (const filepath of filepaths) {
+    const attachment = await readLocalAttachment(filepath, remaining)
+    if (!attachment) return undefined
+    remaining -=
+      typeof attachment.content === "string" ? Buffer.byteLength(attachment.content) : attachment.content.byteLength
+    attachments.push({ filepath, attachment })
+  }
+  return attachments
+}
+
+// macOS terminals paste only the names of files copied in Finder; recover their paths from the pasteboard.
+async function finderFilepaths(text: string, platform: string, pasteboardFiles?: () => Promise<string[]>) {
+  if (platform !== "darwin" || !pasteboardFiles) return []
+  const names = text.split(/\r\n?|\n/)
+  if (!names.every((name) => !name.includes("/") && path.extname(name).toLowerCase() in mimeTypes)) return []
+  const filepaths = await pasteboardFiles()
+  const copied = filepaths.map((filepath) => path.basename(filepath))
+  if (copied.toSorted().join("\n") !== names.toSorted().join("\n")) return []
+  return filepaths
 }
 
 const mimeTypes: Record<string, string> = {
