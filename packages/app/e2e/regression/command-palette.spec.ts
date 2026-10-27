@@ -636,11 +636,13 @@ test("titlebar session search shrinks with results while its field stays anchore
   const input = dialog.getByRole("combobox")
   const options = dialog.getByRole("option")
   const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
+
   const geometry = () =>
     container.evaluate((element) => ({
       height: element.getBoundingClientRect().height,
       inputTop: element.querySelector('[role="combobox"]')!.getBoundingClientRect().top,
     }))
+
   await expect(input).toBeFocused()
   await expect(options).toHaveCount(10)
   // Hover waits for the field's opening animation to settle before taking the reference position.
