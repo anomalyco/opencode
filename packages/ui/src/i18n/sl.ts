@@ -219,7 +219,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(ni odgovora)",
   "ui.question.review.notAnswered": "(ni odgovorjeno)",
   "ui.question.multiHint": "Izberite vse ustrezne odgovore",
-  "ui.question.singleHint": "Izberite en odgovor",
   "ui.question.custom.placeholder": "Vnesite odgovor …",
   "ui.messagePart.context.match.one": "({{count}} ujemanje)",
   "ui.messagePart.context.match.other": "({{count}} ujemanj)",

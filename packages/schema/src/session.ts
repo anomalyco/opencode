@@ -40,8 +40,6 @@ export const Info = Schema.Struct({
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Money.USD,
-  /** Subscription allowance used instead of money, such as OpenCode Go's; absent when none was. */
-  allowance: Money.USD.pipe(optional),
   tokens: TokenUsage.Info,
   /** Outcome of the last completed execution, recorded at `time.idle`. Absent until a run reaches a terminal transition. */
   outcome: Schema.Literals(["succeeded", "failed", "interrupted"]).pipe(optional),

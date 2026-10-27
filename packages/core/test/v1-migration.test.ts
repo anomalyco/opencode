@@ -55,7 +55,6 @@ const session = (
   summary_diffs: null,
   metadata: null,
   cost: 99,
-  allowance: 0,
   tokens_input: 99,
   tokens_output: 99,
   tokens_reasoning: 99,

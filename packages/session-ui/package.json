@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -17,7 +17,6 @@
     "./file": "./src/components/file.tsx",
     "./file-media": "./src/components/file-media.tsx",
     "./file-search": "./src/components/file-search.tsx",
-    "./file-ssr": "./src/components/file-ssr.tsx",
     "./line-comment": "./src/components/line-comment.tsx",
     "./line-comment-annotations": "./src/components/line-comment-annotations.tsx",
     "./markdown": "./src/components/markdown.tsx",
@@ -40,13 +39,16 @@
     "./pierre/*": "./src/pierre/*.ts",
     "./context": "./src/context/index.ts",
     "./context/*": "./src/context/*.tsx",
+    "./sources": "./src/sources/sources.ts",
+    "./sources/experiment": "./src/sources/experiment.ts",
+    "./sources/panel": "./src/sources/sources-panel.tsx",
+    "./sources/title": "./src/sources/sources-title.tsx",
     "./styles": "./src/styles/index.css",
     "./storybook": "./src/storybook/index.ts",
     "./v2/*.css": "./src/v2/components/*.css",
     "./v2/*": "./src/v2/components/*.tsx"
   },
   "scripts": {
-    "generate:progress-indicator": "bun script/generate-session-progress-indicator.ts",
     "typecheck": "bun check --no-script -b",
     "typecheck:tsc": "tsc -b",
     "test": "bun test src --only-failures",
@@ -63,8 +65,10 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
+    "@opencode/patchmark": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",
     "@pierre/diffs": "catalog:",
@@ -77,10 +81,7 @@
     "effect": "catalog:",
     "dompurify": "3.4.14",
     "marked": "catalog:",
-    "mermaid": "11.17.2",
-    "motion": "12.34.5",
-    "remend": "catalog:",
-    "solid-js": "catalog:",
-    "strip-ansi": "7.1.2"
+    "pele": "1.7.0",
+    "solid-js": "catalog:"
   }
 }

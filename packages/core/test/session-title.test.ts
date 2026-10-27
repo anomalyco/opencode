@@ -8,7 +8,7 @@ import {
   SystemPart,
   TransportError,
   type LLMRequest,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"

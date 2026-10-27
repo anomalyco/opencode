@@ -202,7 +202,6 @@ export const dict = {
   "ui.question.answer.none": "（无答案）",
   "ui.question.review.notAnswered": "（未回答）",
   "ui.question.multiHint": "选择所有适用的答案",
-  "ui.question.singleHint": "选择一个答案",
   "ui.question.custom.placeholder": "输入你的答案…",
 
   "ui.fileSearch.placeholder": "查找",

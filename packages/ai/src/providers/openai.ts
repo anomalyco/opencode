@@ -9,6 +9,7 @@ import {
   mergeHttpOptions,
   type ModelID,
   type OpenString,
+  type ProviderOptions,
 } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
@@ -16,13 +17,13 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
-import { OpenAIDecisions } from "../experimental/openai-decisions.js"
+import { OpenAIDecisions, type OptionsInput as OpenAIDecisionOptionsInput } from "../protocols/openai-decisions.js"
 
-export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options.js"
+export type { OpenAIOptionsInput, OpenAIResponseIncludable, OpenAIServiceTier } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
 export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
 export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
-export type { OpenAIDecisionOptions } from "../experimental/openai-decisions.js"
+export type { OptionsInput as OpenAIDecisionOptions } from "../protocols/openai-decisions.js"
 
 export const id = ProviderID.make("openai")
 
@@ -101,9 +102,7 @@ export const configure = (input: Config = {}) => {
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
-    responsesRoute
-      .with(withOpenAIOptions(id, modelDefaults))
-      .model<OpenAIProviderOptionsInput>({ id })
+    responsesRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
       id,
@@ -117,10 +116,18 @@ export const configure = (input: Config = {}) => {
       input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
     ),
   }
-  const image = (modelID: string | ModelID) => OpenAIImages.model({ ...media, id: modelID })
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, providerOptions })
   const speech = (modelID: string | ModelID) => OpenAISpeech.model({ ...media, id: modelID })
   const transcription = (modelID: string | ModelID) => OpenAITranscription.model({ ...media, id: modelID })
-  const evaluation = (modelID: string | ModelID) => OpenAIDecisions.model({ ...media, id: modelID })
+  const decisionRoute = OpenAIDecisions.route.with({
+    endpoint: { baseURL: media.baseURL },
+    auth: media.auth,
+    headers: media.headers,
+    http: media.http,
+  })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
 
   return {
     id,
@@ -130,7 +137,7 @@ export const configure = (input: Config = {}) => {
     image,
     speech,
     transcription,
-    experimental: { evaluation },
+    decision,
     configure,
   }
 }
@@ -174,9 +181,17 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptio
   modelID,
   settings,
 ) => configure(config(settings)).chat(modelID)
+export const imageModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
 export const speech = provider.speech
 export const transcription = provider.transcription
-export const experimental = provider.experimental
+export const decision = provider.decision

@@ -16,7 +16,7 @@ import {
   UnknownProviderError,
   ToolFailure,
   HttpContext,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { RequestExecutor } from "@opencode/ai/route"
 import { Permission } from "@opencode/core/permission"
 import { ID } from "@opencode/core/model"

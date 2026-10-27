@@ -140,6 +140,7 @@ export function useUsageExceededDialogs(input?: {
                 <x.DialogConnectProvider
                   directory={sdk().directory}
                   controller={controller}
+                  standalone
                   selection={input?.selection?.() ?? local.model}
                   onDone={input?.onDone}
                 />

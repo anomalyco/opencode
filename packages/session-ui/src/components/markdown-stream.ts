@@ -1,6 +1,4 @@
-import { Marked, type Tokens } from "marked"
-import remend from "remend"
-import { markdownMath } from "@opencode/ui/context/marked-parser"
+import { createMarkdownStream, type MarkdownBlock, type PatchmarkStream } from "@opencode/patchmark"
 import { completedProjection } from "./markdown-projection"
 
 export type Block = {
@@ -16,138 +14,78 @@ export type Projection = {
   blocks: Block[]
 }
 
-// Split with the renderer's math syntax so a display block is never cut into separately rendered pieces.
-const lexer = new Marked(markdownMath)
+const streams = new WeakMap<Projection, PatchmarkStream>()
 
-function refs(text: string) {
-  if (!text.includes("]:")) return false
+const projectedBlocks = new WeakMap<MarkdownBlock, Block>()
 
-  return /^[ \t]{0,3}\[[^\]]+\]:[ \t]*(?:\S+|\r?\n[ \t]+\S+)/m.test(text)
+function createStream() {
+  return createMarkdownStream({
+    gfm: true,
+    math: true,
+    heal: true,
+    holdPendingMarkers: false,
+    settleOnComplete: false,
+    groupHtmlBlocks: true,
+    renderHtml: false,
+  })
 }
 
-function language(value: string | undefined) {
-  return value?.trim().split(/\s+/, 1)[0] || undefined
-}
+function toBlock(block: MarkdownBlock): Block {
+  const cached = projectedBlocks.get(block)
 
-function openCode(raw: string) {
-  const newline = raw.indexOf("\n")
+  if (cached) return cached
 
-  return newline < 0 ? "" : raw.slice(newline + 1)
-}
+  if (block.kind.type === "code" || block.kind.type === "mermaid") {
+    const item: Block = {
+      raw: block.raw,
+      src: block.kind.source,
+      mode: "code",
+    }
 
-function open(raw: string) {
-  const match = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/)
+    const language = block.kind.type === "mermaid" ? "mermaid" : block.kind.language
 
-  if (!match) return false
-  const mark = match[1]
+    if (language) item.language = language
 
-  if (!mark) return false
-  const char = mark[0]
-  const size = mark.length
-  const last = raw.trimEnd().split("\n").at(-1)?.trim() ?? ""
+    if (block.kind.complete || block.status === "settled") item.complete = true
 
-  return !new RegExp(`^[\\t ]{0,3}${char}{${size},}[\\t ]*$`).test(last)
-}
+    projectedBlocks.set(block, item)
 
-function closesFence(raw: string, suffix: string) {
-  const mark = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/)?.[1]
+    return item
+  }
 
-  if (!mark) return suffix.includes("```") || suffix.includes("~~~")
+  const mode = block.status === "settled" ? "full" : "live"
+  const defs = block.defs ? `\n\n${block.defs}` : ""
+  const base = mode === "live" ? (block.liveRaw ?? block.raw) : block.raw
 
-  return `${raw.slice(-(mark.length - 1))}${suffix}`.includes(mark)
-}
+  const item: Block = {
+    raw: block.raw,
+    src: base + defs,
+    mode,
+  }
 
-function heal(text: string) {
-  return remend(text, { linkMode: "text-only" })
+  projectedBlocks.set(block, item)
+
+  return item
 }
 
 export function stream(text: string, live: boolean): Block[] {
-  if (!live) return completedProjection(text).blocks
-
-  if (refs(text)) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
-  const tokens = lexer.lexer(text)
-  const tail = tokens.findLastIndex((token) => token.type !== "space")
-
-  if (tail < 0) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
-  const last = tokens[tail]
-
-  if (!last) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
-
-  const result: Block[] = []
-
-  for (let index = 0; index < tail; index++) {
-    const token = tokens[index]
-
-    if (!token || token.type === "space") continue
-    let raw = token.raw
-
-    while (tokens[index + 1]?.type === "space" && index + 1 < tail) raw += tokens[++index]!.raw
-
-    if (token.type === "code") {
-      // SAFETY: only marked's built-in fence tokenizer emits `code`; the math extensions use their own token types.
-      const code = token as Tokens.Code
-      result.push({ raw, src: code.text, mode: "code", language: language(code.lang), complete: true })
-      continue
-    }
-
-    result.push({ raw, src: raw, mode: "full" })
-  }
-
-  const raw = tokens
-    .slice(tail)
-    .map((token) => token.raw)
-    .join("")
-
-  if (last.type !== "code") return [...result, { raw, src: heal(raw), mode: "live" }]
-
-  // SAFETY: only marked's built-in fence tokenizer emits `code`; the math extensions use their own token types.
-  const code = last as Tokens.Code
-
-  if (!open(code.raw))
-    return [...result, { raw, src: code.text, mode: "code", language: language(code.lang), complete: true }]
-
-  return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
+  return project(undefined, text, live).blocks
 }
 
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
-  if (!live) {
-    const current =
-      previous?.text === text
-        ? previous
-        : previous && text.startsWith(previous.text)
-          ? project(previous, text, true)
-          : undefined
+  if (!previous && !live) return completedProjection(text)
 
-    if (!current) return completedProjection(text)
+  if (previous && live && previous.text === text) return previous
 
-    return {
-      text,
-      blocks: current.blocks.map((block) => {
-        if (block.mode === "live") return { raw: block.raw, src: block.raw, mode: "full" }
+  const instance = (previous ? streams.get(previous) : undefined) ?? createStream()
+  const blocks = instance.update(text, { streaming: live }).blocks.map(toBlock)
 
-        if (block.mode === "code" && !block.complete) return { ...block, complete: true }
-
-        return block
-      }),
-    }
-  }
-
-  if (!previous || !text.startsWith(previous.text)) return { text, blocks: stream(text, live) }
-  const tail = previous.blocks.at(-1)
-  const suffix = text.slice(previous.text.length)
-
-  if (!suffix || tail?.mode !== "code" || tail.complete || closesFence(tail.raw, suffix))
-    return { text, blocks: stream(text, live) }
-
-  return {
+  const next: Projection = {
     text,
-    blocks: [
-      ...previous.blocks.slice(0, -1),
-      {
-        ...tail,
-        raw: tail.raw + suffix,
-        src: tail.src + suffix,
-      },
-    ],
+    blocks: blocks.length === 0 ? [{ raw: text, src: text, mode: live ? "live" : "full" }] : blocks,
   }
+
+  if (live) streams.set(next, instance)
+
+  return next
 }

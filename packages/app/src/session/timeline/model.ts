@@ -8,6 +8,10 @@ const leadingTurnPageDelay = 200
 
 const leadingTurnPageLimit = 3
 
+// The store preserves the transcript array across prepends and tab switches, and replaces it on eviction.
+// Remember the original turn so interrupted enrichment can resume without chasing newly prepended turns.
+const enrichmentTurns = new WeakMap<SessionMessageInfo[], string>()
+
 export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
   const data = useData()
 
@@ -86,12 +90,25 @@ export async function enrichLeadingTurn(input: {
   pause: () => Promise<void>
   maxPages: number
 }) {
+  const messages = input.messages()
+
+  if (!input.current()) return
+  const assistant = enrichmentTurns.get(messages) ?? messages.find((message) => message.type === "assistant")?.id
+
+  if (!assistant) return
+  enrichmentTurns.set(messages, assistant)
+
   const load = async (pages: number): Promise<void> => {
-    if (!input.current() || pages >= input.maxPages || !leadingTurnNeedsParent(input.messages()) || !input.more())
+    if (
+      !input.current() ||
+      pages >= input.maxPages ||
+      !leadingTurnNeedsParent(input.messages(), assistant) ||
+      !input.more()
+    )
       return
     await input.pause()
 
-    if (!input.current() || !leadingTurnNeedsParent(input.messages()) || !input.more()) return
+    if (!input.current() || !leadingTurnNeedsParent(input.messages(), assistant) || !input.more()) return
 
     if (input.loading()) return load(pages)
     await input.loadMore()
@@ -102,8 +119,9 @@ export async function enrichLeadingTurn(input: {
   return load(0)
 }
 
-function leadingTurnNeedsParent(messages: SessionMessageInfo[]) {
-  const assistant = messages.findIndex((message) => message.type === "assistant")
+function leadingTurnNeedsParent(messages: SessionMessageInfo[], id: string) {
+  // Older pages can start mid-turn too; only complete the turn that was visible on entry.
+  const assistant = messages.findIndex((message) => message.id === id)
 
   if (assistant === -1) return false
   const boundary = messages.findIndex((message) => message.type === "user" || message.type === "shell")

@@ -5,14 +5,14 @@ import { Button } from "@opencode/ui/button"
 import { Component, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
-import { Updater } from "@opencode/gui-extensions/updater"
+import { Updater } from "@opencode/plugin/gui/updater"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { createIpcClients } from "@/runtime/extension/ipc"
+import { createIpcClients } from "@/runtime/plugin/ipc"
 import { Icon } from "@opencode/ui/icon"
 import { errorDescriptionKey, errorStatus } from "./description"
 
-export type InitError = {
+type InitError = {
   name: unknown
   data: object
 }
@@ -289,9 +289,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       .catch(() => undefined)
   })
 
-  // A crash can take the extension root down with the app, so the page reaches the updater's
+  // A crash can take the plugin root down with the app, so the page reaches the updater's
   // main-process Ipc over the bridge itself.
-  const ipcs = createIpcClients(platform.extensions)
+  const ipcs = createIpcClients(platform.plugins)
   onCleanup(ipcs.dispose)
   const updater = () => ipcs.typed(Updater)
 

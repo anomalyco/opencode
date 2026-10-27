@@ -16,7 +16,7 @@ import {
   currentToolHasLoadedFiles,
 } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
-import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
@@ -356,8 +356,21 @@ export namespace Timeline {
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
 
-    const visibleNotice = (message: Notice) =>
-      !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
+    const commentary = new Set(
+      detail && detail.commentary.placement !== "separate"
+        ? turns.flatMap((turn) =>
+            turnCommentary(turn.entries, turn.id !== activeMessageID || status.type === "idle", (content) =>
+              isRenderable(content, showReasoning, detail),
+            ),
+          )
+        : [],
+    )
+
+    const visible = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
+      !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
+      isRenderable(content, showReasoning, detail)
+
+    const visibleNotice = (message: Notice) => !detail || timelineNoticePlacement(message, detail) !== "hidden"
 
     const visibleTurns = detail
       ? turns.filter((turn) => {
@@ -372,7 +385,7 @@ export namespace Timeline {
                 entry.type === "diff" ||
                 !!entry.message.error ||
                 !!entry.message.retry ||
-                entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
+                entry.message.content.some((content) => visible(content, showReasoning, detail)),
           )
         })
       : turns
@@ -407,8 +420,9 @@ export namespace Timeline {
           turn.id === activeMessageID,
           shellToolDefaultOpen,
           editToolDefaultOpen,
-          isRenderable,
+          visible,
           detail,
+          commentary,
         )
       }),
     ]
@@ -443,7 +457,8 @@ export namespace Timeline {
               messages.flatMap((message) =>
                 message.type === "compaction" ||
                 message.type === "model-switched" ||
-                message.type === "location-switched"
+                message.type === "location-switched" ||
+                (message.type === "synthetic" && timelineNoticePlacement(message, detail) === "separate")
                   ? [message.id]
                   : [],
               ),
@@ -465,6 +480,7 @@ export namespace Timeline {
     editToolDefaultOpen = false,
     isRenderable = renderable,
     detail?: TimelineDetail,
+    commentary: ReadonlySet<Content> = new Set(),
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -488,15 +504,6 @@ export namespace Timeline {
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
 
-    const thoughtOnly =
-      working &&
-      detail?.thinking.placement === "grouped" &&
-      assistantMessages.every((message) =>
-        message.content.every(
-          (content) => content.type === "reasoning" || !isRenderable(content, showReasoning, detail),
-        ),
-      )
-
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
 
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
@@ -507,8 +514,6 @@ export namespace Timeline {
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
-      if (thoughtOnly) return
-
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
           .filter(
@@ -524,7 +529,7 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, detail).forEach((group) => {
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -568,6 +573,7 @@ export namespace Timeline {
             userMessageID: turnID,
             text: unwrapErrorMessage(lastAssistant.error.message),
             ...freeLimit(lastAssistant),
+            ...budgetLimit(lastAssistant),
           }),
         )
     }
@@ -589,6 +595,7 @@ export namespace Timeline {
                 userMessageID: turnID,
                 text: unwrapErrorMessage(entry.message.error.message),
                 ...freeLimit(entry.message),
+                ...budgetLimit(entry.message),
               }),
             )
 
@@ -607,7 +614,7 @@ export namespace Timeline {
 
           return
         case "notice":
-          if (detail?.notices.placement === "hidden" && !timelineNoticeRequired(entry.message)) return
+          if (detail && timelineNoticePlacement(entry.message, detail) === "hidden") return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -664,6 +671,17 @@ function freeLimit(
   }
 }
 
+// OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.
+function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
+  const type = message.error?.type
+  if (type !== "provider.budget-limit" && type !== "provider.model-budget-limit") return {}
+  const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(message.error?.response?.body ?? "")?.[1] ?? "")
+  return {
+    kind: type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const),
+    ...(Number.isNaN(at) ? {} : { resetAt: at }),
+  }
+}
+
 function isInterrupted(error: SessionMessageAssistant["error"]) {
   return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
 }
@@ -676,6 +694,26 @@ function shellFailed(message: SessionMessageShell) {
   return (
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
   )
+}
+
+// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
+// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
+// without an answer keeps its last text, so an interrupted turn still ends with something to read.
+function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
+  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
+  const lastTool = contents.findLastIndex((content) => content.type === "tool")
+
+  const commentary = contents.filter(
+    (content, index) =>
+      content.type === "text" &&
+      (content.native?.phase === "commentary" || (content.native?.phase !== "final_answer" && index < lastTool)),
+  )
+
+  const texts = contents.filter((content) => content.type === "text" && visible(content))
+
+  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
+
+  return commentary.filter((content) => content !== texts.at(-1))
 }
 
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
@@ -883,6 +921,7 @@ function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
@@ -920,6 +959,7 @@ function groupContent(
       shellToolDefaultOpen,
       editToolDefaultOpen,
       adjacent?.type === "context" && adjacent.tools,
+      commentary,
       detail,
     )
 
@@ -949,11 +989,12 @@ function contentGroupType(
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ) {
   if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
 
-  if (content.type !== "reasoning") return undefined
+  if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
   return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
 }

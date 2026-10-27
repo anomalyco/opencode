@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src/index.js"
+import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
+import { AIError, HttpContext } from "../src/schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -421,6 +422,77 @@ describe("provider error classification", () => {
           classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
       ),
     ).toEqual(["RateLimit", "RateLimit"])
+  })
+
+  test("classifies Bedrock throttling as a retryable rate limit, not context overflow", () => {
+    // Bedrock throttles with 429 ThrottlingException and a "Too many tokens" message; the token
+    // phrasing used to classify it as overflow and compact the session instead of retrying.
+    const bodies = [
+      '{"message":"Too many tokens, please wait before trying again."}',
+      '{"message":"Too many tokens per day, please wait before trying again."}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body),
+          status: 429,
+          rawBody: body,
+        }),
+      })
+      expect(error.reason._tag).toBe("RateLimit")
+      expect(isContextOverflowFailure(error)).toBe(false)
+      expect(isRetryable(error)).toBe(true)
+    }
+    expect(isContextOverflow("Too many tokens, please wait before trying again.")).toBe(false)
+    expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
+    // Plain overflow phrasing without the throttle cue still compacts.
+    expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("classifies 429 token throttles as retryable rate limits, not context overflow", () => {
+    const bodies = [
+      // Cerebras, captured live
+      '{"message":"Tokens per minute limit exceeded - too many tokens processed.","type":"too_many_tokens_error","param":"quota","code":"token_quota_exceeded"}',
+      '{"message":"Token limit reached: too many tokens per minute for this model."}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({ message: providerErrorMessage(body), status: 429, rawBody: body }),
+      })
+      expect(error.reason._tag).toBe("RateLimit")
+      expect(isRetryable(error)).toBe(true)
+    }
+  })
+
+  test("does not infer context overflow from known throttling exceptions", () => {
+    const cases = [
+      { status: 429, data: { code: "ThrottlingException" } },
+      { status: 429, rawBody: '{"__type":"com.amazonaws.bedrock#ThrottlingException"}' },
+      { rawBody: '{"exception":{"type":"throttlingException"}}' },
+      {
+        status: 429,
+        http: new HttpContext({
+          url: "https://bedrock.test/model/example/converse-stream",
+          status: 429,
+          headers: { "x-amzn-errortype": "ThrottlingException:http://internal.amazon.com/coral/" },
+        }),
+      },
+    ]
+    for (const input of cases) {
+      for (const message of ["Token limit exceeded", "Too many tokens, please try again later"]) {
+        const error = new AIError({ reason: classifyProviderFailure({ ...input, message }) })
+        expect(error.reason._tag).toBe("RateLimit")
+        expect(isContextOverflowFailure(error)).toBe(false)
+        expect(isRetryable(error)).toBe(true)
+      }
+    }
+    expect(
+      classifyProviderFailure({
+        message: "prompt is too long",
+        status: 400,
+        data: { code: "ValidationException" },
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
   })
 
   test("does not let substituted server codes make a 4xx retryable", () => {

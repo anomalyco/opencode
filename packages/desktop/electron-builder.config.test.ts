@@ -7,34 +7,34 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Configuration } from "electron-builder"
 import { getConfig } from "./electron-builder.config"
-import { CLI_BINARIES, nodePtyPackage } from "./scripts/utils"
+import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
 
 // Use electron-builder's matcher so the tests also cover its glob and directory traversal semantics.
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
-  { channel: "beta", appId: "ai.opencode.desktop.beta" },
-  { channel: "prod", appId: "ai.opencode.desktop" },
+  { channel: "dev", appId: "ai.opencode.desktop.dev", feed: "dev" },
+  { channel: "beta", appId: "ai.opencode.desktop.beta", feed: "beta" },
+  { channel: "prod", appId: "ai.opencode.desktop", feed: "latest" },
 ] as const
 
 function load(channel: string, target?: string): Configuration {
   const previous = process.env.OPENCODE_CHANNEL
-  const previousTarget = process.env.OPENCODE_CLI_TARGET
+  const previousTarget = process.env.OPENCODE_TARGET
   process.env.OPENCODE_CHANNEL = channel
 
-  if (target !== undefined) process.env.OPENCODE_CLI_TARGET = target
-  else delete process.env.OPENCODE_CLI_TARGET
+  if (target !== undefined) process.env.OPENCODE_TARGET = target
+  else delete process.env.OPENCODE_TARGET
 
   try {
     return getConfig()
   } finally {
     delete process.env.OPENCODE_CHANNEL
-    delete process.env.OPENCODE_CLI_TARGET
+    delete process.env.OPENCODE_TARGET
 
     if (previous !== undefined) process.env.OPENCODE_CHANNEL = previous
 
-    if (previousTarget !== undefined) process.env.OPENCODE_CLI_TARGET = previousTarget
+    if (previousTarget !== undefined) process.env.OPENCODE_TARGET = previousTarget
   }
 }
 
@@ -47,9 +47,15 @@ function trimFilter(dir: string, config: Configuration) {
   ]).createFilter()
 }
 
-test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
+test.each(channels)("channel identity for $channel", ({ channel, appId, feed }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
+  // Every published channel updates from its own feed on the update service.
+  expect(config.publish).toEqual({
+    provider: "generic",
+    url: `https://opencode.ai/update/api/${feed}/desktop/opencode/`,
+    channel: "latest",
+  })
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
   // The executable must never end in `.desktop`: libappimage resolves the
   // AppImage's desktop entry by globbing `*.desktop`, and an ELF matching
@@ -84,7 +90,10 @@ test("legacy Linux launcher stays hidden", async () => {
 
 test("shared packaging defaults", async () => {
   const config = load("dev")
-  expect(config.mac?.sign).toBeFunction()
+  // Packaging runs in secretless build jobs; the release workflow signs and notarizes afterwards.
+  expect(config.mac?.sign).toBeUndefined()
+  expect(config.mac?.notarize).toBeUndefined()
+  expect(config.win?.signtoolOptions).toBeUndefined()
   expect(config.dmg?.sign).not.toBe(true)
   expect(config.mac?.extendInfo?.NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac).toBe(true)
   const include = path.join(import.meta.dirname, "resources/windows/installer.nsh")

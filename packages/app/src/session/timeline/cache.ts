@@ -16,6 +16,7 @@ export function createTimelineCache(
   session: TimelineSessionSource & { identity: { workspaceKey: Accessor<string> } },
   render: (source: TimelineSessionSource, active: Accessor<boolean>) => JSX.Element,
   visible: Accessor<boolean>,
+  transcript: (sessionID: string) => readonly unknown[],
 ) {
   const owner = getOwner()
   let workspace = untrack(session.identity.workspaceKey)
@@ -30,6 +31,20 @@ export function createTimelineCache(
         // A detached view retains its own inputs until it is selected again.
         const select = <T>(read: Accessor<T>) =>
           createMemo<T>((previous) => (active() ? read() : previous), untrack(read))
+
+        // Session retention evicts the transcripts of closed sessions. A detached view would still hold the old
+        // transcript and its DOM, so it goes too; reopening the session renders a new view.
+        createComputed(
+          on(
+            () => !!id && transcript(id).length === 0,
+            (evicted, previous) => {
+              if (!evicted || previous !== false || untrack(active)) return
+              queueMicrotask(() => {
+                if (!untrack(active) && cache.peek(key)?.dispose === dispose) cache.delete(key)
+              })
+            },
+          ),
+        )
 
         return {
           value: render(

@@ -80,16 +80,17 @@ export const goModels: GoModel[] = [
     regions: true,
   },
   {
-    id: "longcat-2.5-preview-free",
-    name: "LongCat 2.5 Preview Free",
+    id: "beam-free",
+    name: "Beam Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
+    fresh: true,
     limitedTime: true,
   },
   {
-    id: "beam-free",
-    name: "Beam Free",
+    id: "iceman-contributor-free",
+    name: "Iceman Contributor Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
@@ -128,8 +129,8 @@ const plusLimits: Record<string, [number, number]> = {
   "mimo-v2.5": [60200, 120],
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
-  "longcat-2.5-preview-free": [Infinity, Infinity],
   "beam-free": [Infinity, Infinity],
+  "iceman-contributor-free": [Infinity, Infinity],
 }
 
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.

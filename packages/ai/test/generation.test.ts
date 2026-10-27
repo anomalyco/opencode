@@ -8,7 +8,7 @@ import {
   type GenerationRoute,
   type GenerationSnapshot,
   type GenerationStatus,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { it } from "./lib/effect.js"
 
 /** In-memory generation route whose status advances through `statuses` on every poll. */

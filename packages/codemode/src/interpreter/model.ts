@@ -1,16 +1,10 @@
 import type { Node } from "acorn"
-import { Context } from "effect"
 import type { ErrorType } from "./intrinsics.js"
 import type { DiagnosticKind } from "../codemode.js"
 import type { ErrorObj, Value } from "./objects.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
-
-/** The program call a built-in is running under: where to locate failures born inside it, and how deep the stack is there. */
-export const CallSite = Context.Reference<{ readonly node?: AstNode; readonly depth: number }>("codemode/CallSite", {
-  defaultValue: () => ({ depth: 0 }),
-})
 
 export type Binding = {
   mutable: boolean

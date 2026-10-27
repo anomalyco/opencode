@@ -1,39 +1,57 @@
 import { describe, expect, test } from "bun:test"
 import { parseSettingsView, settingsViewRedirect, settingsViewUrl, type SettingsView } from "./route"
 
+const parse = (view: SettingsView) => parseSettingsView(new URL(settingsViewUrl(view), "http://localhost").search)
+
 describe("settings route", () => {
   test("keeps root preferences at the canonical route", () => {
     expect(settingsViewUrl({ type: "root", tab: "general" })).toBe("/settings")
-    expect(parseSettingsView("", false)).toEqual({ type: "root", tab: "general", subtab: undefined })
+    expect(parseSettingsView("")).toEqual({ type: "root", tab: "general", server: undefined, subtab: undefined })
   })
 
-  test("round trips root, server, and project pages", () => {
+  test("round trips root pages, the selected server, and project pages", () => {
     const root: SettingsView = { type: "root", tab: "appearance" }
-    const server: SettingsView = { type: "server", server: "wsl:Debian", tab: "models" }
+    const models: SettingsView = { type: "root", tab: "models", server: "wsl:Debian" }
+    // Preferences with a selected server names its tab, which a link to the old server page lacks.
+    const preferences: SettingsView = { type: "root", tab: "general", server: "wsl:Debian" }
 
     const project: SettingsView = {
       type: "project",
       server: "local",
       project: "C:\\work folder",
-      parent: "server",
       tab: "extensions",
       subtab: "skills",
     }
 
-    expect(parseSettingsView(new URL(settingsViewUrl(root), "http://localhost").search, false)).toEqual({
-      ...root,
-      subtab: undefined,
-    })
-    expect(parseSettingsView(new URL(settingsViewUrl(server), "http://localhost").search, true)).toEqual({
-      ...server,
-      subtab: undefined,
-    })
-    expect(parseSettingsView(new URL(settingsViewUrl(project), "http://localhost").search, true)).toEqual(project)
+    expect(parse(root)).toEqual({ ...root, server: undefined, subtab: undefined })
+    expect(parse(models)).toEqual({ ...models, subtab: undefined })
+    expect(settingsViewUrl(preferences)).toBe("/settings?server=wsl%3ADebian&tab=general")
+    expect(parse(preferences)).toEqual({ ...preferences, subtab: undefined })
+    expect(parse(project)).toEqual(project)
   })
 
-  test("derives project ancestry and keeps search reveal state transient", () => {
+  test("opens links to a server's old settings page on the flat pages with that server selected", () => {
+    expect(parseSettingsView("?server=wsl%3ADebian")).toEqual({ type: "root", tab: "servers", server: "wsl:Debian" })
+    expect(parseSettingsView("?server=wsl%3ADebian&tab=providers")).toEqual({
+      type: "root",
+      tab: "providers",
+      server: "wsl:Debian",
+      subtab: undefined,
+    })
+  })
+
+  test("opens links to the desktop's old Plugins page on the Plugins tab of Extensions", () => {
+    expect(parseSettingsView("?tab=plugins")).toEqual({
+      type: "root",
+      tab: "extensions",
+      server: undefined,
+      subtab: "plugins",
+    })
+  })
+
+  test("keeps search reveal state transient", () => {
     expect(
-      parseSettingsView("?server=local&project=%2Fwork&tab=extensions&subtab=plugins", false, {
+      parseSettingsView("?server=local&project=%2Fwork&tab=extensions&subtab=plugins", {
         target: "settings-plugin",
         searchActivation: 2,
       }),
@@ -41,7 +59,6 @@ describe("settings route", () => {
       type: "project",
       server: "local",
       project: "/work",
-      parent: "root",
       tab: "extensions",
       subtab: "plugins",
       target: "settings-plugin",
@@ -49,25 +66,22 @@ describe("settings route", () => {
     })
   })
 
-  test("keeps a restored server page until the server lists load", () => {
-    const view: SettingsView = { type: "server", server: "wsl:Debian", tab: "models" }
+  test("keeps a restored server selection until the server lists load, then drops a removed one", () => {
+    const view: SettingsView = { type: "root", tab: "models", server: "wsl:Debian" }
     const local = { key: "local", connected: true, starting: false }
     const wsl = { key: "wsl:Debian", connected: false, starting: true }
 
     expect(settingsViewRedirect({ view, loaded: false, servers: [local] })).toBeUndefined()
     expect(settingsViewRedirect({ view, loaded: true, servers: [local, wsl] })).toBeUndefined()
-    expect(settingsViewRedirect({ view, loaded: true, servers: [local] })).toEqual({ type: "back" })
+    expect(settingsViewRedirect({ view, loaded: true, servers: [local] })).toEqual({
+      type: "root",
+      tab: "models",
+      server: undefined,
+    })
   })
 
   test("keeps a project page while its server starts", () => {
-    const view: SettingsView = {
-      type: "project",
-      server: "wsl:Debian",
-      project: "/work",
-      parent: "server",
-      tab: "general",
-    }
-
+    const view: SettingsView = { type: "project", server: "wsl:Debian", project: "/work", tab: "general" }
     const local = { key: "local", connected: true, starting: false }
 
     expect(
@@ -83,40 +97,24 @@ describe("settings route", () => {
         loaded: true,
         servers: [local, { key: "wsl:Debian", connected: false, starting: false }],
       }),
-    ).toEqual({ type: "server", server: "wsl:Debian" })
-  })
-
-  test("moves a single server's page to the root settings", () => {
-    const local = { key: "local", connected: true, starting: false }
-    expect(
-      settingsViewRedirect({
-        view: { type: "server", server: "local", tab: "general" },
-        loaded: true,
-        servers: [local],
-      }),
-    ).toEqual({ type: "root", tab: "servers" })
-    expect(
-      settingsViewRedirect({
-        view: { type: "server", server: "local", tab: "models" },
-        loaded: true,
-        servers: [local],
-      }),
-    ).toEqual({ type: "root", tab: "models" })
+    ).toEqual({ type: "root", tab: "projects", server: "wsl:Debian" })
+    expect(settingsViewRedirect({ view, loaded: true, servers: [local] })).toEqual({ type: "root", tab: "projects" })
   })
 
   test("falls back for invalid scope and tab combinations", () => {
-    expect(parseSettingsView("?tab=unknown", false)).toEqual({ type: "root", tab: "general" })
-    expect(parseSettingsView("?project=%2Fwork&tab=extensions", false)).toEqual({ type: "root", tab: "general" })
-    expect(parseSettingsView("?server=local&tab=about", true)).toEqual({ type: "root", tab: "general" })
-    expect(parseSettingsView("?tab=toString", false)).toEqual({ type: "root", tab: "general" })
-    expect(parseSettingsView("?tab=extensions&subtab=toString", false)).toEqual({
+    expect(parseSettingsView("?tab=unknown")).toEqual({ type: "root", tab: "general" })
+    expect(parseSettingsView("?project=%2Fwork&tab=extensions")).toEqual({ type: "root", tab: "general" })
+    expect(parseSettingsView("?tab=toString")).toEqual({ type: "root", tab: "general" })
+    expect(parseSettingsView("?tab=extensions&subtab=toString")).toEqual({
       type: "root",
       tab: "extensions",
+      server: undefined,
       subtab: undefined,
     })
-    expect(parseSettingsView("?tab=extensions&subtab=lsps", false)).toEqual({
+    expect(parseSettingsView("?tab=extensions&subtab=lsps")).toEqual({
       type: "root",
       tab: "extensions",
+      server: undefined,
       subtab: undefined,
     })
   })

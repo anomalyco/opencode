@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { Image, ImageEvent, Media } from "../../src/index.js"
+import { Image, ImageEvent, Media } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"

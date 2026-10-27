@@ -3,7 +3,9 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, Ref, Schema } from "effect"
 import { FileSystem } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { AIError, Media, Message } from "../src/index.js"
+import { AIError, LLM, Media, Message, ToolCallPart } from "../src/effect.js"
+import { OpenAI } from "../src/providers.js"
+import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, scriptedResponses } from "./lib/http.js"
 
@@ -35,6 +37,44 @@ describe("Media", () => {
       expect(Media.base64("AQID", "application/pdf").kind).toBe("document")
       expect(Media.base64("AQID", "video/mp4").kind).toBe("video")
       expect(Media.base64("AQID", "audio/wav").kind).toBe("audio")
+    }),
+  )
+
+  it.effect("rejects local file references as request errors without breaking construction or decoding", () =>
+    Effect.gen(function* () {
+      const model = OpenAI.configure({ apiKey: "test" }).responses("video-model")
+      const restored = yield* Schema.decodeUnknownEffect(Media.AssetSchema)({
+        source: { type: "url", url: " FILE:/C:/clips/video.mp4", mediaType: "video/mp4" },
+      })
+      for (const asset of [
+        Media.url("file:///Users/example/clip.mp4", { mediaType: "video/mp4" }),
+        Media.ref("openai", "file:///Users/example/clip.mp4", "video/mp4"),
+        restored,
+      ]) {
+        const error = yield* compileRequest(LLM.request({ model, prompt: [Message.media(asset)] })).pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toContain("Media.file(path)")
+      }
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "read", name: "read", input: {} })]),
+            Message.tool({
+              id: "read",
+              name: "read",
+              resultType: "content",
+              result: [{ type: "file", uri: "file:///Users/example/clip.mp4", mime: "video/mp4" }],
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("Media.file(path)")
+      expect(Media.ref("google", "gs://bucket/clip.mp4").source).toMatchObject({ id: "gs://bucket/clip.mp4" })
+      expect(Media.url("https://example.test/clip.mp4").source).toMatchObject({
+        url: "https://example.test/clip.mp4",
+      })
     }),
   )
 
@@ -250,6 +290,16 @@ describe("Media", () => {
       const plain = `${dir}/notes.md`
       yield* fs.writeFile(plain, new TextEncoder().encode("# hi"))
       expect((yield* Media.file(plain)).mediaType).toBe("text/markdown")
+
+      for (const [name, mediaType] of [
+        ["photo.avif", "image/avif"],
+        ["photo.HEIC", "image/heic"],
+        ["photo.heif", "image/heif"],
+        ["clip.mov", "video/quicktime"],
+      ]) {
+        yield* fs.writeFile(`${dir}/${name}`, Uint8Array.from([1, 2, 3]))
+        expect((yield* Media.file(`${dir}/${name}`)).mediaType).toBe(mediaType)
+      }
 
       const target = `${dir}/copy.png`
       yield* Media.write(Media.base64("AQID", "image/png"), target)
