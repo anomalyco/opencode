@@ -193,6 +193,27 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
 
 type OpenInAppState = ReturnType<typeof useOpenInApp>
 
+export function OpenInAppMenuItem(props: { session: MountedSession }) {
+  const ctx = usePlugin()
+
+  const state = useOpenInApp({
+    get session() {
+      return props.session
+    },
+    path: () => props.session.directory,
+    request: useShared().request,
+  })
+
+  return (
+    <Show when={state.canOpen() && state.current().id !== "finder"}>
+      <Menu.Item disabled={state.opening()} onSelect={() => state.openPath(state.current().id)}>
+        <AppIcon id={state.current().icon} class="size-3.5 shrink-0" />
+        {ctx.t("open.ariaLabel", { app: state.current().label })}
+      </Menu.Item>
+    </Show>
+  )
+}
+
 export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = usePlugin()
   const directory = () => props.screen.file.root
@@ -248,11 +269,12 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
   )
 }
 
-function OpenInAppMenuItemsV2(props: {
+export function OpenInAppMenuItemsV2(props: {
   state: OpenInAppState
   path?: () => string
   reveal?: boolean
   selection?: boolean
+  copyPath?: boolean
   close?: () => void
 }) {
   const ctx = usePlugin()
@@ -310,16 +332,18 @@ function OpenInAppMenuItemsV2(props: {
           </Menu.RadioGroup>
         </Show>
       </Menu.Group>
-      <Menu.Separator />
-      <Menu.Item
-        onSelect={() => {
-          props.close?.()
-          props.state.copyPath(path())
-        }}
-      >
-        <Icon name="copy" size="small" class="text-icon-weak" />
-        {ctx.t("open.copyPath")}
-      </Menu.Item>
+      <Show when={props.copyPath !== false}>
+        <Menu.Separator />
+        <Menu.Item
+          onSelect={() => {
+            props.close?.()
+            props.state.copyPath(path())
+          }}
+        >
+          <Icon name="copy" size="small" class="text-icon-weak" />
+          {ctx.t("open.copyPath")}
+        </Menu.Item>
+      </Show>
     </>
   )
 }

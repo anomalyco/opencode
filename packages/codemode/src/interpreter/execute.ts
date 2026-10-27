@@ -1,13 +1,12 @@
 import { parse, type Program } from "acorn"
-import { Cause, Effect, Scope } from "effect"
+import { Cause, Effect } from "effect"
 import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../codemode.js"
-import { toBoundary } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import type { Value } from "./objects.js"
 import { createBuiltins } from "./intrinsics.js"
-import { Pending } from "./promises.js"
 import { Interpreter } from "./interpreter.js"
+import type { Runner } from "./runner.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -31,33 +30,31 @@ export const executeProgram = <R>(
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set only after copy-out so timeouts cannot report invalid values as completed.
-    let returned: { value: DataValue; pending: Pending<R> } | undefined
+    let returned: { value: DataValue; runner: Runner<R> } | undefined
+    let runner: Runner<R> | undefined
 
-    const base = Effect.acquireUseRelease(
-      Scope.make("parallel"),
-      (scope) =>
-        Effect.gen(function* () {
-          const program = parseProgram(code)
-          const pending = new Pending<R>(scope, builtins.Promise)
-          const ctx = new Interpreter<R>({ tools, pending, builtins, logs, globals })
-          // The main job holds the turn until leftover promise work is interrupted.
-          return yield* pending.turn.hold(
-            Effect.gen(function* () {
-              const result = (yield* toBoundary(ctx, yield* ctx.run(program))) ?? null
-              returned = { value: result, pending }
-              const warnings = yield* pending.interrupt()
-              return {
-                ok: true,
-                value: result,
-                ...(warnings.length > 0 ? { warnings } : {}),
-                ...logged(),
-                toolCalls: tools.calls,
-              } satisfies Result
-            }),
-          )
-        }),
-      (scope, exit) => Scope.close(scope, exit),
-    )
+    const base = Effect.gen(function* () {
+      const program = parseProgram(code)
+      const services = yield* Effect.context<R>()
+      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
+      runner = ctx.runner
+      const outcome = yield* runner.run(ctx.main(program))
+      if (!outcome.ok) {
+        return { ok: false, error: normalizeError(outcome.error), ...logged(), toolCalls: tools.calls } satisfies Result
+      }
+      const result = (outcome.value as DataValue | undefined) ?? null
+      returned = { value: result, runner }
+      // Host work the program left running is interrupted, not awaited.
+      yield* runner.interrupt()
+      const warnings = runner.diagnostics()
+      return {
+        ok: true,
+        value: result,
+        ...(warnings.length > 0 ? { warnings } : {}),
+        ...logged(),
+        toolCalls: tools.calls,
+      } satisfies Result
+    }).pipe(Effect.ensuring(Effect.suspend(() => runner?.interrupt() ?? Effect.void)))
     const timeoutMs = limits.timeoutMs
     const operation =
       timeoutMs === undefined
@@ -84,7 +81,7 @@ export const executeProgram = <R>(
                         kind: "TimeoutExceeded",
                         message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await all started promises.`,
                       },
-                      ...returned.pending.diagnostics(),
+                      ...returned.runner.diagnostics(),
                     ],
                     ...logged(),
                     toolCalls: tools.calls,

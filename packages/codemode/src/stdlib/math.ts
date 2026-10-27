@@ -1,9 +1,9 @@
-import { Effect } from "effect"
 import { constants, type Method, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
 import { Obj, coerceToNumber } from "../interpreter/objects.js"
 import { preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
+import type { Eval } from "../interpreter/runner.js"
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
 declare global {
@@ -83,28 +83,26 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "sumPrecise",
       1,
-      (_, args) =>
-        Effect.gen(function* () {
-          const cursor = yield* ctx.iterate(args[0])
-          if (cursor === undefined) {
-            throw typeError("Math.sumPrecise expects a synchronous iterable.")
+      function* (_, args) {
+        const cursor = yield* ctx.iterate(args[0])
+        if (cursor === undefined) {
+          throw typeError("Math.sumPrecise expects a synchronous iterable.")
+        }
+        const numbers: Array<number> = []
+        while (true) {
+          const step = yield* cursor.next()
+          if (step.done) return Math.sumPrecise(numbers)
+          if (typeof step.value !== "number") {
+            yield* preserveConsumerError(cursor.close, rejectNonNumber())
           }
-          const numbers: Array<number> = []
-          while (true) {
-            const step = yield* cursor.next
-            if (step.done) return Math.sumPrecise(numbers)
-            yield* preserveConsumerError(
-              cursor.close,
-              Effect.sync(() => {
-                if (typeof step.value !== "number") {
-                  throw typeError("Math.sumPrecise expects an iterable of numbers.")
-                }
-                numbers.push(step.value)
-              }),
-            )
-          }
-        }),
+          numbers.push(step.value as number)
+        }
+      },
     ],
   ])
   return math
+}
+
+function* rejectNonNumber(): Eval<never> {
+  throw typeError("Math.sumPrecise expects an iterable of numbers.")
 }

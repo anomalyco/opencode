@@ -1,25 +1,25 @@
-import { Effect } from "effect"
 import type { Builtins } from "./intrinsics.js"
 import { typeError } from "./model.js"
-import { type Callable, define, frozen, hidden, Native, type NativeOptions, Obj, type Value } from "./objects.js"
+import {
+  type Callable,
+  define,
+  frozen,
+  hidden,
+  Native,
+  type NativeCall,
+  type NativeOptions,
+  Obj,
+  type Value,
+} from "./objects.js"
 import { describeValue } from "./references.js"
 
-/** A native function body: a value, a thrown `PendingThrow`, or an Effect of a value. */
-export type Impl = (thisValue: Value, args: Array<Value>) => Value | Effect.Effect<Value, unknown, unknown>
+/** A native function body: a value, a thrown `PendingThrow`, or interpreter work producing a value. */
+export type Impl = NativeCall
 
-// The dispatch in `Frame.call` suspends every native call, so a synchronous throw here is a defect.
-const lift =
-  <R>(impl: Impl) =>
-  (thisValue: Value, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
-    const result = impl(thisValue, args)
-    return Effect.isEffect(result) ? (result as Effect.Effect<Value, unknown, R>) : Effect.succeed(result)
-  }
+export const native = (builtins: Builtins, options: NativeOptions): Native => new Native(builtins.Function, options)
 
-export const native = <R>(builtins: Builtins, options: NativeOptions<R>): Native<R> =>
-  new Native<R>(builtins.Function, options)
-
-export const fn = <R>(builtins: Builtins, name: string, length: number, impl: Impl): Native<R> =>
-  native<R>(builtins, { name, length, call: lift(impl) })
+export const fn = (builtins: Builtins, name: string, length: number, impl: Impl): Native =>
+  native(builtins, { name, length, call: impl })
 
 export type Method = readonly [name: string, length: number, impl: Impl]
 
@@ -32,18 +32,17 @@ export const constants = (target: Obj, table: Record<string, Value>): void => {
 }
 
 /** A constructor wired to its prototype: `C.prototype === proto` and `proto.constructor === C`. */
-export const constructor = <R>(builtins: Builtins, proto: Obj, options: NativeOptions<R>): Native<R> => {
-  const ctor = native<R>(builtins, options)
+export const constructor = (builtins: Builtins, proto: Obj, options: NativeOptions): Native => {
+  const ctor = native(builtins, options)
   define(ctor, "prototype", proto, frozen)
   define(proto, "constructor", ctor, hidden)
   return ctor
 }
 
 /** The `call` of a constructor that JS requires to be invoked with `new`. */
-export const requiresNew = (name: string) => (): Effect.Effect<never, unknown, never> =>
-  Effect.sync(() => {
-    throw typeError(`Constructor ${name} requires 'new'.`)
-  })
+export const requiresNew = (name: string) => (): never => {
+  throw typeError(`Constructor ${name} requires 'new'.`)
+}
 
 /** The instance prototype for `new` via `newTarget.prototype`, falling back to the built-in's own. */
 export const prototypeFrom = (newTarget: Callable, fallback: Obj): Obj => {

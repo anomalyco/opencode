@@ -601,7 +601,6 @@ function MessageTimelineView(
                     class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1.5"
                     classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                     style={{
-                      "--inline-input-shadow": "none",
                       "text-align": "start",
                     }}
                     onInput={(event) => setTitle("draft", event.currentTarget.value)}

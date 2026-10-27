@@ -366,7 +366,8 @@ function HomeServerRow(props: {
 
   return (
     <Tooltip
-      appearance="standard"
+      appearance="large"
+      contentClass="max-w-80 break-words"
       placement="top"
       class="flex h-7 w-full min-w-0"
       inactive={!incompatible() && !authentication()}

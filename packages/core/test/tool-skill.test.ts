@@ -9,7 +9,6 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
@@ -20,7 +19,7 @@ import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
-import { registerIntegrationPolicy } from "./fixture/policy"
+import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 
 const skillToolNode = makeLocationNode({
   name: "test/skill-tool-plugin",
@@ -34,7 +33,6 @@ describe("SkillTool", () => {
   it.effect("refuses a policy-blocked skill before authorization or content preparation", () =>
     Effect.gen(function* () {
       const skills = yield* Skill.Service
-      const managed = yield* ManagedPolicy.Service
       const tools = yield* Tool.Service
       // This path does not exist; an attempted content scan would fail the test.
       yield* skills.transform((editor) =>
@@ -47,7 +45,7 @@ describe("SkillTool", () => {
           }),
         ),
       )
-      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:private", effect: "deny" }] })
+      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:private", effect: "deny" }])
       yield* registerIntegrationPolicy({ skill: skills })
       expect(
         yield* executeTool(tools, {
@@ -58,7 +56,7 @@ describe("SkillTool", () => {
       ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unable to load skill private" } })
     }).pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node, ManagedPolicy.node]), [
+        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node]), [
           Config.node.replace(Config.testLayer()),
           Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
           Image.node.replace(imagePassthrough),

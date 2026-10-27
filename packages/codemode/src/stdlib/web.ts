@@ -29,7 +29,7 @@ import { ToolReference } from "../tool-runtime.js"
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies. Invalid input is a
 // TypeError as well; browsers throw a DOMException named InvalidCharacterError, which CodeMode does not have.
 export const base64Global = <R>(ctx: Interpreter<R>, name: "atob" | "btoa") =>
-  fn<R>(ctx.builtins, name, 1, (_, args) => {
+  fn(ctx.builtins, name, 1, (_, args) => {
     if (args.length === 0) throw typeError(`${name} requires 1 argument (a string)`)
     const input = coerceToString(args[0])
     try {
@@ -42,7 +42,7 @@ export const base64Global = <R>(ctx: Interpreter<R>, name: "atob" | "btoa") =>
 // HTML structured clone over CodeMode's data kinds. Shared references survive through the memo; prototypes and
 // frozen state do not, as in JS. Without a DOMException, DataCloneError is a TypeError carrying that prefix.
 export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
-  fn<R>(ctx.builtins, "structuredClone", 1, (_, args) => {
+  fn(ctx.builtins, "structuredClone", 1, (_, args) => {
     if (args.length === 0) throw typeError("structuredClone requires 1 argument")
     const builtins = ctx.builtins
     const memo = new Map<Obj, Obj>()

@@ -8,7 +8,7 @@ export type ComposerInteractionState = {
     | { type: "context"; query: string; activeID?: string }
     | { type: "command-inline"; query: string; activeID?: string }
     | { type: "command-menu"; query: string; activeID?: string }
-    | { type: "history"; query: string; searching: boolean; activeID?: string }
+    | { type: "history"; query: string; activeID?: string }
   drag: "idle" | "active"
   focus: "editor" | "command-search" | "history-search" | "external"
   activeContextID?: string
@@ -19,8 +19,6 @@ export type ComposerInteractionEvent =
   | { type: "commands.open" }
   | { type: "context.open" }
   | { type: "history.open"; id: string }
-  | { type: "history.search" }
-  | { type: "history.browse" }
   | { type: "popover.query"; value: string }
   | { type: "popover.results"; ids: string[] }
   | { type: "popover.active"; id: string }
@@ -73,15 +71,9 @@ export function transitionComposer(
   if (event.type === "context.open") return openContext(state)
 
   if (event.type === "history.open")
-    return changed(
-      { ...state, popover: { type: "history", query: "", searching: false, activeID: event.id }, focus: "editor" },
-      [{ type: "history.preview", id: event.id }],
-    )
-
-  if (event.type === "history.search" && state.popover.type === "history")
-    return changed({ ...state, popover: { ...state.popover, searching: true }, focus: "history-search" })
-
-  if (event.type === "history.browse") return browseHistory(state)
+    return changed({ ...state, popover: { type: "history", query: "", activeID: event.id }, focus: "history-search" }, [
+      { type: "history.preview", id: event.id },
+    ])
 
   if (event.type === "popover.query") return queryChanged(state, event.value)
 
@@ -193,25 +185,10 @@ function queryChanged(state: ComposerInteractionState, query: string): ComposerE
   ])
 }
 
-function browseHistory(state: ComposerInteractionState): ComposerEditorTransition {
-  if (state.popover.type !== "history") return unchanged(state)
-
-  return changed(
-    { ...state, popover: { ...state.popover, searching: false, query: "" }, focus: "editor" },
-    [{ type: "focus.editor" }],
-    true,
-  )
-}
-
 function resultsChanged(state: ComposerInteractionState, ids: string[]): ComposerEditorTransition {
   if (state.popover.type === "closed") return unchanged(state)
 
-  const activeID =
-    state.popover.activeID && ids.includes(state.popover.activeID)
-      ? state.popover.activeID
-      : state.popover.type === "history"
-        ? ids.at(-1)
-        : ids[0]
+  const activeID = state.popover.activeID && ids.includes(state.popover.activeID) ? state.popover.activeID : ids[0]
 
   if (activeID === state.popover.activeID) return unchanged(state)
 
@@ -269,8 +246,6 @@ function keyDown(
   event: Extract<ComposerInteractionEvent, { type: "key.down" }>,
 ): ComposerEditorTransition {
   if (state.popover.type === "history" && (event.key === "Escape" || (event.ctrl && event.key.toLowerCase() === "g"))) {
-    if (state.popover.searching && event.key === "Escape") return browseHistory(state)
-
     return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [{ type: "history.restore" }], true)
   }
 

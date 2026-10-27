@@ -137,12 +137,21 @@ const mantle = (modelID: string | undefined) => {
   return `@opencode/ai/providers/amazon-bedrock/mantle/${modelID.includes("gpt-oss") ? "chat" : "responses"}`
 }
 
+// Old hyphenated Vertex entrypoints that stale configs may still name.
+const LEGACY_VERTEX: Readonly<Record<string, string>> = {
+  "@opencode/ai/providers/google-vertex-chat": "@opencode/ai/providers/google-vertex/chat",
+  "@opencode/ai/providers/google-vertex-responses": "@opencode/ai/providers/google-vertex/responses",
+  "@opencode/ai/providers/google-vertex-interactions": "@opencode/ai/providers/google-vertex/interactions",
+  "@opencode/ai/providers/google-vertex-mistral": "@opencode/ai/providers/google-vertex/mistral",
+}
+
 function resolve(specifier: string, context: Context & { readonly settings?: Provider.Settings }): string | undefined {
   const npm = Provider.packageName(specifier)
   if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
     return native(npm, context)
   if (npm === "@opencode/ai/providers/amazon-bedrock/mantle" || npm === "@opencode/ai/providers/amazon-bedrock-mantle")
     return mantle(context.modelID)
+  if (npm in LEGACY_VERTEX) return LEGACY_VERTEX[npm]
   if (
     (npm === "@opencode/ai/providers/azure" || npm === "@opencode/ai/providers/azure/responses") &&
     azureChat(context)

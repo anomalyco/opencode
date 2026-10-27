@@ -13,21 +13,22 @@ import {
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Button } from "@opencode/ui/button"
+import { PreviewControls } from "@opencode/ui/preview-controls"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { ImagePreview } from "@opencode/ui/image-preview"
-import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { Loader } from "@opencode/ui/loader"
+import { showToast } from "@opencode/ui/toast"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { createKeyed, usePlugin, type FileContent, type MountedSession } from "@opencode/plugin/gui"
+import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
-import { current, useShared } from "./context"
 import { FileViewer } from "@opencode/plugin/gui/file"
-import { workspaceFileUrl } from "./path"
+import { ArtifactToolbar } from "./artifact-toolbar"
 
 type ArtifactMode = "preview" | "source"
 
@@ -67,6 +68,7 @@ const previewableKinds: readonly ArtifactKind[] = ["svg", "html", "markdown", "m
  */
 export default function ArtifactView(props: {
   session: MountedSession
+  screen: SessionScreen
   path: string
   content: FileContent
   cacheKey?: string
@@ -112,10 +114,10 @@ export default function ArtifactView(props: {
     const info: ArtifactInfo = parsed ? { rows: parsed.total, columns: parsed.columns } : state().info
 
     return [
-      info.width && info.height ? `${info.width} × ${info.height}` : undefined,
       info.duration ? formatDuration(info.duration) : undefined,
-      info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
+      info.width && info.height ? `${info.width} × ${info.height}` : undefined,
       info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
+      info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
       ...(info.details ?? []),
       formatBytes(locale.locale(), contentBytes(props.content)),
     ].filter((item): item is string => !!item)
@@ -136,10 +138,18 @@ export default function ArtifactView(props: {
   })
 
   const rendered = () => (
-    <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
-      <Show
-        when={kind() === "markdown"}
-        fallback={<ArtifactMermaid text={props.content.content} cacheKey={props.cacheKey} />}
+    <Show
+      when={kind() === "markdown"}
+      fallback={<ArtifactMermaid text={props.content.content} cacheKey={props.cacheKey} />}
+    >
+      <div
+        data-slot="artifact-document-stage"
+        data-kind="markdown"
+        data-document-surface-inset
+        data-document-surface-scrollport
+        data-document-surface-column
+        class="min-h-0 flex-1 overflow-auto"
+        data-scrollable
       >
         <ArtifactMarkdown
           session={props.session}
@@ -147,21 +157,25 @@ export default function ArtifactView(props: {
           text={props.content.content}
           cacheKey={props.cacheKey}
         />
-      </Show>
-    </div>
+      </div>
+    </Show>
   )
 
   return (
-    <>
+    <div data-slot="artifact-view" class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ArtifactToolbar
+        session={props.session}
+        screen={props.screen}
+        path={props.path}
+        text={
+          props.content.type !== "binary" && previewableKinds.includes(artifactKind(props.path))
+            ? props.content.content
+            : undefined
+        }
         mode={state().mode}
         onModeChange={previewable() ? (mode) => change({ mode }) : undefined}
         meta={meta()}
-        actions={
-          <Show when={kind() === "html"}>
-            <OpenInBrowserButton session={props.session} path={props.path} />
-          </Show>
-        }
+        html={kind() === "html"}
       />
       <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
         <Switch fallback={<ArtifactBinary path={props.path} size={size()} reason={state().reason} />}>
@@ -197,7 +211,7 @@ export default function ArtifactView(props: {
           </Match>
         </Switch>
       </Show>
-    </>
+    </div>
   )
 }
 
@@ -220,80 +234,6 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(total / 60)
 
   return `${minutes}:${String(total % 60).padStart(2, "0")}`
-}
-
-function ArtifactToolbar(props: {
-  mode?: ArtifactMode
-  onModeChange?: (mode: ArtifactMode) => void
-  meta: string[]
-  actions?: JSX.Element
-}) {
-  const ctx = usePlugin()
-
-  return (
-    <div data-slot="artifact-toolbar" class="flex h-10 shrink-0 items-center gap-3 px-4">
-      <Show when={props.onModeChange}>
-        <SegmentedControl
-          value={props.mode ?? "preview"}
-          onChange={(value) => {
-            if (value === "preview" || value === "source") props.onModeChange?.(value)
-          }}
-        >
-          <SegmentedControlItem value="preview">{ctx.t("view.preview")}</SegmentedControlItem>
-          <SegmentedControlItem value="source">{ctx.t("view.source")}</SegmentedControlItem>
-        </SegmentedControl>
-      </Show>
-      <div class="ms-auto flex min-w-0 items-center gap-3">
-        <div class="flex min-w-0 items-center gap-2 text-12-regular text-text-weak">
-          <For each={props.meta}>
-            {(item, index) => (
-              <>
-                <Show when={index() > 0}>
-                  <span aria-hidden class="text-text-faint">
-                    ·
-                  </span>
-                </Show>
-                <span class="truncate tabular-nums">{item}</span>
-              </>
-            )}
-          </For>
-        </div>
-        {props.actions}
-      </div>
-    </div>
-  )
-}
-
-/** Shows only while the browser pane is active and can load the file. */
-function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
-  const ctx = usePlugin()
-  const shared = useShared()
-
-  const pane = () => {
-    const browser = current(shared.browser())
-
-    return browser?.canOpen(props.session, props.path) ? browser : undefined
-  }
-
-  return (
-    <Show when={pane()}>
-      {(browser) => (
-        <Button
-          size="small"
-          variant="ghost"
-          icon="globe"
-          onClick={() => {
-            // The screen's workspace root, read when the user acts.
-            const root = ctx.screen.current()?.file.root
-
-            if (root !== undefined) browser().open(props.session, workspaceFileUrl(root, props.path))
-          }}
-        >
-          {ctx.t("view.openInBrowser")}
-        </Button>
-      )}
-    </Show>
-  )
 }
 
 function createMediaUrl(content: () => FileContent) {
@@ -335,8 +275,6 @@ function ArtifactImage(props: MediaProps) {
 }
 
 function ImageStage(props: MediaProps & { src: string }) {
-  const ctx = usePlugin()
-
   const [view, setView] = createStore({
     width: 0,
     height: 0,
@@ -350,15 +288,18 @@ function ImageStage(props: MediaProps & { src: string }) {
 
   const fit = () =>
     Math.min(
-      1,
+      artifactKind(props.path) === "svg" ? Infinity : 1,
       Math.max(1, view.width - 48) / (view.imageWidth || 1),
       Math.max(1, view.height - 48) / (view.imageHeight || 1),
     )
 
+  const minZoom = () => Math.min(0.25, 1 / fit())
+  const maxZoom = () => Math.max(8, 1 / fit())
+
   const bound = (offset: number, image: number, zoom: number) => {
     // Keep the fitted footprint covered, including its letterboxing. Clamping to
     // the stage edges instead would move the anchor during small pinch increments.
-    const limit = (image * fit() * (zoom - 1)) / 2
+    const limit = Math.max(0, (image * fit() * (zoom - 1)) / 2)
 
     return Math.max(-limit, Math.min(limit, offset))
   }
@@ -375,7 +316,7 @@ function ImageStage(props: MediaProps & { src: string }) {
   let dragged = false
 
   const cursor = () => {
-    if (view.zoom === 1) return undefined
+    if (view.zoom <= 1) return undefined
 
     return view.dragging ? "grabbing" : "grab"
   }
@@ -391,7 +332,7 @@ function ImageStage(props: MediaProps & { src: string }) {
     if (!stage) return
 
     const rect = stage.getBoundingClientRect()
-    const next = Math.max(1, Math.min(Math.max(8, 1 / fit()), zoom))
+    const next = Math.max(minZoom(), Math.min(maxZoom(), zoom))
     const ratio = next / view.zoom
     const anchor = { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 }
     setView({
@@ -399,6 +340,13 @@ function ImageStage(props: MediaProps & { src: string }) {
       x: bound(anchor.x - (anchor.x - x()) * ratio, view.imageWidth, next),
       y: bound(anchor.y - (anchor.y - y()) * ratio, view.imageHeight, next),
     })
+  }
+
+  const zoomBy = (factor: number) => {
+    if (!stage) return
+    const rect = stage.getBoundingClientRect()
+
+    zoomAt(view.zoom * factor, rect.left + rect.width / 2, rect.top + rect.height / 2)
   }
 
   createResizeObserver(
@@ -415,12 +363,11 @@ function ImageStage(props: MediaProps & { src: string }) {
     <div
       ref={stage}
       data-slot="artifact-stage"
-      data-checker
       data-zoom={view.zoom === 1 ? "fit" : "actual"}
       data-overflow={fit() < 1 || undefined}
       class="relative min-h-0 flex-1 overflow-hidden"
       on:wheel={(event) => {
-        if (!view.imageWidth || (!event.ctrlKey && view.zoom === 1)) return
+        if (!view.imageWidth || (!event.ctrlKey && view.zoom <= 1)) return
 
         // Chromium delivers trackpad pinch as Ctrl-wheel. Consume it here before
         // Desktop's window-level zoom handler; ordinary fitted scrolling stays native.
@@ -458,7 +405,7 @@ function ImageStage(props: MediaProps & { src: string }) {
 
           dragged = false
 
-          if (view.zoom === 1) return
+          if (view.zoom <= 1) return
 
           drag = { id: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: x(), y: y() }
           event.currentTarget.setPointerCapture(event.pointerId)
@@ -499,7 +446,7 @@ function ImageStage(props: MediaProps & { src: string }) {
             return
           }
 
-          if (view.zoom > 1) return reset()
+          if (view.zoom !== 1) return reset()
 
           zoomAt(1 / fit(), event.clientX, event.clientY)
         }}
@@ -507,11 +454,14 @@ function ImageStage(props: MediaProps & { src: string }) {
       <Show when={!view.imageWidth}>
         <MediaLoading />
       </Show>
-      <div class="absolute end-3 top-3">
-        <Button size="small" variant="neutral" disabled={view.zoom === 1} onClick={reset}>
-          {ctx.t("view.fit")}
-        </Button>
-      </div>
+      <PreviewControls
+        disabled={!view.imageWidth}
+        zoomInDisabled={view.zoom >= maxZoom()}
+        zoomOutDisabled={view.zoom <= minZoom()}
+        onZoomIn={() => zoomBy(1.25)}
+        onZoomOut={() => zoomBy(1 / 1.25)}
+        onFit={reset}
+      />
     </div>
   )
 }
@@ -638,14 +588,7 @@ function ArtifactVideo(props: MediaProps) {
           }}
         >
           <span class="flex size-9 items-center justify-center rounded-full transition-colors">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M3 6V3H6M10 3H13V6M13 10V13H10M6 13H3V10"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="square"
-              />
-            </svg>
+            <Icon name="outline-expand" size="normal" />
           </span>
         </button>
       </div>
@@ -659,9 +602,9 @@ function ArtifactAudio(props: MediaProps) {
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
       <div class="absolute inset-0 flex items-center justify-center p-6">
-        <div class="flex w-full max-w-lg flex-col items-center gap-5 rounded-xl border border-v2-border-border-muted bg-v2-background-bg-base px-8 py-8 shadow-[var(--v2-elevation-raised)]">
+        <div class="flex w-full max-w-lg flex-col items-center gap-5 rounded-xl bg-v2-background-bg-base px-8 py-8 shadow-[var(--v2-elevation-raised)]">
           <div class="flex size-14 items-center justify-center rounded-full bg-v2-background-bg-layer-02">
-            <FileIcon node={{ path: props.path, type: "file" }} class="size-7" />
+            <FileIcon node={{ path: props.path, type: "file" }} mono class="size-7 text-v2-icon-icon-muted" />
           </div>
           <div class="max-w-full truncate text-14-medium text-text-strong">{getFilename(props.path)}</div>
           <audio
@@ -711,8 +654,10 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
       openLocalFile={(href) => void links.open({ href, base: dir(), session: props.session })}
       localFileExists={(href) => untrack(() => links.exists({ href, base: dir(), session: props.session }))}
     >
-      <div class="mx-auto w-full max-w-3xl px-8 py-6">
-        <Markdown text={props.text} cacheKey={props.cacheKey} />
+      <div data-slot="artifact-markdown-page" data-component="document-surface">
+        <div data-slot="artifact-markdown-content">
+          <Markdown text={props.text} cacheKey={props.cacheKey} />
+        </div>
       </div>
     </MarkdownProvider>
   )
@@ -720,35 +665,97 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
 
 /** Mermaid sources render through the same fenced-block pipeline the timeline uses. */
 function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
+  const [view, setView] = createStore({ zoom: 1, width: 0 })
+  let scroller: HTMLDivElement | undefined
+
+  createResizeObserver(
+    () => scroller,
+    (rect) => setView("width", rect.width),
+  )
+
   return (
-    <div class="mx-auto w-full max-w-4xl px-8 py-6">
-      <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} />
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scroller} class="min-h-0 flex-1 overflow-auto" data-scrollable>
+        <div class="grid min-h-full w-max min-w-full place-items-center">
+          <div data-slot="artifact-diagram" style={{ width: `${Math.min(view.width, 896)}px`, zoom: view.zoom }}>
+            <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} />
+          </div>
+        </div>
+      </div>
+      <PreviewControls
+        disabled={view.width === 0}
+        zoomInDisabled={view.zoom >= 4}
+        zoomOutDisabled={view.zoom <= 0.25}
+        onZoomIn={() => setView("zoom", Math.min(4, view.zoom * 1.25))}
+        onZoomOut={() => setView("zoom", Math.max(0.25, view.zoom / 1.25))}
+        onFit={() => {
+          setView("zoom", 1)
+          scroller?.scrollTo({ top: 0, left: 0 })
+        }}
+      />
     </div>
   )
 }
 
 function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
   const ctx = usePlugin()
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
   const parsed = () => props.parsed
   // Pad the header to the widest row so no data column is dropped.
   const header = () => Array.from({ length: parsed().columns }, (_, index) => parsed().rows[0]?.[index] ?? "")
   const body = () => parsed().rows.slice(1)
 
+  const copy = (text: string) => {
+    // Read the parsed value, not the ellipsized presentation, including embedded tabs and newlines.
+    void ctx.system.copy(text).catch(() => {
+      if (!controller.signal.aborted) showToast({ variant: "error", title: ctx.t("view.table.copyFailed") })
+    })
+  }
+
   return (
-    <div class="min-h-0 flex-1 overflow-auto">
+    <div class="min-h-0 flex-1 overflow-auto" data-scrollable>
       <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base">
         <thead>
           <tr>
-            <th data-index />
-            <For each={header()}>{(cell) => <th>{cell}</th>}</For>
+            <For each={header()}>
+              {(cell) => (
+                <th scope="col">
+                  <span data-slot="artifact-table-cell-text">{cell}</span>
+                  <IconButton
+                    data-slot="artifact-table-copy"
+                    variant="ghost-muted"
+                    size="small"
+                    icon={<Icon name="outline-copy" size="normal" />}
+                    aria-label={ctx.t("view.table.copyCell")}
+                    title={ctx.t("view.table.copyCell")}
+                    onClick={() => copy(cell)}
+                  />
+                </th>
+              )}
+            </For>
           </tr>
         </thead>
         <tbody>
           <For each={body()}>
-            {(row, index) => (
+            {(row) => (
               <tr>
-                <td data-index>{index() + 1}</td>
-                <For each={header()}>{(_, column) => <td>{row[column()] ?? ""}</td>}</For>
+                <For each={header()}>
+                  {(_, column) => (
+                    <td>
+                      <span data-slot="artifact-table-cell-text">{row[column()] ?? ""}</span>
+                      <IconButton
+                        data-slot="artifact-table-copy"
+                        variant="ghost-muted"
+                        size="small"
+                        icon={<Icon name="outline-copy" size="normal" />}
+                        aria-label={ctx.t("view.table.copyCell")}
+                        title={ctx.t("view.table.copyCell")}
+                        onClick={() => copy(row[column()] ?? "")}
+                      />
+                    </td>
+                  )}
+                </For>
               </tr>
             )}
           </For>
@@ -780,8 +787,20 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
   })
 
   return (
-    <div class="min-h-0 flex-1 overflow-auto">
-      <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-8 py-8" style={{ "font-family": `"${family()}"` }}>
+    <div
+      data-slot="artifact-document-stage"
+      data-kind="font"
+      data-document-surface-inset
+      data-document-surface-scrollport
+      data-document-surface-column
+      class="min-h-0 flex-1 overflow-auto"
+      data-scrollable
+    >
+      <div
+        data-component="document-surface"
+        class="flex min-h-full w-full flex-col gap-6 px-8 py-8"
+        style={{ "font-family": `"${family()}"` }}
+      >
         <div class="text-text-strong" style={{ "font-size": "56px", "line-height": "1.1" }}>
           {getFilename(props.path).replace(/\.[^.]+$/, "")}
         </div>

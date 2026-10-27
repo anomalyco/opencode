@@ -3,7 +3,7 @@ import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect
 import { CHANNEL } from "../constants"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages } from "./cli-stages"
-import { keptStages, serviceFile, serviceVersion, shouldRetryEnsure } from "./cli-version"
+import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
@@ -46,11 +46,14 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file = serviceFile({
-    version: cli.version,
-    server: process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
-    stateHome: process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-  })
+  const file =
+    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+      ? path.join(
+          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+          "opencode",
+          "service-local.json",
+        )
+      : undefined
 
   const ensure = (required = version) =>
     client.Service.ensure({
@@ -70,8 +73,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   const runEnsure = () =>
     ensure().catch((error) => {
-      if (!shouldRetryEnsure(version === cli.version, error instanceof Error ? error.message : String(error)))
-        throw error
+      if (!shouldRetryEnsure(version, error instanceof Error ? error.message : String(error))) throw error
 
       return ensure(cli.version)
     })
