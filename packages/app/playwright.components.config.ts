@@ -1,4 +1,7 @@
 import { fileURLToPath } from "node:url"
-import { componentConfig } from "../storybook/playwright/config"
+import type { PlaywrightTestConfig } from "@playwright/test"
+import { componentConfig } from "../stories/playwright/config"
 
-export default componentConfig(fileURLToPath(new URL(".", import.meta.url)))
+const config: PlaywrightTestConfig = componentConfig(fileURLToPath(new URL(".", import.meta.url)))
+
+export default config

@@ -3,14 +3,7 @@ import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./gen
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import {
-  AIError,
-  HttpOptions,
-  MediaUsage,
-  ProviderMetadata,
-  ProviderOptions,
-  type OpenString,
-} from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
@@ -45,6 +38,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
+      providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as VideoRoute,
     })
   }
@@ -79,7 +73,7 @@ export class VideoRequest extends Schema.Class<VideoRequest>("Video.Request")({
   /** Source video for edit or extension routes. */
   video: Schema.optional(Media.AssetSchema),
   durationSeconds: Schema.optional(Schema.Number),
-  aspectRatio: Schema.optional(VideoAspectRatio),
+  aspect: Schema.optional(VideoAspectRatio),
   resolution: Schema.optional(Schema.String),
   /** Whether to generate an audio track; routes whose audio is always on fail typed on `false`. */
   audio: Schema.optional(Schema.Boolean),
@@ -119,7 +113,6 @@ export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<
 export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")({
   videos: Schema.Array(Media.AssetSchema),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   get video() {
@@ -136,7 +129,6 @@ export const VideoOutputEvent = Schema.Struct({
 export const VideoFinishEvent = Schema.Struct({
   type: Schema.tag("finish"),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Video.Event.Finish" })
 
@@ -161,7 +153,6 @@ const collectResponse = (events: ReadonlyArray<VideoEvent>): Effect.Effect<Video
     new VideoResponse({
       videos: events.filter(VideoEvent.is.video).map((event) => event.video),
       usage: finish.usage,
-      notices: finish.notices,
       providerMetadata: finish.providerMetadata,
     }),
   )

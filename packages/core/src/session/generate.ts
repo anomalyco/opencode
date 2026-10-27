@@ -1,7 +1,7 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { LLMClient, Message, type AIError } from "@opencode/ai"
+import { LLMClient, Message, type AIError } from "@opencode/ai/effect"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"

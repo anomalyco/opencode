@@ -28,7 +28,7 @@ Você pode definir permissões globalmente (com `*`), e substituir ferramentas e
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ Para a maioria das permissões, você pode usar um objeto para aplicar diferente
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ Você pode usar `~` ou `$HOME` no início de um padrão para referenciar seu dir
 
 ### Diretórios Externos
 
-Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o opencode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `glob`, `grep` e muitos comandos `shell`).
+Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o opencode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `glob`, `grep` e muitos comandos `bash`).
 
 A expansão do home (como `~/...`) afeta apenas como um padrão é escrito. Não torna um caminho externo parte do espaço de trabalho atual, então caminhos fora do diretório de trabalho ainda devem ser permitidos via `external_directory`.
 
@@ -121,7 +121,7 @@ Qualquer diretório permitido aqui herda os mesmos padrões do espaço de trabal
 }
 ```
 
-Mantenha a lista focada em caminhos confiáveis e adicione regras adicionais de permissão ou negação conforme necessário para outras ferramentas (por exemplo, `shell`).
+Mantenha a lista focada em caminhos confiáveis e adicione regras adicionais de permissão ou negação conforme necessário para outras ferramentas (por exemplo, `bash`).
 
 ---
 
@@ -133,7 +133,7 @@ As permissões do opencode são indexadas pelo nome da ferramenta, além de algu
 - `edit` — todas as modificações de arquivo (cobre `edit`, `write`, `patch`)
 - `glob` — globbing de arquivos (corresponde ao padrão glob)
 - `grep` — busca de conteúdo (corresponde ao padrão regex)
-- `shell` — execução de comandos de shell (corresponde a comandos analisados como `git status --porcelain`)
+- `bash` — execução de comandos de shell (corresponde a comandos analisados como `git status --porcelain`)
 - `task` — lançamento de subagentes (corresponde ao tipo de subagente)
 - `skill` — carregamento de uma habilidade (corresponde ao nome da habilidade)
 - `lsp` — execução de consultas LSP (atualmente não granular)
@@ -175,7 +175,7 @@ Quando o opencode solicita aprovação, a interface oferece três resultados:
 - `always` — aprovar futuras solicitações que correspondam aos padrões sugeridos (para o restante da sessão atual do opencode)
 - `reject` — negar a solicitação
 
-O conjunto de padrões que `always` aprovaria é fornecido pela ferramenta (por exemplo, aprovações de shell normalmente incluem um prefixo de comando seguro como `git status*`).
+O conjunto de padrões que `always` aprovaria é fornecido pela ferramenta (por exemplo, aprovações de bash normalmente incluem um prefixo de comando seguro como `git status*`).
 
 ---
 
@@ -191,7 +191,7 @@ Consulte a seção [Regras Granulares (Sintaxe de Objeto)](#granular-rules-objec
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ Consulte a seção [Regras Granulares (Sintaxe de Objeto)](#granular-rules-objec
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

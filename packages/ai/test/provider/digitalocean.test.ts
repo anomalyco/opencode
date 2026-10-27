@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src/index.js"
+import { CacheHint, LLM } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { it } from "../lib/effect.js"
@@ -49,7 +49,7 @@ describe("DigitalOcean", () => {
         LLM.request({
           model: DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1"),
           system: [
-            { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3_600 }) },
+            { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
             { type: "text", text: "Project instructions" },
           ],
           tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],

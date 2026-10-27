@@ -190,7 +190,6 @@ export const dict = {
   "ui.question.answer.none": "(אין תשובה)",
   "ui.question.review.notAnswered": "(ללא תשובה)",
   "ui.question.multiHint": "בחר את כל התשובות המתאימות",
-  "ui.question.singleHint": "בחר תשובה אחת",
   "ui.question.custom.placeholder": "הקלד את תשובתך…",
   "ui.sessionTurn.diffs.changed.two": "{{count}} קבצים השתנו",
   "ui.messagePart.context.read.two": "{{count}} קריאות",

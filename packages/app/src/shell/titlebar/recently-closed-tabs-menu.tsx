@@ -1,17 +1,23 @@
 import { createMemo, For, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { useQueries } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { compareSessionTime } from "@/shell/layout/helpers"
+import { mergeHomeSessionIndex } from "@/home/sessions/index"
+import { homeSessionsQuery } from "@/home/sessions/queries"
 import { listClosedTabs, type ClosedTab } from "@/shell/tabs/closed"
-import { useTabs } from "@/shell/tabs/tabs"
+import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { sessionTabTitle } from "./tab-title"
+import "./recently-closed-tabs-menu.css"
 
 export function RecentlyClosedTabsMenu(props: {
   onNewTab: () => void
@@ -21,13 +27,66 @@ export function RecentlyClosedTabsMenu(props: {
 }) {
   const language = useLanguage()
   const tabs = useTabs()
+  const global = useGlobal()
+  const [state, setState] = createStore({ query: "", open: false })
+  let search: HTMLInputElement | undefined
 
-  const recent = createMemo(() =>
-    listClosedTabs(tabs.closed, tabs.store).filter((entry) => entry.info?.prompted === true),
-  )
+  const recent = createMemo(() => {
+    const query = state.query.trim().toLocaleLowerCase()
+
+    return listClosedTabs(tabs.closed, tabs.store)
+      .filter((entry) => entry.info?.prompted === true)
+      .filter((entry) => {
+        if (!query) return true
+        const title = global.serverCtx(entry.tab.server)?.data.session.get(entry.tab.sessionId)?.title
+
+        return sessionTabTitle(title ?? entry.info?.title, language.t("session.tab.session"))
+          .toLocaleLowerCase()
+          .includes(query)
+      })
+      .slice(0, 10)
+  })
+
+  const servers = createMemo(() => global.servers.list())
+  const sessions = useQueries(() => ({
+    queries: servers().map((conn) => {
+      const ctx = global.serverCtx(ServerConnection.key(conn))
+
+      return {
+        ...homeSessionsQuery(conn, ctx),
+        enabled: state.open && recent().length < 10 && ctx?.sdk.connection.status() === "connected",
+      }
+    }),
+  }))
+
+  const other = createMemo(() => {
+    if (!state.open || recent().length === 10) return []
+    const query = state.query.trim().toLocaleLowerCase()
+
+    return servers()
+      .flatMap((conn, index) => {
+        const server = ServerConnection.key(conn)
+        const ctx = global.serverCtx(server)
+
+        if (!ctx) return []
+
+        return ctx.data.session
+          .apply(mergeHomeSessionIndex(sessions[index]?.data?.() ?? [], ctx.data.session.list()))
+          .filter((session) => !sessionIDHasOpenTab(tabs.store, server, session.id))
+          .filter(
+            (session) => !recent().some((entry) => entry.tab.server === server && entry.tab.sessionId === session.id),
+          )
+          .filter((session) =>
+            sessionTabTitle(session.title, language.t("session.tab.session")).toLocaleLowerCase().includes(query),
+          )
+          .map((session) => ({ server, session }))
+      })
+      .sort((a, b) => compareSessionTime(a.session, b.session))
+      .slice(0, 10 - recent().length)
+  })
 
   return (
-    <Menu.Context modal={false}>
+    <Menu.Context modal={false} onOpenChange={(open) => setState({ open, query: "" })}>
       <Show
         when={props.vertical}
         fallback={
@@ -65,25 +124,89 @@ export function RecentlyClosedTabsMenu(props: {
         </Menu.Context.Trigger>
       </Show>
       <Menu.Context.Portal>
-        <Menu.Context.Content class="max-h-[66.667dvh] w-56 max-w-56 overflow-y-auto">
-          <Menu.Group>
-            <Menu.GroupLabel>{language.t("home.recentlyClosed")}</Menu.GroupLabel>
-            <For each={recent()}>
-              {(entry) => (
-                <RecentlyClosedTabItem
-                  entry={entry}
-                  onSelect={() => tabs.reopenClosedTab(entry.tab, { append: true })}
-                />
-              )}
-            </For>
-          </Menu.Group>
+        <Menu.Context.Content
+          class="max-h-[66.667dvh] w-56 max-w-56 overflow-y-auto"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+          }}
+          onFocusIn={(event) => {
+            if (event.target !== event.currentTarget) return
+            // The menu defers its own autofocus; redirect only container focus, not item navigation.
+            queueMicrotask(() => search?.focus())
+          }}
+        >
+          <div class="recently-closed-search mx-1 mb-1" data-empty={!state.query}>
+            <TextInput
+              ref={search}
+              type="search"
+              dir="auto"
+              leadingIcon={<Icon name="magnifying-glass" size="small" />}
+              showClearButton
+              clearIcon="circle-xmark"
+              onClearClick={() => {
+                setState("query", "")
+                search?.focus()
+              }}
+              aria-label={language.t("session.tabs.closed.search")}
+              placeholder={language.t("session.tabs.closed.search")}
+              spellcheck={false}
+              autocomplete="off"
+              value={state.query}
+              onFocusIn={(event) => event.stopPropagation()}
+              onInput={(event) => setState("query", event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" || event.key === "ArrowDown" || event.key === "ArrowUp") return
+                event.stopPropagation()
+              }}
+            />
+          </div>
+          <Show when={recent().length}>
+            <Menu.Group>
+              <Menu.GroupLabel>{language.t("home.recentlyClosed")}</Menu.GroupLabel>
+              <For each={recent()}>
+                {(entry) => (
+                  <RecentlyClosedTabItem
+                    entry={entry}
+                    onSelect={() => tabs.reopenClosedTab(entry.tab, { append: true })}
+                  />
+                )}
+              </For>
+            </Menu.Group>
+          </Show>
+          <Show when={other().length}>
+            <Menu.Group>
+              <Menu.GroupLabel>{language.t("sidebar.project.recentSessions")}</Menu.GroupLabel>
+              <For each={other()}>
+                {(item) => (
+                  <RecentlyClosedTabItem
+                    entry={{
+                      tab: { type: "session", server: item.server, sessionId: item.session.id },
+                      info: { title: item.session.title, directory: item.session.location.directory },
+                    }}
+                    onSelect={() => {
+                      global.serverCtx(item.server)?.data.session.remember(item.session)
+                      tabs.select(tabs.addSessionTab({ server: item.server, sessionId: item.session.id }))
+                    }}
+                  />
+                )}
+              </For>
+            </Menu.Group>
+          </Show>
+          <Show when={!recent().length && !other().length}>
+            <div
+              role="status"
+              class="px-3 py-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+            >
+              {language.t(state.query.trim() ? "session.search.noResults" : "session.tabs.closed.empty")}
+            </div>
+          </Show>
         </Menu.Context.Content>
       </Menu.Context.Portal>
     </Menu.Context>
   )
 }
 
-function RecentlyClosedTabItem(props: { entry: ClosedTab; onSelect: () => void }) {
+function RecentlyClosedTabItem(props: { entry: Pick<ClosedTab, "tab" | "info">; onSelect: () => void }) {
   const global = useGlobal()
   const language = useLanguage()
   const [state, setState] = createStore({ truncated: false })
@@ -103,7 +226,7 @@ function RecentlyClosedTabItem(props: { entry: ClosedTab; onSelect: () => void }
 
     if (!directory()) return
 
-    return serverCtx()?.projects.resolve({ worktree: directory(), expanded: false })
+    return serverCtx()?.projects.forDirectory(directory()) ?? { worktree: directory() }
   })
 
   const title = () => sessionTabTitle(session()?.title ?? props.entry.info?.title, language.t("session.tab.session"))

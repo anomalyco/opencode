@@ -220,7 +220,6 @@ export const dict = {
   "ui.question.answer.none": "(yanıt yok)",
   "ui.question.review.notAnswered": "(yanıtlanmadı)",
   "ui.question.multiHint": "Uygun olan tüm yanıtları seçin",
-  "ui.question.singleHint": "Bir yanıt seçin",
   "ui.question.custom.placeholder": "Yanıtınızı yazın…",
 
   "ui.fileSearch.placeholder": "Bul",

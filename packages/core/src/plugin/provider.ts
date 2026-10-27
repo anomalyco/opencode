@@ -19,6 +19,7 @@ import { NeonPlugin } from "./provider/neon.js"
 import { NvidiaPlugin } from "./provider/nvidia.js"
 import { OllamaPlugin } from "./provider/ollama.js"
 import { OpenAIPlugin } from "./provider/openai.js"
+import { OpenAIContextCapsPlugin } from "./provider/openai-context-caps.js"
 import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { OpenRouterPlugin } from "./provider/openrouter.js"
@@ -55,6 +56,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   OpencodePlugin,
   SnowflakeCortexPlugin,
   OpenAIPlugin,
+  OpenAIContextCapsPlugin,
   OpenRouterPlugin,
   PerplexityPlugin,
   PoePlugin,

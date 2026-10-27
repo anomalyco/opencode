@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LanguageModel, LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/index.js"
+import { LanguageModel, LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/effect.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"

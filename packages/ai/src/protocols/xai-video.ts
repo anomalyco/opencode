@@ -20,7 +20,7 @@ export const STATUS_PATH = "/videos"
 // ---------------------------------------------------------------------------
 
 /**
- * Provider-native options. Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspectRatio`,
+ * Provider-native options. Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`,
  * `resolution`, `audio`) live on the request. `mode` selects the endpoint a `video` input is sent to.
  */
 export type XAIVideoOptions = {
@@ -102,7 +102,7 @@ const fromRequest = Effect.fn("XAIVideo.fromRequest")(function* (request: Reques
         reference_images: references.length === 0 ? undefined : references,
         video,
         duration: request.durationSeconds,
-        aspect_ratio: request.aspectRatio,
+        aspect_ratio: request.aspect,
         resolution: request.resolution,
         generate_audio: request.audio,
       },
@@ -155,13 +155,10 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
   }
   if (status !== "completed")
     return yield* output.ended("expired", `${route.name} request ${context.token.requestID} expired`)
-  // `respect_moderation: false` marks a filtered result; a URL may still be present, so report it as a notice.
-  const notices =
-    decoded.video?.respect_moderation === false
-      ? [{ type: "moderated" as const, message: `${route.name} flagged the generated video for moderation` }]
-      : undefined
+  // `respect_moderation: false` marks a filtered result; a URL may still be present, so only a missing one fails.
+  const moderated = decoded.video?.respect_moderation === false
   const url = decoded.video?.url ?? undefined
-  if (url === undefined && notices !== undefined)
+  if (url === undefined && moderated)
     return yield* output.contentPolicy(`${route.name} withheld the video for moderation`)
   if (url === undefined) return yield* output.invalid(`${route.name} completed without a video URL`)
   const duration = decoded.video?.duration ?? undefined
@@ -172,8 +169,13 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
         info: duration === undefined ? undefined : { durationSeconds: duration },
       }),
     ],
-    notices,
-    providerMetadata: { xai: { requestId: context.token.requestID, model: decoded.model ?? undefined } },
+    providerMetadata: {
+      xai: {
+        requestId: context.token.requestID,
+        model: decoded.model ?? undefined,
+        respectModeration: decoded.video?.respect_moderation ?? undefined,
+      },
+    },
   })
 })
 

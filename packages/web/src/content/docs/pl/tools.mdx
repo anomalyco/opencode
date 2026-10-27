@@ -18,7 +18,7 @@ Użyj pola `permission` do kontrolowania zachowania narzędzia. Dla każdego nar
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -45,7 +45,7 @@ Oto wszystkie wbudowane narzędzia dostępne w OpenCode.
 
 ---
 
-### shell
+### bash
 
 Wykonuj polecenia powłoki (shell) w środowisku projektu.
 
@@ -53,7 +53,7 @@ Wykonuj polecenia powłoki (shell) w środowisku projektu.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

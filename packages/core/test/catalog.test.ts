@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel } from "@opencode/ai"
+import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Integration } from "@opencode/core/integration"

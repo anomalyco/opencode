@@ -107,7 +107,8 @@ test("replaces the composer when the location is not found and recovers by movin
   })
 
   await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
-  const status = page.getByRole("status").filter({ hasText: "Session location unavailable" })
+  const status = page.getByRole("group", { name: "Session location unavailable", exact: true })
+  await expect(status).toHaveAccessibleDescription(`${directory} Choose another directory to continue this session.`)
   await expect(status).toContainText(directory)
   await expect(page.getByText("Keep this session history", { exact: true })).toBeVisible()
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
@@ -116,7 +117,6 @@ test("replaces the composer when the location is not found and recovers by movin
 
   await transport.waitForConnection()
   await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Worktree", exact: true }).click()
   await page.getByRole("menuitem", { name: "existing-worktree", exact: true }).click()
   await expect.poll(() => moves).toEqual([{ directory: destination }])
 
@@ -239,7 +239,7 @@ test("keeps the side panel's tabs and selection when the session moves", async (
     await page.keyboard.press("ControlOrMeta+Shift+P")
 
     const dialog = page.getByRole("dialog")
-    const search = dialog.getByRole("textbox")
+    const search = dialog.getByRole("combobox")
     await search.fill(name)
     await expect(dialog.getByRole("option", { name: `/ ${name}.md`, exact: true })).toHaveAttribute(
       "aria-selected",
@@ -393,3 +393,91 @@ function recoveryRequests(page: Page) {
 
   return requests
 }
+test("the worktree menu keeps search focus while hover highlights and Enter selects", async ({ page }) => {
+  const directory = "/projects/deleted-worktree"
+  const sessionID = "ses_location_worktree_hover"
+  const session = { id: sessionID, projectID: fixture.project.id, directory, title: "Missing location" }
+  const moves: unknown[] = []
+  const transport = await installSseTransport(page, { server: fixture.serverKey })
+  // Ten non-current worktrees push otherWorktrees to the searchable threshold so the field renders.
+  const worktrees = [
+    { directory: fixture.directory },
+    ...Array.from({ length: 10 }, (_, index) => ({
+      directory: `/projects/tree${String(index + 1).padStart(2, "0")}`,
+      strategy: "git" as const,
+    })),
+  ]
+
+  await mockOpenCodeServer(page, {
+    directory: fixture.directory,
+    project: fixture.project,
+    provider: fixture.provider,
+    sessions: [session],
+    fileList: () => [],
+    worktrees,
+    pageMessages: () => ({
+      items: [{ id: "msg_saved", type: "user", text: "Keep this session history", time: { created: 1 } }],
+    }),
+  })
+  await page.route("**/api/location?**", (route) => {
+    if (new URL(route.request().url()).searchParams.get("location[directory]") !== directory) return route.fallback()
+
+    return route.fulfill({
+      status: 404,
+      // SAFETY: the server's wire body for a missing Location, which the client decodes into its own error.
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+      json: { _tag: "LocationNotFoundError", location: { directory }, message: `Location not found: ${directory}` },
+      headers: { "access-control-allow-origin": "*" },
+    })
+  })
+  await page.route(`**/api/session/${sessionID}/move`, (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    moves.push(route.request().postDataJSON())
+
+    return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+  })
+
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  await expect(page.getByRole("group", { name: "Session location unavailable", exact: true })).toBeVisible()
+  await transport.waitForConnection()
+  await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
+
+  const menu = page.locator('[role="menu"]:visible')
+  const search = menu.getByPlaceholder("Search worktrees", { exact: true })
+  await expect(search).toBeFocused()
+
+  // Every focus target while the menu is open: only the search field may receive focus, because each steal
+  // restarts the caret blink (the reported flash) and can interrupt typing.
+  await page.evaluate(() => {
+    const log: string[] = []
+    const input = document.querySelector('[role="menu"] input')
+
+    ;(window as unknown as { __focusLog: string[] }).__focusLog = log
+    document.addEventListener(
+      "focusin",
+      (event) => {
+        const target = event.target as HTMLElement | null
+        log.push(target === input ? "search" : (target?.tagName ?? "unknown"))
+      },
+      { capture: true },
+    )
+  })
+
+  const hovered = menu.getByRole("menuitem", { name: "tree03", exact: true })
+  const background = () => hovered.evaluate((node) => getComputedStyle(node).backgroundColor)
+  const before = await background()
+
+  await hovered.hover()
+
+  // The hovered row shows the highlight Kobalte derives from its focused key…
+  await expect.poll(background).not.toBe(before)
+  // …focus stays in the search field…
+  await expect(search).toBeFocused()
+  const steals = await page.evaluate(
+    () => (window as unknown as { __focusLog: string[] }).__focusLog.filter((entry) => entry !== "search"),
+  )
+  expect(steals).toEqual([])
+  // …and Enter from the field selects the highlighted row.
+  await search.press("Enter")
+  await expect.poll(() => moves).toEqual([{ directory: "/projects/tree03" }])
+})

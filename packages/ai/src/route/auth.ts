@@ -40,9 +40,6 @@ export interface Definition {
   readonly pipe: <A>(f: (self: Definition) => A) => A
 }
 
-export const isAuth = (input: unknown): input is Definition =>
-  typeof input === "object" && input !== null && "apply" in input && typeof input.apply === "function"
-
 const credential = (load: Effect.Effect<Redacted.Redacted, CredentialError>): Credential => {
   const self: Credential = {
     load,
@@ -123,8 +120,6 @@ export function bearer(source: Secret | Credential): Definition
 export function bearer(source: Secret | Credential) {
   return credentialInput(source).bearer()
 }
-
-export const apiKey = bearer
 
 export function header(name: string): (source: Secret | Credential) => Definition
 export function header(name: string, source: Secret | Credential): Definition

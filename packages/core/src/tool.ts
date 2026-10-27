@@ -2,7 +2,7 @@ export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
 export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
-import { ToolDefinition, type ToolCall } from "@opencode/ai"
+import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import { Tool } from "@opencode/schema/tool"
 import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -34,6 +34,8 @@ export interface Editor {
 
 type Data = {
   tools: Map<string, Tool.Info & { readonly id: string }>
+  // Converted once at registration; schemas cannot change without re-registering the tool.
+  definitions: Map<string, ToolDefinition>
   namespaces: Map<string, Tool.Namespace>
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
@@ -156,12 +158,19 @@ const layer = Layer.effect(
     })
 
     let catalog:
-      | { data: Data; names: string; inventory: CodeModeTool.Inventory; value: CodeModeCatalog.Inventory }
+      | {
+          data: Data
+          names: string
+          inventory: CodeModeTool.Inventory
+          value: CodeModeCatalog.Inventory
+          definition: ToolDefinition
+        }
       | undefined
     const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
         tools: new Map(),
+        definitions: new Map(),
         namespaces: new Map(),
         errors: [],
       }),
@@ -177,13 +186,19 @@ const layer = Layer.effect(
           editor.namespaces.set(namespace.name, { ...namespace })
         },
         add: (tool) => {
-          const error = registrationError(tool)
-          if (error) {
-            editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
+          const registered = register(tool)
+          if (Result.isFailure(registered)) {
+            editor.errors.push({
+              kind: "tool",
+              name: tool.name,
+              namespace: tool.options?.namespace,
+              error: registered.failure,
+            })
             return
           }
           const id = effectiveName(tool)
           editor.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
+          editor.definitions.set(id, registered.success)
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
@@ -194,15 +209,22 @@ const layer = Layer.effect(
           tool.id = id
           if (tool.options?.namespace !== current.options?.namespace)
             tool.options = { ...tool.options, namespace: current.options?.namespace }
-          const error = registrationError(tool)
-          if (error) {
-            editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
+          const registered = register(tool)
+          if (Result.isFailure(registered)) {
+            editor.errors.push({
+              kind: "tool",
+              name: tool.name,
+              namespace: tool.options?.namespace,
+              error: registered.failure,
+            })
             return
           }
           editor.tools.set(id, tool)
+          editor.definitions.set(id, registered.success)
         },
         remove: (id) => {
           editor.tools.delete(id)
+          editor.definitions.delete(id)
         },
       }),
       notify: (value) => {
@@ -233,13 +255,16 @@ const layer = Layer.effect(
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
-          const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
+          const codeModeEnabled = !whollyDisabled("execute", rules)
+          // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
+          const direct = codeModeEnabled
+            ? new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
+            : active
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const names = Array.from(codeModeTools.keys()).join("\0")
-          const codeModeEnabled = !whollyDisabled("execute", rules)
-          // Discovery is immutable for a registry revision and visible tool set. Keep request
-          // definitions/executors fresh, but share the inventory, whose prepared runtime and much
-          // larger rendered catalog are cached by identity, across steps.
+          // Discovery is immutable for a registry revision and visible tool set. Keep executors
+          // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
+          // are cached by identity, and the execute tool's definition across steps.
           const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
@@ -252,14 +277,22 @@ const layer = Layer.effect(
           const codeModeCatalog = !codeModeEnabled
             ? undefined
             : (cached?.value ?? CodeModeTool.catalog(codeModeInventory))
-          if (codeModeCatalog) catalog = { data, names, inventory: codeModeInventory, value: codeModeCatalog }
+          const codeModeDefinition = codeModeTool && (cached?.definition ?? definition(codeModeTool))
+          if (codeModeCatalog && codeModeDefinition)
+            catalog = {
+              data,
+              names,
+              inventory: codeModeInventory,
+              value: codeModeCatalog,
+              definition: codeModeDefinition,
+            }
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([, tool]) => definition(tool)),
-              ...(codeModeTool ? [definition(codeModeTool)] : []),
+                .map(([name]) => data.definitions.get(name)!),
+              ...(codeModeDefinition ? [codeModeDefinition] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
@@ -302,23 +335,23 @@ function schemaMakeError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function registrationError(tool: Tool.Info) {
+function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationError> {
   const namespace = tool.options?.namespace
   if (namespace !== undefined) {
     const error = namespaceError(namespace)
-    if (error) return error
+    if (error) return Result.fail(error)
   }
   const name = normalizedName(tool)
-  if (!/^[A-Za-z0-9_-]+$/.test(name)) return new RegistrationError({ name, message: `Invalid tool name: ${name}` })
+  if (!/^[A-Za-z0-9_-]+$/.test(name))
+    return Result.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
   const id = effectiveName(tool)
   if (tool.options?.codemode === false && id === "execute")
-    return new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' })
-  const result = Result.try({
+    return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  return Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>
       new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
   })
-  return Result.isFailure(result) ? result.failure : undefined
 }
 
 function namespaceError(name: string) {

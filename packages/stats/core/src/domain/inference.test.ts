@@ -127,9 +127,11 @@ describe("inference stat normalization", () => {
     expect(statModel("x-preview-f", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha-free", "")).toBe("glm-5.3-flash")
-    expect(statModel("cat-jam-free", "")).toBe("beam")
-    expect(statModel("beam-free", "")).toBe("beam")
+    expect(statModel("cat-jam-free", "")).toBe("beam-1.0-501b-a23b")
+    expect(statModel("beam-free", "")).toBe("beam-1.0-501b-a23b")
+    expect(statModel("beam-1.0-501b-a23b", "")).toBe("beam-1.0-501b-a23b")
     expect(RETIRED_STAT_MODELS).toContain("cat-jam")
+    expect(RETIRED_STAT_MODELS).toContain("beam")
     expect(statProvider("cat-jam-free", "", "unknown")).toBe("reflection")
     expect(statProvider("beam-free", "", "unknown")).toBe("reflection")
     expect(statModel("ll-alpha-free", "")).toBe("flint-40b")
@@ -292,7 +294,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -304,7 +306,7 @@ describe("inference stat normalization", () => {
     expect(queries[6]).toContain("'2026-08-12' AS period_key")
     expect(queries[0]).toContain('FROM "inference"."generation"')
     expect(queries[0]).toContain("event_type = 'generation.completed'")
-    expect(queries[0]).toContain("AND (product = 'go' OR (lower(COALESCE(model_tier, '')) = 'free'")
+    expect(queries[0]).toContain("AND (product IN ('go', 'go-plus') OR (lower(COALESCE(model_tier, '')) = 'free'")
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
     expect(queries[0]).toContain("regexp_replace(NULLIF(route_model, ''), '^.*/', '')")
@@ -362,10 +364,10 @@ describe("inference stat normalization", () => {
       expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
     })
     expect(queries.map((query) => query.cohortDates)).toEqual([["2026-08-10"], ["2026-08-17"]])
-    expect(queries[0]?.query).toContain("AND product = 'go'")
+    expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

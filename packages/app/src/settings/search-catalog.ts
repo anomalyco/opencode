@@ -21,12 +21,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
+  { tab: "experimental", label: "settings.tab.experimental", keywords: "experiments preview beta" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
-    label: "settings.appearance.row.tabs.title",
+    label: "settings.general.row.interfaceMode.title",
     target: "settings-tab-layout",
-    keywords: "vertical horizontal tabs",
+    keywords: "top side tabs inbox sidebar mode layout vertical horizontal focus pro",
   },
   {
     tab: "general",
@@ -41,12 +42,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-auto-accept-permissions",
     description: "settings.permissions.autoAccept.default.description",
     keywords: "permissions approve allow auto accept default",
-  },
-  {
-    tab: "general",
-    label: "settings.general.row.terminalPlacement.title",
-    target: "settings-terminal-placement",
-    keywords: "terminal side bottom position",
   },
   {
     tab: "general",
@@ -75,9 +70,46 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.timeline.row.backgroundActivity.title",
+    description: "settings.timeline.row.backgroundActivity.description",
+    target: "settings-background-activity",
+    section: "settings.timeline.title",
+    keywords: "capsule panel subagent shell background activity position alignment hidden left center right",
+  },
+  {
+    tab: "general",
+    label: "settings.timeline.row.width.title",
+    description: "settings.timeline.row.width.description",
+    target: "settings-timeline-width",
+    section: "settings.timeline.title",
+    keywords: "column line length measure narrow focused comfortable wide readability",
+  },
+  {
+    tab: "general",
+    label: "settings.timeline.row.turnDiffs.title",
+    description: "settings.timeline.row.turnDiffs.description",
+    target: "settings-show-turn-diffs",
+    section: "settings.timeline.title",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newIcons.title",
+    target: "settings-new-icons",
+    description: "settings.experimental.row.newIcons.description",
+    keywords: "icons iconography glyphs redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newModelPicker.title",
+    target: "settings-new-model-picker",
+    description: "settings.experimental.row.newModelPicker.description",
+    keywords: "model picker selector switcher redesign",
   },
   {
     tab: "appearance",
@@ -103,6 +135,19 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.terminalFont.title",
     target: "settings-terminal-font",
     keywords: "terminal typeface",
+  },
+  {
+    tab: "appearance",
+    label: "settings.appearance.row.zoom.title",
+    target: "settings-zoom",
+    keywords: "scale size text font larger bigger accessibility",
+    available: "desktop",
+  },
+  {
+    tab: "appearance",
+    label: "settings.appearance.row.reduceMotion.title",
+    target: "settings-reduce-motion",
+    keywords: "animation accessibility",
   },
   {
     tab: "notifications",
@@ -152,9 +197,18 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     description: "settings.general.sounds.errors.description",
     keywords: "sound audio errors",
   },
+  {
+    tab: "notifications",
+    label: "settings.general.sounds.interface.title",
+    target: "settings-sounds-interface",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.interface.description",
+    keywords: "sound audio interface effects wordmark logo",
+  },
 ]
 
-export const serverSettings: Entry<SettingsServerTab>[] = [
+// Pages showing the selected server, and rows of its card on the Servers page.
+export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
   { tab: "projects", label: "settings.tab.projects" },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "providers", label: "settings.providers.title", keywords: "connect api key credentials" },
@@ -166,21 +220,19 @@ export const serverSettings: Entry<SettingsServerTab>[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
+  {
+    tab: "extensions",
+    subtab: "plugins",
+    label: "settings.extensions.tab.plugins",
+    keywords: "extension gui built-in",
+  },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   {
-    tab: "general",
+    tab: "servers",
     label: "settings.general.row.shell.title",
     target: "settings-shell",
     description: "settings.general.row.shell.description",
     keywords: "bash zsh powershell",
-  },
-  {
-    tab: "general",
-    label: "settings.server.preferences.websearch.title",
-    target: "settings-websearch",
-    description: "settings.server.preferences.websearch.description",
-    keywords: "web search provider",
   },
 ]
 

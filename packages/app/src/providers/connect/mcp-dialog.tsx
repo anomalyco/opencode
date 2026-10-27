@@ -1,11 +1,21 @@
-import { Component, createMemo, Show } from "solid-js"
+import { Component, createEffect, createMemo, on, Show } from "solid-js"
+import { createStore } from "solid-js/store"
+import fuzzysort from "fuzzysort"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { List } from "@opencode/ui/list"
+import { Button } from "@opencode/ui/button"
+import { Dialog, DialogBody, DialogHeader, DialogTitle, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { ErrorDetails } from "@opencode/ui/error-details"
+import { SearchList } from "@opencode/ui/search-list"
 import { Switch } from "@opencode/ui/switch"
+import { TruncatedText } from "@opencode/ui/truncated-text"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useMcpToggle } from "@/providers/connect/mcp"
+import { usePlatform } from "@/runtime/platform/platform"
+import { showToast } from "@/shell/notifications/toast"
+import "@/shell/commands/dialog.css"
+import "@/shell/search-list.css"
 
 const statusLabels = {
   connected: "mcp.status.connected",
@@ -14,96 +24,256 @@ const statusLabels = {
   disabled: "mcp.status.disabled",
 } as const
 
+/** The MCPs dialog for the current workspace. */
 export const DialogSelectMcp: Component = () => {
-  const data = useData()
   const sdk = useWorkspaceLocation()
+
+  return <DialogMcp directory={sdk().directory} />
+}
+
+/** Lists the MCP servers of `directory`; `server` opens directly on that server's error. */
+export const DialogMcp: Component<{ directory: string; server?: string }> = (props) => {
+  const data = useData()
   const language = useLanguage()
+  const platform = usePlatform()
+  const directory = () => props.directory
+  const toggle = useMcpToggle(directory)
+
+  const [store, setStore] = createStore<{ detail?: string; copied: boolean; query: string }>({
+    detail: props.server,
+    copied: false,
+    query: "",
+  })
+
+  const loaded = () => data.location.mcp.server.list({ directory: directory() })
+  const servers = createMemo(() => loaded() ?? [])
+
+  createEffect(() => void data.location.mcp.server.sync({ directory: directory() }).catch(() => undefined))
 
   const items = createMemo(() =>
-    (data.location.mcp.server.list({ directory: sdk().directory }) ?? [])
+    servers()
       .map((server) => ({ name: server.name, status: server.status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = useMcpToggle(() => sdk().directory)
+  const results = createMemo(() => {
+    const query = store.query.trim()
 
-  const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
-  const totalCount = createMemo(() => items().length)
+    if (!query) return items()
+
+    return fuzzysort
+      .go(query, items(), { keys: ["name", "status"] })
+      .map((result) => result.obj)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  })
+
+  // Like the TUI, a failed server's row opens its error; retrying and disabling happen there.
+  const failure = createMemo(() => {
+    const server = servers().find((item) => item.name === store.detail)
+
+    return server?.status.status === "failed" ? { name: server.name, error: server.status.error } : undefined
+  })
+
+  const toggleServer = (name: string) => {
+    const status = servers().find((server) => server.name === name)?.status.status
+
+    if (!status || status === "pending" || toggle.isPending) return
+    toggle.mutate(name)
+  }
+
+  const select = (name: string) => {
+    if (servers().find((server) => server.name === name)?.status.status !== "failed") return toggleServer(name)
+    setStore({ detail: name, copied: false })
+    requestAnimationFrame(() => backRef?.focus())
+  }
+
+  // The list stays mounted behind the error, so going back keeps the search, the highlight and the scroll.
+  const back = () => {
+    setStore("detail", undefined)
+    requestAnimationFrame(() => listRef?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus())
+  }
+
+  const onDetailKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    event.stopPropagation()
+    back()
+  }
+
+  // A successful retry or a removed server leaves nothing to show, so return to the list.
+  createEffect(
+    on(failure, (current) => {
+      if (store.detail && loaded() && !current) back()
+    }),
+  )
+
+  const copy = (current: { name: string; error: string }) => {
+    const details = language.t("dialog.mcp.error.details", { name: current.name, error: current.error })
+
+    return (platform.writeClipboardText?.(details) ?? navigator.clipboard.writeText(details))
+      .then(() => setStore("copied", true))
+      .catch((error) =>
+        showToast({
+          variant: "error",
+          title: language.t("dialog.mcp.error.copyFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      )
+  }
+
+  let listRef: HTMLDivElement | undefined
+  let backRef: HTMLButtonElement | undefined
 
   return (
-    <Dialog>
-      <DialogHeader>
-        <DialogTitleGroup
-          title={language.t("dialog.mcp.title")}
-          description={language.t("dialog.mcp.description", { enabled: enabledCount(), total: totalCount() })}
-        />
-      </DialogHeader>
-      <DialogBody>
-        <List
-          class="px-3"
-          search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
-          emptyMessage={language.t("dialog.mcp.empty")}
-          key={(x) => x?.name ?? ""}
-          items={items}
-          filterKeys={["name", "status"]}
-          sortBy={(a, b) => a.name.localeCompare(b.name)}
-          onSelect={(x) => {
-            if (!x || x.status === "pending" || toggle.isPending) return
-            toggle.mutate(x.name)
-          }}
-        >
-          {(i) => {
-            const mcpStatus = () =>
-              data.location.mcp.server.list({ directory: sdk().directory })?.find((server) => server.name === i.name)
-                ?.status
+    // Like the model picker and the TUI, the list has no visible header; the search field leads.
+    <Dialog class="command-palette search-list-dialog mcp-dialog" size="large">
+      <Show
+        when={failure()}
+        fallback={
+          <div class="sr-only">
+            <DialogTitle>{language.t("dialog.mcp.title")}</DialogTitle>
+          </div>
+        }
+      >
+        {(current) => (
+          // Escape steps back to the list, like the TUI, instead of closing the dialog.
+          <div class="contents" data-owns-escape onKeyDown={onDetailKeyDown}>
+            <DialogHeader>
+              <div class="mcp-error-heading">
+                <button
+                  ref={backRef}
+                  type="button"
+                  autofocus
+                  class="flex size-5 shrink-0 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                  onClick={back}
+                  aria-label={language.t("common.goBack")}
+                >
+                  <Icon name="arrow-left" size="small" />
+                </button>
+                <DialogTitleGroup
+                  title={
+                    <span dir="auto" class="[overflow-wrap:anywhere]">
+                      {current().name}
+                    </span>
+                  }
+                  description={language.t("dialog.mcp.error.status")}
+                />
+              </div>
+            </DialogHeader>
+            <DialogBody class="search-list-body">
+              <ErrorDetails error={current().error}>
+                <Button
+                  class="error-details-copy"
+                  variant="ghost-muted"
+                  icon={store.copied ? "check" : "copy"}
+                  onClick={() => void copy(current())}
+                >
+                  {language.t(store.copied ? "common.copied" : "dialog.mcp.error.copy")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={toggle.isPending}
+                  onClick={() => toggle.mutate({ name: current().name, enabled: false })}
+                >
+                  {language.t("dialog.mcp.error.disable")}
+                </Button>
+                <Button variant="neutral" disabled={toggle.isPending} onClick={() => toggleServer(current().name)}>
+                  {language.t("common.retry")}
+                </Button>
+              </ErrorDetails>
+            </DialogBody>
+          </div>
+        )}
+      </Show>
+      <div class="contents" ref={listRef} style={{ display: failure() ? "none" : undefined }}>
+        <DialogBody class="command-palette-body">
+          <SearchList
+            query={store.query}
+            onQuery={(query) => setStore("query", query)}
+            placeholder={language.t("dialog.mcp.search.placeholder")}
+            items={results()}
+            key={(item) => item.name}
+            empty={language.t(items().length > 0 ? "dialog.mcp.search.empty" : "dialog.mcp.empty")}
+            onSelect={(item) => select(item.name)}
+          >
+            {(item, row) => {
+              const server = () => servers().find((entry) => entry.name === item().name)
+              const status = () => server()?.status
+              const error = () => {
+                const current = status()
 
-            const status = () => mcpStatus()?.status
+                return current?.status === "failed" ? current.error : undefined
+              }
+              // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
+              const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID
 
-            const statusLabel = () => {
-              const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
+              const busy = () => {
+                const target = toggle.isPending ? toggle.variables : undefined
 
-              if (!key) return
+                return (typeof target === "string" ? target : target?.name) === item().name
+              }
 
-              return language.t(key)
-            }
+              // The dot shows the status, as in the session's MCP list; the words stay for assistive technology.
+              const label = () => {
+                const current = status()?.status
 
-            const error = () => {
-              const s = mcpStatus()
+                return current && current !== "pending" ? language.t(statusLabels[current]) : undefined
+              }
 
-              if (s?.status === "failed") return s.error
-            }
-
-            const enabled = () => status() === "connected"
-
-            return (
-              <div class="w-full flex items-center justify-between gap-x-3">
-                <div class="flex flex-col gap-0.5 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="truncate">{i.name}</span>
-                    <Show when={statusLabel()}>
-                      <span class="text-11-regular text-text-weaker">{statusLabel()}</span>
+              return (
+                <div {...row} data-option-key={item().name} data-status={status()?.status}>
+                  <span class="mcp-dialog-lead">
+                    <span class="mcp-status-dot" data-status={status()?.status} aria-hidden="true" />
+                    <TruncatedText text={item().name} class="mcp-dialog-name" />
+                  </span>
+                  <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>
+                    <Show when={error()}>
+                      <Button
+                        size="small"
+                        variant="ghost-muted"
+                        class="mcp-status-action"
+                        aria-label={language.t("dialog.mcp.error.viewLabel", { name: item().name })}
+                        onClick={() => select(item().name)}
+                      >
+                        {language.t("dialog.mcp.error.view")}
+                      </Button>
+                    </Show>
+                    <Show
+                      when={signIn()}
+                      fallback={
+                        <Switch
+                          checked={!!status() && status()?.status !== "disabled"}
+                          disabled={status()?.status === "pending" || busy()}
+                          description={label()}
+                          class="[&_[data-slot=switch-description]]:sr-only"
+                          onChange={(enabled) => {
+                            if (toggle.isPending) return
+                            toggle.mutate({ name: item().name, enabled })
+                          }}
+                        >
+                          <span class="sr-only">{item().name}</span>
+                        </Switch>
+                      }
+                    >
+                      <Button
+                        size="small"
+                        variant="ghost-muted"
+                        class="mcp-status-action"
+                        disabled={busy()}
+                        aria-busy={busy()}
+                        aria-label={language.t("dialog.mcp.signIn.open", { name: item().name })}
+                        onClick={() => toggleServer(item().name)}
+                      >
+                        {language.t(busy() ? "dialog.mcp.signingIn" : "dialog.mcp.signIn")}
+                      </Button>
                     </Show>
                   </div>
-                  <Show when={error()}>
-                    <span class="text-11-regular text-text-weaker truncate">{error()}</span>
-                  </Show>
                 </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    appearance="standard"
-                    checked={enabled()}
-                    disabled={status() === "pending" || (toggle.isPending && toggle.variables === i.name)}
-                    onChange={() => {
-                      if (toggle.isPending) return
-                      toggle.mutate(i.name)
-                    }}
-                  />
-                </div>
-              </div>
-            )
-          }}
-        </List>
-      </DialogBody>
+              )
+            }}
+          </SearchList>
+        </DialogBody>
+      </div>
     </Dialog>
   )
 }
