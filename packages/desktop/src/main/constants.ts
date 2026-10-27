@@ -6,6 +6,8 @@ const raw = import.meta.env.OPENCODE_CHANNEL
 
 export const CHANNEL: Channel = raw === "local" || raw === "dev" || raw === "beta" || raw === "prod" ? raw : "dev"
 
+export const DEFAULT_SERVER_CHANNEL = import.meta.env.OPENCODE_DESKTOP_SERVER_CHANNEL
+
 export const VERSION = app.isPackaged ? app.getVersion() : (process.env.OPENCODE_VERSION ?? app.getVersion())
 
 const appNames: Record<string, string> = {

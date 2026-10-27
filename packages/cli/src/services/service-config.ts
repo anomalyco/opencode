@@ -64,9 +64,6 @@ export function legacyFilename(channel = OPENCODE_CHANNEL) {
   return `service-${Hash.fast(channel)}.json`
 }
 
-// Named prod files take precedence over hashed files.
-const prodFilenames = [filename("prod"), legacyFilename("prod")].filter((name) => name !== undefined)
-
 export function versionBelongsToChannel(
   version: string | undefined,
   channel = OPENCODE_CHANNEL,
@@ -90,22 +87,15 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
-  // Prod registrations can belong to older release versions.
-  const prod =
-    channel === "latest" && path.dirname(legacy) === path.dirname(file) && prodFilenames.includes(path.basename(legacy))
-  if (!prod && !versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
+  if (!versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
-  if (!prod) return
-  const current = yield* fs.readFileString(file).pipe(Effect.flatMap(decodeRegistration), Effect.option)
-  if (Option.isSome(current) && Service.same(current.value, registration.value)) return registration.value.url
 })
 
 export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string) {
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
   if (Option.isNone(text)) return
-  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option)) && Option.isNone(decodeLegacy(text.value)))
-    return
+  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option))) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
@@ -132,12 +122,9 @@ const paths = Effect.gen(function* () {
   return {
     fs,
     file,
-    legacyConfigFiles: (OPENCODE_CHANNEL === "latest" ? prodFilenames : legacy ? [legacy] : []).map((name) =>
-      path.join(global.config, name),
-    ),
+    legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      ...(OPENCODE_CHANNEL === "latest" ? prodFilenames.map((name) => path.join(global.state, name)) : []),
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
     configFile: path.join(global.config, name),
@@ -155,10 +142,9 @@ export function processEnv(env: Info["env"]) {
 
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
-  const legacyURLs = yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
+  yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
-    legacyURL: legacyURLs.find((url) => url !== undefined),
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: processEnv((yield* read()).env),
     command: [...selfCommand(), "serve", "--service"],
@@ -166,8 +152,8 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile, legacyConfigFiles } = yield* paths
-  yield* Effect.forEach(legacyConfigFiles, (legacy) => migrateConfig(legacy, configFile), { discard: true })
+  const { fs, configFile, legacyConfigFile } = yield* paths
+  if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
   const text = yield* fs.readFileString(configFile).pipe(Effect.option)
   if (Option.isNone(text)) return {} as Info
   const info = yield* decodeInfo(text.value).pipe(Effect.option)

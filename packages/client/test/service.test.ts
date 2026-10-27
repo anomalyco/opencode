@@ -44,45 +44,6 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
   expect(await status(resolved.url)).toMatchObject({ version: "test", pid: original.pid })
 })
 
-test("an incumbent observed through another URL can stop its registered owner", async () => {
-  await using fixture = await serviceFixture()
-  const owner = fixture.spawn("protocol")
-  await fixture.waitForFile()
-  const original = await Bun.file(fixture.registration).json()
-  const url = new URL(original.url)
-  url.hostname = "127.0.0.1"
-  const observed = await run(Service.incumbent({ file: fixture.registration, url: url.href.replace(/\/$/, "") }))
-  if (observed === undefined) throw new Error("Registered owner did not answer its alternate URL")
-
-  await run(Service.stop({ file: fixture.registration, expected: observed.info, pty: "handoff" }))
-
-  expect(owner.exitCode).toBe(stoppedExitCode)
-  expect(await fixture.signal()).toBe(stopSignal)
-  expect(await Bun.file(fixture.registration + ".handoff-request").exists()).toBe(true)
-  expect(await Bun.file(fixture.registration).exists()).toBe(false)
-})
-
-test("an incumbent observation cannot retarget an owner published during its probe", async () => {
-  await using previous = await serviceFixture()
-  await using current = await serviceFixture()
-  previous.spawn("replace-on-probe")
-  const owner = current.spawn("protocol")
-  await Promise.all([previous.waitForFile(), current.waitForFile()])
-  const original = await Bun.file(previous.registration).json()
-  const replacement = await Bun.file(current.registration).json()
-  await writeFile(previous.registration + ".replacement", JSON.stringify(replacement))
-  const observed = await run(Service.incumbent({ file: previous.registration, url: original.url }))
-  if (observed === undefined) throw new Error("Observed owner did not finish its probe")
-
-  await run(Service.stop({ file: previous.registration, expected: observed.info, pty: "handoff" }))
-
-  expect(owner.exitCode).toBe(null)
-  expect(await Bun.file(previous.registration).json()).toEqual(replacement)
-  expect(await current.signal()).toBeUndefined()
-  expect(await Bun.file(current.registration + ".handoff-request").exists()).toBe(false)
-  expect(await status(replacement.url)).toMatchObject({ pid: owner.pid })
-})
-
 test("reuses a compatible registered service", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

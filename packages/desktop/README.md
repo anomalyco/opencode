@@ -19,13 +19,16 @@ the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow
 bun run build && bun run pack
 ```
 
-Both read the same environment as every other release package:
+Build configuration:
 
-| Variable           | Meaning                                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
-| `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
-| `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
+| Variable                          | Meaning                                                                                                         |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_CHANNEL`                | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
+| `OPENCODE_VERSION`                | Version stamped into the app and its packages.                                                                  |
+| `OPENCODE_TARGET`                 | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
+| `OPENCODE_DESKTOP_SERVER_CHANNEL` | `prod` or `local` selects the matching CLI service registration. Other values use the client default.           |
+
+The runtime value overrides the build default. This setting must match the bundled CLI's service channel.
 
 The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
 `bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)

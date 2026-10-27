@@ -1,7 +1,7 @@
 import { batch, createContext, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createStore, produce, reconcile, type Store } from "solid-js/store"
 import path from "path"
-import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs"
+import { mkdirSync, readFileSync } from "fs"
 import { Flock } from "@opencode/util/flock"
 import { writeJsonAtomic } from "../util/persistence"
 import { safeWatch } from "../util/watch"
@@ -52,7 +52,6 @@ export function createStorage(root: string, channel: string) {
   const directory = path.join(root, segment(channel), "tui")
   const locks = path.join(root, segment(channel), "locks")
   mkdirSync(directory, { recursive: true })
-  if (channel === "latest") migrateProdStorage(root, directory)
 
   const storage: Storage = {
     store<Value extends object>(key: string, options: Options<Value>) {
@@ -129,42 +128,6 @@ export function createStorage(root: string, channel: string) {
       clearTimeout(reloadTimer)
       watcher?.close()
     },
-  }
-}
-
-function migrateProdStorage(root: string, destination: string) {
-  const marker = path.join(destination, ".prod-migration-complete")
-  if (existsSync(marker)) return
-  const source = path.join(root, "prod", "tui")
-  const files = (() => {
-    try {
-      return readdirSync(source, { withFileTypes: true })
-    } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return []
-      console.warn("Failed to read legacy TUI storage", { source, error })
-      return undefined
-    }
-  })()
-  if (files === undefined) return
-  let failed = false
-  for (const file of files) {
-    if (!file.isFile() || path.extname(file.name) !== ".json") continue
-    try {
-      // Existing latest state wins; prod remains available to older clients.
-      copyFileSync(path.join(source, file.name), path.join(destination, file.name), constants.COPYFILE_EXCL)
-    } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") continue
-      console.warn("Failed to migrate legacy TUI state", { source, destination, file: file.name, error })
-      failed = true
-    }
-  }
-  if (failed) return
-  try {
-    // Completed imports must not resurrect state subsequently deleted in latest.
-    writeFileSync(marker, "", { flag: "wx" })
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") return
-    console.warn("Failed to record TUI storage migration", { marker, error })
   }
 }
 

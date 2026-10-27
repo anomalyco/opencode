@@ -61,8 +61,7 @@ stdenv.mkDerivation (finalAttrs: {
   });
 
   env = opencode.env // {
-    # Desktop calls the stable channel "prod"; the CLI calls it "latest".
-    OPENCODE_CHANNEL = "prod";
+    OPENCODE_DESKTOP_SERVER_CHANNEL = "prod";
     ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
   };
 
