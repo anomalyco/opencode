@@ -120,7 +120,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
   const copyButton = () => (
     <Tooltip
-      appearance="standard"
+      appearance="compact"
       value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
       placement="top"
       gutter={4}
