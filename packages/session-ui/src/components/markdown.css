@@ -500,10 +500,6 @@
   }
 }
 
-[data-component="markdown"] > * {
-  unicode-bidi: plaintext;
-}
-
 :root body [data-component="markdown"] {
   [data-slot="markdown-copy-button"]::after {
     box-sizing: border-box;

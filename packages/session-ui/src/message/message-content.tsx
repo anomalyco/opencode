@@ -18,6 +18,7 @@ import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
+import { textDirection } from "../components/text-direction"
 import { linkSegments } from "../components/link-segments"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
@@ -640,7 +641,11 @@ export function CurrentUserMessageDisplay(props: {
               </Tooltip>
             </div>
           </Show>
-          <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            dir={textDirection(props.text ?? "")}
+            data-comments={comments().length > 0 ? "true" : undefined}
+          >
             <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
             <Show when={comments().length > 0}>
               <UserMessageComments comments={comments()} bounded />
@@ -707,7 +712,9 @@ function CurrentHighlightedText(props: {
   files: PromptFileAttachment[]
   agents: PromptAgentAttachment[]
 }) {
-  const segments = createMemo(() => {
+  // A prompt can switch language line by line, so each line resolves its own
+  // direction instead of inheriting one answer for the whole message.
+  const lines = createMemo(() => {
     const references = [
       ...props.files.flatMap((file) =>
         file.mention ? [{ start: file.mention.start, end: file.mention.end, type: "file" as const }] : [],
@@ -741,30 +748,50 @@ function CurrentHighlightedText(props: {
 
     if (last < props.text.length) pushText(props.text.slice(last))
 
-    return result
+    return result.reduce<HighlightSegment[][]>(
+      (lines, segment) => {
+        segment.text.split("\n").forEach((text, index) => {
+          if (index > 0) lines.push([])
+
+          if (text) lines[lines.length - 1].push({ text, type: segment.type })
+        })
+
+        return lines
+      },
+      [[]],
+    )
   })
 
   return (
-    <For each={segments()}>
-      {(segment) => (
-        <Show
-          when={segment.type === "link"}
-          fallback={
-            <span data-highlight={segment.type}>
-              <Show
-                when={segment.type && segment.text.startsWith("@")}
-                fallback={<SessionReferenceText text={segment.text} />}
-              >
-                <span data-slot="user-message-mention-prefix">@</span>
-                {segment.text.slice(1)}
-              </Show>
-            </span>
-          }
-        >
-          <a data-slot="user-message-link" href={segment.text} target="_blank" rel="noopener noreferrer">
-            {segment.text}
-          </a>
-        </Show>
+    <For each={lines()}>
+      {(line, index) => (
+        <>
+          {index() > 0 ? "\n" : ""}
+          <span data-slot="user-message-line" dir={textDirection(line.map((segment) => segment.text).join(""))}>
+            <For each={line}>
+              {(segment) => (
+                <Show
+                  when={segment.type === "link"}
+                  fallback={
+                    <span data-highlight={segment.type}>
+                      <Show
+                        when={segment.type && segment.text.startsWith("@")}
+                        fallback={<SessionReferenceText text={segment.text} />}
+                      >
+                        <span data-slot="user-message-mention-prefix">@</span>
+                        {segment.text.slice(1)}
+                      </Show>
+                    </span>
+                  }
+                >
+                  <a data-slot="user-message-link" href={segment.text} target="_blank" rel="noopener noreferrer">
+                    {segment.text}
+                  </a>
+                </Show>
+              )}
+            </For>
+          </span>
+        </>
       )}
     </For>
   )

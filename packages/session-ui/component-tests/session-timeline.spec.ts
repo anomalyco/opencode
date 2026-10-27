@@ -128,3 +128,28 @@ story("keeps patch file disclosures independent", async ({ mount }) => {
   await expect(modified).toHaveAttribute("aria-expanded", "true")
   await expect(deleted).toHaveAttribute("aria-expanded", "false")
 })
+
+story("keeps each prompt line in the direction it is mostly written in", async ({ mount }) => {
+  const root = await mount("current-session-timeline-rows--arabic-prompt")
+  const bubbles = root.locator('[data-slot="user-message-text"]')
+  await expect(bubbles).toHaveCount(2)
+
+  // The prompt opens with "React", so the first strong character is Latin while
+  // the sentence is mostly Arabic.
+  await expect(bubbles.first()).toHaveAttribute("dir", "rtl")
+  expect(await bubbles.first().evaluate((element) => getComputedStyle(element).direction)).toBe("rtl")
+
+  const lines = bubbles.nth(1).locator('[data-slot="user-message-line"]')
+  await expect(lines).toHaveCount(2)
+  expect(
+    await lines.evaluateAll((elements) =>
+      elements.map((element) => ({
+        dir: element.getAttribute("dir"),
+        direction: getComputedStyle(element).direction,
+      })),
+    ),
+  ).toEqual([
+    { dir: "ltr", direction: "ltr" },
+    { dir: "rtl", direction: "rtl" },
+  ])
+})
