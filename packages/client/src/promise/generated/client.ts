@@ -351,10 +351,14 @@ export function make(options: ClientOptions) {
     }
   }
 
-  const execute = async (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {
+  const execute = async (
+    descriptor: RequestDescriptor,
+    requestOptions?: RequestOptions,
+    cache?: RequestInit["cache"],
+  ) => {
     try {
       const prepared = prepare(descriptor, requestOptions)
-      return await fetch(prepared.url, prepared.init)
+      return await fetch(prepared.url, { ...prepared.init, cache })
     } catch (cause) {
       throw new ClientError("Transport", { cause })
     }
@@ -384,7 +388,8 @@ export function make(options: ClientOptions) {
 
   const sse = <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): AsyncIterable<A> => ({
     async *[Symbol.asyncIterator]() {
-      const response = await execute(descriptor, requestOptions)
+      // Firefox can block concurrent event streams on the same HTTP cache entry.
+      const response = await execute(descriptor, requestOptions, "no-store")
       if (response.status !== descriptor.successStatus) await responseError(response, descriptor)
       if (!isContentType(response, "text/event-stream")) {
         try {

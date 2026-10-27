@@ -1157,7 +1157,7 @@ describe("HttpApiCodegen.generate", () => {
     expect(emitted.module.isMissing(error)).toBeTrue()
   })
 
-  test("iterates an emitted SSE stream lazily without reconnecting", async () => {
+  test("iterates an emitted SSE stream lazily without caching or reconnecting", async () => {
     const output = emitPromise(
       compileContract(
         api(
@@ -1175,7 +1175,8 @@ describe("HttpApiCodegen.generate", () => {
     let url: string | undefined
     const client = emitted.module.OpenCode.make({
       baseUrl: "https://example.com",
-      fetch: async (input: RequestInfo | URL) => {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(init?.cache).toBe("no-store")
         requests++
         url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
         const encoder = new TextEncoder()

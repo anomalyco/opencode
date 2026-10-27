@@ -794,14 +794,14 @@ test("event.subscribe reports heartbeat comments as stream activity", async () =
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
-test("event transport passes through ordinary info requests", async () => {
-  const requests: string[] = []
+test("event transport bypasses the cache for SSE and preserves ordinary info requests", async () => {
+  const requests: Array<{ path: string; cache?: RequestInit["cache"] }> = []
   const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init)
-      requests.push(new URL(request.url).pathname)
+      requests.push({ path: new URL(request.url).pathname, cache: init?.cache })
       if (new URL(request.url).pathname === "/api/event") {
         return new Response(`data: ${JSON.stringify(event)}\n\n`, {
           headers: { "content-type": "text/event-stream" },
@@ -822,7 +822,7 @@ test("event transport passes through ordinary info requests", async () => {
     urls: ["http://localhost:3000"],
     paths: { tmp: "/tmp/opencode" },
   })
-  expect(requests).toEqual(["/api/event", "/api/info"])
+  expect(requests).toEqual([{ path: "/api/event", cache: "no-store" }, { path: "/api/info" }])
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
