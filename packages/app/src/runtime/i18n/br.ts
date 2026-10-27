@@ -1203,7 +1203,7 @@ export const dict = {
   "settings.timeline.row.backgroundActivity.right": "Direita",
   "settings.timeline.row.width.title": "Largura da linha do tempo",
   "settings.timeline.row.width.description":
-    "Linhas mais estreitas são mais fáceis de ler. Linhas mais largas mostram mais de uma vez",
+    "Linhas mais estreitas são mais fáceis de ler. Linhas mais largas mostram mais de uma só vez",
   "settings.timeline.row.width.focused": "Focado",
   "settings.timeline.row.width.comfortable": "Confortável",
   "settings.timeline.row.width.wide": "Amplo",
