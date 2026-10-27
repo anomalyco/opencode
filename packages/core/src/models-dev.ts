@@ -246,9 +246,19 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
   const apis = entries(model.api, decodeApi).map(
     ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
   )
+
+  // Prefer responses API over chat-completions for chat models when both are available,
+  // since responses is the newer, more capable API (supports reasoning, effort updates, etc.)
+  const hasResponses = apis.some(([protocol]) => protocol === "responses")
+  const hasChatCompletions = apis.some(([protocol]) => protocol === "chat-completions")
+  const preferResponses = model.type === "chat" && hasResponses && hasChatCompletions
+
   const [protocol, api, opencodeai] =
     (model.type === "chat"
-      ? apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
+      ? preferResponses
+        ? apis.find(([protocol]) => protocol === "responses") ??
+          apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
+        : apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
       : (apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`)) ??
         apis.find(([, , opencodeai]) => opencodeai))) ?? []
   if (!protocol || !api) return undefined
