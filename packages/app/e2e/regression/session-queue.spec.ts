@@ -664,6 +664,87 @@ test("editing drops a file whose mention was deleted and keeps unmentioned conte
   expect(mock.prompts[0].files?.map((file) => file.uri)).toEqual(["file:///repo/notes.md"])
 })
 
+for (const remove of [true, false]) {
+  test(`editing ${remove ? "removes" : "keeps once"} a path attachment and preserves comment context`, async ({ page }) => {
+    const display = "summarize data"
+    const reference = "Attached file: `/repo/confidential.csv`"
+    const review = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
+    const browser = "The user made the following comment regarding the Submit button: keep it accessible"
+    const attachment = { name: "confidential.csv", mime: "text/plain", path: "/repo/confidential.csv" }
+
+    const comments = [
+      {
+        path: "/repo/app.ts",
+        comment: "check the guard",
+        selection: { startLine: 2, startChar: 0, endLine: 2, endChar: 0 },
+        origin: "review",
+      },
+      {
+        type: "note",
+        origin: "browser",
+        label: "Submit",
+        icon: "select-element",
+        subject: "the Submit button",
+        comment: "keep it accessible",
+      },
+    ]
+
+    const mock = createQueueMock([`${display}\n${reference}\n${review}\n${browser}`])
+    mock.rows[0].payload.metadata = { displayText: display, comments, attachments: [attachment] }
+    mock.rows[0].payload.files = [
+      {
+        data: "",
+        mime: "text/plain",
+        source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+        name: "app.ts",
+      },
+    ]
+    const view = await openQueue(page, mock)
+    await view.rows.getByText(display, { exact: true }).click()
+    await expect(view.input).toHaveText(display)
+    await expect(view.input).toBeFocused()
+    const attachments = view.composer.locator('[data-component="composer-attachments"]')
+    await expect(attachments).toContainText("confidential.csv")
+
+    if (remove) {
+      await attachments.getByRole("button", { name: "Remove attachment", exact: true }).click()
+      await expect(attachments).toBeHidden()
+    }
+
+    // A literal attachment-looking line in the user's text is still their text.
+    const edited = "Use only public data; Attached file: `/repo/user-typed.txt`"
+    await view.input.fill(edited)
+    await view.input.press("Enter")
+
+    await expect.poll(() => mock.prompts.length).toBe(1)
+    expect(mock.prompts[0].text).toBe([edited, ...(remove ? [] : [reference]), review, browser].join("\n"))
+    expect(mock.prompts[0].metadata).toMatchObject({
+      displayText: edited,
+      comments,
+      attachments: remove ? [] : [attachment],
+    })
+    expect(mock.prompts[0].files?.map((file) => file.uri)).toEqual(["file:///repo/app.ts?start=2&end=2"])
+    await expect(view.rows.getByText(edited, { exact: true })).toBeVisible()
+  })
+}
+
+test("editing preserves opaque context from another client", async ({ page }) => {
+  const display = "inspect this"
+  const context = "Attached file: `/repo/external-context.txt`"
+  const mock = createQueueMock([`${display}\n${context}`])
+  mock.rows[0].payload.metadata = { displayText: display, client: "external" }
+  const view = await openQueue(page, mock)
+  await view.rows.getByText(display, { exact: true }).click()
+  await expect(view.input).toHaveText(display)
+  await expect(view.input).toBeFocused()
+  await view.input.fill("inspect again")
+  await view.input.press("Enter")
+
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  expect(mock.prompts[0].text).toBe(`inspect again\n${context}`)
+  expect(mock.prompts[0].metadata).toMatchObject({ client: "external", displayText: "inspect again" })
+})
+
 test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   const note = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
   const mock = createQueueMock([note])
@@ -682,6 +763,7 @@ test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   // With no display text, the editor shows the note itself, so the edit owns it as text.
   await view.rows.getByText(note, { exact: true }).click()
   await expect(view.input).toHaveText(note)
+  await expect(view.input).toBeFocused()
   await view.input.press("End")
   await view.input.pressSequentially(", please")
   await expect(view.input).toHaveText(`${note}, please`)

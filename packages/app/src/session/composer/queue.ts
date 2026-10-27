@@ -10,7 +10,7 @@ import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } fro
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { readPromptPresentation } from "@/composer/comment-note"
+import { formatCommentNote, formatNoteComment, readPromptPresentation } from "@/composer/comment-note"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -611,7 +611,16 @@ async function editedPromptInput(
   const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
-  const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
+  const suffix = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
+  const presentation = suffix ? readPromptPresentation(payload?.metadata) : undefined
+
+  // The suffix also contains path attachments. Rebuild only comments when the
+  // app owns the presentation; opaque context from other clients stays intact.
+  const notes = presentation
+    ? presentation.comments
+        .map((comment) => `\n${comment.type === "note" ? formatNoteComment(comment) : formatCommentNote(comment)}`)
+        .join("")
+    : suffix
 
   const mention = (value: { start: number; end: number; text: string } | undefined) => {
     if (!value) return undefined
