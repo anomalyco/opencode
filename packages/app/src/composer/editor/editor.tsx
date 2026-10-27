@@ -273,6 +273,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onFileRemove={(file) => props.controller.removeContext(file.key)}
               editingQuote={props.controller.editingQuote()}
               onEditQuote={props.controller.editQuote}
+              quoteSource={props.controller.quoteSource}
               onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
               searchPaths={props.controller.searchPaths}
             />
@@ -689,6 +690,7 @@ function ComposerAttachments(props: {
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
   editingQuote?: string
   onEditQuote?: (key?: string) => void
+  quoteSource?: ComposerEditorModel["quoteSource"]
   onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
   searchPaths?: (query: string) => Promise<string[]>
 }) {
@@ -747,11 +749,11 @@ function ComposerAttachments(props: {
                     title={quoteTitle(comment)}
                     tooltip={quoteHint(comment)}
                     active={commentActive(comment)}
-                    onClick={() =>
-                      comment.type === "quote"
-                        ? props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
-                        : props.onCommentClick?.(comment)
-                    }
+                    onClick={() => {
+                      if (comment.type !== "quote") return props.onCommentClick?.(comment)
+                      props.quoteSource?.reveal(comment.key)
+                      props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
+                    }}
                   />
                 </Tooltip>
                 <button

@@ -661,6 +661,7 @@ export const dict = {
   "session.quote.actions": "Quote selection",
   "session.quote.add": "Quote",
   "session.quote.addWithComment": "Quote and comment",
+  "session.quote.commentPlaceholder": "Add a comment about this quote",
   "session.quote.tooLong": "Selection too long",
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "File Explorer",

@@ -231,7 +231,7 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
           <Tooltip
             class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/new-session-tip:delay-[250ms] group-hover/new-session-tip:duration-150 group-hover/new-session-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
             placement="top"
-            openDelay={1000}
+            openDelay={800}
             value={language.t("common.dismiss")}
           >
             <button

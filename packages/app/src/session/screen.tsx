@@ -40,6 +40,7 @@ import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { createTimelineQuote, TimelineQuote } from "./timeline/quote"
+import { createTimelineQuoteHighlight } from "./timeline/quote-highlight"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader, SessionLocation } from "./session-identity-header"
 import { SessionHeaderDrag, windowDragEnabled } from "./header/drag-area"
@@ -246,6 +247,17 @@ function SessionScreenContent(props: {
     sessionKey: session.identity.sessionKey,
     enabled: () => conversationVisible() && composer.quote.available(),
     add: composer.quote.add,
+  })
+
+  createTimelineQuoteHighlight({
+    root: timeline.scroller,
+    visible: timeline.visible,
+    source: composer.quote.source,
+    enabled: () => conversationVisible() && composer.quote.available(),
+    reveal: (id, partID) => {
+      if (!timeline.actions.revealPart(partID)) timeline.actions.revealMessage(id, partID)
+    },
+    unpin: timeline.view.unpin,
   })
 
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {

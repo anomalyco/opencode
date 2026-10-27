@@ -202,7 +202,7 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
                 </>
               }
               placement="top"
-              openDelay={1200}
+              openDelay={800}
             >
               <Button
                 size="small"
