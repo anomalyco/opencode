@@ -75,7 +75,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
-      // Keep an old implicit port only when saved listener settings do not conflict.
+      // Legacy discovery may advertise a different default port.
       if (options.port === undefined && options.hostname === undefined && serviceOptions?.legacyURL !== undefined) {
         const legacy = yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })
         if (legacy !== undefined) {

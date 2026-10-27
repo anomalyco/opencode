@@ -82,7 +82,7 @@ let
               let
                 archive = fetchurl source;
               in
-              # Replace transport only: original naming, integrity and host metadata reach the adapter.
+              # Local transport must preserve the source name, integrity and host metadata.
               (archive.overrideAttrs (_: {
                 urls = [ "file://${fixture}" ];
               }))

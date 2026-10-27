@@ -51,7 +51,7 @@ let
         else
           throw "Missing Bun source integrity: ${identity}";
     in
-    # Workspace files come from the repository, not isolated cache directories.
+    # Bun links workspaces from the repository, not the download cache.
     if builtins.match "workspace:.*" resolution != null then
       [ ]
     else if !compatible then
@@ -93,7 +93,7 @@ let
             {
               inherit url hash;
             }
-            # Keep normal fetch names; only force extraction for non-.tgz URLs.
+            # bun2nix extracts files only when their store name ends in .tgz.
             // (if builtins.match ".*[.]tgz" url == null then { name = "package.tgz"; } else { });
         }
       ]

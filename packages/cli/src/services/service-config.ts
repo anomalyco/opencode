@@ -68,6 +68,7 @@ export function legacyFilename(channel = OPENCODE_CHANNEL) {
   return `service-${Hash.fast(channel)}.json`
 }
 
+// Named prod files take precedence over hashed files.
 const prodFilenames = [filename("prod"), legacyFilename("prod")].filter((name) => name !== undefined)
 
 export function versionBelongsToChannel(
@@ -93,7 +94,7 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
-  // Nix's named and hashed prod registrations belong to the shared release service.
+  // Prod registrations can belong to older release versions.
   const prod =
     channel === "latest" && path.dirname(legacy) === path.dirname(file) && prodFilenames.includes(path.basename(legacy))
   if (!prod && !versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
@@ -135,7 +136,6 @@ const paths = Effect.gen(function* () {
   return {
     fs,
     file,
-    // Preserve settings from Nix's former channel without replacing existing shared settings.
     legacyConfigFiles: (OPENCODE_CHANNEL === "latest" ? prodFilenames : legacy ? [legacy] : []).map((name) =>
       path.join(global.config, name),
     ),

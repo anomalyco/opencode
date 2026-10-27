@@ -98,7 +98,6 @@ const projected = evaluate("bun-lock", JSON.stringify(lock))
 assert.equal(projected.exitCode, 0, projected.stderr.toString())
 assert.deepEqual(fetches(projected), expected)
 
-// A changed lock must change fetches directly, without regenerating a second file.
 const updated = evaluate(
   "bun-lock",
   JSON.stringify({

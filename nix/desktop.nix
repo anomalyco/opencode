@@ -97,7 +97,7 @@ stdenv.mkDerivation (finalAttrs: {
 
     cd packages/desktop
 
-    # Stage the real Nix CLI where the production Desktop build expects its package.
+    # The bundler locates the CLI by its platform package name.
     cli_package="../cli/dist/$(bun -e 'import { getCurrentCli } from "./script/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')"
     mkdir -p "$cli_package/bin"
     cp ${lib.getExe opencode} "$cli_package/bin/opencode"
