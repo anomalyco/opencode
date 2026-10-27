@@ -3,9 +3,9 @@ import { Document, Event, Info, type Entry } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Permission } from "@opencode/schema/permission"
 import { Config } from "@opencode/core/config"
+import { Integration } from "@opencode/core/integration"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { Bus } from "@opencode/core/bus"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -13,6 +13,7 @@ import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
+import { organizationPolicy } from "../fixture/policy"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -62,12 +63,8 @@ describe("ConfigPolicyPlugin.Plugin", () => {
 
   it.effect("organization tool.use policy overrides authored policy", () =>
     Effect.gen(function* () {
-      const managed = yield* ManagedPolicy.Service
-      yield* managed.set({ statements: [tool("deny", "shell:*")], organization: "Acme" })
-      yield* addPlugin([document(tool("allow", "shell:*"))])
+      yield* addPlugin([organizationPolicy([tool("deny", "shell:*")], "Acme"), document(tool("allow", "shell:*"))])
       expect(yield* evaluate("shell", ["ls"])).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
-      yield* managed.set({ statements: [tool("allow", "shell:*")] })
-      expect((yield* evaluate("shell", ["ls"], "ask")).effect).toBe("ask")
     }),
   )
 
@@ -163,17 +160,18 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("evaluates organization provider statements after every authored document", () =>
+  it.effect("lets organization provider statements override authored documents", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
-      const managed = yield* ManagedPolicy.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.openai, () => {})
         catalog.update(Provider.ID.anthropic, () => {})
         catalog.update(Provider.ID.opencode, () => {})
       })
-      yield* managed.set({ statements: [provider("deny", "*"), provider("allow", "opencode")] })
-      yield* addPlugin([document(provider("allow", "anthropic"))])
+      yield* addPlugin([
+        organizationPolicy([provider("deny", "*"), provider("allow", "opencode")]),
+        document(provider("allow", "anthropic")),
+      ])
 
       expect(yield* catalog.get(Provider.ID.anthropic)).toBeUndefined()
       expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
@@ -184,48 +182,48 @@ describe("ConfigPolicyPlugin.Plugin", () => {
   it.effect("lets an organization allow restore a provider denied by the user", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
-      const managed = yield* ManagedPolicy.Service
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
-      yield* managed.set({ statements: [provider("allow", "openai")] })
-      yield* addPlugin([document(provider("deny", "openai"))])
+      yield* addPlugin([organizationPolicy([provider("allow", "openai")]), document(provider("deny", "openai"))])
 
       expect(yield* catalog.get(Provider.ID.openai)).toBeDefined()
     }),
   )
 
-  it.effect("names the organization when its permission statement decides", () =>
-    Effect.gen(function* () {
-      const managed = yield* ManagedPolicy.Service
-      yield* managed.set({ statements: [tool("deny", "shell:sudo *")], organization: "Acme" })
-      yield* addPlugin([document(tool("allow", "shell:*"))])
+  for (const input of [
+    { organization: "Acme", message: "Blocked by Acme's policy" },
+    { organization: undefined, message: "Blocked by your organization's policy" },
+  ])
+    it.effect(`names the organization when its permission statement decides: ${input.organization}`, () =>
+      Effect.gen(function* () {
+        yield* addPlugin([
+          organizationPolicy([tool("deny", "shell:sudo *")], input.organization),
+          document(tool("allow", "shell:*")),
+        ])
 
-      expect(yield* evaluate("shell", ["sudo ls"])).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
-      expect((yield* evaluate("shell", ["ls"])).effect).toBe("allow")
+        expect(yield* evaluate("shell", ["sudo ls"])).toEqual({ effect: "deny", message: input.message })
+        expect((yield* evaluate("shell", ["ls"])).effect).toBe("allow")
+      }),
+    )
 
-      yield* managed.set({ statements: [tool("deny", "shell:sudo *")] })
-      expect(yield* evaluate("shell", ["sudo ls"])).toEqual({
-        effect: "deny",
-        message: "Blocked by your organization's policy",
-      })
-    }),
-  )
-
-  it.effect("rebuilds the catalog from replaced organization statements", () =>
+  it.live("rebuilds the catalog when the organization's policy changes", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
-      const managed = yield* ManagedPolicy.Service
+      const bus = yield* Bus.Service
+      const test = yield* Config.Test
+      const host = yield* PluginHost.make(yield* Plugin.Service)
+      const opencode = Integration.ID.make("opencode")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
-      yield* addPlugin([])
+      yield* ConfigPolicyPlugin.Plugin.effect(host)
       expect(yield* catalog.get(Provider.ID.openai)).toBeDefined()
 
-      yield* managed.set({ statements: [provider("deny", "openai")] })
-      yield* catalog.reload()
-      expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
+      yield* test.integration?.(opencode, organizationPolicy([provider("deny", "openai")])) ?? Effect.void
+      yield* bus.publish(Event.Updated, {})
+      yield* waitUntil(catalog.get(Provider.ID.openai).pipe(Effect.map((provider) => provider === undefined)))
 
-      yield* managed.set({ statements: [] })
-      yield* catalog.reload()
-      expect(yield* catalog.get(Provider.ID.openai)).toBeDefined()
-    }),
+      yield* test.integration?.(opencode, undefined) ?? Effect.void
+      yield* bus.publish(Event.Updated, {})
+      yield* waitUntil(catalog.get(Provider.ID.openai).pipe(Effect.map((provider) => provider !== undefined)))
+    }).pipe(Effect.provide(Config.testLayer())),
   )
 })
 

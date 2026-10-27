@@ -76,13 +76,14 @@ test("the combined location picker shows checkout branches and chooses the base 
   const screen = page.locator('[data-component="new-session"]')
   const base = screen.getByRole("button", { name: "from timeline-quotes", exact: true })
   await expect(base).toBeVisible()
-  expect(searches).toEqual([])
+  await expect.poll(() => searches).toEqual([{ directory: view.directory, search: "", limit: 50 }])
   await base.click()
   const search = page.getByRole("combobox", { name: "Search branches", exact: true })
-  await expect(search).toBeFocused()
-  await expect(search).toHaveAttribute("aria-busy", "true")
+  await expect(search).toHaveCount(0)
   await expect(newSessionLocation(page)).toBeVisible()
   listed.resolve(["timeline-quotes", "release/base", "origin/dev"])
+  await expect(search).toBeFocused()
+  await expect(search).toHaveAttribute("aria-busy", "false")
   await expect(page.getByRole("option", { name: "release/base", exact: true })).toBeVisible()
   await search.fill("release")
   await expect(search).toHaveAttribute("aria-busy", "false")
@@ -95,6 +96,15 @@ test("the combined location picker shows checkout branches and chooses the base 
     { directory: view.directory, search: "", limit: 50 },
     { directory: view.directory, search: "release", limit: 50 },
   ])
+
+  await selected.click()
+  await expect(search).toBeFocused()
+  await expect(search).toHaveValue("")
+  await expect(page.getByRole("option")).toHaveCount(3)
+  // Reopening revalidates the branch list.
+  expect(searches).toHaveLength(3)
+  await page.getByRole("option", { name: "release/base", exact: true }).click()
+  await expect(view.editor).toBeFocused()
 
   await page.setViewportSize({ width: 390, height: 844 })
   await expect
@@ -136,6 +146,55 @@ test("the combined location picker shows checkout branches and chooses the base 
     .toEqual([expect.objectContaining({ body: expect.objectContaining({ text: "Use the selected base" }) })])
 })
 
+test("a pending branch picker can be dismissed before its results arrive", async ({ page }) => {
+  const listed = Promise.withResolvers<string[]>()
+
+  const view = await openWorktreeDraft(page, {
+    name: "BranchDismiss",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => listed.promise,
+  })
+
+  const base = page.getByRole("button", { name: "from dev", exact: true })
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+  await base.click()
+  await expect(base).toHaveAttribute("aria-expanded", "true")
+  await expect(search).toHaveCount(0)
+  await view.editor.click()
+  await expect(base).toHaveAttribute("aria-expanded", "false")
+  await base.click()
+  await base.press("Escape")
+  await expect(base).toHaveAttribute("aria-expanded", "false")
+  await base.click()
+  await base.click()
+  await expect(base).toHaveAttribute("aria-expanded", "false")
+  listed.resolve(["dev", "origin/dev"])
+  await expect(base).toHaveAttribute("aria-busy", "false")
+  await expect(search).toHaveCount(0)
+  await base.click()
+  await expect(search).toBeFocused()
+  await expect(page.getByRole("option")).toHaveText(["dev", "origin/dev"])
+})
+
+test("reopening the branch picker shows branches created since it last opened", async ({ page }) => {
+  let created = false
+
+  await openWorktreeDraft(page, {
+    name: "BranchRefresh",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => (created ? ["dev", "feature/new"] : ["dev"]),
+  })
+
+  const base = page.getByRole("button", { name: "from dev", exact: true })
+  await base.click()
+  await expect(page.getByRole("option")).toHaveText(["dev"])
+  created = true
+  await base.click()
+  await expect(page.getByRole("combobox", { name: "Search branches", exact: true })).toHaveCount(0)
+  await base.click()
+  await expect(page.getByRole("option")).toHaveText(["dev", "feature/new"])
+})
+
 test("branch search keeps results on screen while a query is pending", async ({ page }) => {
   const held = Promise.withResolvers<string[]>()
 
@@ -174,9 +233,62 @@ test("branch search keeps results on screen while a query is pending", async ({ 
   await search.pressSequentially("-missing")
   await expect(options).toHaveText(["timeline-quotes"])
   await expect(page.getByRole("listbox")).not.toHaveAttribute("data-emptied")
+
   held.resolve([])
   await expect(page.getByText("No results found", { exact: true })).toBeVisible()
   await expect(search).toHaveAttribute("aria-busy", "false")
+})
+
+test("the empty branch search state is as tall as a single result", async ({ page }) => {
+  await openWorktreeDraft(page, {
+    name: "BranchEmptyHeight",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => ["dev"],
+  })
+
+  await page.getByRole("button", { name: "from dev", exact: true }).click()
+  await expect(page.getByRole("option")).toHaveCount(1)
+  const panel = page.getByRole("dialog")
+  // Measured on open, before any search animates the panel.
+  const single = await panel.evaluate((element) => element.getBoundingClientRect().height)
+
+  await page.getByRole("combobox", { name: "Search branches", exact: true }).fill("missing")
+  await expect(page.getByText("No results found", { exact: true })).toBeVisible()
+  await expect.poll(() => panel.evaluate((element) => element.getBoundingClientRect().height)).toBe(single)
+})
+
+test("backspacing keeps confirmed branch results until the broader search answers", async ({ page }) => {
+  const broader = Promise.withResolvers<string[]>()
+  const closed = ["closed-search-beta", "closed-session-search", "reopen-closed-tab", "recently-closed-projects"]
+
+  await openWorktreeDraft(page, {
+    name: "BranchBackspace",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: (input) => {
+      if (input.search === "clo") return broader.promise
+
+      if (input.search) return closed
+
+      return [...closed, "origin/cloudflare-run-images", "origin/cloudflare-run-functions"]
+    },
+  })
+
+  await page.getByRole("button", { name: "from dev", exact: true }).click()
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+  const options = page.getByRole("option")
+  await expect(options).toHaveCount(6)
+  await search.fill("closed")
+  await expect(search).toHaveAttribute("aria-busy", "false")
+  await expect(options).toHaveText(closed)
+  await search.press("Backspace")
+  await search.press("Backspace")
+  await search.press("Backspace")
+  await expect(search).toHaveValue("clo")
+  await expect(search).toHaveAttribute("aria-busy", "true")
+  await expect(options).toHaveText(closed)
+  broader.resolve([...closed, "clover-fix"])
+  await expect(search).toHaveAttribute("aria-busy", "false")
+  await expect(options).toHaveText([...closed, "clover-fix"])
 })
 
 test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {

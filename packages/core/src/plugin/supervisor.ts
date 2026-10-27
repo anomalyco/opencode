@@ -5,7 +5,6 @@ import { Cause, Effect, Layer, Queue, Stream } from "effect"
 import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { ManagedPolicy } from "../managed-policy.js"
 import { Bus } from "../bus.js"
 import { Npm } from "@opencode/util/npm"
 import { Plugin } from "../plugin.js"
@@ -123,7 +122,6 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const managed = yield* ManagedPolicy.Service
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
     const instance = yield* InstancePlugins.Service
@@ -218,7 +216,6 @@ export const layer = Layer.effectDiscard(
       )
     yield* watch(sources.changes())
     yield* watch(modules.changes())
-    yield* watch(managed.changes())
     yield* watch(Stream.fromEffectRepeat(Effect.sleep("24 hours")))
     yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
     yield* watch(
