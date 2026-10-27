@@ -3,6 +3,7 @@ import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient } from "effect/sql"
 import { classifySqliteError, SqlError } from "effect/sql/SqlError"
+import { isRecord } from "@opencode/ai/utils/record"
 import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode/core/database/SqliteNode" as const
@@ -22,6 +23,28 @@ interface Config extends Sqlite.ClientConfig {
   readonly allowExtension?: boolean
 }
 
+const isNodeSqliteError = (cause: unknown): cause is Record<string, unknown> =>
+  isRecord(cause) && typeof cause["errcode"] === "number"
+
+// node:sqlite reports SQLITE_BUSY and its kin as
+// { code: "ERR_SQLITE_ERROR", errcode: 5, errstr: "database is locked" } — no
+// errno and no SQLITE_* string code, and those are all classifySqliteError
+// reads, so lock timeouts file as UnknownError and the retry wrapper never
+// fires. node's errcode is the sqlite primary/extended code; copying it onto
+// errno gives the classifier the shape it knows (5 = SQLITE_BUSY,
+// 6 = SQLITE_LOCKED, masked with & 0xff there).
+const classifyNodeSqliteError = (cause: unknown, operation: string) => {
+  if (isNodeSqliteError(cause)) {
+    const normalized: Record<string, unknown> = { ...cause, errno: cause["errcode"] }
+    if (typeof cause["message"] === "string") normalized["message"] = cause["message"]
+    return classifySqliteError(normalized as unknown, {
+      message: "Failed to execute statement",
+      operation,
+    })
+  }
+  return classifySqliteError(cause, { message: "Failed to execute statement", operation })
+}
+
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as DatabaseSync
@@ -33,11 +56,7 @@ const make = (options: Config) =>
         try {
           return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
         } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
+          return Effect.fail(new SqlError({ reason: classifyNodeSqliteError(cause, "execute") }))
         }
       })
 
@@ -51,11 +70,7 @@ const make = (options: Config) =>
             statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
           )
         } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
+          return Effect.fail(new SqlError({ reason: classifyNodeSqliteError(cause, "execute") }))
         }
       })
 
