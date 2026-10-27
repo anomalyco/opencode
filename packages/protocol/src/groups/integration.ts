@@ -144,7 +144,11 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       {
         params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
         query: LocationQuery,
-        payload: Schema.Struct({ code: Schema.optional(Schema.String) }),
+        payload: Schema.Struct({
+          code: Schema.optional(Schema.String),
+          promptID: Schema.optional(Form.ID),
+          answer: Schema.optional(Form.Answer),
+        }),
         success: HttpApiSchema.NoContent,
         error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError, InvalidRequestError],
       },
@@ -154,7 +158,8 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         OpenApi.annotations({
           identifier: "integration.oauth.complete",
           summary: "Complete OAuth connection",
-          description: "Complete a code-based OAuth attempt and store the resulting credential.",
+          description:
+            "Complete a code-based OAuth attempt or answer its current setup prompt. Credentials are stored after authorization finishes.",
         }),
       ),
   )

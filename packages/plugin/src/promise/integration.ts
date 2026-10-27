@@ -50,21 +50,28 @@ export type IntegrationOAuthAuthorization = {
   readonly url: string
   readonly instructions: string
   readonly expiresAt?: number
+  readonly onComplete?: () => { readonly title: string; readonly url: string } | undefined
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Promise<Credential.OAuth>
+      readonly callback: Promise<Credential.OAuth | Credential.Key>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Promise<Credential.OAuth>
+      readonly callback: (code: string) => Promise<Credential.OAuth | Credential.Key>
     }
 )
+
+/** Ask sequential setup steps from an automatic authorization callback, after browser sign-in. Code-mode callbacks cannot prompt. */
+export type IntegrationOAuthPrompt = (input: {
+  readonly title: string
+  readonly fields: Form.Fields
+}) => Promise<Form.Answer>
 
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
   readonly method: IntegrationOAuthMethod
-  readonly authorize: (answer: Form.Answer) => Promise<IntegrationOAuthAuthorization>
+  readonly authorize: (answer: Form.Answer, prompt: IntegrationOAuthPrompt) => Promise<IntegrationOAuthAuthorization>
   readonly refresh?: (credential: Credential.OAuth) => Promise<Credential.OAuth>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }

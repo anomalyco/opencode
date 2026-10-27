@@ -2,7 +2,7 @@ import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
 import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
-import { Effect, Schema, SchemaAST, Stream } from "effect"
+import { Deferred, Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
@@ -411,20 +411,34 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         editor.method.update({
                           ...input,
-                          authorize: (answer) =>
-                            Effect.promise(() => input.authorize(answer)).pipe(
-                              Effect.map((authorization) =>
-                                authorization.mode === "auto"
-                                  ? {
-                                      ...authorization,
-                                      callback: Effect.promise(() => authorization.callback),
-                                    }
-                                  : {
-                                      ...authorization,
-                                      callback: (code) => Effect.promise(() => authorization.callback(code)),
-                                    },
-                              ),
-                            ),
+                          authorize: (answer, prompt) =>
+                            Effect.gen(function* () {
+                              const controller = new AbortController()
+                              yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
+                              const ready = yield* Deferred.make<void>()
+                              const authorization = yield* Effect.promise(() =>
+                                input.authorize(answer, (input) =>
+                                  Effect.runPromiseWith(runtime)(
+                                    Deferred.await(ready).pipe(Effect.andThen(prompt(input))),
+                                    { signal: controller.signal },
+                                  ),
+                                ),
+                              )
+                              if (authorization.mode === "auto")
+                                return {
+                                  ...authorization,
+                                  callback: Deferred.succeed(ready, undefined).pipe(
+                                    Effect.andThen(Effect.promise(() => authorization.callback)),
+                                  ),
+                                }
+                              return {
+                                ...authorization,
+                                callback: (code: string) =>
+                                  Deferred.succeed(ready, undefined).pipe(
+                                    Effect.andThen(Effect.promise(() => authorization.callback(code))),
+                                  ),
+                              }
+                            }),
                           refresh:
                             refresh === undefined
                               ? undefined
