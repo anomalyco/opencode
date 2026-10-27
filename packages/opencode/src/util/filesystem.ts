@@ -49,11 +49,6 @@ export async function readBytes(p: string): Promise<Buffer> {
   return readFile(p)
 }
 
-export async function readArrayBuffer(p: string): Promise<ArrayBuffer> {
-  const buf = await readFile(p)
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
-}
-
 function isEnoent(e: unknown): e is { code: "ENOENT" } {
   return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
 }
