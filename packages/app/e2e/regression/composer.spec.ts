@@ -586,6 +586,7 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
     await page.keyboard.type(line)
     await page.keyboard.press("Shift+Enter")
   }
+
   await page.keyboard.type("Last line")
   await expect.poll(() => editor.innerText()).toMatch(/Line 12\nLast line$/)
 
