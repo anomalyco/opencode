@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, test } from "bun:test"
 import { Effect, FileSystem } from "effect"
-import { rename, writeFile } from "node:fs/promises"
+import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/effect/service"
 import {
   catchesSigterm,
@@ -65,31 +65,22 @@ test("an incumbent observed through another URL can stop its registered owner", 
 test("an incumbent observation cannot retarget an owner published during its probe", async () => {
   await using previous = await serviceFixture()
   await using current = await serviceFixture()
-  previous.spawn("probe-gated")
+  previous.spawn("replace-on-probe")
   const owner = current.spawn("protocol")
   await Promise.all([previous.waitForFile(), current.waitForFile()])
   const original = await Bun.file(previous.registration).json()
   const replacement = await Bun.file(current.registration).json()
-  const observing = run(Service.incumbent({ file: previous.registration, url: original.url }))
-  try {
-    await previous.waitForFile(previous.registration + ".first-request")
-    await writeFile(previous.registration + ".replacement", JSON.stringify(replacement))
-    await rename(previous.registration + ".replacement", previous.registration)
-    await Bun.write(previous.registration + ".release", "")
-    const observed = await observing
-    if (observed === undefined) throw new Error("Observed owner did not finish its probe")
+  await writeFile(previous.registration + ".replacement", JSON.stringify(replacement))
+  const observed = await run(Service.incumbent({ file: previous.registration, url: original.url }))
+  if (observed === undefined) throw new Error("Observed owner did not finish its probe")
 
-    await run(Service.stop({ file: previous.registration, expected: observed.info, pty: "handoff" }))
+  await run(Service.stop({ file: previous.registration, expected: observed.info, pty: "handoff" }))
 
-    expect(owner.exitCode).toBe(null)
-    expect(await Bun.file(previous.registration).json()).toEqual(replacement)
-    expect(await current.signal()).toBeUndefined()
-    expect(await Bun.file(current.registration + ".handoff-request").exists()).toBe(false)
-    expect(await status(replacement.url)).toMatchObject({ pid: owner.pid })
-  } finally {
-    await Bun.write(previous.registration + ".release", "")
-    await observing
-  }
+  expect(owner.exitCode).toBe(null)
+  expect(await Bun.file(previous.registration).json()).toEqual(replacement)
+  expect(await current.signal()).toBeUndefined()
+  expect(await Bun.file(current.registration + ".handoff-request").exists()).toBe(false)
+  expect(await status(replacement.url)).toMatchObject({ pid: owner.pid })
 })
 
 test("reuses a compatible registered service", async () => {

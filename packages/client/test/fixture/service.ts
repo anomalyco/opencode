@@ -79,6 +79,7 @@ const server = Bun.serve({
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
+    if (mode === "replace-on-probe" && requests === 1) await rename(registration + ".replacement", registration)
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
