@@ -11,6 +11,7 @@ import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode/schema/session"
+import { ProjectTable } from "../project/sql.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
@@ -150,7 +151,10 @@ const layer = Layer.effect(
         const conditions: SQL[] = []
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
-        if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
+        if ("project" in input) {
+          const rows = yield* projectRowsFor(db, input.project)
+          conditions.push(or(...rows.map((id) => eq(SessionTable.project_id, id)))!)
+        }
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.parentID !== undefined)
@@ -265,5 +269,29 @@ const layer = Layer.effect(
     })
   }),
 )
+
+/**
+ * Project rows that share a worktree with `project`. A worktree's identity changes with its git fingerprint —
+ * adding a remote is enough — and each identity is a separate row, so a project-scoped list that matched one row
+ * would hide the sessions filed under the others. Rows are the same folder to the caller.
+ */
+function projectRowsFor(db: Database.Interface["db"], project: Project.ID) {
+  return Effect.gen(function* () {
+    const row = yield* db
+      .select({ worktree: ProjectTable.worktree })
+      .from(ProjectTable)
+      .where(eq(ProjectTable.id, project))
+      .get()
+      .pipe(Effect.orDie)
+    if (!row) return [project]
+    const rows = yield* db
+      .select({ id: ProjectTable.id })
+      .from(ProjectTable)
+      .where(eq(ProjectTable.worktree, row.worktree))
+      .all()
+      .pipe(Effect.orDie)
+    return rows.map((item) => item.id)
+  })
+}
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
