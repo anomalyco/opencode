@@ -3,6 +3,7 @@ import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogFooter, DialogHeader, DialogLayout, useDialog, type DialogSize } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
+import "../component/secret-textarea"
 import { Spinner } from "../component/spinner"
 import { useConfig, useNewDesigns } from "../config"
 import { useRenderer } from "@opentui/solid"
@@ -24,6 +25,8 @@ export type DialogPromptProps = {
   description?: () => JSX.Element
   placeholder?: string
   value?: string
+  /** Renders the input masked (`*` per character) so secrets are never echoed to the screen. */
+  secret?: boolean
   busy?: boolean
   busyText?: string
   actions?: DialogPromptAction[]
@@ -160,7 +163,7 @@ export function DialogPrompt(props: DialogPromptProps) {
     >
       <box gap={1}>
         {props.description?.()}
-        <textarea
+        <secret_textarea
           height={1}
           wrapMode="none"
           ref={(val: TextareaRenderable) => {
@@ -168,6 +171,7 @@ export function DialogPrompt(props: DialogPromptProps) {
             setTextareaTarget(val)
           }}
           initialValue={props.value}
+          secret={props.secret}
           placeholder={props.placeholder ?? "Enter text"}
           placeholderColor={newDesigns() ? theme.text.faint : theme.text.muted}
           textColor={props.busy ? theme.text.formfield.disabled : theme.text.formfield.base}

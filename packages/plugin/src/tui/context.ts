@@ -350,6 +350,8 @@ export interface DialogPromptOptions {
   readonly description?: string
   readonly placeholder?: string
   readonly value?: string
+  /** Renders the input masked (`*` per character) so secrets are never echoed to the screen. */
+  readonly secret?: boolean
 }
 
 export interface DialogSelectOption<Value> {
