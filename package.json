@@ -77,7 +77,7 @@
       "@solid-primitives/storage": "4.4.0",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.4",
-      "dompurify": "3.4.14",
+      "dompurify": "3.4.17",
       "drizzle-kit": "1.0.0-rc.5-ab785fc",
       "drizzle-orm": "1.0.0-rc.5-169397b",
       "effect": "4.0.1",

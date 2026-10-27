@@ -79,7 +79,7 @@
     "@solidjs/meta": "catalog:",
     "diff": "catalog:",
     "effect": "catalog:",
-    "dompurify": "3.4.14",
+    "dompurify": "3.4.17",
     "marked": "catalog:",
     "pele": "1.7.0",
     "solid-js": "catalog:"
