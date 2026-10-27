@@ -82,14 +82,19 @@ let
       [
         {
           key = identity;
-          value = {
-            url =
-              if builtins.elemAt entry 1 != "" then
-                builtins.elemAt entry 1
-              else
-                "https://registry.npmjs.org/${name}/-/${builtins.baseNameOf name}-${resolution}.tgz";
-            inherit hash;
-          };
+          value =
+            let
+              url =
+                if builtins.elemAt entry 1 != "" then
+                  builtins.elemAt entry 1
+                else
+                  "https://registry.npmjs.org/${name}/-/${builtins.baseNameOf name}-${resolution}.tgz";
+            in
+            {
+              inherit url hash;
+            }
+            # Keep normal fetch names; only force extraction for non-.tgz URLs.
+            // (if builtins.match ".*[.]tgz" url == null then { name = "package.tgz"; } else { });
         }
       ]
   ) (builtins.attrValues lock.packages);

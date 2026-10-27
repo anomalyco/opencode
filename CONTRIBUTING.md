@@ -77,22 +77,25 @@ Follow the repository [style guide](./AGENTS.md).
 
 Nix reads package URLs and integrity hashes directly from `bun.lock`, then uses bun2nix to prepare Bun's offline cache. Bun installs the original lockfile, links workspaces and peers, and applies patches. CLI and Desktop share these dependencies.
 
+Archive hosts do not select a registry cache namespace. Registry URLs without a terminal `.tgz` receive an extractable filename; other fetch names, all URLs and integrity hashes remain unchanged.
+
 Changing `bun.lock` updates Nix dependencies automatically. There is no generated lockfile, aggregate `node_modules` hash, or hash-update workflow to maintain.
 
-The stable CLI migrates former Nix `service-prod.json` settings and discovery into the shared `service.json` paths. Existing shared files take precedence. A live former service remains discoverable until the normal client version policy reuses or replaces it.
+Stable releases migrate named and hashed former `prod` settings and discovery into shared `service.json` paths. Existing shared files take precedence, then named `prod`, then hashed `prod`. A live old service retains its implicit port only without saved listener constraints; conflicting saved hostname/port settings use the normal stop/handoff/ensure lifecycle.
 
 The cache filters incompatible `os`/`cpu` constraints using Bun's matching rules. It retains libc variants: Bun 1.4.2 ignores libc, while Bun 1.4.4 filters it per dependency.
 
 GitHub archives use Bun's recorded archive integrity, not a separate Nix tree hash. [GitHub can change archive compression](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives#stability-of-source-code-archives), invalidating that checksum even when Git contents are unchanged. The fetch fails rather than accepting different bytes.
 
-Build the CLI and check source theme/spinner conversions against installed dependencies, compiled service discovery, and Nix service upgrades:
+Build the CLI and check offline cache consumers, source theme/spinner conversions against installed dependencies, compiled discovery, and former-channel upgrades:
 
 ```bash
 nix build .#opencode
+nix build ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).bun-cache"
 nix build ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).runtime"
 ```
 
-CI checks the lock reader, installed CLI runtime, and Desktop build before dependency input changes merge. Unrelated source-only PRs keep evaluation-only Nix checks. The reader supports lockfile v1 registry, GitHub, and HTTP sources with recorded integrity; unsupported formats fail explicitly.
+CI checks the lock reader, offline cache consumers, compiled CLI runtime, and Desktop build before dependency input changes merge. Unrelated source-only PRs keep evaluation-only Nix checks. The reader supports lockfile v1 registry, GitHub, and HTTP sources with recorded integrity; unsupported formats fail explicitly.
 
 ## Pull Requests
 

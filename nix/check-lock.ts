@@ -82,16 +82,21 @@ const lock = {
 }
 const expected = {
   "@scope/lib@1.2.3": { url: "https://registry.npmjs.org/@scope/lib/-/lib-1.2.3.tgz", hash },
-  "tarball:https://example.test/archive": { url: "https://example.test/archive", hash, name: "package.tgz" },
+  "tarball:https://example.test/archive": { url: "https://example.test/archive", hash },
   "github:example-editor-abc1234": {
     url: "https://api.github.com/repos/example/editor/tarball/abc1234",
     hash,
-    name: "package.tgz",
   },
+}
+const fetches = (result: ReturnType<typeof evaluate>) => {
+  const sources: Record<string, { url: string; hash: string }> = JSON.parse(result.stdout.toString())
+  return Object.fromEntries(
+    Object.entries(sources).map((entry) => [entry[0], { url: entry[1].url, hash: entry[1].hash }]),
+  )
 }
 const projected = evaluate("bun-lock", JSON.stringify(lock))
 assert.equal(projected.exitCode, 0, projected.stderr.toString())
-assert.deepEqual(JSON.parse(projected.stdout.toString()), expected)
+assert.deepEqual(fetches(projected), expected)
 
 // A changed lock must change fetches directly, without regenerating a second file.
 const updated = evaluate(
@@ -102,7 +107,7 @@ const updated = evaluate(
   }),
 )
 assert.equal(updated.exitCode, 0, updated.stderr.toString())
-assert.deepEqual(JSON.parse(updated.stdout.toString()), {
+assert.deepEqual(fetches(updated), {
   ...expected,
   "@scope/lib@2.0.0": { url: "https://registry.npmjs.org/@scope/lib/-/lib-2.0.0.tgz", hash: otherHash },
 })

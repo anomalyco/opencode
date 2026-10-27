@@ -44,6 +44,10 @@
           opencode = self.packages.${pkgs.stdenv.hostPlatform.system}.opencode;
         in
         {
+          bun-cache = import ./nix/check-bun-cache.nix {
+            inherit pkgs;
+            bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
+          };
           runtime =
             pkgs.runCommand "opencode-runtime-checks"
               {
@@ -53,6 +57,7 @@
                 OPENCODE_DISABLE_MODELS_FETCH = "1";
               }
               ''
+                test -d ${self.checks.${pkgs.stdenv.hostPlatform.system}.bun-cache}
                 export HOME=$(mktemp -d)
                 export XDG_CONFIG_HOME="$HOME/config" XDG_DATA_HOME="$HOME/data"
                 export XDG_STATE_HOME="$HOME/state" XDG_CACHE_HOME="$HOME/cache"

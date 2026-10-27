@@ -68,6 +68,8 @@ export function legacyFilename(channel = OPENCODE_CHANNEL) {
   return `service-${Hash.fast(channel)}.json`
 }
 
+const prodFilenames = [filename("prod"), legacyFilename("prod")].filter((name) => name !== undefined)
+
 export function versionBelongsToChannel(
   version: string | undefined,
   channel = OPENCODE_CHANNEL,
@@ -91,8 +93,9 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
-  // Nix formerly used "prod"; its named registration belongs to the shared release service.
-  const prod = channel === "latest" && legacy === path.join(path.dirname(file), "service-prod.json")
+  // Nix's named and hashed prod registrations belong to the shared release service.
+  const prod =
+    channel === "latest" && path.dirname(legacy) === path.dirname(file) && prodFilenames.includes(path.basename(legacy))
   if (!prod && !versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
   if (!prod) return
@@ -104,7 +107,8 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
   if (Option.isNone(text)) return
-  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option)) && Option.isNone(decodeLegacy(text.value))) return
+  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option)) && Option.isNone(decodeLegacy(text.value)))
+    return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
@@ -132,15 +136,12 @@ const paths = Effect.gen(function* () {
     fs,
     file,
     // Preserve settings from Nix's former channel without replacing existing shared settings.
-    legacyConfigFile:
-      OPENCODE_CHANNEL === "latest"
-        ? path.join(global.config, "service-prod.json")
-        : legacy
-          ? path.join(global.config, legacy)
-          : undefined,
+    legacyConfigFiles: (OPENCODE_CHANNEL === "latest" ? prodFilenames : legacy ? [legacy] : []).map((name) =>
+      path.join(global.config, name),
+    ),
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      ...(OPENCODE_CHANNEL === "latest" ? [path.join(global.state, "service-prod.json")] : []),
+      ...(OPENCODE_CHANNEL === "latest" ? prodFilenames.map((name) => path.join(global.state, name)) : []),
       // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
       // older build and is left for a released client to replace.
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
@@ -173,8 +174,8 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile, legacyConfigFile } = yield* paths
-  if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
+  const { fs, configFile, legacyConfigFiles } = yield* paths
+  yield* Effect.forEach(legacyConfigFiles, (legacy) => migrateConfig(legacy, configFile), { discard: true })
   const text = yield* fs.readFileString(configFile).pipe(Effect.option)
   if (Option.isNone(text)) return {} as Info
   const info = yield* decodeInfo(text.value).pipe(Effect.option)

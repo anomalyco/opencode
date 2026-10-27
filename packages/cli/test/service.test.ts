@@ -307,7 +307,9 @@ test.each([true, false])("service config migration preserves legacy remote=%s se
     await fs.writeFile(legacy, text)
     await run(ServiceConfig.migrateConfig(legacy, target))
     const migrated = await run(ServiceConfig.read())
-    expect(migrated).toEqual(remote ? { ...settings, remote: { route: expect.stringMatching(/^[0-9a-f]{16}$/) } } : settings)
+    expect(migrated).toEqual(
+      remote ? { ...settings, remote: { route: expect.stringMatching(/^[0-9a-f]{16}$/) } } : settings,
+    )
     expect(await Bun.file(target).json()).toEqual(migrated)
     expect(await run(ServiceConfig.read())).toEqual(migrated)
     expect(await Bun.file(legacy).text()).toBe(text)
@@ -352,18 +354,21 @@ const migrateRegistration = (legacy: string, target: string, channel = "latest")
     ServiceConfig.migrateRegistration(legacy, target, channel, "2.1.4+new").pipe(Effect.provide(NodeFileSystem.layer)),
   )
 
-test("latest adopts former prod discovery idempotently without changing its source", async () => {
-  await using root = await tmpdir("opencode-service-prod-adopt-")
-  const legacy = path.join(root.path, "service-prod.json")
-  const target = path.join(root.path, "service.json")
-  const text = JSON.stringify(formerProd)
-  await fs.writeFile(legacy, text)
+test.each(["service-prod.json", "service-f6c433acac2a27cc06a0625896fe3e540a275ac9.json"])(
+  "latest adopts former prod discovery %s idempotently without changing its source",
+  async (source) => {
+    await using root = await tmpdir("opencode-service-prod-adopt-")
+    const legacy = path.join(root.path, source)
+    const target = path.join(root.path, "service.json")
+    const text = JSON.stringify(formerProd)
+    await fs.writeFile(legacy, text)
 
-  expect(await migrateRegistration(legacy, target)).toBe(formerProd.url)
-  expect(await Bun.file(target).json()).toEqual(formerProd)
-  expect(await migrateRegistration(legacy, target)).toBe(formerProd.url)
-  expect(await Bun.file(legacy).text()).toBe(text)
-})
+    expect(await migrateRegistration(legacy, target)).toBe(formerProd.url)
+    expect(await Bun.file(target).json()).toEqual(formerProd)
+    expect(await migrateRegistration(legacy, target)).toBe(formerProd.url)
+    expect(await Bun.file(legacy).text()).toBe(text)
+  },
+)
 
 test.each([
   { name: "beta channel", channel: "beta" },
@@ -371,6 +376,16 @@ test.each([
   { name: "preview channel", channel: "preview-a" },
   { name: "another directory", directory: "other" },
   { name: "ambiguous filename", source: "service-old-hash.json" },
+  {
+    name: "hashed alias in another channel",
+    channel: "beta",
+    source: "service-f6c433acac2a27cc06a0625896fe3e540a275ac9.json",
+  },
+  {
+    name: "hashed alias in another directory",
+    directory: "other",
+    source: "service-f6c433acac2a27cc06a0625896fe3e540a275ac9.json",
+  },
   { name: "invalid registration", pid: 0 },
 ])("registration alias rejects $name", async (input) => {
   await using root = await tmpdir("opencode-service-prod-reject-")

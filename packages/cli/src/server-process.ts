@@ -71,18 +71,25 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
-      // A renamed prod registration may still advertise the former channel's default port.
-      if (
-        options.port === undefined &&
-        options.hostname === undefined &&
-        serviceOptions?.legacyURL !== undefined &&
-        (yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })) !== undefined
-      )
-        return
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
+      // Keep an old implicit port only when saved listener settings do not conflict.
+      if (options.port === undefined && options.hostname === undefined && serviceOptions?.legacyURL !== undefined) {
+        const legacy = yield* Service.incumbent({ ...serviceOptions, url: serviceOptions.legacyURL })
+        if (legacy !== undefined) {
+          if (
+            (config.hostname === undefined && config.port === undefined) ||
+            (findIncumbent !== undefined && (yield* findIncumbent) !== undefined)
+          )
+            return
+          // A successor must inherit the handoff prepared after this process started.
+          yield* Service.stop({ file: serviceOptions.file, pty: legacy.state === "ready" ? "handoff" : "clear" })
+          yield* Service.ensure(serviceOptions)
+          return
+        }
+      }
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
       // Desktop can launch the service directly without injecting its saved environment.
       Object.assign(process.env, ServiceConfig.processEnv(config.env))
