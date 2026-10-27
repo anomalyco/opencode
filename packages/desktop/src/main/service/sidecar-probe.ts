@@ -11,6 +11,7 @@ import { serviceFile } from "./service-file"
 // moment anyone asks. The probe only looks; a service that has to be started waits for the layers,
 // which set the environment the CLI expects.
 let probe: Promise<Endpoint | undefined> | undefined
+
 let probeFile: string | undefined
 
 export function startSidecarProbe() {
@@ -22,6 +23,7 @@ export function startSidecarProbe() {
     .then((client) => {
       const file = serviceFile(client.fallback(), process.env.OPENCODE_DESKTOP_SERVER_CHANNEL ?? DEFAULT_SERVER_CHANNEL)
       probeFile = file
+
       return client.Service.discover({ file, version })
     })
     .catch(() => undefined)
@@ -29,6 +31,7 @@ export function startSidecarProbe() {
 
 export async function sidecarProbe(file: string) {
   const endpoint = await probe
+
   // Shell initialization can change the selected registration after the probe starts.
   return probeFile === file ? endpoint : undefined
 }
