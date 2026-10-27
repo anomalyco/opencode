@@ -6,6 +6,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
+import { ServiceConfig } from "../src/services/service-config"
 import { isolatedEnv } from "./fixture/environment"
 
 // Real `serve --service` processes driven by the real CLI commands and client. Only behavior that
@@ -191,7 +192,7 @@ async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
     root,
     port,
     entry: homeEntry,
-    registration: path.join(root, "state", "opencode", "service-local.json"),
+    registration: path.join(root, "state", "opencode", ServiceConfig.filename("local", path.join(root, "config"))),
     env: Object.fromEntries(
       Object.entries(isolatedEnv(root, overrides)).filter((entry): entry is [string, string] => entry[1] !== undefined),
     ),
