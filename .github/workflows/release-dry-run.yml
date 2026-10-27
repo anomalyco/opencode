@@ -380,14 +380,23 @@ jobs:
         uses: ./.github/release/download
         with:
           pattern: "{build-npm,build-desktop-darwin-*}"
+      # The certificate has no password, which apple-actions/import-codesign-certs rejects. The sign scripts look up
+      # the identity in build.keychain, and codesign finds the key through the user search list.
       - name: Import certificate
         if: needs.plan.outputs.dry_run != 'true'
-        uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
-        with:
-          keychain: build
-          p12-file-base64: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
-          # The certificate has no password; the action passes this to `security import -P`.
-          p12-password: ""
+        run: |
+          cert="$RUNNER_TEMP/cert.p12"
+          keychain_password=$(openssl rand -base64 32)
+          printf '%s' "$APPLE_SIGNING_CERTIFICATE" | base64 --decode > "$cert"
+          security create-keychain -p "$keychain_password" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$keychain_password" build.keychain
+          security import "$cert" -k build.keychain -P "" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          rm -f "$cert"
+        env:
+          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
       - name: Sign CLI
         if: needs.plan.outputs.cli == 'true'
         run: bash .github/release/sign-cli-macos.sh "$RUNNER_TEMP/in/build-npm" "$RUNNER_TEMP/out"
@@ -406,6 +415,11 @@ jobs:
         with:
           name: sign-macos
           path: ${{ runner.temp }}/out
+      - name: Delete keychain
+        if: always() && needs.plan.outputs.dry_run != 'true'
+        run: |
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security delete-keychain build.keychain || true
 
   # Signs the Windows CLI and every executable and native module of the unpacked desktop apps.
   sign-windows:
