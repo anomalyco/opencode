@@ -27,7 +27,7 @@ export const protocol = DecisionRoute.protocol({
   inlineMedia: true,
   body: {
     from: (request) =>
-      SystemOne.encodeBody(request, "images").pipe(Effect.map((input) => ({ model: request.model.id, input }))),
+      SystemOne.encodeBody(request, "root").pipe(Effect.map((input) => ({ model: request.model.id, input }))),
   },
   response: {
     decode: (response, context) =>

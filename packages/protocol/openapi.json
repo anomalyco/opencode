@@ -579,6 +579,114 @@
         "summary": "List plugins"
       }
     },
+    "/api/plugin/gui": {
+      "get": {
+        "tags": ["plugin"],
+        "operationId": "plugin.gui",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Plugin.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Plugin.GuiBundle"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PluginNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PluginNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read an active plugin's prebuilt CommonJS `./gui-experimental` bundle. Desktop app windows run its default export; the desktop app's main process runs its `main` export. Fails with not found when no active plugin has the id or the plugin exports no `./gui-experimental`.",
+        "summary": "Read plugin GUI bundle"
+      }
+    },
     "/api/plugin/check": {
       "post": {
         "tags": ["plugin"],
@@ -5055,6 +5163,32 @@
             "required": false,
             "style": "deepObject",
             "explode": true
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Model.Type"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Model.Type"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only list models of these types. Defaults to chat, the only type offered for sessions."
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -5123,7 +5257,7 @@
             }
           }
         },
-        "description": "Retrieve the current snapshot of available models ordered by release date. The snapshot may precede initial plugin settlement.",
+        "description": "Retrieve the current snapshot of available models of the requested types, chat by default, ordered by release date within each type. The snapshot may precede initial plugin settlement.",
         "summary": "List models"
       }
     },
@@ -5237,7 +5371,7 @@
         "summary": "Get default model"
       }
     },
-    "/api/experimental/generate": {
+    "/api/experimental/generate/text": {
       "post": {
         "tags": ["generate"],
         "operationId": "experimental.generate.text",
@@ -5275,11 +5409,41 @@
             }
           },
           "404": {
-            "description": "LocationNotFoundError",
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
                 }
               }
             }
@@ -5319,6 +5483,330 @@
                 },
                 "required": ["prompt"],
                 "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/generate": {
+      "post": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.textLegacy",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateTextResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateTextResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Deprecated alias of POST /api/experimental/generate/text.",
+        "summary": "Generate text (deprecated path)",
+        "deprecated": true,
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["prompt"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/generate/image": {
+      "post": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.image",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateImageResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
+        "summary": "Generate images",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Generate.ImageRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/generate/decisions": {
+      "post": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.decisions",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateDecisionsResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateDecisionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Ask a decision model typed predicate, choice and score questions about the input and return one probability-bearing answer per question, in question order. Stateless: nothing is stored.",
+        "summary": "Generate decisions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Generate.DecisionRequest"
               }
             }
           },
@@ -10099,7 +10587,242 @@
       "get": {
         "tags": ["event"],
         "operationId": "event.subscribe",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "types",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "location.shutdown",
+                            "models-dev.refreshed",
+                            "credential.updated",
+                            "credential.switched",
+                            "integration.updated",
+                            "provider.updated",
+                            "model.updated",
+                            "agent.updated",
+                            "session.created",
+                            "session.agent.selected",
+                            "session.model.selected",
+                            "session.moved",
+                            "session.renamed",
+                            "session.metadata.updated",
+                            "session.permissions",
+                            "session.viewed",
+                            "session.archived",
+                            "session.unarchived",
+                            "session.usage.updated",
+                            "session.deleted",
+                            "session.forked",
+                            "session.inbox.delivered",
+                            "session.inbox.enqueued",
+                            "session.inbox.cancelled",
+                            "session.inbox.delivery.changed",
+                            "session.execution.started",
+                            "session.execution.succeeded",
+                            "session.execution.failed",
+                            "session.execution.interrupted",
+                            "session.instructions.updated",
+                            "session.synthetic",
+                            "session.skill.activated",
+                            "session.shell.started",
+                            "session.shell.ended",
+                            "session.step.started",
+                            "session.step.streamed",
+                            "session.step.ended",
+                            "session.step.failed",
+                            "session.text.started",
+                            "session.text.delta",
+                            "session.text.ended",
+                            "session.reasoning.started",
+                            "session.reasoning.delta",
+                            "session.reasoning.ended",
+                            "session.tool.input.started",
+                            "session.tool.input.delta",
+                            "session.tool.input.ended",
+                            "session.tool.called",
+                            "session.tool.progress",
+                            "session.tool.success",
+                            "session.tool.failed",
+                            "session.retry.scheduled",
+                            "session.compaction.started",
+                            "session.compaction.delta",
+                            "session.compaction.ended",
+                            "session.compaction.failed",
+                            "session.revert.staged",
+                            "session.revert.cleared",
+                            "session.revert.committed",
+                            "filesystem.changed",
+                            "reference.updated",
+                            "permission.asked",
+                            "permission.replied",
+                            "plugin.updated",
+                            "project.updated",
+                            "worktree.updated",
+                            "worktree.resolved",
+                            "command.updated",
+                            "config.updated",
+                            "skill.updated",
+                            "pty.created",
+                            "pty.updated",
+                            "pty.exited",
+                            "pty.deleted",
+                            "persistent-pty.added",
+                            "persistent-pty.removed",
+                            "shell.created",
+                            "shell.exited",
+                            "shell.deleted",
+                            "form.created",
+                            "form.replied",
+                            "form.cancelled",
+                            "websearch.updated",
+                            "session.status",
+                            "session.idle",
+                            "tui.prompt.append",
+                            "tui.command.execute",
+                            "tui.toast.show",
+                            "tui.session.select",
+                            "installation.updated",
+                            "installation.update-available",
+                            "vcs.branch.updated",
+                            "mcp.status.changed",
+                            "mcp.resources.changed"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^rpc\\.[\\s\\S]*?$"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "location.shutdown",
+                              "models-dev.refreshed",
+                              "credential.updated",
+                              "credential.switched",
+                              "integration.updated",
+                              "provider.updated",
+                              "model.updated",
+                              "agent.updated",
+                              "session.created",
+                              "session.agent.selected",
+                              "session.model.selected",
+                              "session.moved",
+                              "session.renamed",
+                              "session.metadata.updated",
+                              "session.permissions",
+                              "session.viewed",
+                              "session.archived",
+                              "session.unarchived",
+                              "session.usage.updated",
+                              "session.deleted",
+                              "session.forked",
+                              "session.inbox.delivered",
+                              "session.inbox.enqueued",
+                              "session.inbox.cancelled",
+                              "session.inbox.delivery.changed",
+                              "session.execution.started",
+                              "session.execution.succeeded",
+                              "session.execution.failed",
+                              "session.execution.interrupted",
+                              "session.instructions.updated",
+                              "session.synthetic",
+                              "session.skill.activated",
+                              "session.shell.started",
+                              "session.shell.ended",
+                              "session.step.started",
+                              "session.step.streamed",
+                              "session.step.ended",
+                              "session.step.failed",
+                              "session.text.started",
+                              "session.text.delta",
+                              "session.text.ended",
+                              "session.reasoning.started",
+                              "session.reasoning.delta",
+                              "session.reasoning.ended",
+                              "session.tool.input.started",
+                              "session.tool.input.delta",
+                              "session.tool.input.ended",
+                              "session.tool.called",
+                              "session.tool.progress",
+                              "session.tool.success",
+                              "session.tool.failed",
+                              "session.retry.scheduled",
+                              "session.compaction.started",
+                              "session.compaction.delta",
+                              "session.compaction.ended",
+                              "session.compaction.failed",
+                              "session.revert.staged",
+                              "session.revert.cleared",
+                              "session.revert.committed",
+                              "filesystem.changed",
+                              "reference.updated",
+                              "permission.asked",
+                              "permission.replied",
+                              "plugin.updated",
+                              "project.updated",
+                              "worktree.updated",
+                              "worktree.resolved",
+                              "command.updated",
+                              "config.updated",
+                              "skill.updated",
+                              "pty.created",
+                              "pty.updated",
+                              "pty.exited",
+                              "pty.deleted",
+                              "persistent-pty.added",
+                              "persistent-pty.removed",
+                              "shell.created",
+                              "shell.exited",
+                              "shell.deleted",
+                              "form.created",
+                              "form.replied",
+                              "form.cancelled",
+                              "websearch.updated",
+                              "session.status",
+                              "session.idle",
+                              "tui.prompt.append",
+                              "tui.command.execute",
+                              "tui.toast.show",
+                              "tui.session.select",
+                              "installation.updated",
+                              "installation.update-available",
+                              "vcs.branch.updated",
+                              "mcp.status.changed",
+                              "mcp.resources.changed"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^rpc\\.[\\s\\S]*?$"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -11865,6 +12588,68 @@
         "description": "Stream persistent PTY output through the OpenCode server.",
         "summary": "Connect to a persistent PTY",
         "x-websocket": true
+      }
+    },
+    "/api/experimental/media/{hash}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.media.get",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/MediaHash"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
+        "summary": "Read media blob"
       }
     },
     "/api/shell": {
@@ -15194,6 +15979,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
+          },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
           }
@@ -15217,6 +16005,9 @@
         "properties": {
           "modelID": {
             "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/Model.Type"
           },
           "family": {
             "type": "string"
@@ -15377,6 +16168,9 @@
           },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
           },
           "transport": {
             "$ref": "#/components/schemas/Provider.Transport"
@@ -16481,6 +17275,514 @@
           }
         },
         "required": ["_tag", "id", "message"],
+        "additionalProperties": false
+      },
+      "Generate.ChoiceAnswer": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["choice"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "choice": {
+            "$ref": "#/components/schemas/Generate.ChoiceValue"
+          },
+          "probabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "$ref": "#/components/schemas/Generate.ChoiceValue"
+                },
+                "probability": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": ["value", "probability"],
+              "additionalProperties": false
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["type", "name", "choice", "probabilities", "confidence"],
+        "additionalProperties": false
+      },
+      "Generate.ChoiceQuestion": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["choice"]
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique within the request; echoed on the matching answer"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "$ref": "#/components/schemas/Generate.ChoiceValue"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": ["value"],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["type", "name", "instructions", "choices"],
+        "additionalProperties": false,
+        "description": "Pick one value from a fixed set"
+      },
+      "Generate.ChoiceValue": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          }
+        ],
+        "description": "Choice values are typed: true and \"true\" are different values"
+      },
+      "Generate.DecisionAnswer": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.PredicateAnswer"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.ChoiceAnswer"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.ScoreAnswer"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.ErrorAnswer"
+          }
+        ]
+      },
+      "Generate.DecisionFilePart": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["file"]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Prompt.Base64"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "data", "mime"],
+        "additionalProperties": false
+      },
+      "Generate.DecisionJsonPart": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["json"]
+          },
+          "value": {}
+        },
+        "required": ["type", "value"],
+        "additionalProperties": false
+      },
+      "Generate.DecisionPart": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.DecisionTextPart"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.DecisionJsonPart"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.DecisionFilePart"
+          }
+        ]
+      },
+      "Generate.DecisionQuestion": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.PredicateQuestion"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.ChoiceQuestion"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.ScoreQuestion"
+          }
+        ]
+      },
+      "Generate.DecisionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.DecisionPart"
+            },
+            "description": "The evidence every question is asked about, in order"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.DecisionQuestion"
+            },
+            "minItems": 1,
+            "description": "Question names must be unique; duplicates fail with InvalidRequestError"
+          }
+        },
+        "required": ["model", "input", "questions"],
+        "additionalProperties": false
+      },
+      "Generate.DecisionResult": {
+        "type": "object",
+        "properties": {
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.DecisionAnswer"
+            },
+            "description": "One answer per question, in question order"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/Generate.Usage"
+          },
+          "native": {
+            "$ref": "#/components/schemas/Generate.Native_1"
+          }
+        },
+        "required": ["answers"],
+        "additionalProperties": false
+      },
+      "Generate.DecisionTextPart": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text"]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "text"],
+        "additionalProperties": false
+      },
+      "Generate.ErrorAnswer": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the question has no answer, for example refusal"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "name", "reason"],
+        "additionalProperties": false,
+        "description": "This one question has no answer; the other answers still came back"
+      },
+      "Generate.File": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Prompt.Base64"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["data", "mime"],
+        "additionalProperties": false
+      },
+      "Generate.ImageAspect": {
+        "type": "string",
+        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?:[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+        "description": "Aspect ratio as width:height, for example 16:9"
+      },
+      "Generate.ImageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["image"]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Prompt.Base64"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "data", "mime"],
+        "additionalProperties": false
+      },
+      "Generate.ImageRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.File"
+            }
+          },
+          "n": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "aspect": {
+            "$ref": "#/components/schemas/Generate.ImageAspect"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/Generate.ImageResolution"
+          }
+        },
+        "required": ["model", "prompt"],
+        "additionalProperties": false
+      },
+      "Generate.ImageResolution": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["1K", "2K", "4K"]
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Size tier such as 1K, 2K or 4K; 1K is about as many pixels as 1024x1024 at the requested aspect"
+      },
+      "Generate.ImageResult": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.ImageOutput"
+            }
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/Generate.Usage"
+          },
+          "native": {
+            "$ref": "#/components/schemas/Generate.Native"
+          }
+        },
+        "required": ["images"],
+        "additionalProperties": false
+      },
+      "Generate.Native": {
+        "type": "object",
+        "description": "Provider-specific data the shared fields do not cover"
+      },
+      "Generate.Native_1": {
+        "type": "object",
+        "description": "Provider-specific data the shared fields do not cover"
+      },
+      "Generate.PredicateAnswer": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["predicate"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "probability": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["type", "name", "probability"],
+        "additionalProperties": false
+      },
+      "Generate.PredicateQuestion": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["predicate"]
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique within the request; echoed on the matching answer"
+          },
+          "instructions": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "name", "instructions"],
+        "additionalProperties": false,
+        "description": "The probability that a statement is true"
+      },
+      "Generate.ScoreAnswer": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["score"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "description": "Probability-weighted level index, so it can fall between levels"
+          },
+          "probabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "probability": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": ["value", "label", "probability"],
+              "additionalProperties": false
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["type", "name", "score", "probabilities", "confidence"],
+        "additionalProperties": false
+      },
+      "Generate.ScoreQuestion": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["score"]
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique within the request; echoed on the matching answer"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": ["label"],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["type", "name", "instructions", "levels"],
+        "additionalProperties": false,
+        "description": "Place the input on ordered levels, lowest first"
+      },
+      "Generate.Usage": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Token counts, when the provider reports them"
+      },
+      "GenerateDecisionsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.DecisionResult"
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerateImageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.ImageResult"
+          }
+        },
+        "required": ["data"],
         "additionalProperties": false
       },
       "GenerateTextResponse": {
@@ -17592,6 +18894,10 @@
         "required": ["_tag", "server", "message"],
         "additionalProperties": false
       },
+      "MediaHash": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
       "MessageNotFoundErrorEncoded": {
         "type": "object",
         "properties": {
@@ -17673,6 +18979,9 @@
           },
           "supportsEffortUpdates": {
             "type": "boolean"
+          },
+          "mediaInput": {
+            "$ref": "#/components/schemas/Model.MediaInput"
           }
         },
         "additionalProperties": false
@@ -17731,6 +19040,9 @@
           },
           "canonical": {
             "$ref": "#/components/schemas/Provider.ID"
+          },
+          "type": {
+            "$ref": "#/components/schemas/Model.Type"
           },
           "family": {
             "type": "string"
@@ -17824,6 +19136,10 @@
         "type": "string",
         "enum": ["max_completion_tokens", "max_tokens"]
       },
+      "Model.MediaInput": {
+        "type": "string",
+        "enum": ["assets", "state", "root"]
+      },
       "Model.ReasoningField": {
         "anyOf": [
           {
@@ -17857,6 +19173,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
+          },
           "encoding": {
             "$ref": "#/components/schemas/Provider.Encoding"
           }
@@ -17865,6 +19184,17 @@
           {
             "type": "object",
             "additionalProperties": {}
+          }
+        ]
+      },
+      "Model.Type": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["chat", "decision", "image"]
+          },
+          {
+            "type": "string"
           }
         ]
       },
@@ -17888,6 +19218,26 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "ModelNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ModelNotFoundError"]
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "providerID", "modelID", "message"],
         "additionalProperties": false
       },
       "Money.USD": {
@@ -18376,15 +19726,38 @@
           "rpc": {
             "type": "boolean",
             "enum": [true]
+          },
+          "gui": {
+            "type": "boolean",
+            "enum": [true]
           }
         },
         "additionalProperties": false
+      },
+      "Plugin.GuiBundle": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "options": {
+            "type": "object"
+          }
+        },
+        "required": ["code", "revision", "options"],
+        "additionalProperties": false
+      },
+      "Plugin.ID": {
+        "type": "string"
       },
       "Plugin.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Plugin.ID"
           },
           "source": {
             "$ref": "#/components/schemas/Plugin.Source"
@@ -18495,6 +19868,23 @@
             "additionalProperties": false
           }
         ]
+      },
+      "PluginNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PluginNotFoundError"]
+          },
+          "pluginID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "pluginID", "message"],
+        "additionalProperties": false
       },
       "Project": {
         "type": "object",
@@ -18740,6 +20130,19 @@
         "required": ["id"],
         "additionalProperties": false
       },
+      "Provider.Cache": {
+        "type": "object",
+        "properties": {
+          "ttl": {
+            "$ref": "#/components/schemas/Provider.CacheTTL"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Provider.CacheTTL": {
+        "type": "string",
+        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?(?:ms|s|m|h|d)$"
+      },
       "Provider.Compaction": {
         "anyOf": [
           {
@@ -18792,6 +20195,9 @@
           },
           "cacheFormat": {
             "$ref": "#/components/schemas/Model.CacheFormat"
+          },
+          "mediaInput": {
+            "$ref": "#/components/schemas/Model.MediaInput"
           }
         },
         "additionalProperties": false
@@ -18902,6 +20308,9 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
+          "cache": {
+            "$ref": "#/components/schemas/Provider.Cache"
+          },
           "transport": {
             "$ref": "#/components/schemas/Provider.Transport"
           },
@@ -18935,6 +20344,47 @@
           }
         },
         "required": ["_tag", "providerID", "message"],
+        "additionalProperties": false
+      },
+      "ProviderRequestErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProviderRequestError"]
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": ["authentication", "rate_limit", "content_filter", "invalid_request", "overloaded", "provider"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryAfterMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["_tag", "providerID", "reason", "message"],
         "additionalProperties": false
       },
       "Pty": {
@@ -21142,6 +22592,29 @@
           }
         },
         "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "UnsupportedModelErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["UnsupportedModelError"]
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "providerID", "modelID", "capability", "message"],
         "additionalProperties": false
       },
       "UsageLimits.Budget": {

@@ -15,23 +15,23 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/plugin/gui"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
 import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
-import { ExtensionLinks } from "@/runtime/extension/render"
-import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/extension/panels"
-import { createMobileViews, MobileViewTabs } from "@/runtime/extension/mobile"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
-import { createMountedSession } from "@/runtime/extension/mounted-session"
+import { PluginLinks } from "@/runtime/plugin/render"
+import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/plugin/panels"
+import { createMobileViews, MobileViewTabs } from "@/runtime/plugin/mobile"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
+import { createMountedSession } from "@/runtime/plugin/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
-import { PaneTabs, SideRegion } from "@/runtime/extension/side-region"
-import { createPaneDrag } from "@/runtime/extension/pane-drag"
+import { PaneTabs, SideRegion } from "@/runtime/plugin/side-region"
+import { createPaneDrag } from "@/runtime/plugin/pane-drag"
 import { useLanguage } from "@/runtime/i18n/language"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -54,7 +54,7 @@ export function SessionScreenView(props: { session: SessionModel }) {
   const mounted = createMountedSession(props.session)
 
   return (
-    <ExtensionLinks session={mounted.view()}>
+    <PluginLinks session={mounted.view()}>
       <SessionScreenContent
         session={props.session}
         screen={mounted.screen}
@@ -62,7 +62,7 @@ export function SessionScreenView(props: { session: SessionModel }) {
         bindBackground={mounted.bindBackground}
         bindPrompt={mounted.bindPrompt}
       />
-    </ExtensionLinks>
+    </PluginLinks>
   )
 }
 
@@ -72,11 +72,11 @@ function SessionScreenContent(props: {
   view: Accessor<MountedSession>
   screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
-  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void }) => void
+  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void; focused: () => boolean }) => void
 }) {
   const session = props.session
   const language = useLanguage()
-  const attachment = useExtensionAttachment()
+  const attachment = usePluginAttachment()
   const settings = useSettings()
   const server = useServer()
   const isDesktop = session.isDesktop
@@ -235,7 +235,7 @@ function SessionScreenContent(props: {
   })
 
   props.bindBackground(composer.requests.background.tasks)
-  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus })
+  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus, focused: composer.focused })
   useUsageExceededDialogs({
     selection: () => composer.active()?.composer.model.selection,
     onDone: () => composer.active()?.composer.restoreFocus(),
@@ -381,7 +381,7 @@ function SessionScreenContent(props: {
                   view={props.view()}
                   sidebar={sidebar}
                   visible={mobileView() === entry.key}
-                  open={() => region.openFor(entry.extension)}
+                  open={() => region.openFor(entry.plugin)}
                 />
               </div>
             )}
@@ -399,7 +399,7 @@ function SessionScreenContent(props: {
                 view={props.view()}
                 sidebar={sidebar}
                 visible
-                open={() => region.openFor(entry().extension)}
+                open={() => region.openFor(entry().plugin)}
               />
             )}
           </Match>
@@ -420,6 +420,8 @@ function SessionScreenContent(props: {
           {(model) => (
             <ActiveSessionComposerRegion
               session={session}
+              view={props.view}
+              screen={props.screen}
               model={model}
               suggestionBoundary={timeline.visible}
               onReveal={timeline.actions.revealPart}

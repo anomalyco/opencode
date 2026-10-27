@@ -1,7 +1,7 @@
 [data-component="dock-prompt"][data-kind="question"] {
   --v2-question-answer-bg-selected: light-dark(#f5f8ff, #7698fd26);
-  /* A bounce-0 spring sampled for CSS: every selection, focus and progress change eases on it, so two answers trading
-     places always cross in the same frames. */
+  /* A bounce-0 spring sampled for CSS: with the dock's motion on, every pick and progress change eases on it, so two
+     answers trading places always cross in the same frames. */
   --question-spring: linear(
     0,
     0.04,
@@ -26,7 +26,6 @@
     1
   );
   --question-pick: 120ms;
-  --question-quick: 200ms;
   --question-settle: 300ms;
 
   max-block-size: var(--question-prompt-max-height, 100dvh);
@@ -84,11 +83,25 @@
     }
   }
 
+  /* Holds the question text at its sprung height, and the outgoing copy of it while questions switch. It reaches into
+     the header's side padding, so text sliding past a side fades out in that gutter instead of over the text at rest. */
+  [data-slot="question-details-frame"] {
+    --question-gutter: 10px;
+    position: relative;
+    min-inline-size: 0;
+    margin-inline: calc(-1 * var(--question-gutter));
+    padding-inline: var(--question-gutter);
+    overflow: clip;
+    mask-composite: intersect;
+  }
+
+  /* A question switching away shrinks toward its top, and the next one grows from there. */
   [data-slot="question-details"] {
     display: flex;
     flex-direction: column;
     gap: 4px;
     min-inline-size: 0;
+    transform-origin: 50% 0;
   }
 
   [data-slot="question-text"] {
@@ -109,11 +122,38 @@
     overflow-wrap: anywhere;
   }
 
+  /* Each segment is a 20px button holding a 14px dash, 2px apart, so dashes repeat every 22px from 3px in. */
   [data-slot="question-progress"] {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 2px;
     flex-shrink: 0;
+  }
+
+  /* The current question's bar slides along a strip that shows only through the dashes, never in the gaps. */
+  [data-slot="question-progress-track"] {
+    position: absolute;
+    z-index: 1;
+    inset-inline: 0;
+    inset-block-start: calc(50% - 1px);
+    block-size: 2px;
+    pointer-events: none;
+    -webkit-mask-image: repeating-linear-gradient(to right, transparent 0 3px, #000 3px 17px, transparent 17px 22px);
+    mask-image: repeating-linear-gradient(to right, transparent 0 3px, #000 3px 17px, transparent 17px 22px);
+  }
+
+  [data-slot="question-progress"]:has(:disabled) [data-slot="question-progress-track"] {
+    opacity: 0.5;
+  }
+
+  [data-slot="question-progress-current"] {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 3px;
+    inline-size: 14px;
+    background-color: var(--v2-icon-icon-base);
+    will-change: transform;
   }
 
   [data-slot="question-progress-segment"] {
@@ -132,10 +172,6 @@
 
     &[data-answered="true"] [data-slot="question-progress-bar"]::before {
       transform: scaleX(1);
-    }
-
-    &[data-active="true"] [data-slot="question-progress-bar"]::after {
-      opacity: 1;
     }
 
     &:focus-visible {
@@ -157,25 +193,14 @@
     overflow: hidden;
     background-color: var(--v2-background-bg-layer-04);
 
-    &::before,
-    &::after {
+    /* Answering fills the segment from its start. */
+    &::before {
       content: "";
       position: absolute;
       inset: 0;
-    }
-
-    /* Answering fills the segment from its start; the current question sits on top in its own colour. */
-    &::before {
       background-color: var(--v2-background-bg-accent);
       transform: scaleX(0);
       transform-origin: left;
-      transition: transform var(--question-settle) var(--question-spring);
-    }
-
-    &::after {
-      background-color: var(--v2-icon-icon-muted);
-      opacity: 0;
-      transition: opacity var(--question-quick) var(--question-spring);
     }
 
     &:dir(rtl)::before {
@@ -191,18 +216,29 @@
     min-inline-size: 0;
   }
 
+  /* Reaches into the body's side padding like the question text's frame, for the same gutter. */
   [data-slot="question-options"] {
+    --question-gutter: 8px;
     flex: 1 1 auto;
     min-block-size: 0;
     min-inline-size: 0;
-    margin: 0;
+    margin: 0 calc(-1 * var(--question-gutter));
     padding: 0;
     overflow-y: auto;
     scrollbar-width: none;
+    mask-composite: intersect;
 
     &::-webkit-scrollbar {
       display: none;
     }
+  }
+
+  /* Holds the answers and the outgoing copy of them while questions switch. It clips them at its sides, so answers
+     sliding past never make the box scroll sideways. */
+  [data-slot="question-options-track"] {
+    position: relative;
+    padding-inline: var(--question-gutter);
+    overflow-x: clip;
   }
 
   [data-slot="question-options-list"] {
@@ -211,10 +247,11 @@
     gap: 2px;
     position: relative;
     isolation: isolate;
+    transform-origin: 50% 0;
   }
 
-  /* One highlight for the whole list, painted under the answers. It glides to the highlighted answer by its clip; the
-     pick itself shows only on the answer's key. */
+  /* One highlight for the whole list, painted under the answers. It jumps to the hovered or keyboard-highlighted answer
+     by its clip, and shows only while the pointer hovers or the keys drive; the pick itself shows only on the key. */
   [data-slot="question-highlight"] {
     position: absolute;
     inset: 0;
@@ -224,7 +261,10 @@
       var(--v2-background-bg-layer-01);
     clip-path: inset(0 0 100% round 6px);
     pointer-events: none;
-    transition: clip-path var(--question-settle) var(--question-spring);
+
+    &[data-shown="false"] {
+      visibility: hidden;
+    }
   }
 
   [data-slot="question-option"] {
@@ -280,9 +320,6 @@
     font-weight: 530;
     line-height: 1;
     font-variant-numeric: tabular-nums;
-    transition:
-      color var(--question-pick) var(--question-spring),
-      box-shadow var(--question-pick) var(--question-spring);
 
     &::before {
       content: "";
@@ -292,7 +329,6 @@
       border-radius: inherit;
       background-color: var(--v2-background-bg-accent);
       opacity: 0;
-      transition: opacity var(--question-pick) var(--question-spring);
     }
 
     &[data-type="checkbox"] {
@@ -461,6 +497,39 @@
     gap: 8px;
   }
 
+  /* While a switch runs, the dock draws the footer buttons frame by frame; at rest these rules place them. */
+  [data-slot="question-footer-back"][data-shown="false"] {
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  [data-slot="question-advance"] {
+    position: relative;
+    display: flex;
+  }
+
+  [data-slot="question-advance-face"] {
+    display: flex;
+  }
+
+  [data-slot="question-advance-face"][data-active="false"] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  [data-slot="question-advance-face"][data-active="true"] {
+    z-index: 1;
+  }
+
+  [data-slot="question-advance-label"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   [data-slot="question-submit-shortcut"] {
     flex-shrink: 0;
     opacity: 0.6;
@@ -472,20 +541,28 @@
     }
   }
 
-  /* Reduced motion keeps the fades and drops the movement. */
-  :root[data-motion="reduce"] & {
-    [data-slot="question-highlight"] {
-      transition: none;
+  /* Without the dock's motion there is no sliding bar, so the current question's dash lights itself. */
+  [data-component="session-question-dock"][data-animated="false"] & {
+    [data-slot="question-progress-segment"][data-active="true"] [data-slot="question-progress-bar"]::before {
+      background-color: var(--v2-icon-icon-base);
+      transform: scaleX(1);
     }
+  }
 
+  /* Picks and answered dashes ease only while the dock's motion is on; otherwise they change on the same frame. */
+  [data-component="session-question-dock"][data-animated="true"] & {
     [data-slot="question-progress-bar"]::before {
-      transform: none;
-      opacity: 0;
-      transition: opacity var(--question-quick) linear;
+      transition: transform var(--question-settle) var(--question-spring);
     }
 
-    [data-slot="question-progress-segment"][data-answered="true"] [data-slot="question-progress-bar"]::before {
-      opacity: 1;
+    [data-slot="question-option-key"] {
+      transition:
+        color var(--question-pick) var(--question-spring),
+        box-shadow var(--question-pick) var(--question-spring);
+
+      &::before {
+        transition: opacity var(--question-pick) var(--question-spring);
+      }
     }
   }
 }

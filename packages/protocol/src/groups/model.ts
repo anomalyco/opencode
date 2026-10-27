@@ -5,10 +5,17 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
+const ListQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  types: Schema.optional(Schema.ArrayEnsure(Model.Type)).annotate({
+    description: "Only list models of these types. Defaults to chat, the only type offered for sessions.",
+  }),
+})
+
 export const ModelGroup = HttpApiGroup.make("server.model")
   .add(
     HttpApiEndpoint.get("model.list", "/api/model", {
-      query: LocationQuery,
+      query: ListQuery,
       success: Location.response(Schema.Array(Model.Info)),
       error: ServiceUnavailableError,
     })
@@ -18,7 +25,7 @@ export const ModelGroup = HttpApiGroup.make("server.model")
           identifier: "model.list",
           summary: "List models",
           description:
-            "Retrieve the current snapshot of available models ordered by release date. The snapshot may precede initial plugin settlement.",
+            "Retrieve the current snapshot of available models of the requested types, chat by default, ordered by release date within each type. The snapshot may precede initial plugin settlement.",
         }),
       ),
   )

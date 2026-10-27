@@ -217,6 +217,7 @@ function overlay(
       if (item.package !== undefined) model.package = undefined
       if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
     }
+    if (config.type !== undefined) model.type = config.type
     if (config.family !== undefined) model.family = config.family
     if (config.name) model.name = config.name
     if (config.modelID !== undefined) model.modelID = config.modelID

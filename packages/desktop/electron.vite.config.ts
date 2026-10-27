@@ -1,8 +1,8 @@
 import { defineConfig } from "electron-vite"
 import type { Plugin } from "vite"
-import { BetaNotes } from "./scripts/beta-notes"
-import { pickerPlugin } from "./scripts/picker"
-import { nodePtyPackage } from "./scripts/utils"
+import { BetaNotes } from "./script/beta-notes"
+import { pickerPlugin } from "./script/picker"
+import { nodePtyPackage } from "./script/utils"
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
@@ -15,23 +15,6 @@ function resolveChannel() {
 }
 
 const appPlugin = (await import("@opencode/app/vite")).default
-
-const sentry =
-  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-    ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        telemetry: false,
-        release: {
-          name: process.env.SENTRY_RELEASE ?? process.env.VITE_SENTRY_RELEASE,
-        },
-        sourcemaps: {
-          assets: "./out/renderer/**",
-          filesToDeleteAfterUpload: "./out/renderer/**/*.map",
-        },
-      })
-    : false
 
 // Every module the entry reaches through static imports lands in one chunk. Automatic splitting
 // otherwise fragments the initial graph into ~50 files shared with lazy routes, and each file costs
@@ -139,7 +122,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
           command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
         ),
       },
-      plugins: [pickerPlugin(), appPlugin, initialChunk, sentry],
+      plugins: [pickerPlugin(), appPlugin, initialChunk],
       publicDir: "../../../app/public",
       root: "src/renderer",
       build: {

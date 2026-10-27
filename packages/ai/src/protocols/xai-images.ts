@@ -95,12 +95,9 @@ const decodeDocument = route.decodeJson(XAIImageResponse)
 
 const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
-  context: MediaProtocol.DecodeContext<Request>,
 ) {
   const output = yield* decodeDocument(response)
   const decoded = output.value
-  const requested = context.request.resolution
-  const used = resolution(context.request)
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
     MediaInput.imageOutput(output.invalid, `${route.name} result ${index}`, item, item.mime_type ?? undefined, {
       providerMetadata:
@@ -114,10 +111,6 @@ const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
   // provider metadata.
   return new ImageResponse({
     images,
-    notices:
-      requested === undefined || requested.toLowerCase() === used
-        ? undefined
-        : [{ type: "other", message: `${route.name} doesn't offer ${requested}; used ${used}` }],
     providerMetadata: decoded.usage === undefined ? undefined : { xai: { usage: decoded.usage } },
   })
 })

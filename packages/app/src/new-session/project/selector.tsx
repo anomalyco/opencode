@@ -9,8 +9,8 @@ export type PromptServer = {
   name: string
   /** "This computer" beside the current server's name in the server picker. */
   hint?: string
-  kind: "current" | "remote" | "extension"
-  /** The extension's short badge, e.g. "SSH". */
+  kind: "current" | "remote" | "plugin"
+  /** The plugin's short badge, e.g. "SSH". */
   label?: string
 }
 

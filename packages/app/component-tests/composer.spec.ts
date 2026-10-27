@@ -472,7 +472,7 @@ story("grows suggestions while preserving visible timeline context", async ({ mo
   const boundary = component.locator('[data-slot="composer-suggestion-boundary-story"]')
   const suggestions = component.locator('[data-component="composer-suggestions"]')
 
-  await expect(suggestions).toHaveCSS("max-height", "166px")
+  await expect(suggestions).toHaveCSS("max-height", "164px")
   await expect(suggestions).toHaveCSS("scroll-padding-bottom", "18px")
   await expect.poll(() => suggestions.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
   await expect
@@ -497,12 +497,43 @@ story("grows suggestions while preserving visible timeline context", async ({ mo
   await boundary.evaluate((element) => {
     element.style.height = "400px"
   })
-  await expect(suggestions).toHaveCSS("max-height", "306px")
+  await expect(suggestions).toHaveCSS("max-height", "304px")
+})
+
+story("keeps the @ menu and its last results open while the next search is pending", async ({ mount }) => {
+  const component = await mount("opencode-composer-flow--slow-file-search")
+  const input = component.getByRole("textbox", { name: "Prompt", exact: true })
+  const menu = component.locator('[data-component="composer-suggestions"]')
+  const row = (id: string) => menu.locator(`[data-suggestion-id="${id}"]`)
+  const pending = (query: string) => component.getByRole("button", { name: `Return files for ${query}`, exact: true })
+
+  await input.pressSequentially("@r")
+  await pending("r").click()
+  await expect(row("file:r/plan.md")).toBeVisible()
+  await expect(row("agent:review")).toHaveAttribute("data-active", "")
+  const height = (await menu.boundingBox())!.height
+
+  await input.pressSequentially("e")
+  await expect(pending("re")).toBeVisible()
+  await expect(row("file:r/plan.md")).toBeVisible()
+  expect((await menu.boundingBox())!.height).toBe(height)
+
+  await pending("re").click()
+  await expect(row("file:re/plan.md")).toBeVisible()
+  await expect(row("file:r/plan.md")).toHaveCount(0)
+  await expect(row("agent:review")).toHaveAttribute("data-active", "")
+
+  // Only a settled search with nothing to show empties the menu, and it stays open to say so.
+  await input.pressSequentially("z")
+  await expect(pending("rez")).toBeVisible()
+  await expect(row("file:re/plan.md")).toBeVisible()
+  await pending("rez").click()
+  await expect(menu.getByText("No matching items", { exact: true })).toBeVisible()
 })
 
 story("ignores a detached suggestion boundary", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--detached-command-suggestion-boundary")
-  await expect(component.locator('[data-component="composer-suggestions"]')).toHaveCSS("max-height", "306px")
+  await expect(component.locator('[data-component="composer-suggestions"]')).toHaveCSS("max-height", "304px")
 })
 
 // ThemeProvider writes resolved token values into a <style> block, so toggling data-color-scheme by hand

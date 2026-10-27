@@ -647,9 +647,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         const cause =
           detach === "scroll" ? "scrolling the touch target out of view" : "streaming replaces the touch target"
 
-        test(`returns Home after ${cause} (${release})${detach === "scroll" ? " @quarantine" : ""}`, async ({
-          page,
-        }, testInfo) => {
+        test(`returns Home after ${cause} (${release})`, async ({ page }, testInfo) => {
           const image = Promise.withResolvers<void>()
           const url = new URL(`/${detach}-target-image.svg`, testInfo.project.use.baseURL).href
           await page.route(url, async (route) => {
@@ -722,18 +720,22 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
 
           if (detach === "scroll") {
             const bounds = (await scroller.boundingBox())!
-            const touched = page.getByText("Part 66.", { exact: true })
+            // The timeline scrolls on under the composer, and rows behind it stay mounted, so the drag must carry the
+            // touched row past the bottom of the screen before virtualization removes it.
+            const touched = page.getByText("Part 68.", { exact: true })
             await expect(touched).toBeInViewport()
+            const box = (await touched.boundingBox())!
+            const point = { x: bounds.x + 100, y: box.y + box.height / 2 }
             await devtools.send("Input.dispatchTouchEvent", {
               type: "touchStart",
-              touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 }],
+              touchPoints: [point],
               timestamp: restingTimestamp(),
             })
 
             for (let step = 1; step <= 23; step++)
               await devtools.send("Input.dispatchTouchEvent", {
                 type: "touchMove",
-                touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 + step * 30 }],
+                touchPoints: [{ x: point.x, y: point.y + step * 30 }],
                 timestamp: restingTimestamp(),
               })
             await expect(touched).not.toBeInViewport()
@@ -765,7 +767,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await expect(hidden).toHaveCount(1)
           }
 
-          const anchor = page.getByText(detach === "scroll" ? "Part 47." : "Reading 20.", { exact: true })
+          const anchor = page.getByText(detach === "scroll" ? "Part 48." : "Reading 20.", { exact: true })
           await expect(anchor).toBeInViewport()
           const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
           image.resolve()

@@ -612,13 +612,7 @@ describe("Transcription", () => {
 
       expect(truncated.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
       expect(partial.text).toBe("Hello")
-      expect(partial.notices).toEqual([
-        {
-          type: "other",
-          message: "Google Transcription finished with MAX_TOKENS",
-          providerMetadata: { google: { finishReason: "MAX_TOKENS" } },
-        },
-      ])
+      expect(partial.providerMetadata?.google).toMatchObject({ finishReason: "MAX_TOKENS" })
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
     }),
   )

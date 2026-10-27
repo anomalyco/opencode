@@ -291,6 +291,16 @@ describe("Media", () => {
       yield* fs.writeFile(plain, new TextEncoder().encode("# hi"))
       expect((yield* Media.file(plain)).mediaType).toBe("text/markdown")
 
+      for (const [name, mediaType] of [
+        ["photo.avif", "image/avif"],
+        ["photo.HEIC", "image/heic"],
+        ["photo.heif", "image/heif"],
+        ["clip.mov", "video/quicktime"],
+      ]) {
+        yield* fs.writeFile(`${dir}/${name}`, Uint8Array.from([1, 2, 3]))
+        expect((yield* Media.file(`${dir}/${name}`)).mediaType).toBe(mediaType)
+      }
+
       const target = `${dir}/copy.png`
       yield* Media.write(Media.base64("AQID", "image/png"), target)
       expect(yield* fs.readFile(target)).toEqual(Uint8Array.from([1, 2, 3]))

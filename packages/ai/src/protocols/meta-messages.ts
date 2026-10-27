@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { LLMRequest } from "../schema/index.js"
+import { CacheTTL, type LLMRequest } from "../schema/index.js"
 import { AnthropicMessages } from "./anthropic-messages.js"
 import { MetaResponses } from "./meta-responses.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
@@ -12,7 +12,7 @@ const WebSearch = Schema.Struct({
 })
 const MetaCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  ttl: Schema.optional(CacheTTL),
 })
 const FunctionTool = Schema.Struct({
   name: Schema.String,

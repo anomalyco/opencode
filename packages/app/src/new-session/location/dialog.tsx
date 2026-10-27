@@ -71,6 +71,7 @@ function NewSessionLocationDialog(props: {
   const global = useGlobal()
   const servers = useServers()
   const serverSDK = useServerSDK()
+
   const [store, setStore] = createStore<{
     drilled?: PromptProject
     /** Picking the server to add a project to. */
@@ -101,6 +102,7 @@ function NewSessionLocationDialog(props: {
         [],
     }),
   )
+
   // `latest` only skips Suspense once the resource has resolved at least once. Before that it behaves like a plain
   // read, which suspends the dialog and makes it flash on the first drill into a project.
   const listedItems = (project: PromptProject) => {
@@ -204,9 +206,11 @@ function NewSessionLocationDialog(props: {
 
   createEffect(() => {
     if (!activeEntry()) return
+
     const frame = requestAnimationFrame(() =>
       resultsRef?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" }),
     )
+
     onCleanup(() => cancelAnimationFrame(frame))
   })
 
@@ -277,6 +281,7 @@ function NewSessionLocationDialog(props: {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    // SAFETY: this handler is only attached to the search TextInput's <input>, so currentTarget is that element.
     const target = event.currentTarget as HTMLInputElement
     const atEnd = target.selectionStart === target.value.length && target.selectionEnd === target.value.length
     const atStart = target.selectionStart === 0 && target.selectionEnd === 0
@@ -559,12 +564,20 @@ function ServerTag(props: { server?: PromptServer }) {
   )
 }
 
+function workspaceIcon(value: string) {
+  if (value === "main") return "monitor"
+
+  if (value === "create") return "plus"
+
+  return "outline-worktree"
+}
+
 function WorkspaceRow(props: { title: string; value: string; description: string }) {
   return (
     <>
       <div class="command-palette-row-main">
         <Icon
-          name={props.value === "main" ? "monitor" : props.value === "create" ? "plus" : "outline-worktree"}
+          name={workspaceIcon(props.value)}
           class="command-palette-row-icon"
           classList={{ "!text-v2-icon-icon-accent": props.value !== "main" && props.value !== "create" }}
         />
@@ -590,5 +603,5 @@ function tagged(server?: PromptServer) {
 function serverIcon(server: PromptServer) {
   if (server.kind === "current") return "monitor"
 
-  return server.kind === "extension" ? "terminal" : "globe"
+  return server.kind === "plugin" ? "terminal" : "globe"
 }

@@ -10,6 +10,7 @@ import { Headers } from "effect/http"
 import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
+  CacheTTL,
   HttpOptions,
   LLMRequest,
   LLMEvent,
@@ -80,7 +81,7 @@ export type ContextManagement = typeof ContextManagement.Type
 // =============================================================================
 const AnthropicCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  ttl: Schema.optional(CacheTTL),
 })
 const AnthropicServiceTier = knownString<"auto" | "standard_only">()
 const AnthropicSpeed = knownString<"fast" | "standard">()
@@ -533,9 +534,6 @@ const invalid = ProviderShared.invalidRequest
 // that exceed it.
 const ANTHROPIC_BREAKPOINT_CAP = 4
 
-const EPHEMERAL_5M = { type: "ephemeral" as const }
-const EPHEMERAL_1H = { type: "ephemeral" as const, ttl: "1h" as const }
-
 const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefined) => {
   if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
   if (breakpoints.remaining <= 0) {
@@ -543,7 +541,7 @@ const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefin
     return undefined
   }
   breakpoints.remaining -= 1
-  return Cache.ttlBucket(cache.ttlSeconds) === "1h" ? EPHEMERAL_1H : EPHEMERAL_5M
+  return { type: "ephemeral" as const, ...(cache.ttl === undefined ? {} : { ttl: cache.ttl }) }
 }
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })

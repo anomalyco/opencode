@@ -3,8 +3,11 @@ import type { Page } from "@playwright/test"
 export type PromptPosition = { frame: number; top: number | null }
 
 // Paint user bubbles a test-only blue that the frame reader can tell from everything else, whatever the theme colour.
+// The bubble's colour transition would otherwise paint the next frames in a blend of grey and blue.
 export async function markPrompt(page: Page) {
-  await page.addStyleTag({ content: '[data-slot="user-message-text"] { background: rgb(0 0 255) !important; }' })
+  await page.addStyleTag({
+    content: '[data-slot="user-message-text"] { background: rgb(0 0 255) !important; transition: none !important; }',
+  })
 }
 
 // Records painted compositor frames; the returned stop function reads the prompt position in each frame.

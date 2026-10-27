@@ -69,6 +69,15 @@ const PublicInboxInfo = Schema.Union([
   PublicMove,
 ]).annotate({ identifier: "Session.Inbox.Info" })
 
+/** Experimental: the `session.inbox.list` response for clients that opt into `experimental-media-uri`. */
+export const SessionMediaInboxResponse = Schema.Struct({
+  data: Schema.Array(
+    Schema.Union([SessionInbox.MediaUser, SessionInbox.Synthetic, SessionInbox.Compaction, PublicMove]).annotate({
+      identifier: "Session.Inbox.MediaInfo",
+    }),
+  ),
+})
+
 // Transcripts exported before v2.1 carry older names for native data. The wire stays plain JSON so any export file
 // is accepted; decoding upgrades those names and then validates the current message shape.
 const ImportedMessages = Schema.Array(Schema.Json).pipe(

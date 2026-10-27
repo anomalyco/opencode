@@ -34,15 +34,12 @@ export type DesktopMenuRole =
   | "quit"
   | "redo"
   | "reload"
-  | "resetZoom"
   | "selectAll"
   | "toggleDevTools"
   | "togglefullscreen"
   | "undo"
   | "unhide"
   | "windowMenu"
-  | "zoomIn"
-  | "zoomOut"
 
 export type DesktopMenuItem = {
   type: "item"
@@ -61,6 +58,20 @@ export type DesktopMenuSeparator = {
 }
 
 export type DesktopMenuEntry = DesktopMenuItem | DesktopMenuSeparator
+
+// Slack's desktop zoom levels from 100% up. Zoom In, Zoom Out and the Appearance setting all pick one.
+export const desktopZoomLevels = [1, 1.1, 1.25, 1.5, 1.75, 2] as const
+
+export type DesktopZoomLevel = (typeof desktopZoomLevels)[number]
+
+/** The level after `factor` in `direction`. A pinch can leave `factor` between two levels. */
+export function nextDesktopZoomLevel(factor: number, direction: "in" | "out"): DesktopZoomLevel {
+  // Chromium stores zoom on a log scale, so a factor read back can be a hair off the level it was set to.
+  if (direction === "in")
+    return desktopZoomLevels.find((level) => level > factor + 0.01) ?? desktopZoomLevels[desktopZoomLevels.length - 1]
+
+  return desktopZoomLevels.findLast((level) => level < factor - 0.01) ?? desktopZoomLevels[0]
+}
 
 export type DesktopMenu = {
   id: string
@@ -202,22 +213,19 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         type: "item",
         labelKey: "desktop.menu.actualSize",
         action: "view.resetZoom",
-        role: "resetZoom",
-        accelerator: { windows: "Ctrl+0" },
+        accelerator: { macos: "Cmd+0", windows: "Ctrl+0" },
       },
       {
         type: "item",
         labelKey: "desktop.menu.zoomIn",
         action: "view.zoomIn",
-        role: "zoomIn",
-        accelerator: { windows: "Ctrl++" },
+        accelerator: { macos: "Cmd+=", windows: "Ctrl++" },
       },
       {
         type: "item",
         labelKey: "desktop.menu.zoomOut",
         action: "view.zoomOut",
-        role: "zoomOut",
-        accelerator: { windows: "Ctrl+-" },
+        accelerator: { macos: "Cmd+-", windows: "Ctrl+-" },
       },
       { type: "separator" },
       {
@@ -286,19 +294,22 @@ export function desktopMenuVisible(item: { platforms?: DesktopMenuPlatform[] }, 
   return !item.platforms || item.platforms.includes(platform)
 }
 
-/** What a GUI extension's menubar item names in `after`: a built-in item's command, action, or role. */
+/** What a GUI plugin's menubar item names in `after`: a built-in item's command, action, or role. */
 export function desktopMenuKey(entry: DesktopMenuEntry) {
   if (entry.type === "separator") return undefined
 
   return entry.command ?? entry.action ?? entry.role
 }
 
-/** Places extension items after the entry their `after` names, or at the end of the menu. */
-export function desktopMenuWithExtensions<Entry, Extra extends { readonly id: string; readonly after?: string }>(
-  base: readonly { readonly key?: string; readonly entry: Entry }[],
+/** A menu entry with the key a plugin item's `after` can name. */
+export type DesktopMenuPlaced<Entry> = { readonly key?: string; readonly entry: Entry }
+
+/** Places plugin items after the entry their `after` names, or at the end of the menu. */
+export function desktopMenuWithPlugins<Entry, Extra extends { readonly id: string; readonly after?: string }>(
+  base: readonly DesktopMenuPlaced<Entry>[],
   extra: readonly Extra[],
 ) {
-  const list: { readonly key?: string; readonly entry: Entry | Extra }[] = [...base]
+  const list: DesktopMenuPlaced<Entry | Extra>[] = [...base]
 
   extra.forEach((item) => {
     const next = { key: item.id, entry: item }

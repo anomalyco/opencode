@@ -2430,12 +2430,12 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("maps ttlSeconds >= 3600 to cache_control ttl: '1h'", () =>
+  it.effect("sends the hint ttl on cache_control", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
           prompt: "hi",
         }),
       )

@@ -552,6 +552,29 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("lists remote branches without remote HEAD symrefs", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await $`git tag main`.cwd(directory).quiet()
+          await $`git remote add origin ${directory}`.cwd(directory).quiet()
+          await $`git remote add fork ${directory}`.cwd(directory).quiet()
+          await $`git fetch --quiet origin`.cwd(directory).quiet()
+          await $`git fetch --quiet fork`.cwd(directory).quiet()
+          await $`git remote set-head origin main`.cwd(directory).quiet()
+          await $`git remote set-head fork main`.cwd(directory).quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["main", "fork/main", "origin/main"])
+        expect(yield* vcs.branches({ limit: 2 })).toEqual(["main", "fork/main"])
+        expect(yield* vcs.branches({ search: "origin" })).toEqual(["origin/main"])
+        expect(yield* vcs.branches({ search: "MAIN", limit: 2 })).toEqual(["main", "fork/main"])
+      }),
+    ),
+  )
+
   it.live("reports modified, deleted, and untracked files", () =>
     withGit((directory) =>
       Effect.gen(function* () {

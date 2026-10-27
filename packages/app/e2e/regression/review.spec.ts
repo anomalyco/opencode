@@ -123,8 +123,8 @@ test("a rejected Git init releases its session's button without showing an error
   await expect(init).toBeEnabled()
 })
 
-test("open file tab browses, searches, and tracks missing files @quarantine", async ({ page }) => {
-  const searches: { query: string; dirs?: string; limit?: number }[] = []
+test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
+  const searches: { query: string; dirs?: string; limit?: number; directory: string }[] = []
   const directory = "C:/OpenCode/ReviewOpenFile"
   const files = Array.from({ length: 80 }, (_, index) => `file-${String(index).padStart(2, "0")}.ts`)
 
@@ -216,7 +216,7 @@ test("open file tab browses, searches, and tracks missing files @quarantine", as
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:src/nested.ts", { exact: true })).toBeVisible()
-  expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200 })
+  expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200, directory })
 
   await browseFiles(page)
   await expect(tab("nested.ts")).toHaveCount(1)
@@ -252,6 +252,9 @@ test("open file tab browses, searches, and tracks missing files @quarantine", as
   await expect
     .poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
     .toBeLessThanOrEqual(1)
+  // The tree ignores the pointer until a scroll settles. A click before then hits the scroller, and Playwright's retry
+  // scrolls the row into view itself, which moves the position this case guards.
+  await expect(viewport.locator("[data-file-tree-virtualized-list]")).not.toHaveAttribute("data-is-scrolling")
   const scrolled = await viewport.evaluate((element) => element.scrollTop)
   expect(scrolled).toBeGreaterThan(0)
   await root.evaluate((element) => void (element.dataset.e2eProbe = "original"))
@@ -313,7 +316,7 @@ for (const listed of [false, true]) {
 }
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
-  // A /btw tab saved before extensions must not linger as a hidden tab that keeps the region open.
+  // A /btw tab saved before plugins must not linger as a hidden tab that keeps the region open.
   await openSession(page, {
     name: "ReviewContextOpener",
     seed: {
@@ -586,7 +589,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
 })
 
-test("rereads a file each time an artifact link opens it @quarantine", async ({ page }) => {
+test("rereads a file each time an artifact link opens it", async ({ page }) => {
   // Enough lines to scroll the code view, ending in the draft's name.
   const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
   const file = { content: draft("first draft") }
@@ -613,17 +616,27 @@ test("rereads a file each time an artifact link opens it @quarantine", async ({ 
   const link = page.getByRole("link", { name: "shopping.txt", exact: true })
   const panel = page.locator("#review-panel")
   const tab = panel.getByRole("tab", { name: "shopping.txt" })
+  const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
+
+  // A long file mounts only the rows near the viewport, so its last line needs a scroll. A reopened tab may restore its
+  // earlier scroll position, so this starts from wherever the view is once its rows overflow.
+  const scrollToEnd = async () => {
+    await expect.poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+    await code.hover()
+    await page.mouse.wheel(0, 100_000)
+    await expect
+      .poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+      .toBeLessThanOrEqual(1)
+  }
+
   await link.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
+  // The first open starts at the top.
+  await expect(panel.getByText("item 1", { exact: true })).toBeVisible()
+  await scrollToEnd()
   await expect(panel.getByText("first draft", { exact: true })).toBeVisible()
 
   // Rereading the open file updates it in place: the code view keeps its node and never jumps back to the top.
-  const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
-  await code.hover()
-  await page.mouse.wheel(0, 100_000)
-  await expect
-    .poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
-    .toBeLessThanOrEqual(1)
   const scrolled = await code.evaluate((element) => element.scrollTop)
   expect(scrolled).toBeGreaterThan(0)
   await code.evaluate((element) => void (element.dataset.e2eProbe = "original"))
@@ -638,6 +651,7 @@ test("rereads a file each time an artifact link opens it @quarantine", async ({ 
   await expect(tab).toHaveCount(0)
   await link.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
+  await scrollToEnd()
   await expect(panel.getByText("third draft", { exact: true })).toBeVisible()
   await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
 
@@ -985,7 +999,7 @@ test("video files stream into the viewer behind a loading state, open into the p
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
 })
 
-test("restores review state and the side-panel tab per session @quarantine", async ({ page }) => {
+test("restores review state and the side-panel tab per session", async ({ page }) => {
   const sessions = [
     { id: "ses_review_state_a", title: "Alpha review state" },
     { id: "ses_review_state_b", title: "Beta review state" },
@@ -1082,6 +1096,8 @@ test("restores review state and the side-panel tab per session @quarantine", asy
   await toggle.click()
   await selectedTab("README.md")
 
+  // Opening moves focus into the side panel once its motion lands; from there Close Tab closes the side tab.
+  await expect(panel).toBeFocused()
   await page.keyboard.press("Control+w")
   await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(0)
   await expect(review).toHaveAttribute("aria-selected", "true")
@@ -1112,7 +1128,7 @@ test("shows and restores last turn changes from the session diff", async ({ page
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 })
 
-test("keeps the review state a session stored before extensions", async ({ page }) => {
+test("keeps the review state a session stored before plugins", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewLegacy"
   await openSession(page, {
     name: "ReviewLegacy",
@@ -1206,7 +1222,7 @@ test("desktop review waits for the session's stored mode before it loads changes
     .poll(() =>
       page.evaluate(() =>
         Object.entries(localStorage).some(
-          ([key, value]) => key.includes("extension.review.session") && value.includes('"branch"'),
+          ([key, value]) => key.includes("plugin.review.session") && value.includes('"branch"'),
         ),
       ),
     )
@@ -1214,7 +1230,7 @@ test("desktop review waits for the session's stored mode before it loads changes
 
   // The reopened window's review mounts before its session store has loaded.
   working.length = 0
-  await page.goto(desktop("extension.review.session"))
+  await page.goto(desktop("plugin.review.session"))
   await expectSessionTitle(page, title)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#review-panel").getByText("Loading changes…", { exact: true })).toBeVisible()

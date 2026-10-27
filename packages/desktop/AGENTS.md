@@ -7,7 +7,7 @@
 - Never add test-only parameters or exports to production modules (`now`, `delay`, `budget`). Use `setSystemTime` from `bun:test`.
 - Test IPC through the raw message format the renderer sends, not through a mock client.
 - No source-grep or tombstone tests that assert a file, export or feature is gone.
-- Main-process code that belongs to a GUI extension is tested in `packages/gui-extensions`, not here.
+- Main-process code that belongs to a built-in GUI plugin is tested in `packages/gui-plugins`, not here.
 - `bun typecheck` does not cover test files. Run `bun test <file>` for every test file you touch.
 
 ## Code
