@@ -4,8 +4,9 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, tokenUsage, type OpenString } from "../schema/index.js"
 import { JsonObject, ProviderShared, optionalNull } from "./shared.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
 const route = MediaProtocol.identity({ id: "meta-images", name: "Meta Images", provider: "meta" })
@@ -15,8 +16,14 @@ export const DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native options. Common fields (`n`, `size`, `format`, `images`) live on the request. */
+/**
+ * Provider-native options. Common fields (`n`, `aspect`, `images`) live on the request; Meta picks its own output
+ * resolution (about 2.5 megapixels), so `resolution` is ignored.
+ */
 export type ImageOptions = {
+  /** `WIDTHxHEIGHT` aspect ratio hint; it replaces `aspect`, so setting both fails. */
+  readonly size?: string
+  readonly outputFormat?: OpenString<"webp" | "png" | "jpeg">
   readonly responseFormat?: OpenString<"b64_json" | "url">
   readonly reasoningStrength?: OpenString<"low" | "high">
   readonly toolEnablement?: {
@@ -73,7 +80,10 @@ const reference = (asset: Media.Asset) =>
 
 const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Request) {
   const images = yield* Effect.forEach(request.images ?? [], reference)
-  const { responseFormat, reasoningStrength, toolEnablement, ...native } = request.providerOptions ?? {}
+  const { outputFormat, responseFormat, reasoningStrength, toolEnablement, ...native } = request.providerOptions ?? {}
+  if (native.size !== undefined && request.aspect !== undefined)
+    return yield* ProviderShared.invalidRequest("Meta providerOptions.size replaces aspect; set one or the other")
+  const hint = request.aspect === undefined ? undefined : ImageSizing.fit({ aspect: request.aspect }, { multiple: 16 })
   const payload = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
     mergeJsonRecords(
       {
@@ -81,8 +91,8 @@ const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Requ
         prompt: request.prompt,
         images: images.length === 0 ? undefined : images,
         n: request.n,
-        size: request.size,
-        output_format: request.format,
+        size: hint === undefined ? undefined : `${hint.width}x${hint.height}`,
+        output_format: outputFormat,
         response_format: responseFormat,
         reasoning_strength: reasoningStrength,
         tool_enablement: toolEnablement,
@@ -120,13 +130,12 @@ const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
     usage:
       decoded.usage === undefined
         ? undefined
-        : {
-            type: "tokens",
+        : tokenUsage({
             input: decoded.usage.input_tokens,
             output: decoded.usage.output_tokens,
             total: decoded.usage.total_tokens,
             details: { meta: decoded.usage },
-          },
+          }),
     providerMetadata: { meta: { outputFormat: format } },
   })
 })
@@ -136,7 +145,6 @@ const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["mask", "aspectRatio", "seed"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

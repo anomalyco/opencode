@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("keeps the open Used header below the session title while scrolling", async ({ mount }) => {
   const root = await mount("current-tool-group--sticky-header", { args: { height: "720" } })

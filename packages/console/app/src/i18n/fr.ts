@@ -70,12 +70,8 @@ export const dict = {
   "home.what.title": "Qu'est-ce que OpenCode ?",
   "home.what.body":
     "OpenCode est un agent open source qui vous aide à écrire du code dans votre terminal, IDE ou desktop.",
-  "home.what.lsp.title": "LSP activé",
-  "home.what.lsp.body": "Charge automatiquement les bons LSP pour le LLM",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Lancez plusieurs agents en parallèle sur le même projet",
-  "home.what.shareLinks.title": "Liens de partage",
-  "home.what.shareLinks.body": "Partagez un lien vers n'importe quelle session pour référence ou debug",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Connectez-vous avec GitHub pour utiliser votre compte Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -115,8 +111,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Vous pouvez même connecter vos",
   "home.faq.a3.p4.localLink": "modèles locaux",
   "home.faq.q4": "Puis-je utiliser mes abonnements IA existants avec OpenCode ?",
-  "home.faq.a4.p1":
-    "Oui, OpenCode prend en charge les abonnements des principaux fournisseurs. Vous pouvez utiliser Claude Pro/Max, ChatGPT Plus/Pro ou GitHub Copilot.",
+  "home.faq.a4.p1": "Oui, vous pouvez utiliser vos abonnements ChatGPT Plus/Pro ou GitHub Copilot.",
   "home.faq.q5": "Puis-je utiliser OpenCode uniquement dans le terminal ?",
   "home.faq.a5.beforeDesktop": "Plus maintenant ! OpenCode est désormais disponible en application pour",
   "home.faq.a5.desktop": "desktop",
@@ -166,7 +161,7 @@ export const dict = {
     "Pour couvrir les coûts, OpenCode ajoute uniquement de petits frais de traitement de paiement de 1,23 $ par recharge de 20 $.",
   "zen.faq.q5": "Et pour les données et la confidentialité ?",
   "zen.faq.a5.beforeExceptions":
-    "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs appliquent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
+    "Tous les modèles Zen sont hébergés aux États-Unis et dans l'UE. Les fournisseurs appliquent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.faq.a5.exceptionsLink": "exceptions suivantes",
   "zen.faq.q6": "Puis-je définir des limites de dépense ?",
   "zen.faq.a6": "Oui, vous pouvez définir des limites de dépense mensuelles dans votre compte.",
@@ -202,12 +197,14 @@ export const dict = {
   "zen.how.step2.link": "payez par requête",
   "zen.how.step2.afterLink": "sans marge",
   "zen.how.step3.title": "Recharge automatique",
-  "zen.how.step3.body": "lorsque votre solde atteint 5 $, nous ajouterons automatiquement 20 $",
+  "zen.how.step3.body":
+    "activez la recharge automatique facultative et choisissez le seuil de solde et le montant de la recharge",
   "zen.privacy.title": "Votre vie privée est importante pour nous",
   "zen.privacy.beforeExceptions":
-    "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
+    "Tous les modèles Zen sont hébergés aux États-Unis et dans l'UE. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro est désormais disponible dans Go.",
   "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
   "go.meta.description":
     "Go coûte 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
@@ -289,8 +286,6 @@ export const dict = {
     "Des journaux de surveillance des abus sont générés pour toute utilisation des fonctionnalités API et conservés pendant un maximum de 30 jours.",
   "go.faq.a5.museRetention":
     "Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta.",
-  "go.faq.a5.geminiRetention":
-    "Vos prompts et vos complétions peuvent être utilisés pour entraîner de futurs modèles Google.",
   "go.faq.a5.learnMore": "En savoir plus",
   "go.faq.a5.deepseekRetention":
     "L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 octobre 2026.",
@@ -382,7 +377,7 @@ export const dict = {
     "Commencez simplement par un essai interne avec votre équipe. Par défaut, OpenCode ne stocke pas votre code ni vos données de contexte, ce qui facilite la prise en main. Ensuite, contactez-nous pour discuter des tarifs et des options de mise en œuvre.",
   "enterprise.faq.q3": "Comment fonctionne la tarification entreprise ?",
   "enterprise.faq.a3":
-    "Nous proposons une tarification entreprise par siège. Si vous avez votre propre passerelle LLM, nous ne facturons pas les tokens utilisés. Pour plus de détails, contactez-nous pour un devis sur mesure en fonction des besoins de votre organisation.",
+    "Si vous avez votre propre passerelle LLM, nous ne facturons pas les tokens utilisés. Pour plus de détails, contactez-nous pour un devis sur mesure en fonction des besoins de votre organisation.",
   "enterprise.faq.q4": "Mes données sont-elles sécurisées avec OpenCode Enterprise ?",
   "enterprise.faq.a4":
     "Oui. OpenCode ne stocke pas votre code ni vos données de contexte. Tout le traitement se fait localement ou via des appels API directs vers votre fournisseur d'IA. Avec une configuration centralisée et une intégration SSO, vos données restent sécurisées au sein de l'infrastructure de votre organisation.",

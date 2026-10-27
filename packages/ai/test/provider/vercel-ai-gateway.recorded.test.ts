@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, LLMRequest } from "../../src/index.js"
+import { LLM, LLMClient, LLMEvent, LLMRequest } from "../../src/effect.js"
 import { isRetryable } from "../../src/provider-error.js"
 import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { recordedTests } from "../recorded-test.js"

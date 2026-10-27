@@ -6,11 +6,27 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Option, Predicate, Schema } from "effect"
-import { For, Show, createEffect, createMemo, type Accessor, type JSX } from "solid-js"
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createMemo,
+  onCleanup,
+  untrack,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { DiffChanges } from "@opencode/ui/diff-changes"
+import { Icon } from "@opencode/ui/icon"
+import { Spring, frameLoop, prefersReducedMotion } from "@opencode/ui/motion"
+import { springStyle } from "@opencode/ui/motion/solid"
 import { Dynamic } from "solid-js/web"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
+import { useSources } from "../context/sources"
+import { turnSources } from "../sources/sources"
 import { TimelineSeparator } from "../components/timeline-separator"
 import {
   SessionAssistantContent,
@@ -26,12 +42,14 @@ import {
   SessionCompactionMessage,
   SessionCompactionQueued,
 } from "../message/message-content"
-import { ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
+import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
 import { currentToolFailed } from "../message/current-tool-state"
+import { userMessageRuns, userRunSpring } from "./user-runs"
+import { attached } from "../components/message-file"
 import {
   createReactiveTimelineProjection,
   Timeline,
@@ -51,6 +69,8 @@ const decodeMetadataFile = Schema.decodeUnknownOption(Schema.Struct({ file: Sche
 type Projection = ReturnType<typeof createReactiveTimelineProjection>
 
 type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, TimelineRow.TurnGap>
+
+type Outcome = "completed" | "error" | "cancelled"
 
 export type SessionUserPresentation = {
   displayText?: string
@@ -78,9 +98,12 @@ export function createSessionTimelineRowRenderer(input: {
   centered?: Accessor<boolean>
   padding?: Accessor<string>
   anchor?: (messageID: string) => string | undefined
+  /** Scrolls to and expands the tool call named by its ID or by the shell ID a backgrounded shell call reports. */
+  revealPart?: (target: string) => boolean
 }) {
   const i18n = useI18n()
   const data = useData()
+  const sourcesHost = useSources()
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
@@ -110,6 +133,57 @@ export function createSessionTimelineRowRenderer(input: {
 
     return owners
   })
+
+  const runs = createMemo(() => {
+    const messages = input.projection.messageByID()
+    const context = input.projection.userContextByID()
+
+    return userMessageRuns(input.projection.rows(), [...messages.values()], (id) => {
+      const message = messages.get(id)
+      const user = context.get(id)
+
+      if (message?.type !== "user" || !user) return undefined
+      const status = input.actions?.pending?.status(id)
+      const presentation = input.presentation(message)
+
+      return {
+        kind: status === "steering" || status === "stranded" ? "pending" : "sent",
+        agent: user.agent,
+        model: user.model,
+        text: !!(presentation?.displayText ?? message.text),
+        attachments: (message.files ?? []).some(attached) || !!presentation?.references?.length,
+      }
+    })
+  })
+
+  // A steer sent while the timeline is open grows in. Messages already there when a session loads, and rows the
+  // virtualizer remounts, appear as they are.
+  const seen = { sessionID: "", ids: new Set<string>() }
+
+  const arrivals = createMemo(() => {
+    const sessionID = input.sessionID()
+    const loaded = seen.sessionID === sessionID && seen.ids.size > 0
+    const arrived = new Set<string>()
+
+    if (seen.sessionID !== sessionID) seen.ids.clear()
+    seen.sessionID = sessionID
+    input.projection.rows().forEach((row) => {
+      if (!Predicate.isTagged(row, "UserMessage") || seen.ids.has(row.userMessageID)) return
+      seen.ids.add(row.userMessageID)
+
+      if (loaded) arrived.add(row.userMessageID)
+    })
+
+    return arrived
+  })
+
+  // The input's pending status lands after its row, so a message sent while the session works counts as a steer.
+  const arriving = (messageID: string) => untrack(() => arrivals().delete(messageID) && input.status().type !== "idle")
+
+  const run = (messageID: string) =>
+    createMemo(() => runs().get(messageID), undefined, {
+      equals: (a, b) => a?.above === b?.above && a?.below === b?.below,
+    })
 
   const workingTurn = (messageID: string) =>
     input.status().type !== "idle" && input.projection.activeMessageID() === messageID
@@ -205,6 +279,15 @@ export function createSessionTimelineRowRenderer(input: {
             ]
           const message = input.projection.messageByID().get(ref.messageID)
 
+          if (content?.type === "text" && message?.type === "assistant")
+            return [
+              {
+                type: "text",
+                id: ref.partID,
+                render: () => <SessionAssistantContent message={message} content={content} contentID={ref.partID} />,
+              },
+            ]
+
           if (ref.messageID !== ref.partID || !message) return []
 
           if (message.type === "shell")
@@ -243,7 +326,9 @@ export function createSessionTimelineRowRenderer(input: {
             }
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
-            toolDefaultOpen={(tool) => (input.timelineDetail ? contentDefaultOpen(tool) : false)}
+            toolDefaultOpen={(tool) =>
+              input.timelineDetail || tool.name === "execute" ? contentDefaultOpen(tool) : false
+            }
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) =>
@@ -356,6 +441,19 @@ export function createSessionTimelineRowRenderer(input: {
       return item ? contentDefaultOpen(item) : undefined
     })
 
+    // Only the finished turn's footer part derives them, and only while the host shows sources.
+    const turnSourcesValue = createMemo(() => {
+      const current = ref()
+
+      if (!sourcesHost?.enabled || !current || copyContentID(row().userMessageID) !== current.partID) return undefined
+
+      const value = turnSources(
+        input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages,
+      )
+
+      return value.steps.length > 0 ? value : undefined
+    })
+
     const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
 
     return (
@@ -369,6 +467,8 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                sources={turnSourcesValue()}
+                onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}
                 toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
                 onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
@@ -382,6 +482,8 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
+    if (item.type === "tool" && item.name === "execute") return true
+
     if (input.timelineDetail) {
       const category = timelineCategory(item)
 
@@ -454,23 +556,28 @@ export function createSessionTimelineRowRenderer(input: {
       const actor =
         source === "shell"
           ? i18n.t("ui.tool.shell")
-          : Predicate.isString(agent)
-            ? agent
-            : i18n.t("ui.tool.agent.default")
+          : ((Predicate.isString(agent) ? taskAgentName(agent, data.store.agent) : undefined) ??
+            i18n.t("ui.tool.agent.default"))
 
       const state = message.metadata?.state
+      const outcome: Outcome = state === "error" || state === "cancelled" ? state : "completed"
 
       return {
-        label: i18n.t(outcomeNoticeKey(Predicate.isString(state) ? state : undefined), { actor }),
+        label: i18n.t(outcomeNoticeKey(outcome), { actor }),
         data: message.description,
+        outcome,
+        icon: outcomeNoticeIcon(outcome),
       }
     }
 
     return { label: message.description ?? message.text }
   }
 
-  const Frame = (props: { row: FramedTimelineRow; children: JSX.Element }) => (
+  const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
     <div
+      ref={(el) => {
+        if (props.grow) growIn(el)
+      }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
       data-timeline-row={props.row._tag}
@@ -555,16 +662,29 @@ export function createSessionTimelineRowRenderer(input: {
       if (id) return data.sessionHref?.(id)
     })
 
-    const clickable = createMemo(() => !!(childID() && (data.navigateToSession || href())))
+    // A finished background shell jumps to its call, as its activity pill does.
+    const shellID = createMemo(() => {
+      const value = message()
+
+      if (!input.revealPart || value?.type !== "synthetic" || value.metadata?.source !== "shell") return
+      const id = value.metadata.shellID
+
+      if (Predicate.isString(id) && id) return id
+    })
+
+    const clickable = createMemo(() => !!shellID() || !!(childID() && (data.navigateToSession || href())))
 
     const open = () => {
+      const shell = shellID()
+
+      if (shell) return void input.revealPart?.(shell)
       const id = childID()
 
       if (id) data.navigateToSession?.(id)
     }
 
     const navigate = (event: MouseEvent) => {
-      if (!childID() || !data.navigateToSession) return
+      if (!shellID() && (!childID() || !data.navigateToSession)) return
 
       if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
       event.preventDefault()
@@ -604,17 +724,27 @@ export function createSessionTimelineRowRenderer(input: {
                         <Dynamic
                           component={href() ? "a" : "div"}
                           data-slot="session-timeline-notice"
-                          class={`block w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-text-weak ${inset()}`}
-                          classList={{ "cursor-pointer": clickable() }}
+                          data-outcome={content().outcome}
+                          class={`block w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-v2-text-text-faint ${inset()}`}
+                          classList={{ "cursor-pointer hover:text-v2-text-text-base": clickable() }}
                           href={href()}
-                          role={clickable() && !href() ? "link" : undefined}
+                          role={clickable() && !href() ? (shellID() ? "button" : "link") : undefined}
                           tabIndex={clickable() && !href() ? 0 : undefined}
                           onClick={navigate}
                           onKeyDown={navigateKey}
                         >
+                          <Show when={content().icon}>
+                            {(icon) => (
+                              <Icon
+                                name={icon()}
+                                size="normal"
+                                class={`inline-block align-top me-1.5 ${outcomeNoticeColor(content().outcome)}`}
+                              />
+                            )}
+                          </Show>
                           <bdi
                             dir="auto"
-                            class="font-[530]"
+                            class={`font-[530] ${outcomeNoticeColor(content().outcome)}`}
                             classList={{ "text-v2-text-text-faint": message()?.type === "agent-switched" }}
                           >
                             {content().label}
@@ -729,14 +859,14 @@ export function createSessionTimelineRowRenderer(input: {
       <Show when={data.turnDiff && paths().length > 0}>
         <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
           <div class="flex h-6 min-w-0 items-center gap-2">
-            <span class="text-14-medium text-text-strong tabular-nums">
+            <span class="text-14-medium text-v2-text-text-base tabular-nums">
               {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
             </span>
             <DiffChanges changes={[...(diffs() ?? [])]} />
             <Show when={overflow()}>
               <button
                 type="button"
-                class="ml-auto text-14-regular text-text-interactive-base"
+                class="ml-auto text-14-regular text-v2-text-text-accent"
                 onClick={() => input.disclosure.set(showAllKey(), !showAll())}
               >
                 {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
@@ -761,8 +891,32 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
+  // A run's messages sit as close as the iOS app's (4 px); the gap springs open as a message leaves.
+  function TurnGap(props: { messageID: string }) {
+    let element: HTMLDivElement | undefined
+    const joined = run(props.messageID)
+    springStyle(
+      () => element,
+      () => ({ height: joined()?.above ? 4 : 16 }),
+      (el, value) => {
+        el.style.height = `${value.height}px`
+      },
+      // Closing up as a message joins is instant; the joining message grows in instead.
+      { ...userRunSpring, snap: () => !!joined()?.above },
+    )
+
+    return (
+      <div
+        ref={element}
+        data-timeline-row="TurnGap"
+        aria-hidden="true"
+        style={{ height: untrack(joined)?.above ? "4px" : "16px" }}
+      />
+    )
+  }
+
   const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
-    if (Predicate.isTagged(row(), "TurnGap")) return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
+    if (Predicate.isTagged(row(), "TurnGap")) return <TurnGap messageID={row().userMessageID} />
 
     // The host owns live status and renders this slot itself.
     if (Predicate.isTagged(row(), "Activity")) return null
@@ -783,9 +937,11 @@ export function createSessionTimelineRowRenderer(input: {
       })
 
       const context = createMemo(() => input.projection.userContextByID().get(current().userMessageID))
+      const joined = run(current().userMessageID)
+      const grow = arriving(current().userMessageID)
 
       return (
-        <Frame row={current()}>
+        <Frame row={current()} grow={grow}>
           <Show when={message()}>
             {(message) => {
               const presentation = () => input.presentation(message())
@@ -803,6 +959,7 @@ export function createSessionTimelineRowRenderer(input: {
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={input.actions}
+                      run={joined()}
                     />
                   </div>
                 </div>
@@ -1028,19 +1185,79 @@ export function createSessionTimelineRowRenderer(input: {
       return i18n.t("ui.sessionTurn.freeLimit.lineReset", { time })
     })
 
+    // A budget pauses paid models, or only the ones it covers, until it resets at the start of a month.
+    const budgetLimit = createMemo(() => {
+      const kind = current().kind
+
+      if (kind !== "budget-limit" && kind !== "model-budget-limit") return
+      const at = current().resetAt
+
+      const time =
+        at === undefined
+          ? undefined
+          : new Intl.DateTimeFormat(i18n.locale(), {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              timeZoneName: "shortOffset",
+            }).format(at)
+
+      if (kind === "budget-limit")
+        return {
+          text: time
+            ? i18n.t("ui.sessionTurn.budgetLimit.all", { time })
+            : i18n.t("ui.sessionTurn.budgetLimit.allUntilReset"),
+          action: i18n.t("ui.sessionTurn.budgetLimit.useFreeModel"),
+        }
+
+      return {
+        text: time
+          ? i18n.t("ui.sessionTurn.budgetLimit.models", { time })
+          : i18n.t("ui.sessionTurn.budgetLimit.modelsUntilReset"),
+        action: i18n.t("ui.sessionTurn.budgetLimit.switchModel"),
+      }
+    })
+
     return (
       <Frame row={current()}>
         <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-          <Show when={freeLimit()} fallback={<SessionError message={current().text} />}>
-            {(text) => (
-              <div
-                role="status"
-                class="text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted"
-              >
-                {text()}
-              </div>
-            )}
-          </Show>
+          <Switch fallback={<SessionError message={current().text} />}>
+            <Match when={budgetLimit()}>
+              {(notice) => (
+                <div
+                  role="status"
+                  class="text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted"
+                >
+                  {notice().text}
+                  <Show when={input.actions?.chooseModel}>
+                    {(choose) => (
+                      <>
+                        <span aria-hidden="true">{" · "}</span>
+                        <button
+                          type="button"
+                          class="font-[530] text-v2-text-text-base hover:underline focus-visible:underline focus-visible:outline-none"
+                          onClick={() => choose()()}
+                        >
+                          {notice().action}
+                        </button>
+                      </>
+                    )}
+                  </Show>
+                </div>
+              )}
+            </Match>
+            <Match when={freeLimit()}>
+              {(text) => (
+                <div
+                  role="status"
+                  class="text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted"
+                >
+                  {text()}
+                </div>
+              )}
+            </Match>
+          </Switch>
         </div>
       </Frame>
     )
@@ -1061,10 +1278,63 @@ function capitalizeAgent(agent: string) {
   return agent.slice(0, 1).toUpperCase() + agent.slice(1)
 }
 
+function outcomeNoticeIcon(outcome: Outcome) {
+  if (outcome === "error") return "warning"
+
+  if (outcome === "cancelled") return "circle-ban-sign"
+}
+
+function outcomeNoticeColor(outcome: Outcome | undefined) {
+  if (!outcome) return ""
+
+  if (outcome === "error") return "text-v2-state-fg-danger"
+
+  if (outcome === "cancelled")
+    return "text-[var(--v2-yellow-900)] [[data-color-scheme=dark]_&]:text-v2-state-fg-warning"
+
+  return "text-v2-text-text-code-accent"
+}
+
 function outcomeNoticeKey(state: string | undefined) {
   if (state === "error") return "ui.sessionTimeline.notice.failed"
 
   if (state === "cancelled") return "ui.sessionTimeline.notice.cancelled"
 
   return "ui.sessionTimeline.notice.finished"
+}
+
+/** Grows a row from nothing to its natural height, clipping its content on the way. Rows below follow its edge. */
+function growIn(el: HTMLElement) {
+  if (prefersReducedMotion()) return
+  const spring = Spring.fromDuration(0, { duration: 0.2, bounce: 0 })
+  const content = el.firstElementChild
+  let natural = 0
+  el.style.height = "0px"
+  el.style.overflow = "clip"
+  el.toggleAttribute("data-timeline-grow", true)
+
+  const remove = frameLoop.addMeasured(
+    () => {
+      natural = content instanceof HTMLElement ? content.offsetHeight : 0
+    },
+    (dt) => {
+      if (!el.isConnected) return true
+      spring.set(natural)
+      const height = spring.step(dt)
+
+      if (!spring.resting) {
+        el.style.height = `${height}px`
+
+        return true
+      }
+
+      el.style.height = ""
+      el.style.overflow = ""
+      el.toggleAttribute("data-timeline-grow", false)
+
+      return false
+    },
+  )
+
+  onCleanup(remove)
 }

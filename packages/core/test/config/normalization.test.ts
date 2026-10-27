@@ -420,6 +420,24 @@ describe("ConfigNormalize", () => {
     ).toBe(true)
   })
 
+  test.each([
+    { type: "local", command: ["example"] },
+    { type: "remote", url: "https://example.com/mcp" },
+  ])("preserves codemode: false for legacy $type MCP servers", (server) => {
+    const result = normalized({ mcp: { example: { ...server, codemode: false } } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).mcp?.servers?.example?.codemode).toBe(false)
+  })
+
+  test.each([
+    { type: "local", command: ["example"] },
+    { type: "remote", url: "https://example.com/mcp" },
+  ])("leaves codemode unset for legacy $type MCP servers when omitted", (server) => {
+    const result = normalized({ mcp: { example: server } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).mcp?.servers?.example?.codemode).toBeUndefined()
+  })
+
   test("expands numeric MCP timeouts to every phase", () => {
     const result = normalized({
       mcp: {
@@ -525,7 +543,8 @@ describe("ConfigNormalize", () => {
         experimental: {
           portable_shell_scanner: true,
           todo: true,
-          precompute_compaction: true,
+          background_compaction: true,
+          media_blob: true,
           subagent_depth: 0,
           location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
@@ -535,7 +554,8 @@ describe("ConfigNormalize", () => {
       experimental: {
         portable_shell_scanner: true,
         todo: true,
-        precompute_compaction: true,
+        background_compaction: true,
+        media_blob: true,
         subagent_depth: 0,
         location_idle_timeout: "7200000 millis",
       },

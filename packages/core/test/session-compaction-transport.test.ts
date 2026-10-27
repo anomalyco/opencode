@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai"
+import { LLM, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"

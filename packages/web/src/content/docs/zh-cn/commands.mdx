@@ -23,7 +23,7 @@ description: 为重复任务创建自定义命令。
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ frontmatter 定义命令属性，内容则成为模板。
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ frontmatter 定义命令属性，内容则成为模板。
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -301,7 +301,7 @@ Check for performance issues and suggest improvements.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

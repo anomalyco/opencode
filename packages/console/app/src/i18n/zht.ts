@@ -69,12 +69,8 @@ export const dict = {
 
   "home.what.title": "什麼是 OpenCode？",
   "home.what.body": "OpenCode 是一個開源代理，幫助你在終端、IDE 或桌面端編寫程式碼。",
-  "home.what.lsp.title": "支援 LSP",
-  "home.what.lsp.body": "為 LLM 自動載入合適的 LSP",
   "home.what.multiSession.title": "多工作階段",
   "home.what.multiSession.body": "在同一專案中平行啟動多個代理",
-  "home.what.shareLinks.title": "分享連結",
-  "home.what.shareLinks.body": "將任意階段的連結分享給他人供參考或除錯",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "使用 GitHub 登入以使用你的 Copilot 帳號",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -111,8 +107,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "你還可以連接你的",
   "home.faq.a3.p4.localLink": "本地模型",
   "home.faq.q4": "可以使用我現有的 AI 訂閱嗎？",
-  "home.faq.a4.p1":
-    "可以。OpenCode 支援主流供應商的訂閱方案，包括 Claude Pro/Max、ChatGPT Plus/Pro 與 GitHub Copilot。",
+  "home.faq.a4.p1": "可以，你可以使用 ChatGPT Plus/Pro 或 GitHub Copilot 訂閱。",
   "home.faq.q5": "OpenCode 只能在終端中使用嗎？",
   "home.faq.a5.beforeDesktop": "不再是了！OpenCode 現在也提供",
   "home.faq.a5.desktop": "桌面端",
@@ -155,7 +150,8 @@ export const dict = {
   "zen.faq.a4.p2.accountLink": "帳戶中設定每月支出上限",
   "zen.faq.a4.p3": "為了覆蓋成本，OpenCode 只會收取很小的支付處理費：每次儲值 $20 會額外收取 $1.23。",
   "zen.faq.q5": "資料與隱私如何？",
-  "zen.faq.a5.beforeExceptions": "所有 Zen 模型都託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
+  "zen.faq.a5.beforeExceptions":
+    "所有 Zen 模型都託管在美國和歐盟。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
   "zen.faq.a5.exceptionsLink": "以下例外",
   "zen.faq.q6": "我可以設定支出上限嗎？",
   "zen.faq.a6": "可以，你可以在帳戶中設定每月支出上限。",
@@ -187,11 +183,13 @@ export const dict = {
   "zen.how.step2.link": "按請求付費",
   "zen.how.step2.afterLink": "零加價",
   "zen.how.step3.title": "自動儲值",
-  "zen.how.step3.body": "當你的餘額達到 $5 時，我們會自動儲值 $20",
+  "zen.how.step3.body": "視需要啟用自動儲值，並設定餘額門檻和儲值金額",
   "zen.privacy.title": "你的隱私對我們很重要",
-  "zen.privacy.beforeExceptions": "所有 Zen 模型均在美國託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
+  "zen.privacy.beforeExceptions":
+    "所有 Zen 模型均在美國和歐盟託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
   "zen.privacy.exceptionsLink": "以下例外情況",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro 現已上線 Go。",
   "go.title": "OpenCode Go | 低成本全民編碼模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
@@ -268,7 +266,6 @@ export const dict = {
     "ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。",
   "go.faq.a5.museRetention": "以允許使用您的提示詞和生成結果來訓練未來的 Meta 模型為交換，token 價格可享大幅折扣。",
-  "go.faq.a5.geminiRetention": "你的提示詞和模型輸出可能會被用於訓練未來的 Google 模型。",
   "go.faq.a5.learnMore": "了解更多",
   "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 10 月 31 日。",
   "go.faq.q6": "我可以儲值額度嗎？",
@@ -355,7 +352,7 @@ export const dict = {
     "只要先以團隊的內部試用開始。OpenCode 預設不會儲存你的程式碼或上下文資料，所以上手非常容易。之後聯絡我們，討論定價與完整實作方案。",
   "enterprise.faq.q3": "企業定價是如何進行的？",
   "enterprise.faq.a3":
-    "我們提供按席位的企業定價。如果你有自己的 LLM 閘道器，我們不會對使用的 token 另外收費。更多詳情，請聯絡我們以獲得依據組織需求的客製報價。",
+    "如果你有自己的 LLM 閘道器，我們不會對使用的 token 另外收費。更多詳情，請聯絡我們以獲得依據組織需求的客製報價。",
   "enterprise.faq.q4": "我的資料在 OpenCode Enterprise 中是安全的嗎？",
   "enterprise.faq.a4":
     "是的。OpenCode 不會儲存你的程式碼或上下文資料。所有處理都會在本地或透過直接呼叫你的 AI 供應商 API 完成。透過中央化設定與 SSO 整合，你的資料會安全保留在組織的基礎設施內部。",

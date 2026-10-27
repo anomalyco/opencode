@@ -2,18 +2,10 @@
   overflow: hidden;
 }
 
-/* Anchor to the top edge of where a centered 480px-tall dialog would sit, so the
-   top stays put while the content-driven height grows and shrinks. */
-[data-component="dialog-v2"]:has(.command-palette) {
-  align-items: flex-start;
-}
-
+/* Keep a fixed height so the dialog does not resize as results change while typing. */
 [data-component="dialog-v2"]:has(.command-palette) [data-slot="dialog-container"] {
   width: min(calc(100vw - 24px), 640px);
-  height: auto;
-  min-height: 280px;
-  max-height: min(calc(100vh - 96px), 480px);
-  margin-top: max(48px, calc((100vh - 480px) / 2));
+  height: min(calc(100vh - 96px), 480px);
   border-radius: 12px;
   background: var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-floating);
@@ -28,47 +20,10 @@
   padding: 0;
 }
 
-.command-palette-search {
-  flex-shrink: 0;
-  padding: 6px;
-}
-
-.command-palette-search [data-component="text-input-v2"] {
-  width: 100%;
-  height: 36px;
-  border-radius: 6px;
-  outline: 0;
-  background: color-mix(in srgb, var(--v2-background-bg-layer-02) 60%, transparent);
-  box-shadow: none;
-  transition:
-    background-color 120ms ease-in-out,
-    box-shadow 120ms ease-in-out;
-}
-
-.command-palette-search [data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid]),
-.command-palette-search [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
-  background: var(--v2-background-bg-layer-02);
-  box-shadow: none;
-}
-
-.command-palette-search [data-component="text-input-v2"] [data-slot="text-input-v2-value"] {
-  border-radius: 6px;
-  background: transparent;
-  gap: 8px;
-}
-
-.command-palette-search [data-component="text-input-v2"] [data-slot="text-input-v2-leading-icon"] {
-  padding-left: 12px;
-}
-
-.command-palette-search [data-component="text-input-v2"] [data-slot="text-input-v2-input"] {
-  border-radius: 6px;
-  background: transparent;
-}
-
 .command-palette-scroll {
   min-height: 0;
   flex: 1;
+  overflow-y: auto;
 }
 
 .command-palette-results {
@@ -95,37 +50,6 @@
   user-select: none;
 }
 
-.command-palette-row {
-  display: flex;
-  width: 100%;
-  height: 36px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--v2-text-text-base);
-  text-align: left;
-  cursor: default;
-  scroll-margin: 6px 0;
-}
-
-.command-palette-row[data-active] {
-  background: var(--v2-overlay-simple-overlay-hover);
-}
-
-.command-palette-row:focus-visible {
-  background: var(--v2-overlay-simple-overlay-hover);
-  outline: none;
-}
-
-[data-color-scheme="dark"] .command-palette-row:is([data-active], :focus-visible) {
-  background: var(--v2-alpha-light-10);
-}
-
 .command-palette-row-main {
   display: flex;
   min-width: 0;
@@ -144,18 +68,6 @@
   min-width: 0;
   align-items: center;
   gap: 6px;
-}
-
-.command-palette-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--v2-text-text-base);
-  font-size: 13px;
-  font-weight: 530;
-  line-height: 16px;
-  letter-spacing: -0.04px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .command-palette-description,
@@ -218,7 +130,133 @@
     gap: 1px;
   }
 
+  .command-palette-title,
   .command-palette-description {
     max-width: 100%;
+  }
+}
+
+/* Like the project picker, results grow down from a stable search-field anchor. Other picker dialogs keep their layout. */
+[data-component="dialog-v2"]:has(.command-palette-compact) {
+  align-items: flex-start;
+}
+
+[data-component="dialog-v2"]:has(.command-palette-compact) [data-slot="dialog-container"] {
+  width: min(calc(100vw - 24px), 480px);
+  height: auto;
+  max-height: min(calc(100vh - 96px), 480px);
+  min-height: 0;
+  margin-top: max(48px, calc((100vh - 480px) / 2));
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-overlay);
+}
+
+.command-palette-compact {
+  [data-slot="search-list-search"] {
+    position: relative;
+    padding: 6px 6px 17px;
+
+    &::after {
+      position: absolute;
+      inset-inline: 0;
+      bottom: 8px;
+      border-top: 0.5px solid var(--v2-border-border-base);
+      content: "";
+    }
+
+    [data-component="text-input-v2"] {
+      height: 28px;
+      padding-inline-end: 6px;
+      background: transparent;
+    }
+
+    [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+      background: transparent;
+    }
+
+    [data-slot="text-input-v2-value"] {
+      gap: 6px;
+    }
+
+    [data-slot="text-input-v2-leading-icon"] {
+      padding-inline-start: 6px;
+    }
+
+    [data-slot="text-input-v2-input"]::placeholder {
+      color: var(--v2-text-text-base);
+      opacity: 0.5;
+    }
+  }
+
+  [data-slot="search-list-results"] {
+    padding: 0 6px 6px;
+  }
+
+  [data-slot="search-list-section"] {
+    gap: 4px;
+
+    &:not(:last-child) {
+      padding-bottom: 4px;
+    }
+  }
+
+  [data-slot="search-list-header"] {
+    padding-inline: 12px;
+    background: var(--v2-background-bg-layer-01);
+  }
+
+  [data-slot="search-list-fade"]::before {
+    background: linear-gradient(var(--v2-background-bg-layer-01), transparent);
+  }
+
+  [data-slot="search-list-row"] {
+    padding-inline: 6px;
+
+    &:is([data-active], :focus-visible) {
+      background: var(--v2-overlay-simple-overlay-hover);
+      outline: none;
+    }
+  }
+
+  .command-palette-row-text {
+    flex: 1;
+  }
+
+  .command-palette-row-text:has(.command-palette-description) > .command-palette-title {
+    max-width: 60%;
+    flex-shrink: 0;
+  }
+
+  .command-palette-description {
+    flex: 1;
+    color: var(--v2-text-text-faint);
+  }
+}
+
+[data-color-scheme="dark"] .command-palette-compact [data-slot="search-list-row"]:is([data-active], :focus-visible) {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+@media (max-width: 640px) {
+  .command-palette-compact {
+    [data-slot="search-list-row"]:has(.command-palette-description) {
+      min-height: 40px;
+    }
+
+    .command-palette-row-text:has(.command-palette-description) > .command-palette-title {
+      max-width: 100%;
+    }
+
+    .command-palette-description {
+      flex: none;
+    }
+  }
+}
+
+@media (pointer: coarse) {
+  .command-palette-compact [data-slot="search-list-row"],
+  .command-palette-compact [data-slot="search-list-row"]:has(.command-palette-description),
+  .command-palette-compact [data-slot="search-list-search"] [data-component="text-input-v2"] {
+    min-height: 44px;
   }
 }

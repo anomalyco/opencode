@@ -1,6 +1,6 @@
 import { HttpRecorder } from "@opencode/http-recorder"
 import { NodeSocket } from "@effect/platform-node"
-import { Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { Socket } from "effect/socket"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -9,8 +9,8 @@ import { ImageClient } from "../src/image-client.js"
 import { VideoClient } from "../src/video-client.js"
 import { SpeechClient } from "../src/speech-client.js"
 import { TranscriptionClient } from "../src/transcription-client.js"
-import { EvaluationClient } from "../src/experimental/evaluation-client.js"
-import type { Service as EvaluationClientService } from "../src/experimental/evaluation-client.js"
+import { DecisionClient } from "../src/decision-client.js"
+import type { Service as DecisionClientService } from "../src/decision-client.js"
 import type { Service as ImageClientService } from "../src/image-client.js"
 import type { Service as VideoClientService } from "../src/video-client.js"
 import type { Service as SpeechClientService } from "../src/speech-client.js"
@@ -33,7 +33,7 @@ type RecordedEnv =
   | VideoClientService
   | SpeechClientService
   | TranscriptionClientService
-  | EvaluationClientService
+  | DecisionClientService
   | Socket.WebSocketConstructor
 
 type RecordedTestsOptions = RecordedGroupOptions & {
@@ -86,10 +86,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         ...recorderOptions?.metadata,
         ...metadata,
       }
-      if (recording) {
-        if (process.env.CI !== undefined) throw new Error("Unset CI before recording cassettes")
-        HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
-      }
+      if (recording && process.env.CI !== undefined) throw new Error("Unset CI before recording cassettes")
       const requestExecutor = RequestExecutor.layer.pipe(
         Layer.provide(
           HttpRecorder.layerFetch(cassette, {
@@ -104,15 +101,23 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         directory: FIXTURES_DIR,
         metadata: recorderMetadata,
       }).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
-      return Layer.mergeAll(
+      const layer = Layer.mergeAll(
         requestExecutor,
         LLMClient.layer.pipe(Layer.provide(requestExecutor)),
         ImageClient.layer.pipe(Layer.provide(requestExecutor)),
         VideoClient.layer.pipe(Layer.provide(requestExecutor)),
         SpeechClient.layer.pipe(Layer.provide(requestExecutor)),
         TranscriptionClient.layer.pipe(Layer.provide(requestExecutor)),
-        EvaluationClient.layer.pipe(Layer.provide(requestExecutor)),
+        DecisionClient.layer.pipe(Layer.provide(requestExecutor)),
         webSocket,
+      )
+      if (!recording) return layer
+      // Remove the cassette when the test runs, not when it is registered, so tests filtered out by `-t` keep theirs.
+      return Layer.unwrap(
+        Effect.sync(() => {
+          HttpRecorder.removeCassetteSync(cassette, { directory: FIXTURES_DIR })
+          return layer
+        }),
       )
     },
   })

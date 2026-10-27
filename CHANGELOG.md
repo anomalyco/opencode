@@ -2,6 +2,350 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.2.0 — 2026-10-27
+
+### Highlights
+
+- Create, install and share [Desktop plugins](https://opencode.ai/v2/docs/build/plugins/gui) (experimental) ([#55246](https://github.com/anomalyco/opencode/pull/55246), [#59469](https://github.com/anomalyco/opencode/pull/59469), [#59489](https://github.com/anomalyco/opencode/pull/59489))
+- Refreshed the desktop app experience ([#56898](https://github.com/anomalyco/opencode/pull/56898), [#58865](https://github.com/anomalyco/opencode/pull/58865), [#55838](https://github.com/anomalyco/opencode/pull/55838), [#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Add experimental image and decision generation APIs to plugins and sdk, allowing image generation or decision model (think typesafe, clef, etc) workflows. ([#59190](https://github.com/anomalyco/opencode/pull/59190), [#59380](https://github.com/anomalyco/opencode/pull/59380), [#58758](https://github.com/anomalyco/opencode/pull/58758))
+- Plugins can now attach and update keyed session instructions with ctx.session.instructions.entry.put/list/remove. Instead of editing the system prompt and busting the prompt cache, each change is added as a small update at the next step. The entries also survive compaction and reverts, and they don't start an extra model turn. ([#56550](https://github.com/anomalyco/opencode/pull/56550))
+- Restored the Todo tool in desktop via opt-in ([#59092](https://github.com/anomalyco/opencode/pull/59092))
+- Add configurable prompt cache TTLs per provider/model ([#59157](https://github.com/anomalyco/opencode/pull/59157))
+
+### Breaking changes
+
+#### `@opencode/ai` root is now the Promise API
+
+`@opencode/ai` now works like `@opencode/sdk` and `@opencode/client`: the package root exports the Promise API, and the Effect API moved to `@opencode/ai/effect`. `@opencode/ai/promise` is removed, and the wildcard subpath export is replaced with an explicit list of provider and protocol entry points. ([#58847](https://github.com/anomalyco/opencode/pull/58847), [#59183](https://github.com/anomalyco/opencode/pull/59183))
+
+```diff
+-import { AI } from "@opencode/ai/promise"
+-import { LLM } from "@opencode/ai"
++import { AI } from "@opencode/ai"
++import { LLM } from "@opencode/ai/effect"
+```
+
+#### The OpenCode GitHub Action is removed
+
+The OpenCode GitHub Action is no longer published. Remove it from your workflows. ([#59032](https://github.com/anomalyco/opencode/pull/59032))
+
+#### TUI plugins require OpenTUI 0.7
+
+`@opencode/plugin` now requires `@opentui/core` and `@opentui/solid` 0.7.0, up from 0.6.8 or later. Plugins that depend on OpenTUI 0.6 fail to install until they upgrade. In OpenTUI 0.7, custom renderables read their hooks from their class at construction: assign `renderBefore`, `renderAfter`, and `onLifecyclePass` in the constructor instead of as class fields, call `refreshHooks()` after adding a hook by reflection, and replace `defineNativeIntegration()` with a `static nativeIntegration` declaration. See the [OpenTUI 0.7.0 release notes](https://opentui.com/docs/releases/0.7.0). ([#59295](https://github.com/anomalyco/opencode/pull/59295))
+
+### Core
+
+#### Improvements
+
+- Add experimental image and decision generation API endpoints. ([#59190](https://github.com/anomalyco/opencode/pull/59190))
+- Add image and decision entrypoints for catalog providers. ([#59380](https://github.com/anomalyco/opencode/pull/59380))
+- Improve integration rebuild performance. ([#59402](https://github.com/anomalyco/opencode/pull/59402))
+- Let custom model configuration set a model type. ([#59388](https://github.com/anomalyco/opencode/pull/59388))
+- Let model-list API requests filter by type. ([#59355](https://github.com/anomalyco/opencode/pull/59355))
+- Make external-directory permission checks use the project's filesystem. ([#59089](https://github.com/anomalyco/opencode/pull/59089))
+- Reduce memory use when code search finds very large lines. ([#59205](https://github.com/anomalyco/opencode/pull/59205))
+- Let plugins filter event subscriptions by type. ([#58864](https://github.com/anomalyco/opencode/pull/58864))
+- Add configurable prompt-cache TTLs. ([#59157](https://github.com/anomalyco/opencode/pull/59157))
+- Move image resizing off the main process and release idle image memory. ([#58820](https://github.com/anomalyco/opencode/pull/58820))
+- Reduce repeated session-history loading during a step. ([#59091](https://github.com/anomalyco/opencode/pull/59091))
+- Add an experimental API for session media and opt-in media URI support. ([#59103](https://github.com/anomalyco/opencode/pull/59103))
+- Add the machine hostname to `/api/info`. ([#59090](https://github.com/anomalyco/opencode/pull/59090))
+- Add experimental content-addressed blob storage for session media behind `experimental.media_blob`. ([#58656](https://github.com/anomalyco/opencode/pull/58656), [#58741](https://github.com/anomalyco/opencode/pull/58741))
+- Start session history from the latest completed compaction. ([#59020](https://github.com/anomalyco/opencode/pull/59020))
+- Reduce work encoding durable event payloads that are not persisted. ([#58923](https://github.com/anomalyco/opencode/pull/58923))
+- Expose MCP server titles from `serverInfo`. ([#58950](https://github.com/anomalyco/opencode/pull/58950))
+- Apply OpenCode Console workspace configuration as a configuration layer. ([#57703](https://github.com/anomalyco/opencode/pull/57703))
+- Replace experimental evaluations with Decision APIs in the AI pkg, including OpenAI Decisions, System One, and Cloudflare Run models. ([#58758](https://github.com/anomalyco/opencode/pull/58758), [#58382](https://github.com/anomalyco/opencode/pull/58382), [#58379](https://github.com/anomalyco/opencode/pull/58379), [#58381](https://github.com/anomalyco/opencode/pull/58381))
+- Convert tool schemas once to speed up tool execution. ([#58798](https://github.com/anomalyco/opencode/pull/58798), [#58848](https://github.com/anomalyco/opencode/pull/58848))
+- Make Git project discovery faster while recognizing repository changes. ([#58616](https://github.com/anomalyco/opencode/pull/58616))
+- Show OpenCode Console budget limits and Go usage where they block you. ([#58694](https://github.com/anomalyco/opencode/pull/58694), [#58714](https://github.com/anomalyco/opencode/pull/58714))
+- Record provider-reported session costs. ([#58562](https://github.com/anomalyco/opencode/pull/58562))
+- Find Git more reliably on macOS. ([#58602](https://github.com/anomalyco/opencode/pull/58602))
+- Resolve model details once per prompt step. ([#58601](https://github.com/anomalyco/opencode/pull/58601))
+- Let plugins manage session instruction entries for subsequent model requests. ([#56550](https://github.com/anomalyco/opencode/pull/56550))
+- Add GPT-6.1 Terra and GPT-6.1 Terra Fast to Sign in with ChatGPT. ([#59359](https://github.com/anomalyco/opencode/pull/59359))
+
+#### Bug fixes
+
+- Wait for plugins to finish reloading before each session step and tool call. Thanks [@kernel-oops](https://github.com/kernel-oops) and [@Tarquinen](https://github.com/Tarquinen). ([#51133](https://github.com/anomalyco/opencode/pull/51133))
+- Size session compaction from the provider's reported token count to preserve usable context. ([#59441](https://github.com/anomalyco/opencode/pull/59441))
+- Skip unavailable models.dev API entrypoints instead of failing model catalog updates. ([#59475](https://github.com/anomalyco/opencode/pull/59475))
+- Return a server error with a reference ID when the server cannot encode a response. ([#59459](https://github.com/anomalyco/opencode/pull/59459))
+- Avoid warming a session while its model request is running. ([#59325](https://github.com/anomalyco/opencode/pull/59325))
+- Preserve legacy MCP `codemode` settings during migration. Thanks [@tneemo](https://github.com/tneemo). ([#59126](https://github.com/anomalyco/opencode/pull/59126))
+- Use the correct Vertex AI endpoints for the `eu` and `us` multi-regions. ([#59335](https://github.com/anomalyco/opencode/pull/59335))
+- Accept Databricks hosts that include `http://` or `https://`. ([#59334](https://github.com/anomalyco/opencode/pull/59334))
+- Keep files intact when patch edits move a file onto itself. ([#59197](https://github.com/anomalyco/opencode/pull/59197))
+- Preserve literal `$0` and `$ARGUMENTS` text in custom command input. ([#59198](https://github.com/anomalyco/opencode/pull/59198))
+- Close project locations concurrently during shutdown. ([#59326](https://github.com/anomalyco/opencode/pull/59326))
+- Treat equivalent directory paths, including trailing slashes, as one location. ([#59327](https://github.com/anomalyco/opencode/pull/59327))
+- Send valid tool schemas to Kimi for tuple, default, and keyword-like arguments. ([#59207](https://github.com/anomalyco/opencode/pull/59207))
+- Expose Code Mode MCP tools directly when the `execute` permission is denied. ([#59315](https://github.com/anomalyco/opencode/pull/59315))
+- Coordinate OAuth credential refreshes across locations and processes. ([#54023](https://github.com/anomalyco/opencode/pull/54023))
+- List and search remote Git branches correctly without bare remote names. ([#58597](https://github.com/anomalyco/opencode/pull/58597))
+- Detect AVIF, HEIC/HEIF, QuickTime, and M4A attachments correctly. ([#58480](https://github.com/anomalyco/opencode/pull/58480), [#58886](https://github.com/anomalyco/opencode/pull/58886), [#58887](https://github.com/anomalyco/opencode/pull/58887))
+- Reduce memory retained by long-running tool calls and unchanged hooked model requests. ([#58448](https://github.com/anomalyco/opencode/pull/58448), [#58449](https://github.com/anomalyco/opencode/pull/58449))
+- Load session diffs without reading every message, improving performance for large sessions. ([#57686](https://github.com/anomalyco/opencode/pull/57686))
+- Keep active locations alive when session events use an equivalent directory path. ([#56259](https://github.com/anomalyco/opencode/pull/56259))
+- Reload compatibility skills only when their own sources change. ([#59086](https://github.com/anomalyco/opencode/pull/59086))
+- Avoid publishing redundant catalog updates when configuration is unchanged. ([#56267](https://github.com/anomalyco/opencode/pull/56267))
+- Avoid booting idle or deleted project locations while polling session forms. ([#59083](https://github.com/anomalyco/opencode/pull/59083))
+- Wait for plugins before returning agent and provider lists, preventing incomplete catalogs. ([#59082](https://github.com/anomalyco/opencode/pull/59082))
+- Manage sessions and instruction entries after their project directory is deleted. ([#58997](https://github.com/anomalyco/opencode/pull/58997))
+- Start fuzzy file search only on first use, reducing project startup work. ([#58959](https://github.com/anomalyco/opencode/pull/58959))
+- Exit after 10 seconds when shutdown hangs and report pending work. ([#58817](https://github.com/anomalyco/opencode/pull/58817))
+- Keep the models catalog fresh without redownloading it when unchanged. ([#58813](https://github.com/anomalyco/opencode/pull/58813))
+- Send xAI Responses `top_k` settings and stop sending unsupported penalties. ([#58868](https://github.com/anomalyco/opencode/pull/58868))
+- Honor shared parallel tool-call and service-tier settings for Groq. ([#58871](https://github.com/anomalyco/opencode/pull/58871))
+- Retry throttled requests instead of misreporting them as context overflows. ([#58866](https://github.com/anomalyco/opencode/pull/58866))
+- Preserve streamed text and reasoning that arrive after an OpenAI Chat finish reason. ([#58851](https://github.com/anomalyco/opencode/pull/58851))
+- Classify AWS REST JSON errors consistently regardless of where the error type appears. ([#58770](https://github.com/anomalyco/opencode/pull/58770))
+- Validate large base64 attachments without slowdowns or hangs. ([#58811](https://github.com/anomalyco/opencode/pull/58811))
+- Retry Bedrock throttling errors as rate limits instead of context overflows. Thanks [@Irish-Joseph](https://github.com/Irish-Joseph). ([#58759](https://github.com/anomalyco/opencode/pull/58759))
+- Keep working MCP tools available when a server returns malformed ones. ([#58350](https://github.com/anomalyco/opencode/pull/58350))
+- Match absolute instruction-file globs across directories. Thanks [@heimoshuiyu](https://github.com/heimoshuiyu). ([#58749](https://github.com/anomalyco/opencode/pull/58749))
+- Use configured provider regions in Bedrock endpoint URLs. ([#58538](https://github.com/anomalyco/opencode/pull/58538))
+- Handle unknown OpenAI Chat finish reasons without failing the response. ([#58608](https://github.com/anomalyco/opencode/pull/58608))
+- Avoid unnecessary Azure model updates when endpoint transforms make no change. ([#58600](https://github.com/anomalyco/opencode/pull/58600))
+- Prefer JPEG for opaque browser screenshots, reducing attachment size. ([#56990](https://github.com/anomalyco/opencode/pull/56990))
+- Detect generated image types from their bytes when compatible hosts omit the format. ([#58475](https://github.com/anomalyco/opencode/pull/58475))
+- Keep project services alive while sessions run long tools or wait for input, with a 24-hour inactivity cap. ([#57274](https://github.com/anomalyco/opencode/pull/57274))
+- Prevent unrelated configuration changes and compatibility-skill update bursts from repeatedly reloading skills. ([#56260](https://github.com/anomalyco/opencode/pull/56260))
+
+### TUI
+
+#### Improvements
+
+- Reduce CPU use while animated session-tab pulses are visible. ([#59235](https://github.com/anomalyco/opencode/pull/59235))
+- List OpenCode Console before OpenCode Go in the integration picker. ([#59107](https://github.com/anomalyco/opencode/pull/59107))
+- Add `/usage`, model-picker, prompt, sidebar, warning, and error details for OpenCode Console usage limits. ([#58731](https://github.com/anomalyco/opencode/pull/58731))
+- Make CLI service registration more reliable when concurrent processes update its files. ([#59105](https://github.com/anomalyco/opencode/pull/59105))
+
+#### Bug fixes
+
+- Return `opencode run --format json` server connection errors as JSON. Thanks [@andreivince](https://github.com/andreivince). ([#59366](https://github.com/anomalyco/opencode/pull/59366))
+- Preserve pasted prompt text when copying it back out. ([#59209](https://github.com/anomalyco/opencode/pull/59209))
+- Reliably update the background service on Windows when its files are briefly locked. ([#59105](https://github.com/anomalyco/opencode/pull/59105))
+- Keep the background service state directory out of tool shells and identify processes blocking its port. ([#58815](https://github.com/anomalyco/opencode/pull/58815))
+- Refresh Git branch details after switching branches. ([#58982](https://github.com/anomalyco/opencode/pull/58982))
+- Keep the TUI running when a plugin slot or route renders bare text. Thanks [@anmol0b](https://github.com/anmol0b) and [@Tarquinen](https://github.com/Tarquinen). ([#58144](https://github.com/anomalyco/opencode/pull/58144))
+- Accept `--server` and `--standalone` anywhere in supported CLI commands. ([#58505](https://github.com/anomalyco/opencode/pull/58505))
+- Release closed and background session transcripts to prevent memory growth. ([#58434](https://github.com/anomalyco/opencode/pull/58434), [#57025](https://github.com/anomalyco/opencode/pull/57025))
+- Connect remote access tunnels through HTTP proxies. ([#58464](https://github.com/anomalyco/opencode/pull/58464))
+- Keep development builds on a separate server, database, and port from released builds. ([#58331](https://github.com/anomalyco/opencode/pull/58331))
+
+### Desktop
+
+#### Improvements
+
+- Manage desktop plugins from Settings › Extensions › Plugins. ([#59489](https://github.com/anomalyco/opencode/pull/59489))
+- Add a persistent desktop zoom setting. ([#59277](https://github.com/anomalyco/opencode/pull/59277))
+- Capture heap snapshots in desktop debug builds on `SIGUSR2` when explicitly enabled. ([#58317](https://github.com/anomalyco/opencode/pull/58317))
+- Show the open session title in the browser tab. ([#59131](https://github.com/anomalyco/opencode/pull/59131))
+- Show todowrite tasks above the composer. ([#59092](https://github.com/anomalyco/opencode/pull/59092))
+- Load session history once when returning to a session tab. ([#59166](https://github.com/anomalyco/opencode/pull/59166))
+- Answer questions with number keys and show multi-select choices as checkboxes. ([#58595](https://github.com/anomalyco/opencode/pull/58595))
+- Add an always-available Add project action to the location picker. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Let you rewind or fork from any message. ([#58865](https://github.com/anomalyco/opencode/pull/58865))
+- Let you edit line comments and copy shell output. ([#58970](https://github.com/anomalyco/opencode/pull/58970), [#58974](https://github.com/anomalyco/opencode/pull/58974))
+- Render Mermaid diagrams in messages much faster, sized to fit the column. ([#57483](https://github.com/anomalyco/opencode/pull/57483), [#57004](https://github.com/anomalyco/opencode/pull/57004))
+- Add opt-in memory logging and remote debugging for desktop debug builds. ([#58315](https://github.com/anomalyco/opencode/pull/58315))
+- Show web sources for a turn behind the experimental Sources setting. ([#58307](https://github.com/anomalyco/opencode/pull/58307))
+- Jump from a completed shell notification to its shell output. ([#58663](https://github.com/anomalyco/opencode/pull/58663))
+- Keep the composer usable while the voice-call panel floats. ([#58587](https://github.com/anomalyco/opencode/pull/58587))
+- Use the Soft Radar activity spinner by default and provide experimental variations. ([#58010](https://github.com/anomalyco/opencode/pull/58010), [#57903](https://github.com/anomalyco/opencode/pull/57903))
+- Add an experimental new model picker. ([#58413](https://github.com/anomalyco/opencode/pull/58413))
+- Add experimental Console voice calls in Desktop beta. ([#58249](https://github.com/anomalyco/opencode/pull/58249))
+- Add a timeline width setting. ([#58308](https://github.com/anomalyco/opencode/pull/58308))
+- Improve command, session, and model search lists with sticky sections. ([#58222](https://github.com/anomalyco/opencode/pull/58222))
+- Add search to recently closed sessions. ([#55721](https://github.com/anomalyco/opencode/pull/55721))
+- Open extension configuration and skills in side tabs. ([#58023](https://github.com/anomalyco/opencode/pull/58023))
+- Open session extension lists on hover and follow keyboard navigation. ([#58021](https://github.com/anomalyco/opencode/pull/58021))
+- Add video previews with zoom controls. ([#57924](https://github.com/anomalyco/opencode/pull/57924))
+- Add generated project avatars and an experimental avatar-style switcher. ([#57871](https://github.com/anomalyco/opencode/pull/57871), [#57930](https://github.com/anomalyco/opencode/pull/57930))
+- Add recently closed side tabs to the new-tab view. ([#57863](https://github.com/anomalyco/opencode/pull/57863))
+- Add a searchable prompt history picker. ([#57716](https://github.com/anomalyco/opencode/pull/57716))
+- Find settings from the command palette. ([#57651](https://github.com/anomalyco/opencode/pull/57651))
+- Group queued and steered messages, and group consecutive user messages under one metadata line. ([#57561](https://github.com/anomalyco/opencode/pull/57561), [#57552](https://github.com/anomalyco/opencode/pull/57552))
+- Improve file-tree and folder-picker performance. ([#57573](https://github.com/anomalyco/opencode/pull/57573), [#57557](https://github.com/anomalyco/opencode/pull/57557))
+- Keep branch search results visible while new results load. ([#57531](https://github.com/anomalyco/opencode/pull/57531))
+- Add a session-details menu to the session header. ([#57528](https://github.com/anomalyco/opencode/pull/57528))
+- Show a subagent's model, status, and elapsed time in its composer area. ([#57473](https://github.com/anomalyco/opencode/pull/57473))
+- Let you delete sessions from tab menus and rename the current session with Ctrl+R. ([#57453](https://github.com/anomalyco/opencode/pull/57453), [#57423](https://github.com/anomalyco/opencode/pull/57423))
+- Restore session summary and project menu actions. ([#57781](https://github.com/anomalyco/opencode/pull/57781))
+- Let you place the background-activity capsule at the left, center, right, or hide it. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Show project and worktree details in the session header and location menu. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Add text-rendering controls to the debug bar. ([#57326](https://github.com/anomalyco/opencode/pull/57326))
+- Show elapsed time for background work. ([#57218](https://github.com/anomalyco/opencode/pull/57218))
+- Improve streamed Markdown rendering reliability and performance. ([#57016](https://github.com/anomalyco/opencode/pull/57016))
+- Split the side pane and add a draggable bottom pane with tabs. ([#56960](https://github.com/anomalyco/opencode/pull/56960))
+- Add consistent MCP sign-in and error-status links across connection, session, and Settings views. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Open multiple file tabs at once and open side-panel content in tabs. ([#57182](https://github.com/anomalyco/opencode/pull/57182), [#57094](https://github.com/anomalyco/opencode/pull/57094))
+- Move running work to the background when you steer a session. ([#57142](https://github.com/anomalyco/opencode/pull/57142))
+- Let the timeline scroll beneath the composer while keeping its content visible. ([#57141](https://github.com/anomalyco/opencode/pull/57141))
+- Simplify Settings into a flat list with a per-server switcher. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Quote selected timeline or terminal text into the composer. ([#55664](https://github.com/anomalyco/opencode/pull/55664), [#58420](https://github.com/anomalyco/opencode/pull/58420))
+- Search sessions across online servers from the title bar. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Add a Reduce motion appearance setting. ([#57103](https://github.com/anomalyco/opencode/pull/57103))
+- Show projects from all servers in the new-session location picker. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Pick models from a searchable dialog with favorites and recent models. ([#55838](https://github.com/anomalyco/opencode/pull/55838))
+- Attach the new-session location picker below the composer. ([#56952](https://github.com/anomalyco/opencode/pull/56952))
+- Open image previews directly from message and composer thumbnails. ([#56896](https://github.com/anomalyco/opencode/pull/56896))
+- Start new worktrees from the current branch in the simplified location picker. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Manage running subagents and shells from the composer activity capsule. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Sync projects from each server and prioritize projects you use on Home. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Choose between Focus and Pro interface layouts in Settings. ([#56898](https://github.com/anomalyco/opencode/pull/56898))
+- Open terminals as side-panel tabs. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Choose a project and worktree from one new-session location dialog. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Show subagents as separate timeline rows by default. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Add a sidebar toggle for vertical tabs. ([#55646](https://github.com/anomalyco/opencode/pull/55646))
+- Add ⌘1–9 and ⇧⌘[ / ⇧⌘] shortcuts for side-panel tabs. ([#57301](https://github.com/anomalyco/opencode/pull/57301))
+- Let you choose a new directory or worktree when a session location is unavailable. ([#56087](https://github.com/anomalyco/opencode/pull/56087))
+- Refresh the Manage models, MCP, and fork dialogs with compact searchable lists. ([#56029](https://github.com/anomalyco/opencode/pull/56029), [#56028](https://github.com/anomalyco/opencode/pull/56028))
+- Install future Windows desktop updates in about a second. ([#55933](https://github.com/anomalyco/opencode/pull/55933))
+- Show individual Code Mode tool calls in Execute rows. ([#55649](https://github.com/anomalyco/opencode/pull/55649))
+- Add a Commentary timeline category and display setting. ([#55248](https://github.com/anomalyco/opencode/pull/55248))
+- Support `@` links to other sessions in messages. ([#57480](https://github.com/anomalyco/opencode/pull/57480))
+- Polish spacing, alignment, borders, and typography across the session header, titlebar, composer, file tree, browser pane, timeline, and Settings. ([#58195](https://github.com/anomalyco/opencode/pull/58195), [#57776](https://github.com/anomalyco/opencode/pull/57776), [#57570](https://github.com/anomalyco/opencode/pull/57570), [#57782](https://github.com/anomalyco/opencode/pull/57782), [#57336](https://github.com/anomalyco/opencode/pull/57336), [#57363](https://github.com/anomalyco/opencode/pull/57363), [#58100](https://github.com/anomalyco/opencode/pull/58100), [#58979](https://github.com/anomalyco/opencode/pull/58979))
+
+#### Bug fixes
+
+- Prevent duplicate tab shortcuts and remove uninstalled plugin commands from Shortcuts. ([#59499](https://github.com/anomalyco/opencode/pull/59499))
+- Keep todo items from shrinking in the todo panel. ([#59430](https://github.com/anomalyco/opencode/pull/59430))
+- Keep question-dock answers and controls positioned correctly when changing questions. ([#59383](https://github.com/anomalyco/opencode/pull/59383))
+- Keep the @ menu open while it searches. ([#59425](https://github.com/anomalyco/opencode/pull/59425))
+- Finish quitting after Cmd+Q on macOS. Thanks [@anmol0b](https://github.com/anmol0b). ([#59144](https://github.com/anomalyco/opencode/pull/59144))
+- Toggle MCP servers for the current session location from Settings. ([#59132](https://github.com/anomalyco/opencode/pull/59132))
+- Deliver steering messages when an earlier move was missed. ([#58984](https://github.com/anomalyco/opencode/pull/58984))
+- Keep session and command-palette search results stable while searching. ([#58908](https://github.com/anomalyco/opencode/pull/58908), [#57479](https://github.com/anomalyco/opencode/pull/57479))
+- Restrict Search projects to the project list. ([#58978](https://github.com/anomalyco/opencode/pull/58978))
+- Let custom Close tab shortcuts close terminal and browser tabs. ([#58945](https://github.com/anomalyco/opencode/pull/58945))
+- Prevent live status rows from jumping or leaving gaps above the composer. ([#58691](https://github.com/anomalyco/opencode/pull/58691), [#58697](https://github.com/anomalyco/opencode/pull/58697))
+- Keep browser tabs still behind open dialogs. ([#58958](https://github.com/anomalyco/opencode/pull/58958))
+- Keep side-panel content and browser pages visible while the sidebar or panel moves. ([#58202](https://github.com/anomalyco/opencode/pull/58202), [#58185](https://github.com/anomalyco/opencode/pull/58185))
+- Render session diffs reliably.
+- Keep keyboard focus in terminals, side panels, dialogs, and the composer when appropriate. ([#57980](https://github.com/anomalyco/opencode/pull/57980), [#57297](https://github.com/anomalyco/opencode/pull/57297), [#56273](https://github.com/anomalyco/opencode/pull/56273))
+- Preserve empty browser and side-panel tabs instead of closing them automatically. ([#58440](https://github.com/anomalyco/opencode/pull/58440))
+- Reduce desktop memory use by releasing closed transcripts, discarded tool-result images, retained UI batches, and aborted timeline work. ([#57025](https://github.com/anomalyco/opencode/pull/57025), [#58434](https://github.com/anomalyco/opencode/pull/58434), [#58427](https://github.com/anomalyco/opencode/pull/58427), [#58560](https://github.com/anomalyco/opencode/pull/58560), [#58447](https://github.com/anomalyco/opencode/pull/58447), [#58439](https://github.com/anomalyco/opencode/pull/58439), [#58432](https://github.com/anomalyco/opencode/pull/58432))
+- Restore horizontal scrolling and sticky change badges in the file tree. ([#58117](https://github.com/anomalyco/opencode/pull/58117))
+- Show live Thinking for reasoning-only turns. ([#58299](https://github.com/anomalyco/opencode/pull/58299))
+- Stop loading older history after completing the initially visible turn and prioritize the first transcript page. ([#57700](https://github.com/anomalyco/opencode/pull/57700), [#57741](https://github.com/anomalyco/opencode/pull/57741))
+- Keep Home project and session lists reliable during refreshes.
+- Keep deleted sessions from reappearing on Home. ([#55349](https://github.com/anomalyco/opencode/pull/55349))
+- Find sessions immediately in @ mentions, including multi-word titles. ([#57683](https://github.com/anomalyco/opencode/pull/57683))
+- Keep queued messages editable while changes sync with the server. ([#57569](https://github.com/anomalyco/opencode/pull/57569))
+- Open image and video URLs in the browser pane. ([#57562](https://github.com/anomalyco/opencode/pull/57562))
+- Mark submitted generated forms as complete and send each response only once. ([#57537](https://github.com/anomalyco/opencode/pull/57537))
+- Improve file-view performance with reused views, virtualized medium files, and cached diffs. ([#57551](https://github.com/anomalyco/opencode/pull/57551))
+- Group untracked folders into one expandable review row. ([#57527](https://github.com/anomalyco/opencode/pull/57527))
+- Let you paste into the composer from the session view. ([#57545](https://github.com/anomalyco/opencode/pull/57545))
+- Recover failed beta background servers and preserve their required CLI versions. ([#57321](https://github.com/anomalyco/opencode/pull/57321))
+- Restore branch selection when starting a new worktree session. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Keep the running server available while beta updates install. ([#57309](https://github.com/anomalyco/opencode/pull/57309))
+- Make links in user messages, shell output, and Code Mode output clickable. ([#57211](https://github.com/anomalyco/opencode/pull/57211), [#57303](https://github.com/anomalyco/opencode/pull/57303))
+- Make Check for Updates always report its result. ([#57296](https://github.com/anomalyco/opencode/pull/57296))
+- Reopen the last closed side-panel tab with ⇧⌘T and open a browser tab with ⌘T. ([#57269](https://github.com/anomalyco/opencode/pull/57269), [#57156](https://github.com/anomalyco/opencode/pull/57156))
+- Keep OpenCode keyboard shortcuts working in the browser pane. ([#56697](https://github.com/anomalyco/opencode/pull/56697), [#55240](https://github.com/anomalyco/opencode/pull/55240))
+- Preview image attachments supplied by file path. ([#57249](https://github.com/anomalyco/opencode/pull/57249))
+- Apply configured code and UI fonts consistently. ([#57242](https://github.com/anomalyco/opencode/pull/57242))
+- Keep activity and busy indicators steady while switching sessions. ([#57196](https://github.com/anomalyco/opencode/pull/57196))
+- Reserve ⇧⌘W for closing the window so ⌘W does not. ([#57150](https://github.com/anomalyco/opencode/pull/57150))
+- Make image preview transitions resize smoothly without clipping or blocking clicks. ([#56997](https://github.com/anomalyco/opencode/pull/56997), [#57324](https://github.com/anomalyco/opencode/pull/57324))
+- Keep in-session search reliable alongside titlebar session search. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Return focus to the prompt after keyboard model selection.
+- Open searchable pickers at the top with search focused. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Keep tables visible beneath sticky headers. ([#57050](https://github.com/anomalyco/opencode/pull/57050))
+- Fit provider connection steps without shifting a dialog's top edge. ([#57006](https://github.com/anomalyco/opencode/pull/57006))
+- Give unavailable-server panels clear error styling. ([#57003](https://github.com/anomalyco/opencode/pull/57003))
+- Make mouse-wheel and keyboard scrolling respond immediately on Linux. ([#57962](https://github.com/anomalyco/opencode/pull/57962))
+- Keep long Execute tool code contained and show successful Code Mode output. ([#56915](https://github.com/anomalyco/opencode/pull/56915))
+- Focus the most useful control when dialogs open, including Cancel in delete confirmations. ([#57453](https://github.com/anomalyco/opencode/pull/57453))
+- Install Windows beta, stable, and nightly builds into separate directories. ([#56904](https://github.com/anomalyco/opencode/pull/56904))
+- Keep session tabs recoverable when their server becomes unreachable. ([#56248](https://github.com/anomalyco/opencode/pull/56248))
+- Keep the composer model's provider and session-model resolution consistent with the TUI. ([#56225](https://github.com/anomalyco/opencode/pull/56225))
+- Reread open files without resetting their scroll position. ([#55899](https://github.com/anomalyco/opencode/pull/55899))
+- Hide agent names when agents are disabled. ([#57525](https://github.com/anomalyco/opencode/pull/57525))
+- Polish sidebar, panel, composer, activity, question-dock, loading, and motion behavior across light and dark themes. ([#57449](https://github.com/anomalyco/opencode/pull/57449), [#58013](https://github.com/anomalyco/opencode/pull/58013), [#58577](https://github.com/anomalyco/opencode/pull/58577), [#57944](https://github.com/anomalyco/opencode/pull/57944), [#58052](https://github.com/anomalyco/opencode/pull/58052), [#58494](https://github.com/anomalyco/opencode/pull/58494), [#58073](https://github.com/anomalyco/opencode/pull/58073), [#58114](https://github.com/anomalyco/opencode/pull/58114))
+- Polish hover states, cursors, tooltips, focus rings, scrollbars, and transitions across desktop controls. ([#57653](https://github.com/anomalyco/opencode/pull/57653), [#57787](https://github.com/anomalyco/opencode/pull/57787), [#57304](https://github.com/anomalyco/opencode/pull/57304), [#58971](https://github.com/anomalyco/opencode/pull/58971), [#57221](https://github.com/anomalyco/opencode/pull/57221), [#57192](https://github.com/anomalyco/opencode/pull/57192), [#58575](https://github.com/anomalyco/opencode/pull/58575), [#58580](https://github.com/anomalyco/opencode/pull/58580))
+
+### SDK
+
+#### Improvements
+
+- Add GUI plugin APIs for toasts, dialogs, notifications, tabs, composer controls, and custom UI. ([#59469](https://github.com/anomalyco/opencode/pull/59469))
+
+#### Bug fixes
+
+- Fix generated Promise client input types for TypeScript consumers. ([#58875](https://github.com/anomalyco/opencode/pull/58875))
+- Let SDK clients discard inline tool-result file payloads to reduce memory use. ([#59101](https://github.com/anomalyco/opencode/pull/59101))
+- Avoid unnecessary catalog refreshes for locations an SDK client has not loaded. ([#55237](https://github.com/anomalyco/opencode/pull/55237), [#59099](https://github.com/anomalyco/opencode/pull/59099))
+- Restore running sessions created while an SDK client was disconnected. ([#53012](https://github.com/anomalyco/opencode/pull/53012))
+- Release omitted tool-image payloads from memory instead of retaining their base64 data. ([#58560](https://github.com/anomalyco/opencode/pull/58560))
+
+## v2.1.4 — 2026-10-23
+
+### Highlights
+
+- **MCP Input Forms Now Appear**: When an MCP server asks for input during a tool call, the form now shows up instead of the call waiting until it times out. Desktop and web can now show these forms too, including text, number, choice, multiselect, boolean, and URL requests. ([#58184](https://github.com/anomalyco/opencode/pull/58184), [#58305](https://github.com/anomalyco/opencode/pull/58305))
+- **Background Compaction**: Set `experimental.background_compaction` to `true` to prepare a summary in the background as a session nears its compaction threshold, so automatic compaction does not wait for it. Summaries that are never used still cost tokens. ([#57444](https://github.com/anomalyco/opencode/pull/57444), [#58294](https://github.com/anomalyco/opencode/pull/58294))
+
+### Core
+
+#### Improvements
+
+- Added experimental background compaction through `experimental.background_compaction`. ([#57444](https://github.com/anomalyco/opencode/pull/57444), [#58294](https://github.com/anomalyco/opencode/pull/58294))
+- When a compaction request exceeds the provider limit, older tool output and exchanges are now shortened first, so more useful history survives. ([#58015](https://github.com/anomalyco/opencode/pull/58015))
+- ChatGPT sign-in context caps are now a documented built-in plugin. Add `"-opencode.provider.openai-context-caps"` to `plugins` to turn them off. ([#58194](https://github.com/anomalyco/opencode/pull/58194))
+- Added `opencode debug heap-dump [--server <url>]` to capture a running server's heap without restarting it. ([#58252](https://github.com/anomalyco/opencode/pull/58252))
+
+#### Bug fixes
+
+- Sessions without their own model now use the selected agent's model. ([#58355](https://github.com/anomalyco/opencode/pull/58355))
+- Compaction buffers that leave the model no room are now ignored, and more provider context-overflow errors are recognized. ([#58313](https://github.com/anomalyco/opencode/pull/58313), [#57982](https://github.com/anomalyco/opencode/pull/57982))
+- Agent files that use V2-only fields are now read as V2 agents. ([#58218](https://github.com/anomalyco/opencode/pull/58218))
+- Codex models that ChatGPT accounts reject are now hidden. ([#58180](https://github.com/anomalyco/opencode/pull/58180))
+- Imported V1 global sessions are now attributed to the correct project. ([#56322](https://github.com/anomalyco/opencode/pull/56322))
+
+### TUI
+
+#### Improvements
+
+- Added an experimental **TUI tools** option in the experiments dialog, which lets agents open and type into the session terminal through `tui_open_terminal` and `tui_write_terminal` without taking keyboard focus. ([#57506](https://github.com/anomalyco/opencode/pull/57506))
+- After an update restart, the TUI now tells you to start OpenCode again. ([#58139](https://github.com/anomalyco/opencode/pull/58139))
+
+#### Bug fixes
+
+- Rows that contain Unicode direction marks, common in Hebrew and Arabic text, no longer shift one column when part of the row redraws. ([#58380](https://github.com/anomalyco/opencode/pull/58380))
+
+### Desktop
+
+#### Improvements
+
+- MCP elicitation forms now appear in desktop and web sessions, with controls for structured and URL requests. ([#58305](https://github.com/anomalyco/opencode/pull/58305))
+- Added **Capture heap snapshots** to the command palette. It saves app-window, main-process, and server snapshots together in Downloads, with native-memory, GPU, and page diagnostics. ([#58259](https://github.com/anomalyco/opencode/pull/58259), [#58311](https://github.com/anomalyco/opencode/pull/58311))
+
+#### Bug fixes
+
+- File change counts now appear before their labels in review and file summaries. ([#58353](https://github.com/anomalyco/opencode/pull/58353))
+- Linux AppImage executable names no longer end in `.desktop`. Thanks [@ImBIOS](https://github.com/ImBIOS). ([#58263](https://github.com/anomalyco/opencode/pull/58263))
+
+### SDK
+
+#### Improvements
+
+- Added `connectClientMcp()` for hosting MCP tools in a client over the experimental client MCP WebSocket transport. ([#57504](https://github.com/anomalyco/opencode/pull/57504), [#57505](https://github.com/anomalyco/opencode/pull/57505))
+
+### Extensions
+
+#### Bug fixes
+
+- MCP elicitation forms now appear during tool calls instead of the call waiting until it times out. Thanks [@dimitriskourg](https://github.com/dimitriskourg) and [@chrischall](https://github.com/chrischall). ([#58184](https://github.com/anomalyco/opencode/pull/58184))
+- MCP OAuth login now keeps waiting after unrelated requests reach its callback. Thanks [@reynold-hu](https://github.com/reynold-hu). ([#58342](https://github.com/anomalyco/opencode/pull/58342))
+- Remote MCP requests now stay open past Bun's fetch idle timeout. ([#58341](https://github.com/anomalyco/opencode/pull/58341))
+- MCP servers started during initial reconciliation are no longer duplicated, and MCP servers now stop in parallel on shutdown. ([#58349](https://github.com/anomalyco/opencode/pull/58349), [#58351](https://github.com/anomalyco/opencode/pull/58351))
+- MCP tools whose output schema is not a root object are now accepted. ([#58224](https://github.com/anomalyco/opencode/pull/58224))
+
 ## v2.1.3 — 2026-10-22
 
 ### Highlights

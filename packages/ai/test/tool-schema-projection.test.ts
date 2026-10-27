@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
-import { LLM } from "../src/index.js"
+import { LLM } from "../src/effect.js"
 import { AnthropicMessages, Gemini, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
 import { Tool, toDefinitions } from "../src/tool.js"
@@ -204,7 +204,20 @@ describe("tool schema projections", () => {
           linked: { $ref: "#/$defs/Linked", description: "drop me" },
           tuple: { type: "array", items: [{ type: "string" }, { type: "number" }] },
           prefixTuple: { type: "array", prefixItems: [{ type: "boolean" }, { type: "string" }] },
+          closedTuple: { type: "array", prefixItems: [{ type: "string" }, { type: "number" }], items: false },
+          restTuple: { type: "array", prefixItems: [{ type: "string" }], items: { type: "number" } },
+          prefixItems: { type: "string" },
+          unevaluatedItems: { type: "boolean" },
+          items: { type: "array", items: { type: "string" } },
+          cart: {
+            type: "object",
+            default: { items: ["a", "b"], $ref: "#/literal", count: 1 },
+            const: { enum: ["literal"] },
+            examples: [{ items: ["x", "y"] }],
+          },
         },
+        dependentRequired: { items: ["cart"] },
+        dependencies: { items: ["cart"], prefixItems: { required: ["items"] } },
       }),
     ).toEqual({
       type: "object",
@@ -212,7 +225,20 @@ describe("tool schema projections", () => {
         linked: { $ref: "#/$defs/Linked" },
         tuple: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
         prefixTuple: { type: "array", items: { anyOf: [{ type: "boolean" }, { type: "string" }] } },
+        closedTuple: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
+        restTuple: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
+        prefixItems: { type: "string" },
+        unevaluatedItems: { type: "boolean" },
+        items: { type: "array", items: { type: "string" } },
+        cart: {
+          type: "object",
+          default: { items: ["a", "b"], $ref: "#/literal", count: 1 },
+          const: { enum: ["literal"] },
+          examples: [{ items: ["x", "y"] }],
+        },
       },
+      dependentRequired: { items: ["cart"] },
+      dependencies: { items: ["cart"], prefixItems: { required: ["items"] } },
     })
   })
 

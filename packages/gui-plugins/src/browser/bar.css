@@ -1,0 +1,307 @@
+/* The browser bar's address field: the whole URL at rest, and an editable address with a focus border while the
+   field has focus. */
+[data-component="browser-address"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  background-color: var(--v2-background-bg-layer-01);
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  transition: outline-color 85ms ease-out;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  cursor: text;
+
+  /* The site button keeps 4px on every side, and the address still starts 32px in. */
+  &[data-site] {
+    gap: 8px;
+    padding-inline-start: 4px;
+  }
+
+  &:hover:not([data-editing]) {
+    background-color: var(--v2-background-bg-layer-02);
+  }
+
+  &[data-editing] {
+    padding-inline-start: 8px;
+    outline-color: var(--v2-border-border-focus);
+  }
+
+  /* A focused page address sits where it sat at rest, 32px in; typed text and the placeholder sit at 30px. */
+  &[data-editing][data-address] {
+    gap: 8px;
+  }
+
+  [data-slot="browser-address-text"] {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+  }
+
+  [data-slot="browser-address-input"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    letter-spacing: inherit;
+    color: transparent;
+
+    &::placeholder {
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  &[data-editing] [data-slot="browser-address-input"] {
+    color: var(--v2-text-text-base);
+  }
+
+  /* Focus leaving the window (or into the page) ends editing but keeps the input's selection, which Chromium paints
+     over transparent text. At rest only the drawn address shows. */
+  &:not([data-editing]) [data-slot="browser-address-input"]::selection {
+    color: transparent;
+    background-color: transparent;
+  }
+
+  [data-slot="browser-address-display"],
+  [data-slot="browser-address-hint"] {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: pre;
+    pointer-events: none;
+  }
+
+  [data-slot="browser-address-hint"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  /* One line of the whole URL, ending in an ellipsis where the field ends. The scheme and the path are muted around
+     the host, and so is the ellipsis, which takes the line's color and almost always cuts the path. An address
+     without a host, such as a workspace file, keeps its path at full strength. */
+  [data-slot="browser-address-url"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &[data-host] {
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  [data-slot="browser-address-muted"] {
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="browser-address-host"] {
+    color: var(--v2-text-text-base);
+  }
+
+  /* The page's zoom when it is not 100%, drawn like the zoom badge in the browser options. */
+  [data-slot="browser-address-zoom"] {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 4px;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 2px;
+    background: var(--v2-background-bg-layer-02);
+    color: var(--v2-text-text-muted);
+    font-size: 11px;
+    font-weight: 530;
+    line-height: var(--line-height-tight);
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: default;
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  /* Page actions show on hover and while the field has focus, 4px from the edge like the site button. */
+  [data-slot="browser-address-actions"] {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &:is(:hover, :focus-within) [data-slot="browser-address-actions"] {
+    display: flex;
+  }
+
+  &:is(:hover, :focus-within):has([data-slot="browser-address-actions"]) {
+    padding-inline-end: 4px;
+  }
+
+  /* The hit area reaches the field's top and bottom edges and meets its neighbour halfway across the gap. */
+  [data-slot="browser-address-actions"] [data-component="icon-button-v2"] {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -4px -2px;
+    }
+  }
+}
+
+/* Suggestions from the browsing history, under the address field. */
+[data-component="browser-suggestions"] {
+  z-index: 60;
+  width: calc(var(--kb-popper-anchor-width) + 16px);
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-floating);
+  outline: none;
+  transform-origin: var(--kb-popover-content-transform-origin);
+}
+
+[data-component="browser-page-row"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  text-align: start;
+  cursor: default;
+
+  &:hover {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+
+  &[aria-selected="true"] {
+    background: var(--v2-overlay-simple-overlay-pressed);
+  }
+
+  [data-slot="browser-page-row-text"] {
+    display: flex;
+    flex: 1 1 0;
+    gap: 4px;
+    min-width: 0;
+    white-space: pre;
+  }
+
+  [data-slot="browser-page-row-title"] {
+    flex: none;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="browser-page-row-url"] {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--v2-text-text-muted);
+  }
+
+  mark {
+    background: none;
+    color: inherit;
+    font-weight: 530;
+  }
+}
+
+/* Suggestions read the address at full strength; the new tab page mutes it. */
+[data-component="browser-suggestions"] [data-slot="browser-page-row-url"] {
+  color: var(--v2-text-text-base);
+}
+
+/* Site information under the site button. */
+[data-component="browser-site"] {
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 261px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
+  outline: none;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-base);
+  letter-spacing: -0.04px;
+  user-select: none;
+  transform-origin: var(--kb-popover-content-transform-origin);
+
+  [data-slot="browser-site-host"] {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: inherit;
+  }
+
+  [data-slot="browser-site-row"] {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  /* Centers the icon on the first line of the row's text. */
+  [data-slot="browser-site-icon"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    height: 20px;
+    color: var(--v2-icon-icon-muted);
+  }
+
+  /* Spans the card edge to edge over its padding; a 1px line scaled to a hairline. */
+  [data-slot="browser-site-separator"] {
+    flex: none;
+    height: 1px;
+    margin: 2px -4px;
+    background: var(--v2-border-border-base);
+    transform: scaleY(0.5);
+  }
+
+  /* An action beside a row's text, centered on it. */
+  [data-slot="browser-site-row"] > [data-component="button-v2"] {
+    flex: none;
+    align-self: center;
+  }
+
+  [data-slot="browser-site-detail"] {
+    font-size: 11px;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-muted);
+  }
+}

@@ -395,6 +395,8 @@ const requestSchema = Schema.Struct({
   // Stable cache affinity for protocols that support provider-managed prompt caching.
   promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  /** Emit a `raw` event with each provider frame before the events parsed from it. */
+  includeRaw: Schema.optional(Schema.Boolean),
 })
 
 export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Schema.Class<LLMRequest>("LLM.Request")(
@@ -427,6 +429,7 @@ export namespace LLMRequest {
     cache: request.cache,
     promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
+    includeRaw: request.includeRaw,
   })
 
   export function update<Model extends LanguageModel>(

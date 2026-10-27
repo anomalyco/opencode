@@ -8,7 +8,6 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Plugin } from "@opencode/core/plugin"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Rpc } from "@opencode/core/rpc"
 import { Tool } from "@opencode/core/tool"
@@ -18,6 +17,7 @@ import { Npm } from "@opencode/util/npm"
 import { createForeignPackageFilter, ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { createLoader, discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { tempGlobalLayer } from "../fixture/global"
+import { setOrganizationPolicy } from "../fixture/policy"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -331,12 +331,14 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
             ".": "./src/promise/index.ts",
             "./effect": "./src/effect/index.ts",
             "./effect/*": "./src/effect/*.ts",
+            "./gui/*": "./src/gui/*.ts",
           },
         }),
         "consumer/node_modules/@opencode/plugin/src/promise/index.ts": "export const root = 'src'",
         "consumer/node_modules/@opencode/plugin/src/effect/index.ts": "export * as plugin from './plugin.ts'",
         "consumer/node_modules/@opencode/plugin/src/effect/plugin.ts": "export const leaf = 'src'",
         "consumer/node_modules/@opencode/plugin/src/unexported.ts": "export const secret = true",
+        "consumer/node_modules/@opencode/plugin/src/gui/sdk/index.ts": "export const window = true",
         "consumer/node_modules/@opencode/plugin/dist/promise/index.js": "export const root = 'dist'",
         "consumer/node_modules/@opencode/plugin/dist/effect/index.js": "export const index = 'dist'",
         "consumer/node_modules/@opencode/plugin/dist/effect/plugin.js": "export const leaf = 'dist'",
@@ -349,6 +351,8 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
     expect(discovered.get("@opencode/plugin/effect")?.replaceAll("\\", "/")).toEndWith("src/effect/index.ts")
     expect(discovered.get("@opencode/plugin/effect/plugin")?.replaceAll("\\", "/")).toEndWith("src/effect/plugin.ts")
     expect(discovered.has("@opencode/plugin/unexported")).toBe(false)
+    // The GUI SDK runs in the app; the server and TUI runtime never load it.
+    expect([...discovered.keys()].filter((specifier) => specifier.startsWith("@opencode/plugin/gui"))).toEqual([])
 
     const hostDiscovered = discoverPluginRuntimeSpecifiers()
     expect(hostDiscovered.has("effect/schema/SchemaJITCompiler")).toBe(true)
@@ -411,30 +415,68 @@ it.live("blocks a local plugin before module initialization and honors replaceme
     `,
       ),
     )
-    const managed = yield* ManagedPolicy.Service
     const modules = yield* PluginModule.make()
     const operation = { type: "add" as const, target: directory.path, options: {} }
-    yield* managed.set({
-      statements: [{ action: "integration.use", resource: `plugin:${directory.path}`, effect: "deny" }],
-    })
+    yield* setOrganizationPolicy([{ action: "integration.use", resource: `plugin:${directory.path}`, effect: "deny" }])
     expect(yield* modules.load(operation)).toEqual({ blocked: true })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(false)
-    yield* managed.set({ statements: [] })
+    yield* setOrganizationPolicy(undefined)
     expect(yield* modules.load(operation)).toMatchObject({ id: "policy-fixture" })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
+  }),
+)
+
+it.live("loads a GUI-only package under its package name without running it, and leaves a TUI-only one to the TUI", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const gui = path.join(directory.path, "gui")
+    const tui = path.join(directory.path, "acme-tui")
+    const evaluated = 'throw new Error("A client part must not run on the server")'
+    yield* Effect.promise(() =>
+      writeFiles(directory.path, {
+        "gui/package.json": JSON.stringify({
+          name: "opencode-acme-gui",
+          exports: { "./gui-experimental": "./dist/gui-experimental.cjs" },
+        }),
+        "gui/dist/gui-experimental.cjs": evaluated,
+        "acme-tui/tui.tsx": evaluated,
+      }),
+    )
+    const modules = yield* PluginModule.make()
+    const plugins = yield* Plugin.Service
+
+    const loaded = yield* modules.load({ type: "add", target: gui, options: { region: "eu" } })
+    expect(loaded).toMatchObject({
+      id: "opencode-acme-gui",
+      features: { gui: true },
+      gui: { options: { region: "eu" } },
+      source: { type: "local", path: gui },
+    })
+    // The server lists a TUI-only directory as it always has: the TUI loads it from its own config.
+    const terminal = yield* modules.load({ type: "add", target: tui, options: {} }).pipe(Effect.flip)
+    expect(terminal.message).toBe(`Plugin entrypoint not found: ${tui}`)
+    if ("pending" in loaded || "blocked" in loaded) return yield* Effect.die(new Error("The plugin was not loaded"))
+
+    yield* plugins.activate([loaded])
+    yield* plugins.awaitActivation
+    expect((yield* plugins.list()).filter((plugin) => plugin.source.type === "local")).toEqual([
+      {
+        id: Plugin.ID.make("opencode-acme-gui"),
+        source: { type: "local", path: gui },
+        state: { status: "active" },
+        features: { gui: true },
+      },
+    ])
   }),
 )
 
 for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
   it.live(`blocks versioned package ${target} before npm resolution or installation`, () =>
     Effect.gen(function* () {
-      const managed = yield* ManagedPolicy.Service
-      const modules = yield* PluginModule.make()
-      yield* managed.set({
-        statements: [
-          { action: "integration.use", resource: `plugin:${target.slice(0, target.lastIndexOf("@"))}`, effect: "deny" },
-        ],
-      })
+        const modules = yield* PluginModule.make()
+      yield* setOrganizationPolicy([
+        { action: "integration.use", resource: `plugin:${target.slice(0, target.lastIndexOf("@"))}`, effect: "deny" },
+      ])
       const operation = { type: "add" as const, target, options: {} }
       expect(yield* modules.load(operation, { install: false })).toEqual({ blocked: true })
       expect(yield* modules.load(operation, { install: true })).toEqual({ blocked: true })

@@ -134,7 +134,7 @@ export function milestoneForLine(line: string): Milestone | undefined {
 
 const milestonePatterns: ReadonlyArray<{ name: Milestone; text: string }> = [
   { name: "bunRootScript", text: "$ bun --cwd packages/desktop dev" },
-  { name: "bunDesktopScript", text: "$ bun ./scripts/dev.ts" },
+  { name: "bunDesktopScript", text: "$ bun run script/dev.ts" },
   { name: "desktopPrepared", text: "Copied dev icons from" },
   { name: "mainBundleReady", text: "electron main process built successfully" },
   { name: "preloadBundleReady", text: "electron preload scripts built successfully" },
@@ -239,7 +239,8 @@ function startDesktop(profile: Awaited<ReturnType<typeof createColdProfile>>) {
         }),
       ])
 
-      browser = await chromium.connectOverCDP(url, { timeout: 120_000 })
+      // Observe the native appearance and focus instead of applying Playwright's media defaults.
+      browser = await chromium.connectOverCDP(url, { timeout: 120_000, noDefaults: true })
       const context = browser.contexts()[0]
 
       if (!context) throw new Error("Electron did not expose a browser context")

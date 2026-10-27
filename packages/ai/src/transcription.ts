@@ -48,6 +48,7 @@ export class TranscriptionModel<Options extends TranscriptionOptions = Transcrip
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
+      providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as TranscriptionRoute,
     })
   }
@@ -129,7 +130,6 @@ const transcriptFields = {
   language: Schema.optional(Schema.String),
   durationSeconds: Schema.optional(Schema.Number),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }
 

@@ -3,6 +3,7 @@ export * as Environment from "./index.js"
 export { type Driver } from "./driver.js"
 export {
   type DirEntry,
+  exists,
   Failed,
   type FileInfo,
   type Files,

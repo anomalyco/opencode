@@ -29,6 +29,7 @@ const DiffQuery = Schema.Struct({
   mode: Vcs.Mode,
   base: optional(Schema.String),
   context: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+  untracked: optional(Vcs.Untracked),
 })
 
 export const VcsGroup = HttpApiGroup.make("server.vcs")

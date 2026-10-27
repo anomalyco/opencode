@@ -22,7 +22,7 @@ Kreiraj `.opencode/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -59,7 +59,7 @@ Koristite opciju `command` u svom OpenCode [config](/docs/config):
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -84,7 +84,7 @@ Također možete definirati komande koristeći markdown datoteke. Stavite ih u:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -297,7 +297,7 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovu naredbu.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

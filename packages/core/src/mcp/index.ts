@@ -181,6 +181,9 @@ export const layer = (options?: Options) =>
       const credentials = yield* Credential.Service
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
+      // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
+      // the rest past a service restart's kill deadline and leave them orphaned.
+      const servers = yield* Scope.fork(root, "parallel")
 
       const entries = new Map<ServerName, ServerEntry>()
       const attached = new Map<ServerName, AttachedEntry[]>()
@@ -451,7 +454,7 @@ export const layer = (options?: Options) =>
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
           yield* bus.publish(McpEvent.StatusChanged, { server: name })
-          const scope = yield* Scope.fork(root)
+          const scope = yield* Scope.fork(servers)
           entry.scope = scope
           const authProvider = yield* connectProvider(entry)
           const { McpClient } = yield* Effect.promise(() => import("./client.js"))
@@ -675,7 +678,13 @@ export const layer = (options?: Options) =>
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
               continue
             }
-            fork(startServer(name, entry).pipe(locks.withLock(name)))
+            fork(
+              Effect.gen(function* () {
+                // connect() or disconnect() may have settled the server while this startup waited to run.
+                if (entry.status.status !== "pending") return yield* entry.startup.open
+                yield* startServer(name, entry)
+              }).pipe(locks.withLock(name)),
+            )
           }
           return
         }
@@ -750,7 +759,14 @@ export const layer = (options?: Options) =>
         servers: Effect.fn("MCP.servers")(function* () {
           return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
-            .map(([name, entry]): ServerInfo => ({ name, status: entry.status, integrationID: entry.integrationID }))
+            .map(
+              ([name, entry]): ServerInfo => ({
+                name,
+                status: entry.status,
+                title: entry.client?.title,
+                integrationID: entry.integrationID,
+              }),
+            )
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)

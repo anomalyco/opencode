@@ -34,11 +34,14 @@ export interface Context {
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<OpenCodeClient["experimental"]["persistentPty"], "read">
+    /** Stateless generation with a model and a prompt: no session, history or tools. */
+    readonly generate: GenerateApi
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: GenerateApi
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<GenerateApi, "text">
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi, "list">
   readonly provider: ProviderDomain

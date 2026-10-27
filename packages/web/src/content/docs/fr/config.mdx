@@ -14,7 +14,7 @@ OpenCode prend en charge les formats **JSON** et **JSONC** (JSON avec commentair
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -35,7 +35,7 @@ Les fichiers de configuration sont **fusionnés**, pas remplacés.
 
 Les fichiers de configuration sont fusionnés et non remplacés. Les paramètres des emplacements de configuration suivants sont combinés. Les configurations ultérieures remplacent les précédentes uniquement en cas de clés en conflit. Les paramètres non conflictuels de toutes les configurations sont conservés.
 
-Par exemple, si votre configuration globale définit `autoupdate: true` et que la configuration de votre projet définit `model: "anthropic/claude-sonnet-4-5"`, la configuration finale inclura les deux paramètres.
+Par exemple, si votre configuration globale définit `autoupdate: true` et que la configuration de votre projet définit `model: "anthropic/claude-sonnet-5-5"`, la configuration finale inclura les deux paramètres.
 
 ---
 
@@ -217,7 +217,7 @@ Vous pouvez gérer les outils qu'un LLM peut utiliser via l'option `tools`.
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": false,
-    "shell": false
+    "bash": false
   }
 }
 ```
@@ -234,8 +234,8 @@ Vous pouvez configurer les fournisseurs et les modèles que vous souhaitez utili
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -324,7 +324,7 @@ Vous pouvez configurer des agents spécialisés pour des tâches spécifiques vi
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -369,7 +369,7 @@ Vous pouvez configurer des commandes personnalisées pour les tâches répétiti
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -444,14 +444,14 @@ Vous pouvez configurer les formateurs de code via l'option `formatter`.
 
 Par défaut, opencode **autorise toutes les opérations** sans nécessiter d'approbation explicite. Vous pouvez modifier cela en utilisant l'option `permission`.
 
-Par exemple, pour garantir que les outils `edit` et `shell` nécessitent l'approbation de l'utilisateur :
+Par exemple, pour garantir que les outils `edit` et `bash` nécessitent l'approbation de l'utilisateur :
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "ask",
-    "shell": "ask"
+    "bash": "ask"
   }
 }
 ```

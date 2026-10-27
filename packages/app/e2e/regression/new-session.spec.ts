@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
-import { draftHref, expectPath, provider, sessionHref } from "../utils/app"
-import type { MockAnswer } from "../utils/mock-server"
-import { openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
+import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
+import { mockOpenCodeServer } from "../utils/mock-server"
+import { newSessionLocation, openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
 
@@ -37,7 +37,7 @@ const pendingDraft = {
   createdSessionTitle: "Created workspace session",
 } satisfies WorkspaceInput & { draftID: string }
 
-const failFirstCreate = (_: unknown, attempt: number): MockAnswer | undefined =>
+const failFirstCreate: NonNullable<WorkspaceInput["onSessionCreate"]> = (_body, attempt) =>
   attempt === 1 ? { status: 500, body: { message: "Session creation failed in the fixture" } } : undefined
 
 test.use({
@@ -49,6 +49,291 @@ test.use({
 test("the new session screen does not show session details", async ({ page }) => {
   await openDraft(page, { name: "Summary" })
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
+})
+
+test("the location shortcut keeps cycling after hovering its icon", async ({ page }) => {
+  const view = await openDraft(page, { name: "LocationShortcut" })
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionLocation(page)).not.toContainText("New worktree")
+  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.directory)
+  await page.locator('[data-slot="new-session-location-icon"]').hover()
+  await expect(page.getByRole("tooltip")).toContainText("Toggle session location")
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(view.editor).toBeFocused()
+})
+
+for (const row of [
+  {
+    name: "POSIX",
+    directory: "/Users/alice/.local/share/opencode/worktree/123456/my-project",
+    pattern: /^\/Users\/.*…\/123456\/my-project$/,
+  },
+  {
+    name: "Windows",
+    directory: "C:\\Users\\alice\\Documents\\opencode\\worktree\\123456\\my-project",
+    pattern: /^C:\\.*…\\123456\\my-project$/,
+  },
+]) {
+  test(`the location path keeps its start and final two segments on ${row.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 700 })
+    await openDraft(page, { name: "A project with a long name", directory: row.directory })
+    const path = page.locator('[data-slot="new-session-location-path"]')
+    await expect(path).toHaveText(row.pattern)
+    await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await path.hover()
+    await expect(page.getByRole("tooltip")).toHaveText(row.directory)
+  })
+}
+
+test("the combined location picker shows checkout branches and chooses the base for a new worktree", async ({
+  page,
+}) => {
+  const listed = Promise.withResolvers<string[]>()
+  const searches: { directory: string; search?: string; limit?: number }[] = []
+  const existing = "C:/OpenCode/BranchContext/.worktrees/stellar-orchid"
+
+  const view = await openWorktreeDraft(page, {
+    name: "BranchContext",
+    project: { name: "Custom project" },
+    vcs: (directory) => ({
+      current: directory === existing ? "model-picker-dialog" : "timeline-quotes",
+      default: "main",
+    }),
+    worktrees: () => [{ directory: "C:/OpenCode/BranchContext" }, { directory: existing, strategy: "git" }],
+    branches: (input) => {
+      searches.push(input)
+
+      return listed.promise
+    },
+  })
+
+  const screen = page.locator('[data-component="new-session"]')
+  const base = screen.getByRole("button", { name: "from timeline-quotes", exact: true })
+  await expect(base).toBeVisible()
+  await expect.poll(() => searches).toEqual([{ directory: view.directory, search: "", limit: 50 }])
+  await base.click()
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+  await expect(search).toHaveCount(0)
+  await expect(newSessionLocation(page)).toBeVisible()
+  listed.resolve(["timeline-quotes", "release/base", "origin/dev"])
+  await expect(search).toBeFocused()
+  await expect(search).toHaveAttribute("aria-busy", "false")
+  await expect(page.getByRole("option", { name: "release/base", exact: true })).toBeVisible()
+  await search.fill("release")
+  await expect(search).toHaveAttribute("aria-busy", "false")
+  await expect(page.getByRole("option")).toHaveText(["release/base"])
+  await page.getByRole("option", { name: "release/base", exact: true }).click()
+  const selected = screen.getByRole("button", { name: "from release/base", exact: true })
+  await expect(selected).toBeVisible()
+  await expect(view.editor).toBeFocused()
+  expect(searches).toEqual([
+    { directory: view.directory, search: "", limit: 50 },
+    { directory: view.directory, search: "release", limit: 50 },
+  ])
+
+  await selected.click()
+  await expect(search).toBeFocused()
+  await expect(search).toHaveValue("")
+  await expect(page.getByRole("option")).toHaveCount(3)
+  // Reopening revalidates the branch list.
+  expect(searches).toHaveLength(3)
+  await page.getByRole("option", { name: "release/base", exact: true }).click()
+  await expect(view.editor).toBeFocused()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect
+    .poll(async () => {
+      const location = await newSessionLocation(page).boundingBox()
+      const branch = await selected.boundingBox()
+
+      return !!location && !!branch && branch.y >= location.y + location.height
+    })
+    .toBe(true)
+
+  const select = async (name: RegExp) => {
+    await newSessionLocation(page).click()
+    await page.getByRole("combobox", { name: "Search projects", exact: true }).press("ArrowRight")
+    await page.getByRole("option", { name }).click()
+    await expect(view.editor).toBeFocused()
+  }
+
+  await select(/^stellar-orchid /)
+  await expect(screen.getByText("model-picker-dialog", { exact: true })).toBeVisible()
+  await expect(screen.getByRole("button", { name: /from / })).toHaveCount(0)
+  await newSessionLocation(page).click()
+  await page.getByRole("combobox", { name: "Search projects", exact: true }).press("ArrowRight")
+  await page.getByRole("combobox", { name: "Search worktrees", exact: true }).fill("Custom project")
+  await expect(page.getByRole("option")).toHaveCount(1)
+  await page.getByRole("option", { name: /Custom project C:\/OpenCode\/BranchContext/ }).click()
+  await expect(view.editor).toBeFocused()
+  await expect(screen.getByText("timeline-quotes", { exact: true })).toBeVisible()
+  await expect(screen.getByRole("button", { name: /from / })).toHaveCount(0)
+  await select(/^New worktree/)
+  await expect(base).toBeVisible()
+  await base.click()
+  await expect(search).toBeFocused()
+  await page.getByRole("option", { name: "origin/dev", exact: true }).click()
+  await expect(screen.getByRole("button", { name: "from origin/dev", exact: true })).toBeVisible()
+  await view.editor.fill("Use the selected base")
+  await submit(page).click()
+  await expect
+    .poll(() => view.worktreeRequests.map((request) => request.body))
+    .toEqual([expect.objectContaining({ from: view.directory, branch: "origin/dev" })])
+  view.worktree.resolve({ status: 200, json: { directory: existing } })
+  await expect
+    .poll(() => view.prompts)
+    .toEqual([expect.objectContaining({ body: expect.objectContaining({ text: "Use the selected base" }) })])
+})
+
+test("a pending branch picker can be dismissed before its results arrive", async ({ page }) => {
+  const listed = Promise.withResolvers<string[]>()
+
+  const view = await openWorktreeDraft(page, {
+    name: "BranchDismiss",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => listed.promise,
+  })
+
+  const base = page.getByRole("button", { name: "from dev", exact: true })
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+  await base.click()
+  await expect(base).toHaveAttribute("aria-expanded", "true")
+  await expect(search).toHaveCount(0)
+  await view.editor.click()
+  await expect(base).toHaveAttribute("aria-expanded", "false")
+  await base.click()
+  await base.press("Escape")
+  await expect(base).toHaveAttribute("aria-expanded", "false")
+  await base.click()
+  await base.click()
+  await expect(base).toHaveAttribute("aria-expanded", "false")
+  listed.resolve(["dev", "origin/dev"])
+  await expect(base).toHaveAttribute("aria-busy", "false")
+  await expect(search).toHaveCount(0)
+  await base.click()
+  await expect(search).toBeFocused()
+  await expect(page.getByRole("option")).toHaveText(["dev", "origin/dev"])
+})
+
+test("reopening the branch picker shows branches created since it last opened", async ({ page }) => {
+  let created = false
+
+  await openWorktreeDraft(page, {
+    name: "BranchRefresh",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => (created ? ["dev", "feature/new"] : ["dev"]),
+  })
+
+  const base = page.getByRole("button", { name: "from dev", exact: true })
+  await base.click()
+  await expect(page.getByRole("option")).toHaveText(["dev"])
+  created = true
+  await base.click()
+  await expect(page.getByRole("combobox", { name: "Search branches", exact: true })).toHaveCount(0)
+  await base.click()
+  await expect(page.getByRole("option")).toHaveText(["dev", "feature/new"])
+})
+
+test("branch search keeps results on screen while a query is pending", async ({ page }) => {
+  const held = Promise.withResolvers<string[]>()
+
+  await openWorktreeDraft(page, {
+    name: "BranchPending",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: (input) => (input.search ? held.promise : ["dev", "release/base", "release/next", "timeline-quotes"]),
+  })
+
+  await page.getByRole("button", { name: "from dev", exact: true }).click()
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+  const options = page.getByRole("option")
+  await expect(options).toHaveCount(4)
+  // Record any moment the list renders without rows, however brief.
+  await page.getByRole("listbox").evaluate((list) => {
+    const observer = new MutationObserver(() => {
+      if (!list.querySelector('[role="option"]')) list.setAttribute("data-emptied", "")
+    })
+
+    observer.observe(list, { childList: true, subtree: true })
+  })
+
+  const next = page.getByRole("option", { name: "release/next", exact: true })
+  await search.press("ArrowDown")
+  await search.press("ArrowDown")
+  await expect(next).toHaveAttribute("aria-selected", "true")
+  await search.pressSequentially("release")
+  await expect(search).toHaveAttribute("aria-busy", "true")
+  await expect(options).toHaveText(["release/base", "release/next"])
+  await expect(next).toHaveAttribute("aria-selected", "true")
+  await search.press("ControlOrMeta+a")
+  await search.press("Backspace")
+  await expect(options).toHaveCount(4)
+  await search.pressSequentially("quotes")
+  await expect(options).toHaveText(["timeline-quotes"])
+  await search.pressSequentially("-missing")
+  await expect(options).toHaveText(["timeline-quotes"])
+  await expect(page.getByRole("listbox")).not.toHaveAttribute("data-emptied")
+
+  held.resolve([])
+  await expect(page.getByText("No results found", { exact: true })).toBeVisible()
+  await expect(search).toHaveAttribute("aria-busy", "false")
+})
+
+test("the empty branch search state is as tall as a single result", async ({ page }) => {
+  await openWorktreeDraft(page, {
+    name: "BranchEmptyHeight",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => ["dev"],
+  })
+
+  await page.getByRole("button", { name: "from dev", exact: true }).click()
+  await expect(page.getByRole("option")).toHaveCount(1)
+  const panel = page.getByRole("dialog")
+  // Measured on open, before any search animates the panel.
+  const single = await panel.evaluate((element) => element.getBoundingClientRect().height)
+
+  await page.getByRole("combobox", { name: "Search branches", exact: true }).fill("missing")
+  await expect(page.getByText("No results found", { exact: true })).toBeVisible()
+  await expect.poll(() => panel.evaluate((element) => element.getBoundingClientRect().height)).toBe(single)
+})
+
+test("backspacing keeps confirmed branch results until the broader search answers", async ({ page }) => {
+  const broader = Promise.withResolvers<string[]>()
+  const closed = ["closed-search-beta", "closed-session-search", "reopen-closed-tab", "recently-closed-projects"]
+
+  await openWorktreeDraft(page, {
+    name: "BranchBackspace",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: (input) => {
+      if (input.search === "clo") return broader.promise
+
+      if (input.search) return closed
+
+      return [...closed, "origin/cloudflare-run-images", "origin/cloudflare-run-functions"]
+    },
+  })
+
+  await page.getByRole("button", { name: "from dev", exact: true }).click()
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+  const options = page.getByRole("option")
+  await expect(options).toHaveCount(6)
+  await search.fill("closed")
+  await expect(search).toHaveAttribute("aria-busy", "false")
+  await expect(options).toHaveText(closed)
+  await search.press("Backspace")
+  await search.press("Backspace")
+  await search.press("Backspace")
+  await expect(search).toHaveValue("clo")
+  await expect(search).toHaveAttribute("aria-busy", "true")
+  await expect(options).toHaveText(closed)
+  broader.resolve([...closed, "clover-fix"])
+  await expect(search).toHaveAttribute("aria-busy", "false")
+  await expect(options).toHaveText([...closed, "clover-fix"])
 })
 
 test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {
@@ -95,7 +380,11 @@ test("a pending worktree session shows immediately, keeps its draft, and hands o
   const label = page.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')
   await expect(label).toHaveText("Session")
   const pending = await submitPending(page, mock)
-  const spinner = tabLink(page, pending.sessionID).locator('[data-component="session-progress-indicator-v2"]')
+
+  const spinner = page.locator(
+    `[data-titlebar-tab-slot]:has(a[href="${sessionHref(pending.sessionID)}"]) [data-component="activity-ring"]`,
+  )
+
   await expect(spinner).toBeVisible()
   await expect(label).toHaveText("Session")
 
@@ -192,9 +481,7 @@ test("the title and message stay stable through worktree creation", async ({ pag
         title: visible(title) ? title!.textContent : null,
         message: visible(document.querySelector('[data-component="user-message"]')),
         spinner: visible(
-          document.querySelector(
-            '[data-titlebar-tab-slot][data-active="true"] [data-component="session-progress-indicator-v2"]',
-          ),
+          document.querySelector('[data-titlebar-tab-slot][data-active="true"] [data-component="activity-ring"]'),
         ),
         draft: visible(editor) ? editor!.textContent : null,
       })
@@ -281,7 +568,7 @@ for (const row of [
 
     if (row.followUp) return
     await expect(page.getByText("Failed to create worktree", { exact: true })).toBeVisible()
-    await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
+    await expect(newSessionLocation(page)).toContainText("New worktree")
     await expect(pending.message).toHaveCount(0)
     await expect(tabLink(page, pending.sessionID)).toHaveCount(0)
     expect(mock.creates).toEqual([])
@@ -298,7 +585,7 @@ test("retains the draft and reuses the created workspace after session creation 
   await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
   await expect(editor(page)).toHaveText(text)
   await expect(submit(page)).toBeEnabled()
-  await expect(page.getByRole("button", { name: "pending-workspace", exact: true })).toBeVisible()
+  await expect(newSessionLocation(page)).toContainText("pending-workspace")
   await expect(pending.shimmer).toHaveCount(0)
   await expect(pending.message).toHaveCount(0)
   expect(mock.creates).toEqual([expect.objectContaining({ id: pending.sessionID, location: { directory: workspace } })])
@@ -346,7 +633,7 @@ test("restores the draft after closing and revisiting a pending session that fai
   await expect(page.getByText("Failed to create worktree", { exact: true })).toBeVisible()
   await expect(editor(page)).toHaveText(`${text}\n\n${followUp}`)
   await expect(submit(page)).toBeEnabled()
-  await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
+  await expect(newSessionLocation(page)).toContainText("New worktree")
   await expect(page.locator(`[data-titlebar-tab-link][href="${draftHref(draftID)}"]`)).toHaveCount(1)
   await expect(tab).toHaveCount(0)
   await expect(pending.message).toHaveCount(0)
@@ -385,6 +672,7 @@ test("executes a selected slash command after creating its worktree", async ({ p
       },
     ])
   // The server owns command expansion; the client receives the expanded inbox item.
+  // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
   await mock.push([
     {
       id: "evt_workspace_review",
@@ -406,6 +694,191 @@ test("executes a selected slash command after creating its worktree", async ({ p
   expect(mock.prompts).toEqual([])
 })
 
+test("the location dialog separates added projects from server projects and tags the remote ones", async ({ page }) => {
+  const apollo = "http://apollo.test:4096"
+
+  const entry = (id: string, directory: string, active: number) =>
+    project({ id, directory, time: { created: T0, updated: T0, active: T0 + active } })
+
+  const remote = entry("proj_apollo_opencode", "/home/dax/opencode", 4)
+  const files: string[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (url.origin === apollo && url.pathname === "/api/fs/list") files.push(url.pathname)
+  })
+  await mockOpenCodeServer(page, {
+    server: apollo,
+    directory: remote.worktree,
+    project: remote,
+    projects: () => [remote, entry("proj_apollo_sst", "/home/dax/sst", 3)],
+    worktrees: () => [{ directory: remote.worktree }, { directory: "/home/dax/opencode-beta", strategy: "git" }],
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+    fileList: () => [],
+  })
+  // romulus is listed but unreachable, so it contributes no projects and cannot take a new one.
+  await seed(page, {
+    servers: [
+      { url: apollo, name: "apollo" },
+      { url: "http://127.0.0.1:4999", name: "romulus" },
+    ],
+    usedProjects: { [apollo]: [remote.id] },
+  })
+  const local = entry("proj_opencode", "C:/work/opencode", 2)
+  await openDraft(page, {
+    name: "opencode",
+    hostname: "hailmary",
+    directory: local.worktree,
+    project: { time: local.time },
+    projects: () => [local, entry("proj_console", "C:/work/console", 9)],
+  })
+
+  await newSessionLocation(page).click()
+  const dialog = page.getByRole("dialog")
+  const search = dialog.getByRole("combobox")
+  await expect(search).toBeFocused()
+  const options = dialog.getByRole("option")
+  const add = options.filter({ hasText: "Add project" })
+  await expect(add.locator('[data-component="keybind-v2"]')).toContainText("O")
+  const rows = options.filter({ has: page.locator(".new-session-location-name") })
+  const names = options.locator(".new-session-location-name")
+  const paths = options.locator(".command-palette-description")
+  const back = dialog.getByRole("button", { name: "Back to projects", exact: true })
+  // Only the projects added to this client open expanded; other ready-server projects remain discoverable.
+  await expect(names).toHaveText(["opencodeapollo", "opencode"])
+  await expect(paths).toHaveText(["/home/dax/opencode", "C:/work/opencode"])
+  const others = options.filter({ hasText: "Other projects" })
+  await expect(others).toBeVisible()
+  await expect(others.locator(".new-session-location-count")).toHaveText("2")
+  await expect(dialog.locator(".command-palette-group-title")).toHaveCount(0)
+  await expect(options.locator(".command-palette-title")).toHaveText([
+    "opencode",
+    "opencode",
+    "Other projects",
+    "Add project",
+  ])
+  // It opens on the first row, not on the draft's current project (the second row).
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
+
+  // The picker shares the palette's full-width search, compact rows, and single-line titles.
+  await expect(options.nth(0)).toHaveCSS("height", "28px")
+  await expect(dialog.locator(".palette-menu-search [data-component='text-input-v2']")).toHaveCSS("height", "28px")
+  await expect(dialog.locator(".new-session-location-hints")).toHaveCount(0)
+  await expect(dialog.locator("..")).toHaveCSS("width", "480px")
+  await expect(options.nth(0)).toHaveCSS("display", "flex")
+  await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("font-size", "13px")
+  await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("white-space", "nowrap")
+  await expect(rows.nth(0)).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+  // "Add project" shares the project rows' width and icon column.
+  await expect
+    .poll(async () => {
+      const field = await dialog.locator('[data-component="text-input-v2"]').boundingBox()
+      const row = await rows.nth(0).boundingBox()
+      const first = await add.boundingBox()
+      const icon = await add.locator(".command-palette-row-icon").boundingBox()
+      const avatar = await rows.nth(0).locator('[data-component="project-avatar-v2"]').boundingBox()
+
+      return field && row && first && icon && avatar
+        ? Math.max(Math.abs(field.width - row.width), Math.abs(first.width - row.width), Math.abs(icon.x - avatar.x))
+        : Infinity
+    })
+    .toBeLessThanOrEqual(1)
+
+  await others.click()
+  await expect(names).toHaveText(["console", "sstapollo"])
+  await expect(back).toHaveText("Other projects")
+  await search.fill("no-project-matches")
+  await expect(options).toHaveCount(0)
+  await expect(back).toBeVisible()
+  await search.fill("")
+  await expect(names).toHaveText(["console", "sstapollo"])
+  await search.press("ArrowLeft")
+  await expect(names).toHaveText(["opencodeapollo", "opencode"])
+  await search.press("ArrowRight")
+  await expect(names).toHaveText(["console", "sstapollo"])
+  await search.press("Backspace")
+  await search.press("Enter")
+  await expect(names).toHaveText(["console", "sstapollo"])
+  await search.press("Escape")
+  await expect(names).toHaveText(["opencodeapollo", "opencode"])
+  await others.click()
+  await back.click()
+  await expect(names).toHaveText(["opencodeapollo", "opencode"])
+
+  await search.fill("apollo")
+  await expect(names).toHaveText(["opencodeapollo", "sstapollo"])
+  await expect(dialog.locator(".command-palette-group-title")).toHaveText("Other projects")
+
+  // The worktree step keeps the project's avatar and server tag in its main-checkout row.
+  await search.fill("opencode")
+  await expect(paths).toHaveText(["/home/dax/opencode", "C:/work/opencode"])
+  await expect(rows.nth(0)).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("ArrowRight")
+  // The worktree step has no "Add project".
+  await expect(add).toHaveCount(0)
+  await expect(back).toHaveText("Run session in")
+  await expect(options.nth(0).locator('[data-component="tag"]')).toHaveText("apollo")
+  await expect(options.locator(".command-palette-title")).toHaveText(["opencode", "New worktree", "opencode-beta"])
+  await expect(dialog.getByRole("separator")).toHaveCount(1)
+  await search.fill("opencode-beta")
+  await expect(options).toHaveCount(1)
+  await expect(dialog.getByRole("separator")).toHaveCount(0)
+  await search.fill("no-worktree-matches")
+  await expect(options).toHaveCount(0)
+  await expect(dialog.getByRole("separator")).toHaveCount(0)
+  await search.fill("")
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("Backspace")
+  await expect(search).toHaveValue("opencode")
+  await expect(rows.nth(0)).toHaveAttribute("aria-selected", "true")
+
+  // Adding a project picks one of the ready servers first, then browses that server.
+  await search.fill("")
+  await expect(rows.nth(0)).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("ArrowUp")
+  await expect(options.nth(3)).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press((await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+o" : "Control+o")
+  await expect(back).toHaveText("Servers")
+  // The server the app runs beside shows its hostname and "This computer" instead of its address.
+  await expect(options).toHaveText(["hailmaryThis computer", "apollo"])
+  await back.click()
+  await options.filter({ hasText: "Add project" }).click()
+  await expect(options).toHaveText(["hailmaryThis computer", "apollo"])
+  await options.filter({ hasText: "apollo" }).click()
+  await expect(page.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await expect.poll(() => files.length).toBeGreaterThan(0)
+})
+
+for (const binding of ["mod+alt+p", "none"]) {
+  test(`the location dialog honors the Open project shortcut override: ${binding}`, async ({ page }) => {
+    await openDraft(page, {
+      name: "ProjectShortcut",
+      fileList: () => [],
+      seed: { settings: { keybinds: { "project.open": binding } } },
+    })
+    await newSessionLocation(page).click()
+    const search = page.getByRole("combobox", { name: "Search projects", exact: true })
+    await expect(search).toBeFocused()
+    const keys = page.getByRole("option", { name: /^Add project/ }).locator('[data-component="keybind-v2"]')
+
+    if (binding === "none") await expect(keys).toHaveCount(0)
+
+    if (binding !== "none") await expect(keys).toContainText("P")
+
+    const modifier = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta" : "Control"
+    await search.press(`${modifier}+o`)
+    await search.fill("still searching")
+    await expect(search).toHaveValue("still searching")
+
+    if (binding === "none") return
+
+    await search.press(`${modifier}+Alt+p`)
+    await expect(page.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  })
+}
+
 const accentRoot = "C:/OpenCode/WorkspaceAccent"
 
 const accentWorkspace = `${accentRoot}/.worktrees/feature`
@@ -418,7 +891,7 @@ for (const row of [
     accent: false,
   },
 ]) {
-  test(`workspace accent colors the user message only for ${row.name}`, async ({ page }) => {
+  test(`keeps the user message grey for ${row.name}`, async ({ page }) => {
     const inventory: WorktreeDirectory[] = [{ directory: accentRoot }, { directory: accentWorkspace, strategy: "git" }]
 
     const listed = page.waitForResponse(
@@ -453,7 +926,7 @@ for (const row of [
     expect((await listed).ok()).toBe(true)
     const composer = page.locator('[data-component="composer"]')
     const send = composer.getByRole("button", { name: "Send", exact: true })
-    await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Accent Model")
+    await expect(composer.locator('[data-action="composer-model"]')).toHaveText("OpenCode / Accent Model")
     await view.editor.fill("Inspect this fixture workspace.")
     await expect(send).toBeEnabled()
     await expectBackground(send, "icon-button-contrast")
@@ -464,8 +937,8 @@ for (const row of [
     await expectBackground(send, "icon-button-contrast")
     const message = page.locator('[data-slot="user-message-text"]')
     await expect(message).toHaveText("Check this fixture workspace.")
-    await expectToken(message, "background-color", row.accent ? "--v2-background-bg-accent" : "--v2-blue-100")
-    await expectToken(message, "color", row.accent ? "--v2-text-text-contrast" : "--v2-blue-700")
+    await expectToken(message, "background-color", "--v2-background-bg-layer-02")
+    await expectToken(message, "color", "--v2-text-text-base")
 
     if (!row.accent) return
 
@@ -475,6 +948,7 @@ for (const row of [
       (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
     )
 
+    // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
     await view.push([
       {
         id: "evt_accent_inventory",
@@ -487,6 +961,7 @@ for (const row of [
     await expect(page).toHaveURL(url)
     await expect(view.editor).toHaveText("Inspect this fixture workspace.")
     await expectBackground(send, "icon-button-contrast")
+    // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
     await view.push([
       {
         id: "evt_accent_running",
@@ -504,6 +979,7 @@ for (const row of [
 }
 
 function renamed(sessionID: string) {
+  // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
   return {
     id: "evt_generated_title",
     type: "session.renamed",

@@ -13,7 +13,7 @@ export const Plugin = define({
     const compaction = yield* SessionCompaction.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, compaction.reload())
     yield* compaction.transform((editor) => {
-      editor.configure({ precompute: Config.latest(loaded.entries, "experimental")?.precompute_compaction === true })
+      editor.configure({ precompute: Config.latest(loaded.entries, "experimental")?.background_compaction === true })
       for (const entry of loaded.entries) {
         if (entry.type !== "document" || !entry.info.compaction) continue
         editor.configure({

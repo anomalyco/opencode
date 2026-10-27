@@ -23,7 +23,7 @@ description: Tekrarlanan görevler için özel komutlar oluşturulur.
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ opencode [config](/docs/config)'deki `command` seçeneğini kullanın:
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ Markdown dosyalarını kullanarak komutları da tanımlayabilirsiniz. Bunları �
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -302,7 +302,7 @@ Bu parçanın varsayılan kodu geçersiz için `model` kontrolünü kullanın.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }

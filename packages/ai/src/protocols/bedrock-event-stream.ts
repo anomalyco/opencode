@@ -135,6 +135,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
 export const framing = (route: string): Framing.Definition<Frame> => ({
   id: "aws-event-stream",
   body: (frame) => frame.rawBody,
+  raw: ({ rawBody: _, ...event }) => event,
   frame: (bytes) =>
     bytes.pipe(
       Stream.map((bytes): FrameInput => ({ _tag: "Chunk", bytes })),

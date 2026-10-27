@@ -196,7 +196,6 @@ export const dict = {
   "ui.question.answer.none": "(အဖြေမရှိ)",
   "ui.question.review.notAnswered": "(မဖြေပါ)",
   "ui.question.multiHint": "သက်ဆိုင်သည့် အဖြေအားလုံးကို ရွေးပါ။",
-  "ui.question.singleHint": "အဖြေတစ်ခု ရွေးပါ။",
   "ui.question.custom.placeholder": "သင့်အဖြေကို ရိုက်ထည့်ပါ…",
   "ui.tool.loadedFile": "{{path}} ကို ဖွင့်ပြီးပါပြီ",
   "ui.tool.loadedSkill": "{{name}} ကျွမ်းကျင်မှုကို ဖွင့်ပြီးပါပြီ",

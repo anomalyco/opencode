@@ -19,7 +19,7 @@ export async function readLocalImage(
   path: string,
   signal: AbortSignal,
 ): Promise<Blob | undefined> {
-  const drive = /^[a-z]:\//i.test(path)
+  const drive = /^[a-z]:[\\/]/i.test(path)
 
   if (/^[\\/]{2}/.test(path) || (!drive && /^[a-z][a-z\d+.-]*:/i.test(path))) return
   const type = types.get(path.match(/\.([^./]+)$/)?.[1]?.toLowerCase() ?? "")

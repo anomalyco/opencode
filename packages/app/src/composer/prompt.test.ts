@@ -5,6 +5,44 @@ import { buildPromptRequest } from "./request"
 import { contextItemKey } from "./schema"
 
 describe("extractPromptFromMessage", () => {
+  test("restores a renamed session and preserves file offsets when resubmitted", () => {
+    const id = "ses_0123456789abcdefghijklmnop"
+    const text = `@session:${id} @a.ts`
+
+    const prompt = extractPromptFromMessage(
+      {
+        id: "msg_mention",
+        text,
+        files: [
+          {
+            data: "",
+            mime: "text/plain",
+            source: { type: "uri", uri: "file:///repo/a.ts" },
+            mention: { text: "@a.ts", start: 40, end: 45 },
+          },
+        ],
+      },
+      { sessionTitle: () => "Renamed", directory: "/repo" },
+    )
+
+    expect(prompt).toMatchObject([
+      { type: "session", id, content: "@Renamed", start: 0, end: 8 },
+      { type: "text", content: " ", start: 8, end: 9 },
+      { type: "file", content: "@a.ts", start: 9, end: 14 },
+    ])
+
+    const result = buildPromptRequest({
+      prompt,
+      context: [],
+      images: [],
+      text: "@Renamed @a.ts",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.text).toBe(text)
+    expect(result.files[0]?.mention).toEqual({ text: "@a.ts", start: 40, end: 45 })
+  })
+
   test("restores uploaded attachments in order, optimistic data URLs, and review comments", () => {
     const message = {
       id: "msg_1",

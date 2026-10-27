@@ -6,6 +6,7 @@ import { Deferred, Effect, Exit, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Teardown } from "@opencode/util/teardown"
 import { testEffect } from "../lib/effect"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)
@@ -300,6 +301,39 @@ describe("cross-spawn spawner", () => {
         10_000,
       )
     }
+
+    fx.live(
+      "stops tracking a released child while a grandchild holds stdio",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "child.pid")
+        yield* Effect.addFinalizer(() =>
+          Effect.tryPromise(async () => process.kill(Number(await fs.readFile(pidFile, "utf8")), "SIGKILL")).pipe(
+            Effect.ignore,
+          ),
+        )
+        const label = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* ChildProcess.make(
+              "node",
+              [path.join(import.meta.dir, "../fixture/held-stdio.cjs"), "exit", pidFile],
+              { stdin: "ignore" },
+            )
+            const label = `child ${handle.pid} running:`
+            expect(Teardown.pending().some((item) => item.label.startsWith(label))).toBe(true)
+            yield* handle.exitCode
+            return label
+          }),
+        )
+        // Checked before yielding to the event loop: release itself settles the entry, not a later "close" event.
+        expect(Teardown.pending().some((item) => item.label.startsWith(label))).toBe(false)
+        expect(alive(Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8"))))).toBe(true)
+      }),
+      10_000,
+    )
 
     fx.effect(
       "kills a running process",

@@ -2,6 +2,7 @@ import { Schema, SchemaGetter, Struct } from "effect"
 import { checksum } from "@opencode/util/encode"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Skill } from "@opencode/schema/skill"
+import { Session } from "@opencode/schema/session"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileSelection, SelectedLineRange } from "@/workspaces/files/types"
 
@@ -58,6 +59,14 @@ export const SkillPart = Persistence.struct({
 })
 
 export type SkillPart = typeof SkillPart.Type
+
+export const SessionPart = Persistence.struct({
+  type: Schema.Literal("session"),
+  ...PartBase,
+  id: Session.ID,
+})
+
+export type SessionPart = typeof SessionPart.Type
 
 const ImageFields = {
   type: Schema.Literal("image"),
@@ -121,6 +130,7 @@ export const ContentPart = Schema.Union([
   FileAttachmentPart,
   AgentPart,
   SkillPart,
+  SessionPart,
   ImageAttachmentPart,
   PathAttachmentPart,
 ])
@@ -165,7 +175,7 @@ const NoteFields = {
   comment: Schema.String,
 }
 
-/** An extension's comment on something other than workspace lines, as sent in message metadata. */
+/** A plugin's comment on something other than workspace lines, as sent in message metadata. */
 export const NoteComment = Persistence.struct(NoteFields)
 
 export type NoteComment = typeof NoteComment.Type
@@ -174,15 +184,43 @@ export const NoteContextItem = Persistence.struct({ ...NoteFields, commentID: Sc
 
 export type NoteContextItem = typeof NoteContextItem.Type
 
-export type ContextItem = FileContextItem | NoteContextItem
+/** Where text quoted from outside the timeline came from, such as a plugin's terminal. */
+export const QuoteSource = Persistence.struct({
+  label: Schema.String,
+  icon: Schema.String,
+  subject: Schema.String,
+})
+
+export type QuoteSource = typeof QuoteSource.Type
+
+const QuoteFields = {
+  type: Schema.Literal("quote"),
+  text: Schema.String,
+  comment: Persistence.optional(Schema.String),
+  source: Persistence.optional(QuoteSource),
+}
+
+/**
+ * Plain text the user quoted, with an optional comment, as sent in message metadata. Without a source it was quoted
+ * from the session timeline.
+ */
+export const QuoteComment = Persistence.struct(QuoteFields)
+
+export type QuoteComment = typeof QuoteComment.Type
+
+export const QuoteContextItem = Persistence.struct({ ...QuoteFields, commentID: Schema.String })
+
+export type QuoteContextItem = typeof QuoteContextItem.Type
+
+export type ContextItem = FileContextItem | NoteContextItem | QuoteContextItem
 
 /** A note's live part names state inside the app process that attached it; anything that may outlive it drops it. */
 export function durableNote<Note extends NoteComment>(note: Note) {
   return Struct.omit(note, ["live"])
 }
 
-// Legacy data: desktop builds before extension notes stored browser element comments as their own type, in drafts
-// and in message metadata. They read as the browser extension's note, without the element ref of their process.
+// Legacy data: desktop builds before plugin notes stored browser element comments as their own type, in drafts
+// and in message metadata. They read as the browser plugin's note, without the element ref of their process.
 const LegacyBrowserComment = Persistence.struct({
   type: Schema.Literal("browser"),
   tabID: Schema.String,
@@ -232,6 +270,8 @@ function legacyBrowserNote(item: typeof LegacyBrowserComment.Type): NoteComment 
 
 export function contextItemKey(item: ContextItem) {
   if (item.type === "note") return `note:${item.origin}:c=${item.commentID}`
+
+  if (item.type === "quote") return `quote:c=${item.commentID}`
   const key = `${item.type}:${item.path}:${item.selection?.startLine}:${item.selection?.endLine}`
 
   if (item.commentID) return `${key}:c=${item.commentID}`
@@ -261,6 +301,16 @@ const NoteContextEntry = Schema.Struct({
   }),
 )
 
+const QuoteContextEntry = Schema.Struct({
+  ...QuoteContextItem.fields,
+  key: Persistence.optional(Schema.String),
+}).pipe(
+  Schema.decodeTo(Persistence.struct({ ...QuoteContextItem.fields, key: Schema.String }).pipe(Schema.toType), {
+    decode: SchemaGetter.transform((item) => ({ ...item, key: contextItemKey(item) })),
+    encode: SchemaGetter.transform((item) => item),
+  }),
+)
+
 const LegacyBrowserContextEntry = Schema.Struct({
   ...LegacyBrowserComment.fields,
   commentID: Schema.String,
@@ -276,7 +326,7 @@ const LegacyBrowserContextEntry = Schema.Struct({
   }),
 )
 
-const ContextEntry = Schema.Union([FileContextEntry, NoteContextEntry, LegacyBrowserContextEntry])
+const ContextEntry = Schema.Union([FileContextEntry, NoteContextEntry, QuoteContextEntry, LegacyBrowserContextEntry])
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 

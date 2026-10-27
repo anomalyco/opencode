@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LLM, Message, ToolCallPart } from "../../src/effect.js"
 import { GoogleVertexInteractions } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { Auth } from "../../src/route/auth.js"
@@ -184,6 +184,37 @@ describe("Google Vertex Interactions", () => {
         { event_type: "interaction.completed", interaction: { status: "completed" } },
       ).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
+    }),
+  )
+
+  it.effect("classifies failed interactions by their reported errors", () =>
+    Effect.gen(function* () {
+      const model = GoogleVertexInteractions.configure({ apiKey: "vertex-key" }).model("gemini-3.8-flash")
+      const cases = [
+        {
+          errors: [{ code: "permission_denied", message: "Access denied" }],
+          tag: "Authentication",
+          message: "Access denied",
+        },
+        {
+          errors: [{ message: "Out of credits" }, { code: "insufficient_quota", message: "Add billing" }],
+          tag: "QuotaExceeded",
+          message: "Out of credits\nAdd billing",
+        },
+        { errors: [], tag: "UnknownProvider", message: "Google Interactions failed" },
+      ]
+      for (const item of cases) {
+        const event = { event_type: "interaction.completed", interaction: { status: "failed", errors: item.errors } }
+        const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Hi" })).pipe(
+          Effect.provide(fixedResponse(sseEvents(event))),
+          Effect.flip,
+        )
+        expect([error.reason._tag, error.reason.message, error.reason.body]).toEqual([
+          item.tag,
+          item.message,
+          JSON.stringify(event),
+        ])
+      }
     }),
   )
 

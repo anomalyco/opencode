@@ -16,7 +16,6 @@ import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
@@ -24,6 +23,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -35,7 +35,6 @@ import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
-import { Voice } from "@opencode/core/voice"
 import { WebSearch } from "@opencode/core/websearch"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
@@ -54,7 +53,14 @@ const npmLayer = Layer.succeed(
   }),
 )
 
-const generateLayer = Layer.succeed(Generate.Service, Generate.Service.of({ text: () => Effect.succeed("") }))
+const generateLayer = Layer.succeed(
+  Generate.Service,
+  Generate.Service.of({
+    text: () => Effect.succeed(""),
+    image: () => Effect.die("unused"),
+    decisions: () => Effect.die("unused"),
+  }),
+)
 
 const configLayer = Config.testLayer()
 
@@ -95,9 +101,9 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Command.node,
       Integration.node,
       KV.node,
-      ManagedPolicy.node,
       Mcp.node,
       Session.node,
+      InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,
       Permission.node,
@@ -108,7 +114,6 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       SkillDiscovery.node,
       Tool.node,
       Vcs.node,
-      Voice.node,
       Watcher.node,
       WebSearch.node,
       Worktree.node,

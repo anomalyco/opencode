@@ -214,7 +214,6 @@ export const dict = {
   "ui.question.answer.none": "(لا توجد إجابة)",
   "ui.question.review.notAnswered": "(لم تتم الإجابة)",
   "ui.question.multiHint": "حدد كل ما ينطبق",
-  "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك…",
 
   "ui.fileSearch.placeholder": "بحث",
