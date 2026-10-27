@@ -38,9 +38,15 @@ type RunValues = (
 // the next attempt waits it out. Statements of our own transaction carry its
 // service in the fiber context and fail fast instead — a BUSY_SNAPSHOT there
 // repeats until the transaction is rolled back and restarted, so retrying
-// would only burn the budget. BEGIN, COMMIT and ROLLBACK run outside that
-// context while our transaction holds the semaphore, so they retry in place
-// rather than re-take it.
+// would only burn the budget. Rolling back and rerunning the whole
+// transaction is the only recovery there, and only the caller can do it: the
+// body reads and branches between its statements, so whether a rerun is safe
+// is the caller's call. The durable write paths (Bus, session lifecycle) get
+// that caller-side replay from #53704's StorageRetry; this client stays at
+// statement scope so the two layers never retry the same write — a
+// transaction's body statements never retry here, and its BEGIN, COMMIT and
+// ROLLBACK retry in place while it holds the semaphore, so a caller-side
+// replay only starts after this client's budget is spent.
 //
 // The budget and backoff curve are the policy in one place:
 //   50ms doubling to 250ms, jittered, giving up after LOCK_BUDGET_MS total.
@@ -113,8 +119,19 @@ export const makeClient = <
     const gateStatement = <A>(attempt: Effect.Effect<A, SqlError>): Effect.Effect<A, SqlError> =>
       Effect.withFiber((fiber) => {
         if (Context.getOption(fiber.context, transactionService)._tag === "Some") return attempt
-        // BEGIN/COMMIT/ROLLBACK run outside the transaction's service context
-        // while it holds the semaphore; re-taking it there would deadlock.
+        // Only the transaction's own control statements can reach here with
+        // the flag set. Every gated statement runs while holding the client
+        // semaphore — both acquirers take it before handing out the
+        // connection, and the statement executes inside their scope — and
+        // `transactionOpen` is true exactly while a transaction holds that
+        // semaphore. A foreign statement therefore never observes it true:
+        // it queues on the semaphore until the transaction closes, by which
+        // point the flag has flipped back. effect-sql runs BEGIN before it
+        // provides the transaction service and COMMIT/ROLLBACK after that
+        // context is withdrawn (nested savepoints run inside it, so they
+        // arrive above with the service), so exactly those three arrive here
+        // service-less while owning the semaphore; re-taking it there would
+        // deadlock, so they retry in place.
         if (transactionOpen) return retryLockTimeout(attempt)
         return retryLockTimeout(Effect.andThen(acquirer, attempt))
       })

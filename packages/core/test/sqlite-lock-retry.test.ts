@@ -4,358 +4,259 @@ import { join } from "node:path"
 import { Database } from "bun:sqlite"
 import { expect, test } from "bun:test"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
 import { sql } from "drizzle-orm"
 import { Sqlite } from "@opencode/core/database/sqlite"
 import { sqliteLayer } from "@opencode/core/database/sqlite.bun"
 
-// Regression: a statement blocked by another process's write lock (SQLITE_BUSY)
-// must retry until the lock frees, not fail the prompt with LockTimeoutError.
-test("retries statements while another process holds the write lock", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-retry-"))
-  const filename = join(dir, "locked.db")
+// Lock-retry contract of the sqlite client. Foreign write locks are held by a
+// second connection and released by the test, never by a timer, and fiber
+// order is set with Deferreds. Where a sleep remains it is a wide margin
+// ("long enough that everything before it has certainly happened"), not a
+// tuned window: effect sleeps never fire early, so a first attempt always
+// precedes a release scheduled a second later.
 
-  try {
-    const holder = new Database(filename, { create: true })
-    holder.run("create table t (id integer primary key, v text)")
-    holder.run("insert into t values (1, 'before')")
-    holder.run("pragma journal_mode = WAL")
-    holder.run("begin immediate")
+const withDatabase = (prefix: string, run: (filename: string) => Promise<void>) =>
+  mkdtemp(join(tmpdir(), prefix)).then(async (dir) => {
+    try {
+      await run(join(dir, "test.db"))
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => {})
+    }
+  })
 
-    // Release the lock 100ms in; the retry loop must recover.
-    setTimeout(() => holder.run("commit"), 100)
+// Schema plus WAL (a database-level setting) through one throwaway client.
+// busy_timeout is per connection, so each test sets it on its own.
+const initFile = (filename: string, exec: (native: unknown, text: string) => void, layer = sqliteLayer({ filename })) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const native = yield* Sqlite.Native
+      for (const text of [
+        "create table t (id integer primary key, v text)",
+        "insert into t values (1, 'before')",
+        "pragma journal_mode = WAL",
+      ]) {
+        exec(native, text)
+      }
+    }).pipe(Effect.provide(layer), Effect.scoped),
+  )
 
-    const rows = (await Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-        const native = (yield* Sqlite.Native) as Database
-        native.run("PRAGMA busy_timeout = 0")
-        yield* db.run(sql`update t set v = 'after' where id = 1`)
-        return yield* db.all(sql`select v from t where id = 1`)
-      }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped) as Effect.Effect<
-        Array<Record<string, unknown>>,
-        unknown,
-        never
-      >,
-    )) as Array<Record<string, unknown>>
-    expect(rows[0].v).toBe("after")
-    holder.close()
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-})
+const readValue = (filename: string) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const rows = (yield* db.all(sql`select v from t where id = 1`)) as Array<{ v: string }>
+      return rows[0]?.v
+    }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
+  )
 
-// Regression: a DEFERRED WAL transaction that holds a read snapshot cannot be
-// upgraded to a write after another connection commits — the snapshot is
-// stale and the upgrade fails with SQLITE_BUSY_SNAPSHOT. The retry wrapper,
-// applied indiscriminately, would loop this error for the full 30 s budget;
-// only a rollback + restart of the whole transaction helps. Inside an
-// explicit transaction, statements must fail fast.
-test("fails fast on BUSY_SNAPSHOT inside a deferred transaction", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-snapshot-"))
-  const filename = join(dir, "snap.db")
+// Fork `write` against a held lock, hold the lock well past its first
+// (immediately failing, busy_timeout = 0) attempt so the retry loop is
+// entered for sure, then release from the test and let a later attempt land.
+const releaseAfterRetries = <A, E>(write: Effect.Effect<A, E>, release: () => void) =>
+  Effect.gen(function* () {
+    const fiber = yield* Effect.forkChild(write)
+    yield* Effect.sleep("1 second")
+    release()
+    yield* Fiber.join(fiber)
+  })
 
-  try {
-    // Set up schema and one row, enable WAL, all via the layer.
+// drizzle wraps the raw SqlError inside EffectDrizzleQueryError.cause.reasons[0].error.
+const surfaceReason = (error: unknown) =>
+  (
+    (error as { cause?: { reasons?: ReadonlyArray<{ error?: { reason?: unknown } }> } })?.cause?.reasons ?? []
+  )[0]?.error?.reason as { _tag?: string; cause?: { code?: string } } | undefined
+
+// Regression: a statement blocked by another connection's write lock
+// (SQLITE_BUSY past busy_timeout) must retry until the lock frees, not fail
+// the prompt with LockTimeoutError.
+test("retries a statement until another connection releases the write lock", async () => {
+  await withDatabase("sqlite-retry-", async (filename) => {
+    await initFile(filename, (native, text) => (native as Database).run(text))
+    const lock = new Database(filename)
+    lock.run("begin immediate")
+
     await Effect.runPromise(
       Effect.gen(function* () {
-        const native = (yield* Sqlite.Native) as Database
-        native.run("create table t (id integer primary key, v text)")
-        native.run("insert into t values (1, 'before')")
-        native.run("PRAGMA journal_mode = WAL")
-        native.run("PRAGMA busy_timeout = 0")
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        ;((yield* Sqlite.Native) as Database).run("pragma busy_timeout = 0")
+        yield* releaseAfterRetries(db.run(sql`update t set v = 'after' where id = 1`), () => {
+          lock.run("commit")
+          lock.close()
+        })
       }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
     )
-
-    // Inside a deferred transaction: read, then have another connection write
-    // and commit (invalidating the read snapshot), then attempt a write.
-    // The write must surface a LockTimeoutError immediately, not loop the
-    // 30 s retry budget.
-    const start = Date.now()
-    let error: unknown
-    try {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-          yield* db.transaction(
-            (tx) =>
-              Effect.gen(function* () {
-                yield* tx.get(sql`select v from t where id = 1`)
-                // A separate connection writes and commits while we hold the
-                // deferred transaction's read snapshot.
-                yield* Effect.sync(() => {
-                  const other = new Database(filename)
-                  other.run("update t set v = 'after' where id = 1")
-                  other.close()
-                })
-                // This write must fail with BUSY_SNAPSHOT and surface fast —
-                // the retry helper must NOT keep trying the same stale snapshot.
-                yield* tx.run(sql`update t set v = 'after2' where id = 1`)
-              }),
-            { behavior: "deferred" },
-          )
-        }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
-      )
-    } catch (e) {
-      error = e
-    }
-    const elapsed = Date.now() - start
-
-    expect(error).toBeDefined()
-    // drizzle wraps the raw SqlError inside EffectDrizzleQueryError.cause.
-    // Effect wraps the SqlError in a Cause. Walk the failure chain to confirm
-    // the surface error is a LockTimeoutError wrapping SQLITE_BUSY_SNAPSHOT.
-    const reasons =
-      (
-        error as {
-          cause?: { reasons?: ReadonlyArray<{ error?: { reason?: { _tag?: string; cause?: { code?: string } } } }> }
-        }
-      ).cause?.reasons ?? []
-    const inner = reasons[0]?.error
-    expect(inner?.reason?._tag).toBe("LockTimeoutError")
-    expect((inner?.reason?.cause as { code?: string } | undefined)?.code).toBe("SQLITE_BUSY_SNAPSHOT")
-    expect(elapsed).toBeLessThan(2000)
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
+    expect(await readValue(filename)).toBe("after")
+  })
 })
 
-// Regression: the node driver errors with { code: "ERR_SQLITE_ERROR",
-// errcode: 5, errstr: "database is locked" } — no errno, no SQLITE_* string
-// code — so effect's classifier files the busy error as UnknownError and the
-// retry wrapper never fires. node:sqlite's DatabaseSync is typed here instead
-// of bun:sqlite's Database; everything else matches the bun test above.
-test("node driver retries statements while another process holds the write lock", async () => {
-  const { DatabaseSync } = await import("node:sqlite")
-  const { sqliteLayer: nodeSqliteLayer } = await import("@opencode/core/database/sqlite.node")
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-node-retry-"))
-  const filename = join(dir, "locked.db")
+// Regression: executeValues routes through runValues, a separate wire in the
+// driver; dropping the retry there would leave this green-broken.
+test("retries on the values path too", async () => {
+  await withDatabase("sqlite-retry-values-", async (filename) => {
+    await initFile(filename, (native, text) => (native as Database).run(text))
+    const lock = new Database(filename)
+    lock.run("begin immediate")
 
-  try {
-    const holder = new DatabaseSync(filename)
-    holder.exec("create table t (id integer primary key, v text)")
-    holder.exec("insert into t values (1, 'before')")
-    holder.exec("pragma journal_mode = WAL")
-    holder.exec("begin immediate")
-    setTimeout(() => {
-      holder.exec("commit")
-      holder.close()
-    }, 100)
-
-    const rows = (await Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-        const native = (yield* Sqlite.Native) as InstanceType<typeof DatabaseSync>
-        native.exec("PRAGMA busy_timeout = 0")
-        yield* db.run(sql`update t set v = 'after' where id = 1`)
-        return yield* db.all(sql`select v from t where id = 1`)
-      }).pipe(Effect.provide(nodeSqliteLayer({ filename })), Effect.scoped) as Effect.Effect<
-        Array<Record<string, unknown>>,
-        unknown,
-        never
-      >,
-    )) as Array<Record<string, unknown>>
-    expect(rows[0].v).toBe("after")
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-})
-
-// Regression: the node in-transaction BUSY_SNAPSHOT path must fail fast, the
-// same contract the bun driver test pins under the bun layer.
-test("node in-transaction lock surfaces fast instead of retrying", async () => {
-  const { DatabaseSync } = await import("node:sqlite")
-  const { sqliteLayer: nodeSqliteLayer } = await import("@opencode/core/database/sqlite.node")
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-node-snapshot-"))
-  const filename = join(dir, "snap.db")
-
-  try {
     await Effect.runPromise(
       Effect.gen(function* () {
-        const native = (yield* Sqlite.Native) as InstanceType<typeof DatabaseSync>
-        native.exec("create table t (id integer primary key, v text)")
-        native.exec("insert into t values (1, 'before')")
-        native.exec("PRAGMA journal_mode = WAL")
-        native.exec("PRAGMA busy_timeout = 0")
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        ;((yield* Sqlite.Native) as Database).run("pragma busy_timeout = 0")
+        yield* releaseAfterRetries(db.values(sql`update t set v = 'after' where id = 1`), () => {
+          lock.run("commit")
+          lock.close()
+        })
+      }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
+    )
+    expect(await readValue(filename)).toBe("after")
+  })
+})
+
+// Regression: node:sqlite reports busy as { code: "ERR_SQLITE_ERROR", errcode:
+// 5 } — no errno and no SQLITE_* string code, which is all effect's
+// classifier reads — so lock timeouts filed as UnknownError and the retry
+// never fired on that driver.
+test("node driver classifies busy as a lock timeout and retries", async () => {
+  const { DatabaseSync } = await import("node:sqlite")
+  const { sqliteLayer: nodeSqliteLayer } = await import("@opencode/core/database/sqlite.node")
+  type NodeDatabase = InstanceType<typeof DatabaseSync>
+
+  await withDatabase("sqlite-node-retry-", async (filename) => {
+    await initFile(filename, (native, text) => (native as NodeDatabase).exec(text), nodeSqliteLayer({ filename }))
+    const lock = new DatabaseSync(filename)
+    lock.exec("begin immediate")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        ;((yield* Sqlite.Native) as NodeDatabase).exec("pragma busy_timeout = 0")
+        yield* releaseAfterRetries(db.run(sql`update t set v = 'after' where id = 1`), () => {
+          lock.exec("commit")
+          lock.close()
+        })
       }).pipe(Effect.provide(nodeSqliteLayer({ filename })), Effect.scoped),
     )
+    expect(await readValue(filename)).toBe("after")
+  })
+})
+
+// Regression: a DEFERRED WAL transaction that has read cannot upgrade to a
+// write after another connection commits — the snapshot is stale and the
+// upgrade fails with SQLITE_BUSY_SNAPSHOT. Retrying the statement cannot fix
+// a stale snapshot; it must surface at once so the caller can roll back and
+// rerun the whole transaction. The foreign write is synchronous between the
+// read and the write, so this test has no timing at all.
+test("fails fast inside a deferred transaction on a stale snapshot", async () => {
+  await withDatabase("sqlite-snapshot-", async (filename) => {
+    await initFile(filename, (native, text) => (native as Database).run(text))
 
     const start = Date.now()
     let error: unknown
-    try {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-          yield* db.transaction(
-            (tx) =>
-              Effect.gen(function* () {
-                yield* tx.get(sql`select v from t where id = 1`)
-                yield* Effect.sync(() => {
-                  const other = new DatabaseSync(filename)
-                  other.exec("update t set v = 'after' where id = 1")
-                  other.close()
-                })
-                yield* tx.run(sql`update t set v = 'after2' where id = 1`)
-              }),
-            { behavior: "deferred" },
-          )
-        }).pipe(Effect.provide(nodeSqliteLayer({ filename })), Effect.scoped),
-      )
-    } catch (e) {
-      error = e
-    }
-    const elapsed = Date.now() - start
-    expect(error).toBeDefined()
-    expect(elapsed).toBeLessThan(2000)
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-})
-
-// Regression: a non-lock failure (unique-constraint violation) must surface
-// immediately, not ride the lock-retry schedule. Widening retryLocked's
-// predicate beyond LockTimeoutError would retry this constraint error, and the
-// only visible symptom would be slowness.
-test("fails fast on a non-lock SqlError", async () => {
-  const { Database } = await import("bun:sqlite")
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-constraint-"))
-  const filename = join(dir, "constraint.db")
-
-  try {
-    const holder = new Database(filename, { create: true })
-    holder.run("create table t (id integer primary key, v text)")
-    holder.run("insert into t values (1, 'before')")
-    holder.close()
-
-    // Widening retryLocked's predicate beyond LockTimeoutError would retry
-    // this constraint violation for the whole retry budget, so the elapsed
-    // assertion is the predicate guard; the reason-class assertion pins that
-    // the driver classified the failure rather than leaving it unknown.
-    const start = Date.now()
-    let error: unknown
-    try {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-          yield* db.run(sql`insert into t values (1, 'dup')`)
-        }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
-      )
-    } catch (e) {
-      error = e
-    }
-    expect(error).toBeDefined()
-    expect(Date.now() - start).toBeLessThan(1000)
-    const reasons = (
-      error as {
-        cause?: { reasons?: ReadonlyArray<{ error?: { reason?: { _tag?: string } } }> }
-      }
-    ).cause?.reasons ?? []
-    expect(reasons[0]?.error?.reason?._tag).not.toBe("LockTimeoutError")
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(()=>{})
-  }
-})
-
-// Regression: the retry pipe must also cover the runValues path (executeValues
-// and executeValuesUnprepared route there). Every other test goes through
-// db.run/db.all, so dropping .pipe(retryIfAutocommit) from either runValues
-// block would leave the suite green while values-path writes stop retrying.
-test("runValues path retries statements while another process holds the write lock", async () => {
-  const { Database } = await import("bun:sqlite")
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-retry-values-"))
-  const filename = join(dir, "locked.db")
-
-  try {
-    const holder = new Database(filename, { create: true })
-    holder.run("create table t (id integer primary key, v text)")
-    holder.run("insert into t values (1, 'before')")
-    holder.run("pragma journal_mode = WAL")
-    holder.run("begin immediate")
-    setTimeout(() => holder.run("commit"), 100)
-
-    const rows = (await Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-        const native = (yield* Sqlite.Native) as Database
-        native.run("PRAGMA busy_timeout = 0")
-        // .values() routes to executeValues, i.e. the runValues wiring.
-        yield* db.values(sql`update t set v = 'after' where id = 1`)
-        return yield* db.values(sql`select v from t where id = 1`)
-      }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped) as Effect.Effect<
-        ReadonlyArray<ReadonlyArray<unknown>>,
-        unknown,
-        never
-      >,
-    )) as ReadonlyArray<ReadonlyArray<unknown>>
-    expect(rows[0][0]).toBe("after")
-    holder.close()
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-})
-
-// Regression: while a statement sleeps between lock retries, another fiber can
-// open a transaction on the shared connection. An attempt that resumes without
-// re-entering the client semaphore then runs inside that transaction — its
-// writes are rolled back with it, or the retry predicate sees the foreign
-// transaction and gives up. Fiber A's update must wait out fiber B's
-// transaction and land in autocommit after it closes.
-test("a retrying statement waits out a transaction that opens while it sleeps", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "sqlite-retry-race-"))
-  const filename = join(dir, "race.db")
-
-  try {
     await Effect.runPromise(
       Effect.gen(function* () {
-        const native = (yield* Sqlite.Native) as Database
-        native.run("create table t (id integer primary key, v text)")
-        native.run("insert into t values (1, 'before')")
-        native.run("PRAGMA journal_mode = WAL")
-        native.run("PRAGMA busy_timeout = 0")
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        yield* db.transaction(
+          (tx) =>
+            Effect.gen(function* () {
+              yield* tx.get(sql`select v from t where id = 1`)
+              yield* Effect.sync(() => {
+                const other = new Database(filename)
+                other.run("update t set v = 'gone' where id = 1")
+                other.close()
+              })
+              yield* tx.run(sql`update t set v = 'after' where id = 1`)
+            }),
+          { behavior: "deferred" },
+        )
       }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
-    )
+    ).catch((e) => {
+      error = e
+    })
 
-    // A second process holds the write lock, so fiber A's first attempt files
-    // as LockTimeoutError and the retry sleeps.
-    const holder = new Database(filename)
-    holder.run("begin immediate")
-    setTimeout(() => {
-      holder.run("commit")
-      holder.close()
-    }, 300)
+    expect(error).toBeDefined()
+    expect(surfaceReason(error)?._tag).toBe("LockTimeoutError")
+    expect(surfaceReason(error)?.cause?.code).toBe("SQLITE_BUSY_SNAPSHOT")
+    expect(Date.now() - start).toBeLessThan(2000)
+  })
+})
 
-    const rows = (await Effect.runPromise(
+// Regression: only lock timeouts retry. A constraint violation must surface
+// immediately; a widened predicate would show up here as slowness.
+test("fails fast on a non-lock error", async () => {
+  await withDatabase("sqlite-constraint-", async (filename) => {
+    await initFile(filename, (native, text) => (native as Database).run(text))
+
+    const start = Date.now()
+    let error: unknown
+    await Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-        const writer = Effect.gen(function* () {
-          // A: plain autocommit write, retrying through the holder's lock.
-          yield* Effect.sleep("10 millis")
-          yield* db.run(sql`update t set v = 'after' where id = 1`)
-        })
-        const transactor = Effect.gen(function* () {
-          // B: opens a transaction while A sleeps and rolls it back.
-          yield* Effect.sleep("30 millis")
-          yield* db
+        yield* db.run(sql`insert into t values (1, 'dup')`)
+      }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
+    ).catch((e) => {
+      error = e
+    })
+
+    expect(error).toBeDefined()
+    expect(surfaceReason(error)?._tag).not.toBe("LockTimeoutError")
+    expect(Date.now() - start).toBeLessThan(1000)
+  })
+})
+
+// Regression: while a statement sleeps between lock retries, another fiber
+// can open a transaction on the shared connection. An attempt that resumes
+// without re-entering the client semaphore runs inside that transaction and
+// its writes roll back with it; the fix makes each attempt wait the
+// transaction out. The Deferred parks the transaction mid-body so the
+// interleaving is ordered by the test, not by sleeps lining up.
+test("a retrying statement waits out a transaction opened while it sleeps", async () => {
+  await withDatabase("sqlite-race-", async (filename) => {
+    await initFile(filename, (native, text) => (native as Database).run(text))
+    const lock = new Database(filename)
+    lock.run("begin immediate")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        ;((yield* Sqlite.Native) as Database).run("pragma busy_timeout = 0")
+
+        // A: a plain autocommit write. Its first attempts fail on the foreign
+        // lock; by one second in, it is sleeping between retries.
+        const writer = yield* Effect.forkChild(db.run(sql`update t set v = 'after' where id = 1`))
+        yield* Effect.sleep("1 second")
+
+        // B: open a transaction on the same client and park inside it on a
+        // Deferred. It holds the client semaphore until the test lets go.
+        const inside = yield* Deferred.make<void>()
+        const transactor = yield* Effect.forkChild(
+          db
             .transaction(
               (tx) =>
                 Effect.gen(function* () {
                   yield* tx.get(sql`select v from t where id = 1`)
-                  yield* Effect.sleep("120 millis")
+                  yield* Deferred.await(inside)
                   yield* Effect.fail(new Error("rollback requested"))
                 }),
               { behavior: "deferred" },
             )
-            .pipe(Effect.ignore)
-        })
-        yield* Effect.all([writer, transactor], { concurrency: 2, discard: true })
-        return yield* db.all(sql`select v from t where id = 1`)
-      }).pipe(
-        Effect.provide(sqliteLayer({ filename })),
-        Effect.scoped,
-      ) as Effect.Effect<Array<Record<string, unknown>>, unknown, never>,
-    )) as Array<Record<string, unknown>>
-    expect(rows[0].v).toBe("after")
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
+            .pipe(Effect.ignore),
+        )
+        yield* Effect.sleep("1 second")
+
+        // Free the write lock while B is parked. A's next attempt must now
+        // wait for B: if it resumed without the semaphore it would join B's
+        // transaction, succeed, and be rolled back below.
+        lock.run("commit")
+        lock.close()
+        yield* Effect.sleep("500 millis")
+        yield* Deferred.succeed(inside, undefined)
+        yield* Fiber.join(transactor)
+        yield* Fiber.join(writer)
+      }).pipe(Effect.provide(sqliteLayer({ filename })), Effect.scoped),
+    )
+
+    // B rolled back, so the update only survives if A waited B out and landed
+    // in autocommit.
+    expect(await readValue(filename)).toBe("after")
+  })
 })
