@@ -14,7 +14,7 @@ import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { emptyThemeSource } from "../../fixture/fixture"
-import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
+import { createApi, createEventStream, createFetch, json, type FetchHandler } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -247,12 +247,123 @@ test("uses the active location for integration data without scoping credential r
   }
 })
 
-async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
+test.each(["success", "failure"])("cancels an in-flight setup submission and ignores its late %s", async (outcome) => {
+  const response = Promise.withResolvers<Response>()
+  const submitted = Promise.withResolvers<void>()
+  const fixture = await renderIntegration(undefined, undefined, async (url, request) => {
+    const location = { directory: process.cwd() }
+    if (url.pathname === "/api/integration/openai/connect/oauth")
+      return json({
+        location,
+        data: {
+          mode: "auto",
+          attemptID: "attempt_setup",
+          url: "https://example.com",
+          instructions: "Sign in",
+          time: { created: 1, expires: 9999999999999 },
+        },
+      })
+    if (url.pathname.endsWith("/attempt_setup/complete")) {
+      submitted.resolve()
+      return response.promise
+    }
+    if (url.pathname.endsWith("/attempt_setup") && request.method === "GET")
+      return json({
+        location,
+        data: {
+          status: "pending",
+          time: { created: 1, expires: 9999999999999 },
+          prompt: {
+            id: "form_confirm",
+            title: "Create key",
+            fields: [{ type: "string", key: "name", title: "Key name", required: true }],
+          },
+        },
+      })
+    return undefined
+  })
+
+  try {
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    await fixture.app.mockInput.typeText("OpenCode")
+    fixture.app.mockInput.pressEnter()
+    await submitted.promise
+    await fixture.app.waitForFrame((frame) => frame.includes("Waiting for authorization"))
+    fixture.app.mockInput.pressEscape()
+    await fixture.app.waitFor(() => fixture.requests.some((request) => request.method === "DELETE"))
+    fixture.openOther()
+    response.resolve(
+      outcome === "success"
+        ? new Response(null, { status: 204 })
+        : json({ message: "Submission failed" }, { status: 500 }),
+    )
+    await fixture.app.renderOnce()
+    expect(fixture.app.captureCharFrame()).toContain("Another dialog")
+    expect(fixture.app.captureCharFrame()).not.toContain("Key name")
+  } finally {
+    response.resolve(new Response(null, { status: 204 }))
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("does not reopen a dismissed wizard when a pending status response arrives", async () => {
+  const response = Promise.withResolvers<Response>()
+  const polled = Promise.withResolvers<void>()
+  const fixture = await renderIntegration(undefined, undefined, async (url, request) => {
+    const location = { directory: process.cwd() }
+    if (url.pathname === "/api/integration/openai/connect/oauth")
+      return json({
+        location,
+        data: {
+          mode: "auto",
+          attemptID: "attempt_setup",
+          url: "https://example.com",
+          instructions: "Sign in",
+          time: { created: 1, expires: 9999999999999 },
+        },
+      })
+    if (request.method === "GET") {
+      polled.resolve()
+      return response.promise
+    }
+    return undefined
+  })
+  try {
+    fixture.app.mockInput.pressEnter()
+    await polled.promise
+    await fixture.app.waitForFrame((frame) => frame.includes("Waiting for authorization"))
+    fixture.app.mockInput.pressEscape()
+    await fixture.app.waitFor(() => fixture.requests.some((request) => request.method === "DELETE"))
+    fixture.openOther()
+    response.resolve(
+      json({
+        location: { directory: process.cwd() },
+        data: {
+          status: "pending",
+          prompt: {
+            id: "form_late",
+            title: "Late setup",
+            fields: [{ type: "string", key: "name", title: "Key name", required: true }],
+          },
+        },
+      }),
+    )
+    await fixture.app.renderOnce()
+    expect(fixture.app.captureCharFrame()).toContain("Another dialog")
+  } finally {
+    response.resolve(new Response(null, { status: 204 }))
+    fixture.app.renderer.destroy()
+  }
+})
+
+async function renderIntegration(activeLocation?: LocationRef, form?: FormFields, oauth?: FetchHandler) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
   const locations: LocationRef[] = []
   const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
+  let dialog: ReturnType<typeof useDialog>
   let accounts = [
     { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
     { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
@@ -277,11 +388,20 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
           {
             id: "openai",
             name: "OpenAI",
-            methods: [{ type: "key", label: "API key", form }],
+            methods: oauth
+              ? [{ type: "oauth", id: "setup", label: "Sign in" }]
+              : [{ type: "key", label: "API key", form }],
             connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
           },
         ],
       })
+    }
+
+    if (oauth && url.pathname.includes("/connect/oauth")) {
+      requests.push({ method: request.method, path: url.pathname })
+      const response = await oauth(url, request)
+      if (response) return response
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
     }
 
     if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/key") {
@@ -345,7 +465,7 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
 
   function Probe() {
     const data = useData()
-    const dialog = useDialog()
+    dialog = useDialog()
     const location = useLocation()
     onMount(() => {
       location.set(activeLocation)
@@ -393,6 +513,7 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
     requests,
     locations,
     credentialQueries,
+    openOther: () => dialog.replace(() => <text>Another dialog</text>),
     get accounts() {
       return accounts
     },

@@ -51,20 +51,30 @@ export type IntegrationOAuthAuthorization = {
   readonly url: string
   readonly instructions: string
   readonly expiresAt?: number
+  readonly onComplete?: () => { readonly title: string; readonly url: string } | undefined
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.OAuth, unknown>
+      readonly callback: Effect.Effect<Credential.OAuth | Credential.Key, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.OAuth | Credential.Key, unknown>
     }
 )
+/** Ask sequential setup steps from an automatic authorization callback, after browser sign-in. Code-mode callbacks cannot prompt. */
+export type IntegrationOAuthPrompt = (input: {
+  readonly title: string
+  readonly fields: Form.Fields
+}) => Effect.Effect<Form.Answer, unknown>
+
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
   readonly method: IntegrationOAuthMethod
-  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (
+    answer: Form.Answer,
+    prompt: IntegrationOAuthPrompt,
+  ) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }

@@ -273,7 +273,29 @@ const waitForOAuth = Effect.fn("cli.auth.login.oauth.wait")(function* (
     const response = yield* request((signal) =>
       client.integration.oauth.status({ integrationID, attemptID, location }, { signal }),
     )
-    if (response.data.status !== "pending") return response.data
+    if (response.data.status !== "pending") {
+      if (response.data.status === "complete" && response.data.next)
+        log.info(`${response.data.next.title}: ${response.data.next.url}`)
+      return response.data
+    }
+    if (response.data.prompt) {
+      const prompt = response.data.prompt
+      log.step(prompt.title)
+      const answer = yield* answerForm(prompt.fields)
+      yield* request((signal) =>
+        client.integration.oauth.complete(
+          {
+            integrationID,
+            attemptID,
+            location,
+            promptID: prompt.id,
+            answer,
+          },
+          { signal },
+        ),
+      )
+      continue
+    }
     yield* Effect.sleep(500)
   }
 })

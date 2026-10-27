@@ -25,6 +25,7 @@ import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { ExternalLink } from "@/runtime/platform/external-link"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -682,6 +683,8 @@ function ProviderConnection(props: {
         ),
       )
 
+    if (controller.prompt()) return props.onTitle(controller.prompt()!.title)
+
     if (props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max"))
       return props.onTitle(language.t("provider.connect.title.anthropicProMax"))
 
@@ -695,7 +698,7 @@ function ProviderConnection(props: {
   // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
   function AuthFormView() {
     const method = controller.currentMethod()
-    const fields = method && method.type !== "command" ? (method.form ?? []) : []
+    const fields = controller.prompt()?.fields ?? (method && method.type !== "command" ? (method.form ?? []) : [])
     const hidden = providerFormDefaults(fields)
 
     const [formStore, setFormStore] = createStore<{
@@ -757,7 +760,8 @@ function ProviderConnection(props: {
       const index = fields.findIndex((item, i) => i > formStore.index && asked(item) && active(item, merged))
 
       if (index === -1) {
-        void controller.auth.select(controller.methodIndex()!, answer)
+        if (controller.prompt()) void controller.auth.completePrompt(answer)
+        else void controller.auth.select(controller.methodIndex()!, answer)
 
         return
       }
@@ -1724,6 +1728,21 @@ function ProviderConnection(props: {
           </Match>
           <Match when={controller.methodIndex() === undefined}>
             <MethodSelection />
+          </Match>
+          <Match when={controller.auth.state() === "receipt"}>
+            <div class="px-3 flex flex-col gap-4">
+              <p>{language.t("provider.connect.toast.connected.title", { provider: provider().name })}</p>
+              <ExternalLink
+                href={controller.receipt()?.url ?? ""}
+                class="inline-flex items-center gap-1.5 self-start text-[13px] leading-5 underline-offset-4"
+              >
+                {controller.receipt()?.title}
+                <Icon name="arrow-up-right" size="small" />
+              </ExternalLink>
+              <Button variant="contrast" onClick={() => void controller.auth.refresh()}>
+                {language.t("common.continue")}
+              </Button>
+            </div>
           </Match>
           <Match when={controller.auth.state() === "form"}>
             <AuthFormView />
