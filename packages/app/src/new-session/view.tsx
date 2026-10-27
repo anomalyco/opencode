@@ -361,7 +361,8 @@ function NewSessionLocation(props: {
         </Tooltip>
         {props.branch}
       </div>
-      <Show when={path()}>
+      {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
+      <Show when={path()} keyed>
         {(directory) => (
           <div
             class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
@@ -369,8 +370,8 @@ function NewSessionLocation(props: {
           >
             <Tooltip
               placement="top"
-              value={directory()}
-              disabled={fitted().text === directory() && fitted().minimum <= layout.width}
+              value={directory}
+              disabled={fitted().text === directory && fitted().minimum <= layout.width}
               class="flex min-w-0 flex-1"
               contentClass="max-w-[calc(100vw-32px)] break-all"
             >

@@ -51,6 +51,23 @@ test("the new session screen does not show session details", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
 })
 
+test("the location shortcut keeps cycling after hovering its icon", async ({ page }) => {
+  const view = await openDraft(page, { name: "LocationShortcut" })
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionLocation(page)).not.toContainText("New worktree")
+  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.directory)
+  await page.locator('[data-slot="new-session-location-icon"]').hover()
+  await expect(page.getByRole("tooltip")).toContainText("Toggle session location")
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(view.editor).toBeFocused()
+})
+
 for (const row of [
   {
     name: "POSIX",
