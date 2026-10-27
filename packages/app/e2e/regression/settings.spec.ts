@@ -1112,6 +1112,37 @@ test("providers: OpenCode Console signs in from its method list", async ({ page,
   await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
 })
 
+test("providers: a device sign-in copies the code its page does not prefill", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "github-copilot",
+        name: "GitHub Copilot",
+        methods: [{ id: "device", type: "oauth", label: "GitHub" }],
+        connections: [],
+      },
+    ],
+    // Like GitHub's device page, the URL carries no `user_code`, so the code has to be pasted.
+    onIntegrationOAuth: () => ({
+      url: "https://auth.example.test/login/device",
+      instructions: "Enter code: 8EA6-ACBA",
+    }),
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const popup = page.waitForEvent("popup")
+  await settings
+    .locator(".settings-provider-row", { hasText: "GitHub Copilot" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  await popup
+  // Read once rather than poll: the copy finishes before the browser opens.
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("8EA6-ACBA")
+})
+
 test("providers: OpenCode Go connects with its own methods, not the Console sign-in", async ({ page }) => {
   const attempts: string[] = []
 

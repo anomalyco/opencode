@@ -32,6 +32,9 @@ type Polling = {
 // and connects with its own methods, the same as the TUI.
 export const CONSOLE_INTEGRATION = "opencode"
 
+// Device-flow codes such as "8EA6-ACBA", matched the same way as the TUI.
+const DEVICE_CODE = /[A-Z0-9]{4}-[A-Z0-9]{4,5}/
+
 // Same order as the TUI: browser and command sign-ins first, API keys last.
 export function connectMethods(integration: IntegrationInfo) {
   return integration.methods
@@ -379,10 +382,22 @@ export function createProviderConnectionController(options: {
   }
 
   const open = async () => {
-    const url = store.authorization?.url
+    const authorization = store.authorization
 
-    if (!url) return
+    if (!authorization) return
+    const url = authorization.url
     const generation = polling.generation
+
+    // Device pages such as GitHub's ask for a code the URL does not prefill (no `user_code`). Copy it
+    // before opening the browser: once the browser has focus, the app can no longer write to the clipboard.
+    const code = new URL(url).searchParams.has("user_code")
+      ? undefined
+      : authorization.instructions.match(DEVICE_CODE)?.[0]
+
+    if (code)
+      await Promise.resolve()
+        .then(() => platform.writeClipboardText?.(code) ?? navigator.clipboard.writeText(code))
+        .catch(() => undefined)
 
     const opened = await Promise.resolve()
       .then(() => {

@@ -112,9 +112,13 @@ export interface MockServerConfig {
   // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
   // another status (for example `{ status: "failed", error }`). Unknown servers answer 404.
   onMcpAction?: (input: { server: string; action: "connect" | "disconnect"; directory: string }) => void | MockMcpStatus
-  // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
+  // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL and optional instructions; the
+  // attempt then stays pending.
   // Without it, OAuth connects answer 501 MockUnsupported.
-  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => {
+    url: string
+    instructions?: string
+  }
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
   plugins?: Resolvable<unknown[]>
@@ -937,7 +941,7 @@ function mockHandlers(
               data: {
                 attemptID,
                 url: started.url,
-                instructions: "",
+                instructions: started.instructions ?? "",
                 mode: "auto",
                 time: { created, expires: created + 600_000 },
               },
