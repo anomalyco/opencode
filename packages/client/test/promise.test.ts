@@ -57,7 +57,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental.media)).toEqual(["get"])
   expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "update"])
+  expect(Object.keys(client.project)).toEqual(["list", "update", "remove"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 

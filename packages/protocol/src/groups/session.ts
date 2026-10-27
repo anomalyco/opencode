@@ -21,6 +21,7 @@ import {
   InvalidCursorError,
   InvalidRequestError,
   MessageNotFoundError,
+  ProjectNotFoundError,
   ServiceUnavailableError,
   SessionBusyError,
   SessionNotFoundError,
@@ -251,6 +252,19 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.remove",
           summary: "Delete session",
           description: "Delete a session and its child sessions.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.removeProject", "/api/session/remove-project", {
+        payload: Schema.Struct({ projectID: Project.ID }),
+        success: HttpApiSchema.NoContent,
+        error: ProjectNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.removeProject",
+          summary: "Delete a project's sessions",
+          description: "Delete every session in a project, children included, keeping the project itself.",
         }),
       ),
     )

@@ -141,6 +141,8 @@ export interface Interface {
   }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
   readonly view: (input: { sessionID: SessionSchema.ID; idle: number }) => Effect.Effect<void, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  /** Removes every session in the project, children included, through {@link Interface.remove}. */
+  readonly removeProject: (projectID: Project.ID) => Effect.Effect<void>
   readonly messages: (
     input: SessionStore.MessagesInput,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -399,10 +401,24 @@ const layer = Layer.effect(
         yield* execution.awaitIdle(sessionID)
         yield* transport.close(sessionID)
         const children = yield* store.list({ parentID: sessionID })
-        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        // A concurrent removal may have taken a child first; the parent still goes.
+        yield* Effect.forEach(
+          children,
+          (child) => result.remove(child.id).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void)),
+          { concurrency: 1, discard: true },
+        )
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
+      }),
+      removeProject: Effect.fn("Session.removeProject")(function* (projectID) {
+        const sessions = yield* store.list({ project: projectID })
+        // A removed parent already cascades to its children, so a later list entry may legitimately be gone.
+        yield* Effect.forEach(
+          sessions,
+          (session) => result.remove(session.id).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void)),
+          { concurrency: 1, discard: true },
+        )
       }),
       list: Effect.fn("Session.list")(function* (input = {}) {
         const filter =

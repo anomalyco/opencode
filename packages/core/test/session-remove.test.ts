@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { eq } from "drizzle-orm"
 import { Effect, Layer, RcMap, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -9,6 +10,7 @@ import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionTable } from "@opencode/core/session/sql"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionProjector } from "@opencode/core/session/projector"
@@ -16,7 +18,6 @@ import { SessionStore } from "@opencode/core/session/store"
 import { SessionEnvironment } from "@opencode/core/session/environment"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { testEffect } from "./lib/effect"
-import { globalProjectNode } from "./lib/project"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
@@ -46,9 +47,9 @@ const it = testEffect(
       Session.node,
       Instance.node,
       LocationServiceMap.node,
+      Project.node,
     ]),
     [
-      Project.node.replace(globalProjectNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
       SessionModelTransport.node.replace(transport),
       offlineModels,
@@ -112,6 +113,49 @@ describe("Session.remove", () => {
         _tag: "Failure",
         failure: { _tag: "Session.NotFoundError", sessionID },
       })
+    }),
+  )
+})
+
+describe("Session.removeProject", () => {
+  it.effect("removes every session in the project and leaves other projects alone", () =>
+    Effect.gen(function* () {
+      const first = yield* tmpdirScoped()
+      const second = yield* tmpdirScoped()
+      const db = (yield* Database.Service).db
+      const session = yield* Session.Service
+      const inProject = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(first.path) }),
+      })
+      const child = yield* session.create({ parentID: inProject.id })
+      const elsewhere = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(second.path) }),
+      })
+      const row = yield* db
+        .select({ project_id: SessionTable.project_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, inProject.id))
+        .get()
+      if (!row) return yield* Effect.die(new Error("session row missing"))
+      const projectID = row.project_id
+      closed.length = 0
+
+      yield* session.removeProject(projectID)
+
+      expect(yield* Effect.result(session.get(inProject.id))).toMatchObject({ _tag: "Failure" })
+      expect(yield* Effect.result(session.get(child.id))).toMatchObject({ _tag: "Failure" })
+      expect((yield* session.get(elsewhere.id)).id).toBe(elsewhere.id)
+      expect(closed).toEqual([inProject.id, child.id])
+    }),
+  )
+
+  it.effect("succeeds when the project has no sessions", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+
+      yield* session.removeProject(Project.ID.make("prj_empty"))
+
+      expect((yield* session.list()).data).toEqual([])
     }),
   )
 })
