@@ -45,7 +45,8 @@ jobs:
   plan:
     if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-24.04
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.plan.outputs.version }}
       channel: ${{ steps.plan.outputs.channel }}
@@ -68,6 +69,7 @@ jobs:
         name: Plan
         run: bash .github/release/plan-release.sh
         env:
+          GH_TOKEN: ${{ github.token }} # reads the triggering actor's repository role for stable releases
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
 
