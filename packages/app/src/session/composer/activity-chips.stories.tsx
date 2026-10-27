@@ -64,6 +64,11 @@ type PreviewArgs = { stage: number; subagents: number; shells: number }
 // Driven by args, so moving between these stories updates the same capsule and its transitions play.
 function Preview(props: PreviewArgs) {
   const value = createMemo(() => liveDocument(stages[props.stage] ?? stages[0]))
+  // Built once per count, so each item keeps the start time it had when it appeared.
+  const activity = createMemo(() => ({
+    subagents: Array.from({ length: props.subagents }, (_, index) => subagentItem(index)),
+    shells: Array.from({ length: props.shells }, (_, index) => shellItem(index)),
+  }))
 
   onMount(() => pin("auto"))
   createEffect(on(value, () => pin("smooth"), { defer: true }))
@@ -74,10 +79,7 @@ function Preview(props: PreviewArgs) {
       description="opencode · activity chips"
       document={value()}
       timelineDetail={timelineDetail}
-      activity={{
-        subagents: Array.from({ length: props.subagents }, (_, index) => subagentItem(index)),
-        shells: Array.from({ length: props.shells }, (_, index) => shellItem(index)),
-      }}
+      activity={activity()}
     />
   )
 }
