@@ -68,7 +68,7 @@ that wakes partial requests and blocked subscription writes before joining.
 On Unix the daemon loop sleeps in `poll(2)` on the listener and a private wake
 socket pair until a connection arrives, a stop or ownership change wakes it, an
 ownership deadline is due, or a two-second safety net elapses. Windows still
-polls every 10 ms.
+polls every 25 ms.
 
 The Windows named-pipe backend keeps protocol 7 and the registration fields
 `instance_id`, `pid`, `protocol`, `socket`, and `token`. Treat `socket` as an opaque
@@ -332,7 +332,7 @@ coverage on their own.
 On Windows, normal root-child exit hands the ConPTY master to the existing
 child-wait worker for closing. The actor and reader continue draining until the
 real output-pipe EOF; only then is the final exit event published. The worker
-checks the root's wait handle at 10 ms intervals. After the master is handed
+checks the root's wait handle at 25 ms intervals. After the master is handed
 off, Windows input and resize requests fail with a child-exited error; final
 snapshots, rows, and replay remain readable until the terminal is removed.
 Unix post-exit PTY operations retain their existing behavior.

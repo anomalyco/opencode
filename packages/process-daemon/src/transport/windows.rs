@@ -38,6 +38,8 @@ use security::PrivateSecurity;
 const BUFFER_BYTES: u32 = 64 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const COMPLETION_TIMEOUT: Duration = Duration::from_secs(2);
+/// Interim idle poll until `wait` blocks on the pending connect and a stop event.
+const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 pub(crate) struct Listener {
     endpoint: Vec<u16>,
@@ -83,9 +85,9 @@ impl Listener {
         self.pending.operation.pipe.cancel();
     }
 
-    /// Windows keeps the 10 ms poll for now; the caller then polls `accept`.
+    /// Windows keeps a 25 ms poll for now; the caller then polls `accept`.
     pub fn wait(&self, _wake: &Wake, listen: bool, timeout: Duration) -> io::Result<Readiness> {
-        thread::sleep(timeout.min(Duration::from_millis(10)));
+        thread::sleep(timeout.min(POLL_INTERVAL));
         // `timed_out` stays false: Windows cannot tell, and the missed-wake detector must stay off.
         Ok(Readiness {
             connection: listen,
@@ -102,7 +104,7 @@ pub(crate) struct Readiness {
     pub timed_out: bool,
 }
 
-/// Windows keeps the 10 ms poll for now, so notify is a no-op.
+/// Windows keeps a 25 ms poll for now, so notify is a no-op.
 pub(crate) struct Wake;
 
 impl Wake {
