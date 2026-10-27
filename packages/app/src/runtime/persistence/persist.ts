@@ -65,7 +65,12 @@ export function persistStore<T extends object>(input: {
     input.sync?.[1](input.name, next)
 
     if (input.write) return input.write(input.store, next)
-    void input.storage.setItem(input.name, next)
+    // The browser draft store is written on page hide, so a save can race the document teardown that
+    // closes its IndexedDB connection. Nothing can persist once the page is going away, so absorb a
+    // rejected write then and keep surfacing it otherwise.
+    void Promise.resolve(input.storage.setItem(input.name, next)).catch((error) => {
+      if (typeof document === "undefined" || !document.hidden) throw error
+    })
   }
 
   // Solid's setter overloads are too deep to spread generically; the wrapper only forwards.
