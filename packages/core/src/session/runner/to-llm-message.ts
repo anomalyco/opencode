@@ -73,12 +73,23 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
   },
 })
 
+// Local TUI path pastes embed bytes as data: and stash the absolute path in
+// description. Only treat absolute filesystem paths as locations — never
+// display names like "clipboard" or free-form descriptions.
+const absoluteFilesystemPath = (value: string) =>
+  value.startsWith("/") || value.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(value)
+
+const inlineAttachmentPath = (file: FileAttachment) => {
+  if (file.source.type !== "inline" || file.description === undefined) return undefined
+  return absoluteFilesystemPath(file.description) ? file.description : undefined
+}
+
 const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
   if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
-    const location = attachmentLocation(file)
-    return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
+    const origin = attachmentLocation(file) ?? inlineAttachmentPath(file)
+    return [...(origin === undefined ? [] : [Message.text(`Attached file: ${origin}`)]), media(file)]
   }
   return []
 }

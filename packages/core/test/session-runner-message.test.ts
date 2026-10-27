@@ -528,6 +528,62 @@ Earlier work
     ])
   })
 
+  test("notes absolute paths carried in inline attachment descriptions", () => {
+    const data = Base64.make("AAECAw==")
+    const location = path.resolve("/project/IMG_3480.JPG")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-inline-image-path"),
+          type: "user",
+          text: "Inspect this image",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "IMG_3480.JPG",
+              description: location,
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "clipboard",
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "photo.png",
+              description: "a screenshot from earlier",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "text", text: `Attached file: ${location}` },
+      {
+        type: "media",
+        media: Media.base64(data, "image/png"),
+        filename: "IMG_3480.JPG",
+        metadata: { description: location },
+      },
+      { type: "media", media: Media.base64(data, "image/png"), filename: "clipboard" },
+      {
+        type: "media",
+        media: Media.base64(data, "image/png"),
+        filename: "photo.png",
+        metadata: { description: "a screenshot from earlier" },
+      },
+    ])
+  })
+
   test("exposes admitted local image source paths before provider media", () => {
     const data = Base64.make("AAECAw==")
     const location = path.resolve("/project/IMG_3480.JPG")

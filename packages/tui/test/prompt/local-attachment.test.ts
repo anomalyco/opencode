@@ -97,7 +97,12 @@ describe("prompt local attachments", () => {
 
     for (const input of [file, `'${file}'`, pathToFileURL(file).href]) {
       expect(await resolvePastedAttachments(input, process.platform)).toEqual([
-        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
+        {
+          type: "file",
+          uri: "data:image/png;base64,AQID",
+          filename: "one image.png",
+          description: file,
+        },
       ])
     }
   })
@@ -113,8 +118,18 @@ describe("prompt local attachments", () => {
       `# dropped files\r\n${pathToFileURL(image).href}\r\n${pathToFileURL(pdf).href}`,
     ]) {
       expect(await resolvePastedAttachments(input, process.platform)).toEqual([
-        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
-        { type: "file", uri: "data:application/pdf;base64,BAUG", filename: "two file.pdf" },
+        {
+          type: "file",
+          uri: "data:image/png;base64,AQID",
+          filename: "one image.png",
+          description: image,
+        },
+        {
+          type: "file",
+          uri: "data:application/pdf;base64,BAUG",
+          filename: "two file.pdf",
+          description: pdf,
+        },
       ])
     }
   })
@@ -159,7 +174,7 @@ describe("prompt local attachments", () => {
     ])
 
     expect(await resolvePastedAttachments(`${image} ${svg}`, process.platform)).toMatchObject([
-      { type: "file", filename: "image.png" },
+      { type: "file", filename: "image.png", description: image },
       { type: "text", content, filename: "image.svg" },
     ])
     await Bun.write(svg, content + " ")
