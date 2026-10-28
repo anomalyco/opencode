@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   unlock:
+    if: github.ref == 'refs/heads/v1'
     runs-on: ubuntu-latest
     environment: ${{ inputs.stage }}
     steps:

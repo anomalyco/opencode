@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/v1'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       REGISTRY: ghcr.io/${{ github.repository_owner }}

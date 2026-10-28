@@ -4,11 +4,7 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
-      - ci
       - v1
-      - beta
-      - fix/npm-native-binary-install
-      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
@@ -33,12 +29,13 @@ permissions:
 
 env:
   # V1 previews keep the dev channel so existing opencode-ai@dev installs keep upgrading and their data path.
-  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v1' && !inputs.bump && !inputs.version && 'dev') || '' }}
+  OPENCODE_CHANNEL: ${{ (!inputs.bump && !inputs.version && 'dev') || '' }}
 
 jobs:
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
+    # Only v1 publishes. Every other job needs this one, so a dispatch on another ref publishes nothing.
+    if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/v1'
     # Versioned releases wait for approval in the release environment.
     environment: ${{ (inputs.bump || inputs.version) && 'release' || '' }}
     steps:
@@ -60,7 +57,7 @@ jobs:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/opencode-beta') || github.repository }}
+          GH_REPO: ${{ github.repository }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -81,8 +78,8 @@ jobs:
       - name: Build
         id: build
         run: |
-          ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
-          ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+          ./packages/opencode/script/build.ts
+          ./packages/cli/script/build.ts
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
@@ -115,17 +112,26 @@ jobs:
       - version
     runs-on: macos-26
     if: github.repository == 'anomalyco/opencode'
-    # Apple signing secrets are moving into the release environment.
-    environment: ${{ (github.ref_name == 'v1' || inputs.bump || inputs.version) && 'release' || '' }}
+    environment: release
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
-      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
-        with:
-          keychain: build
-          # Prefer the passwordless release-environment certificate, falling back to the repository one.
-          p12-file-base64: ${{ secrets.APPLE_SIGNING_CERTIFICATE || secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_SIGNING_CERTIFICATE == '' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+      # The certificate has no password, which apple-actions/import-codesign-certs rejects. The signing step looks up
+      # the identity in build.keychain, and codesign finds the key through the user search list.
+      - name: Import certificate
+        run: |
+          cert="$RUNNER_TEMP/cert.p12"
+          keychain_password=$(openssl rand -base64 32)
+          printf '%s' "$APPLE_SIGNING_CERTIFICATE" | base64 --decode > "$cert"
+          security create-keychain -p "$keychain_password" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$keychain_password" build.keychain
+          security import "$cert" -k build.keychain -P "" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          rm -f "$cert"
+        env:
+          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -187,12 +193,19 @@ jobs:
             packages/opencode/dist/opencode-darwin-*.zip
           if-no-files-found: error
 
+      - name: Delete keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security delete-keychain build.keychain || true
+
   sign-cli-windows:
     needs:
       - build-cli
       - version
     runs-on: blacksmith-4vcpu-windows-2025
     if: github.repository == 'anomalyco/opencode'
+    environment: release
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -318,24 +331,34 @@ jobs:
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux --arm64
     runs-on: ${{ matrix.settings.host }}
-    # Apple signing secrets are moving into the release environment. Windows keeps its existing Azure login subject.
-    environment: ${{ contains(matrix.settings.host, 'macos') && (github.ref_name == 'v1' || inputs.bump || inputs.version) && 'release' || '' }}
+    environment: release
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
-      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
+      # The certificate has no password, which apple-actions/import-codesign-certs rejects. electron-builder reads
+      # the identity from build.keychain through CSC_KEYCHAIN.
+      - name: Import certificate
         if: runner.os == 'macOS'
-        with:
-          keychain: build
-          # Prefer the passwordless release-environment certificate, falling back to the repository one.
-          p12-file-base64: ${{ secrets.APPLE_SIGNING_CERTIFICATE || secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_SIGNING_CERTIFICATE == '' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+        run: |
+          cert="$RUNNER_TEMP/cert.p12"
+          keychain_password=$(openssl rand -base64 32)
+          printf '%s' "$APPLE_SIGNING_CERTIFICATE" | base64 --decode > "$cert"
+          security create-keychain -p "$keychain_password" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$keychain_password" build.keychain
+          security import "$cert" -k build.keychain -P "" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          rm -f "$cert"
+        env:
+          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
 
-      - name: Setup Apple API Key
+      # electron-builder notarizes with APPLE_API_KEY (a .p8 path), APPLE_API_KEY_ID and APPLE_API_ISSUER.
+      - name: Setup Apple notary key
         if: runner.os == 'macOS'
         run: printf '%s\n' "$APPLE_NOTARY_KEY" > "$RUNNER_TEMP/apple-api-key.p8"
         env:
-          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY || secrets.APPLE_API_KEY_PATH }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -375,7 +398,7 @@ jobs:
         working-directory: packages/desktop
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: prod
           RUST_TARGET: ${{ matrix.settings.target }}
 
       - name: Build
@@ -384,13 +407,13 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: prod
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
           SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
-          VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
+          VITE_SENTRY_ENVIRONMENT: production
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
 
       - name: Package
@@ -399,12 +422,12 @@ jobs:
         working-directory: packages/desktop
         timeout-minutes: 60
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: prod
           GH_TOKEN: ${{ github.token }}
           CSC_KEYCHAIN: build.keychain
           APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
-          APPLE_API_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID || secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ vars.APPLE_NOTARY_ISSUER_ID || secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
 
       - name: Package (no publish)
         if: ${{ !needs.version.outputs.release }}
@@ -412,7 +435,7 @@ jobs:
         working-directory: packages/desktop
         timeout-minutes: 60
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: prod
 
       - name: Create macOS .app.tar.gz
         if: runner.os == 'macOS' && needs.version.outputs.release
@@ -462,6 +485,12 @@ jobs:
           name: latest-yml-${{ matrix.settings.target }}
           path: packages/desktop/dist/latest*.yml
 
+      - name: Delete keychain
+        if: always() && runner.os == 'macOS'
+        run: |
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/apple-api-key.p8"
+          security delete-keychain build.keychain || true
+
   publish:
     needs:
       - version
@@ -469,10 +498,10 @@ jobs:
       - sign-cli-macos
       - sign-cli-windows
       - build-electron
-    if: always() && !failure() && !cancelled()
+    if: always() && !failure() && !cancelled() && needs.version.result == 'success'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     # npm trusted publishing (previews included) only accepts the release environment.
-    environment: ${{ (github.ref_name == 'v1' || needs.version.outputs.release) && 'release' || '' }}
+    environment: release
     steps:
       # The release deploy key pushes the release tag and the version sync commit to v1.
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
