@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode/plugin/tui"
-import { SessionGoal } from "@opencode/schema/session-goal"
+import { Goal } from "@opencode/plugin-goal/rpc"
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor } from "solid-js"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
@@ -10,8 +10,8 @@ import { DialogFooter, DialogHeader, DialogLayout, type DialogFooterAction } fro
  * reconnects, since changes published meanwhile were missed, and kept current from its `changed` events.
  */
 export function createSessionGoal(context: Plugin.Context, sessionID: Accessor<string | undefined>) {
-  const [goal, setGoal] = createSignal<SessionGoal.State>()
-  const rpc = context.client.rpc(SessionGoal.Definition)
+  const [goal, setGoal] = createSignal<Goal.State>()
+  const rpc = context.client.rpc(Goal.Definition)
   // A change that arrives while a fetch is in flight is newer than its reply, so each change or fetch takes a turn.
   const turn = { value: 0 }
   const load = (id: string) => {
@@ -47,13 +47,13 @@ export function createSessionGoal(context: Plugin.Context, sessionID: Accessor<s
   return goal
 }
 
-function goalColor(theme: Plugin.Context["theme"], goal: SessionGoal.State) {
+function goalColor(theme: Plugin.Context["theme"], goal: Goal.State) {
   if (goal.status === "paused") return theme.text.feedback.warning.base
   if (goal.status === "complete") return theme.text.feedback.success.base
   return theme.text.muted
 }
 
-function goalLabel(goal: SessionGoal.State) {
+function goalLabel(goal: Goal.State) {
   if (goal.status === "paused") return "goal paused"
   if (goal.status === "complete") return "goal met"
   return "goal"
@@ -66,10 +66,10 @@ function goalLabel(goal: SessionGoal.State) {
 export function GoalStatus(props: {
   context: Plugin.Context
   sessionID: string
-  goal: Accessor<SessionGoal.State | undefined>
+  goal: Accessor<Goal.State | undefined>
 }) {
   const [hovered, setHovered] = createSignal(false)
-  const color = (current: SessionGoal.State) =>
+  const color = (current: Goal.State) =>
     hovered() ? props.context.theme.text.base : goalColor(props.context.theme, current)
 
   return (
@@ -91,7 +91,7 @@ export function GoalStatus(props: {
 }
 
 /** Opens the goal dialog for a Session, or explains how to start one. */
-function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<SessionGoal.State | undefined>) {
+function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<Goal.State | undefined>) {
   if (!goal()) {
     context.ui.toast.show({ message: "No goal is set. Start one with /goal <objective>.", variant: "info" })
     return
@@ -102,7 +102,7 @@ function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<Ses
 function GoalDialog(props: {
   context: Plugin.Context
   sessionID: string
-  goal: Accessor<SessionGoal.State | undefined>
+  goal: Accessor<Goal.State | undefined>
 }) {
   const theme = useTheme().surface("dialog")
   const goal = props.goal

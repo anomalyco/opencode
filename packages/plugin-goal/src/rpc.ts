@@ -1,8 +1,8 @@
-export * as SessionGoal from "./session-goal.js"
+export * as Goal from "./rpc.js"
 
 import { Schema } from "effect"
-import { Rpc } from "./rpc.js"
-import { optional } from "./schema.js"
+import { Rpc } from "@opencode/schema/rpc"
+import { optional } from "@opencode/schema/schema"
 
 export const Status = Schema.Literals(["active", "paused", "complete"])
 export type Status = typeof Status.Type
@@ -23,7 +23,7 @@ export const State = Schema.Struct({
   /** The server process that armed the goal. */
   boot: Schema.String,
   updatedAt: Schema.Number,
-}).annotate({ identifier: "SessionGoal.State" })
+}).annotate({ identifier: "Goal.State" })
 
 /**
  * The `/goal` plugin's RPC. Clients read a Session's goal with `get` and keep it current from `changed`, which the

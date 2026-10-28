@@ -11,13 +11,13 @@ import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Model } from "@opencode/core/model"
-import { GoalPlugin } from "@opencode/core/plugin/goal"
+import { GoalPlugin } from "@opencode/plugin-goal"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { SessionGoal } from "@opencode/schema/session-goal"
+import { Goal } from "@opencode/plugin-goal/rpc"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { tempGlobalLayer } from "../fixture/global"
@@ -524,7 +524,7 @@ function serve(respond: (request: LLMRequest) => TestLLM.Response) {
 
 // The goal plugin's own storage, as the plugin host hands it to the plugin.
 const goals = KV.Service.use((kv) => Effect.succeed(PluginHost.storage(kv, GoalPlugin.Plugin.id)))
-const decodeGoal = Schema.decodeUnknownOption(SessionGoal.State)
+const decodeGoal = Schema.decodeUnknownOption(Goal.State)
 
 function goal(sessionID: Session.ID) {
   return goals.pipe(
@@ -533,7 +533,7 @@ function goal(sessionID: Session.ID) {
   )
 }
 
-function setGoal(sessionID: Session.ID, state: SessionGoal.State) {
+function setGoal(sessionID: Session.ID, state: Goal.State) {
   return goals.pipe(Effect.flatMap((storage) => storage.set(`session:${sessionID}`, state)))
 }
 

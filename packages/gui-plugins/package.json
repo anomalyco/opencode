@@ -29,6 +29,7 @@
     "@opencode/client": "workspace:*",
     "@opencode/plugin": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",
+    "@opencode/plugin-goal": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/session-ui": "workspace:*",
     "@opencode/ui": "workspace:*",

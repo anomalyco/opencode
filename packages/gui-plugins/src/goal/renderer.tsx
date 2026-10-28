@@ -7,9 +7,9 @@ import {
   type ComposerPillProps,
   type Plugin,
 } from "@opencode/plugin/gui"
-import { SessionGoal } from "@opencode/schema/session-goal"
+import { Goal } from "@opencode/plugin-goal/rpc"
 import { showToast } from "@opencode/ui/toast"
-import type Goal from "./index"
+import type GoalDefinition from "./index"
 
 const status = {
   active: { label: "title", icon: "outline-steer", tone: undefined },
@@ -21,9 +21,9 @@ const status = {
  * The session's `/goal` above its composer: the status as a pill, and a menu headed by the objective with the actions
  * that apply. The server's goal plugin owns the goal and serves it over its RPC; a bare `/goal` shows the last reason.
  */
-const setup: Plugin.Setup<typeof Goal> = (ctx) => {
+const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
   // The last goal heard for each server and session. A session switched back to shows it until the refetch lands.
-  const [goals, setGoals] = createStore<Record<string, { goal: SessionGoal.State | null }>>({})
+  const [goals, setGoals] = createStore<Record<string, { goal: Goal.State | null }>>({})
   const key = (server: string, sessionID: string) => `${server}\u0000${sessionID}`
 
   // Subscribes to the routed session's goal: its current value, then every change. It runs again when another session
@@ -40,7 +40,7 @@ const setup: Plugin.Setup<typeof Goal> = (ctx) => {
       if (!session) return
 
       const server = session.server.id
-      const rpc = session.server.client.rpc(SessionGoal.Definition)
+      const rpc = session.server.client.rpc(Goal.Definition)
       const controller = new AbortController()
       // A change that arrives before the snapshot is newer than it.
       const heard = { value: false }

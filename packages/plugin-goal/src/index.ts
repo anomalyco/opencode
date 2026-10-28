@@ -1,16 +1,13 @@
-export * as GoalPlugin from "./goal.js"
+export * as GoalPlugin from "./index.js"
 
 import { isContextOverflowFailure, Message } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
 import { Session } from "@opencode/schema/session"
-import { SessionGoal } from "@opencode/schema/session-goal"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
-import CONTINUATION from "./goal/continuation.txt"
-import JUDGE from "./goal/judge.txt"
-import KICKOFF from "./goal/kickoff.txt"
-import REMINDER from "./goal/reminder.txt"
+import { CONTINUATION, JUDGE, KICKOFF, REMINDER } from "./prompts.js"
+import { Goal } from "./rpc.js"
 
 export const MAX_OBJECTIVE = 4_000
 export const MAX_ROUNDS = 50
@@ -22,8 +19,8 @@ export const WAIT_LIMIT = Duration.minutes(30)
 let processBoot: string | undefined
 const boot = () => (processBoot ??= crypto.randomUUID())
 
-type State = SessionGoal.State
-const decodeState = Schema.decodeUnknownOption(SessionGoal.State)
+type State = Goal.State
+const decodeState = Schema.decodeUnknownOption(Goal.State)
 // Storage key prefix of a Session's goal. Plugin storage is the plugin's own, so children and forks start without one.
 const PREFIX = "session:"
 
@@ -45,7 +42,7 @@ export const Plugin = define({
     })
 
     const rpc = yield* ctx.rpc
-      .register(SessionGoal.Definition, {
+      .register(Goal.Definition, {
         get: (input) => read(input.sessionID).pipe(Effect.map((goal) => goal ?? null)),
       })
       .pipe(Effect.orDie)

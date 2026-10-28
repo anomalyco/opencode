@@ -33,6 +33,7 @@ for (const name of [
   "client",
   "plugin",
   "plugin-browser",
+  "plugin-goal",
   "core",
   "simulation",
   "server",

@@ -54,6 +54,7 @@
     "@opencode/latex": "workspace:*",
     "@opencode/merman": "workspace:*",
     "@opencode/plugin": "workspace:*",
+    "@opencode/plugin-goal": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/simulation": "workspace:*",
     "@opencode/theme": "workspace:*",

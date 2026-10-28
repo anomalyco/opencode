@@ -4,8 +4,8 @@ import { TestClock } from "effect/testing"
 import type { Plugin } from "@opencode/plugin/effect"
 import type { CommandDefinition } from "@opencode/plugin/effect/command"
 import { Event } from "@opencode/schema/event"
-import { SessionGoal } from "@opencode/schema/session-goal"
-import { GoalPlugin } from "@opencode/core/plugin/goal"
+import { Goal } from "@opencode/plugin-goal/rpc"
+import { GoalPlugin } from "@opencode/plugin-goal"
 import { Session } from "@opencode/core/session"
 import type { SessionEvent } from "@opencode/core/session/event"
 import { it } from "../lib/effect"
@@ -34,10 +34,10 @@ const step = (stepSessionID: Session.ID) =>
   ({ type: "session.step.started", data: { sessionID: stepSessionID } }) as unknown as SessionEvent.Step.Started
 
 /** Runs the goal plugin against stubbed domains: plugin storage in memory, and RPC that records what it publishes. */
-const run = Effect.fnUntraced(function* (seed?: SessionGoal.State) {
+const run = Effect.fnUntraced(function* (seed?: Goal.State) {
   const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
   const changed: unknown[] = []
-  const handlers: { get?: (input: { sessionID: string }) => Effect.Effect<SessionGoal.State | null> } = {}
+  const handlers: { get?: (input: { sessionID: string }) => Effect.Effect<Goal.State | null> } = {}
   const events = yield* Queue.unbounded<Watched>()
   const commands: CommandDefinition[] = []
   const info = (id: Session.ID) =>
@@ -97,7 +97,7 @@ const run = Effect.fnUntraced(function* (seed?: SessionGoal.State) {
   yield* Effect.yieldNow
   return {
     goal: () =>
-      Option.getOrUndefined(Schema.decodeUnknownOption(SessionGoal.State)(stored.get(`session:${sessionID}`))),
+      Option.getOrUndefined(Schema.decodeUnknownOption(Goal.State)(stored.get(`session:${sessionID}`))),
     changed,
     get: () => handlers.get?.({ sessionID }) ?? Effect.die("the goal RPC was not registered"),
     command: (text: string) =>
