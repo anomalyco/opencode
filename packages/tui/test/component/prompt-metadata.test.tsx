@@ -43,9 +43,13 @@ async function row(terminalWidth: number, promptWidth: number) {
 }
 
 // The home screen caps the prompt at 75 columns inside a wider terminal.
-for (const promptWidth of [75, 60]) {
+for (const [terminalWidth, promptWidth] of [
+  [120, 75],
+  [120, 60],
+  [46, 41],
+]) {
   test(`lays out against the ${promptWidth}-column prompt, not the terminal`, async () => {
-    const line = await row(120, promptWidth)
+    const line = await row(terminalWidth, promptWidth)
 
     expect(line).toContain("Build")
     expect(line).toContain("medium")

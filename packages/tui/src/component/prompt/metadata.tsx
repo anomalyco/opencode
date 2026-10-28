@@ -34,7 +34,7 @@ export function PromptMetadataRow(props: {
     if (props.mode === "shell") return { agent: props.agent ?? "Shell", model: "" }
     return promptMetadataLayout({
       width: width(),
-      terminalWidth: width(),
+      terminalWidth: dimensions().width,
       agent: props.agent ?? "",
       auto: props.auto,
       model: props.model,
