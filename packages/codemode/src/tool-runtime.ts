@@ -377,6 +377,8 @@ export type ToolRuntime<R = never> = {
     args: Array<Json | undefined>,
   ) => Effect.Effect<Json | undefined, unknown, R>
   readonly search: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>
+  /** Whether `tools.<path>` names the built-in search: models often write `tools.search(...)`; a tool there wins. */
+  readonly isSearch: (path: ReadonlyArray<string>) => boolean
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
@@ -444,15 +446,15 @@ export const make = <R>(
     calls,
     hooks,
     keys: (path) => namespaceKeys(root, path),
+    isSearch: (path) => {
+      const segments = canonicalSegments(path)
+      return segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined
+    },
     search: (args) => Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args)),
     execute: (path, args) =>
-      Effect.suspend(() => {
-        const segments = canonicalSegments(path)
-        // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
-        if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", makeSearchTool(prepared.searchIndex), args)
-        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args)
-      }),
+      Effect.suspend(() =>
+        executeTool(canonicalSegments(path).join("."), resolve(root, path, prepared.searchIndex), args),
+      ),
   }
 }
 
