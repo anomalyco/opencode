@@ -278,6 +278,37 @@ fn subscription_delivers_final_exit_frame_before_closing() {
 }
 
 #[test]
+fn shutdown_ends_an_idle_subscription() {
+    let mut daemon = Daemon::start();
+    let (mut owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    let terminal = daemon.terminal("exec cat");
+    let mut subscription = daemon.connect();
+    assert!(matches!(
+        daemon.send(
+            &mut subscription,
+            Request::Subscribe {
+                id: terminal.id,
+                offset: 0,
+                attachment_id: "idle-observer".into(),
+                role: AttachmentRole::Observer,
+                takeover: false,
+            }
+        ),
+        Response::Attached { .. }
+    ));
+    // The subscription is blocked with no output; shutdown must still end it.
+    assert!(matches!(
+        daemon.send(&mut owner, Request::Shutdown),
+        Response::Ok
+    ));
+    // The 3s read timeout fails this read if the handler never closes the stream.
+    subscription.read_to_end(&mut Vec::new()).unwrap();
+    daemon.wait();
+    assert_terminal_stopped(&terminal);
+}
+
+#[test]
 fn handoff_preserves_daemon_and_terminal_and_shutdown_overrides_it() {
     let mut daemon = Daemon::start();
     let (mut owner, response) = daemon.own(None);

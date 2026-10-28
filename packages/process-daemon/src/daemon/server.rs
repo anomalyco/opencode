@@ -288,7 +288,6 @@ fn stream_subscription(
                 Ok(event) => event,
                 Err(_) => break Ok(()),
             },
-            default(Duration::from_millis(100)) => continue,
         };
         let response = match event {
             StreamEvent::Output { start, end, bytes } => {

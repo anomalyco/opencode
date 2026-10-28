@@ -185,7 +185,10 @@ pub(super) fn process_exists(pid: u32) -> bool {
 }
 
 /// Named pipes vanish with their server process; there is no endpoint to remove.
-pub(super) fn remove_stale_endpoint(_canonical_directory: &Path) -> Result<()> {
+pub(super) fn remove_stale_endpoint(
+    _canonical_directory: &Path,
+    _registration: Option<&Registration>,
+) -> Result<()> {
     Ok(())
 }
 

@@ -6,7 +6,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode-pty.git"
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/process-daemon/npm"
   },
   "exports": {
     ".": {

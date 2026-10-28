@@ -76,7 +76,6 @@
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/media": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
-    "@solidjs/meta": "catalog:",
     "diff": "catalog:",
     "effect": "catalog:",
     "dompurify": "3.4.17",
