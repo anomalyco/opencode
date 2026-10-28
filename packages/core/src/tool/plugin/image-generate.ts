@@ -50,7 +50,7 @@ export const Input = Schema.Struct({
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'NEVER set this unless the user asks for a particular image model. Written as "providerID/modelID". Do not guess the ID: look it up with the models tool using type: "image".',
+      'NEVER set this unless the user explicitly asks for a particular image model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look it up with the models tool using type: "image".',
   }),
   path: Schema.optionalKey(Schema.String).annotate({
     description:
@@ -91,7 +91,12 @@ export const Plugin = {
         const preferred = configured
           ? available.find((model) => model.providerID === configured.providerID && model.id === configured.model)
           : undefined
-        if (preferred && (!images || acceptsImages(preferred))) return { model: preferred }
+        const variantMissing =
+          configured?.variant !== undefined &&
+          preferred !== undefined &&
+          !preferred.variants.some((variant) => variant.id === configured.variant)
+        if (preferred && !variantMissing && (!images || acceptsImages(preferred)))
+          return { model: preferred, variant: configured?.variant }
         const providerID = (yield* ctx.session.get({ sessionID })).model?.providerID
         const model = defaultModel(available, { providerID, images })
         if (!model)
@@ -101,18 +106,32 @@ export const Plugin = {
               : "No image model is available.",
           })
         if (!configured) return { model }
-        const ref = `${configured.providerID}/${configured.model}`
-        const reason = preferred ? "doesn't accept input images" : "isn't available"
+        const ref = `${configured.providerID}/${configured.model}${configured.variant ? `#${configured.variant}` : ""}`
+        const reason = !preferred
+          ? "isn't available"
+          : variantMissing
+            ? `has no variant "${configured.variant}"`
+            : "doesn't accept input images"
         return { model, note: ` ${ref} ${reason}; used ${model.providerID}/${model.id}.` }
       }
       const ref = yield* Effect.try({
         try: () => Model.Ref.parse(input),
-        catch: () => new ToolFailure({ message: `Invalid model "${input}". Use "providerID/modelID".` }),
+        catch: () =>
+          new ToolFailure({
+            message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
+          }),
       })
       const model = available.find((model) => model.providerID === ref.providerID && model.id === ref.id)
       if (model === undefined)
         return yield* new ToolFailure({
           message: `Model "${ref.providerID}/${ref.id}" is not an available image model. Use the models tool with type: "image" to see what is available.`,
+        })
+      if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
+        return yield* new ToolFailure({
+          message:
+            model.variants.length === 0
+              ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
+              : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
         })
       if (images && !acceptsImages(model)) {
         const capable = available.filter(acceptsImages).slice(0, 3)
@@ -123,7 +142,7 @@ export const Plugin = {
               : `Model "${ref.providerID}/${ref.id}" does not accept input images. Image models that do: ${capable.map((model) => `${model.providerID}/${model.id}`).join(", ")}.`,
         })
       }
-      return { model }
+      return { model, variant: ref.variant }
     })
 
     const readImage = Effect.fn("ImageGenerateTool.readImage")(function* (
@@ -236,7 +255,8 @@ export const Plugin = {
               const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
               const resolved = yield* resolveModel(input.model, context.sessionID, input.images !== undefined)
               const model = resolved.model
-              const ref = `${model.providerID}/${model.id}`
+              const variant = resolved.variant
+              const ref = `${model.providerID}/${model.id}${variant ? `#${variant}` : ""}`
               const target = input.path ? yield* access.resolve({ path: input.path, kind: "file" }) : undefined
               const requested =
                 target?.absolute ??
@@ -272,7 +292,11 @@ export const Plugin = {
               const run = Effect.gen(function* () {
                 const result = yield* generate
                   .image({
-                    model: Model.Ref.make({ providerID: model.providerID, id: model.id }),
+                    model: Model.Ref.make({
+                      providerID: model.providerID,
+                      id: model.id,
+                      ...(variant ? { variant } : {}),
+                    }),
                     prompt: input.prompt,
                     n: 1,
                     ...(images ? { images } : {}),

@@ -355,6 +355,57 @@ describe("image_generate", () => {
     }),
   )
 
+  it.live("passes a model variant through, from the input or from config", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter", (model) => {
+        model.variants = [{ id: Model.VariantID.make("hd"), settings: { quality: "high" } }]
+      })
+      yield* imageModel("test", "plain")
+      const { run, notice } = yield* setup()
+
+      const explicit = yield* run({ prompt: "x", model: "test/painter#hd" })
+      expect(explicit.output).toMatchObject({ model: "test/painter#hd" })
+      yield* notice(explicit)
+      expect(fixture.requests.at(-1)?.model).toEqual(
+        Model.Ref.make({
+          providerID: Provider.ID.make("test"),
+          id: Model.ID.make("painter"),
+          variant: Model.VariantID.make("hd"),
+        }),
+      )
+      expect(failure(yield* run({ prompt: "x", model: "test/painter#bogus" }))).toBe(
+        'Variant "bogus" is not available for "test/painter". Available: hd.',
+      )
+      expect(failure(yield* run({ prompt: "x", model: "test/plain#hd" }))).toBe(
+        'Model "test/plain" has no variants. Omit the variant.',
+      )
+
+      yield* configure({
+        model: {
+          providerID: Provider.ID.make("test"),
+          model: Model.ID.make("painter"),
+          variant: Model.VariantID.make("hd"),
+        },
+      })
+      const configured = yield* run({ prompt: "x" })
+      expect(configured.output).toMatchObject({ model: "test/painter#hd" })
+      yield* notice(configured)
+      expect(fixture.requests.at(-1)?.model.variant).toBe(Model.VariantID.make("hd"))
+
+      yield* configure({
+        model: {
+          providerID: Provider.ID.make("test"),
+          model: Model.ID.make("painter"),
+          variant: Model.VariantID.make("bogus"),
+        },
+      })
+      const fallback = yield* run({ prompt: "x" })
+      expect(text(fallback)).toContain('test/painter#bogus has no variant "bogus"; used ')
+      yield* notice(fallback)
+      expect(fixture.requests.at(-1)?.model.variant).toBeUndefined()
+    }),
+  )
+
   it.live("rejects input files that are not images", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
