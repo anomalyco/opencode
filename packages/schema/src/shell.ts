@@ -31,7 +31,8 @@ export const Time = Schema.Struct({
 export interface Time extends Schema.Schema.Type<typeof Time> {}
 
 // Opaque caller-supplied tags echoed back on Info and events. The Shell service never interprets
-// these; callers (e.g. ShellTool stores the originating session ID) use them to filter or correlate.
+// these; ShellTool records sessionID and the initial background boolean for filtering and correlation.
+// The boolean describes creation intent, not later foreground-to-background transitions.
 export const Metadata = Schema.Record(Schema.String, Schema.Unknown)
 export type Metadata = typeof Metadata.Type
 
