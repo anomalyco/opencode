@@ -59,12 +59,11 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
 
     // The title first renders in the loading header, which the timeline replaces once messages arrive.
     // Measuring before then can read the detached heading, whose empty bounds put the start at 0.
-    const agents = page.getByRole("button", { name: "Used 1 Agent", exact: true })
-    await expect(agents).toBeVisible()
+    const card = page.locator(`a[href="${sessionHref(childID)}"]`)
+    await expect(card).toBeVisible()
     const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
 
-    await agents.click()
-    await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+    await card.click()
     await expectSessionTitle(page, taskDescription)
 
     const breadcrumb = page.locator('[data-slot="session-title-parent"]')
@@ -137,6 +136,10 @@ test("shows the full ancestor path and navigates to an earlier subagent", async 
   await expect(header.locator('[data-slot="session-title-ancestor"]')).toHaveText([parentTitle, childTitle])
   await expect(header.locator('[data-slot="session-title-parent"]')).toHaveText(grandchildTitle)
   await expect(header.getByRole("heading", { name: greatGrandchildTitle })).toBeVisible()
+  // Project, each ancestor and the title are all split by the same slash.
+  const separators = header.locator('[data-slot="session-title-separator"]')
+  await expect(separators).toHaveCount(4)
+  await expect(separators.locator('[data-component="slash"]')).toHaveCount(4)
 
   await header.getByRole("button", { name: childTitle, exact: true }).click()
   await expect(page).toHaveURL(sessionHref(childID))
@@ -154,20 +157,51 @@ test("keeps the active nested session visible in a narrow desktop header", async
   const separator = header.locator('[data-slot="session-title-ancestors"] + [data-slot="session-title-separator"]')
   await expect(header.locator('[data-slot="session-title-ancestor"]')).toHaveText([parentTitle, childTitle])
   await expect(heading).toBeInViewport()
-  await expect(separator).toBeInViewport()
+  // The header stays one row, so the trail still ends in a separator before the title.
+  await expect(separator).toBeVisible()
   const bounds = await heading.boundingBox()
   expect(bounds).not.toBeNull()
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(820)
 
   await page.evaluate(() => document.documentElement.setAttribute("dir", "rtl"))
   await expect(heading).toBeInViewport()
-  await expect(separator).toBeInViewport()
+  await expect(separator).toBeVisible()
 
   const root = header.locator(`[data-slot="session-title-ancestor"][data-session-id="${parentID}"]`)
   await root.focus()
   await expect(root).toBeFocused()
   await root.press("Enter")
   await expect(page).toHaveURL(sessionHref(parentID))
+})
+
+test("restores the project name after closing review in a nested session", async ({ page }) => {
+  await page.setViewportSize({ width: 890, height: 900 })
+  await mockWorkspace(page, {
+    name: "Project with a moderately long display name",
+    directory,
+    sessions: [
+      { id: parentID, title: "Root session outlining repository-wide change analysis and implementation" },
+      { id: childID, parentID, title: "Intermediate agent examining architecture and regression coverage" },
+      { id: grandchildID, parentID: childID, title: "Review repository" },
+    ],
+  })
+  await page.goto(sessionHref(grandchildID))
+  await expect(page.locator("[data-timeline-virtual-content]")).toBeAttached()
+  const header = page.locator("[data-session-title]")
+  const row = header.locator(".session-header-layout")
+  const project = header.locator('[data-slot="session-location-project"]')
+  const review = page.getByRole("button", { name: "Toggle review", exact: true })
+  await expect(project).toBeVisible()
+  const width = await row.evaluate((element) => element.getBoundingClientRect().width)
+  await header.screenshot({ path: test.info().outputPath("nested-header-before-review.png") })
+
+  await review.click()
+  await expect(project).toBeHidden()
+  await review.click()
+  await expect.poll(() => row.evaluate((element) => element.getBoundingClientRect().width)).toBe(width)
+  await expect(project).toBeVisible()
+  await expect(header.getByRole("heading", { name: "Review repository", exact: true })).toBeVisible()
+  await header.screenshot({ path: test.info().outputPath("nested-header-restored.png") })
 })
 
 test("shows parent lineage while the child timeline loads", async ({ page }) => {
@@ -185,7 +219,6 @@ test("shows parent lineage while the child timeline loads", async ({ page }) => 
 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
   await Promise.all([
@@ -210,7 +243,6 @@ test("keeps the parent visible while the child session resolves", async ({ page 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
 
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await requested.promise
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)]).finally(
@@ -286,17 +318,24 @@ test.describe("session ID links", () => {
   test("opens a verified session from agent prose or inline code with the keyboard", async ({ page }) => {
     await setupTimeline(page, {
       sessions: [session(), session({ id: target, title: "Linked session" })],
+      tabs: [sessionID, target],
       messages: [
         userMessage(),
-        assistantMessage([textPart("prt_session_links", `Visit ${target} or \`${target}\` to see the result.`)]),
+        assistantMessage([textPart("prt_session_links", `Visit ${target}.\n\nOr \`${target}\` to see the result.`)]),
       ],
     })
-    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: `Visit ${target}` })
+    // Visit the target so it is known to the shared session cache before checking its references.
+    await page.locator(`[data-titlebar-tab-link][href$="/session/${target}"]`).click()
+    await expectSessionTitle(page, "Linked session")
+    await page.locator(`[data-titlebar-tab-link][href$="/session/${sessionID}"]`).click()
+    await expectSessionTitle(page, "Timeline visual stability")
+    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
     await expect(markdown).toHaveAttribute("data-markdown-ready", "")
-    await expect(markdown.getByRole("button", { name: target })).toHaveCount(2)
+    await expect(markdown.getByRole("button", { name: "Linked session", exact: true })).toHaveCount(2)
     await markdown
-      .getByRole("button", { name: target })
-      .filter({ has: page.locator("code") })
+      .locator("p")
+      .filter({ hasText: "Or" })
+      .getByRole("button", { name: "Linked session", exact: true })
       .press("Enter")
     await expectPath(page, sessionHref(target))
     await expect(page.locator(`[data-titlebar-tab-link][href$="/session/${target}"]`)).toContainText("Linked session")
@@ -308,8 +347,8 @@ test.describe("session ID links", () => {
     })
     const markdown = page.locator('[data-component="markdown"]').filter({ hasText: `See ${missing}.` })
     await expect(markdown).toHaveAttribute("data-markdown-ready", "")
-    await markdown.getByRole("button", { name: missing }).click()
-    await expect(page.getByText("This session cannot be found")).toBeVisible()
+    await expect(markdown.getByRole("button")).toHaveCount(0)
+    await expect(markdown.locator("code")).toHaveText(missing)
     await expectPath(page, sessionHref(sessionID))
   })
 })
@@ -374,7 +413,6 @@ function titleInlineStart(title: Locator) {
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
 
   const card = page.locator(`a[href="${sessionHref(childID)}"]`)
   await expect(card).toBeVisible()

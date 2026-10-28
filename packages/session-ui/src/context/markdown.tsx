@@ -16,6 +16,7 @@ const context = createContext<{
   readonly openLocalFile?: OpenMarkdownLocalFile
   readonly localFileExists?: MarkdownLocalFileExists
   readonly openSession?: (sessionID: string) => void
+  readonly sessionTitle?: (sessionID: string) => string | undefined
 }>()
 
 export function MarkdownProvider(
@@ -24,6 +25,7 @@ export function MarkdownProvider(
     openLocalFile?: OpenMarkdownLocalFile
     localFileExists?: MarkdownLocalFileExists
     openSession?: (id: string) => void
+    sessionTitle?: (id: string) => string | undefined
   }>,
 ) {
   const parent = useMarkdown()
@@ -42,6 +44,9 @@ export function MarkdownProvider(
         },
         get openSession() {
           return props.openSession ?? parent?.openSession
+        },
+        get sessionTitle() {
+          return props.sessionTitle ?? parent?.sessionTitle
         },
       }}
     >

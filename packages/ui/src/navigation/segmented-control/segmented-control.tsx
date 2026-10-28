@@ -16,6 +16,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import "./segmented-control.css"
+import { prefersReducedMotion } from "../../motion"
 
 type OnChange = (value: string | null) => void
 
@@ -108,8 +109,6 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
   const selected = createMemo(() => (isControlled() ? (local.value ?? null) : internal()))
 
-  const reducedMotion = () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true
-
   const x = useMotionValue(0)
   const width = useMotionValue(0)
 
@@ -135,7 +134,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
     target = next
 
-    if (!ready() || !shouldAnimate || reducedMotion()) {
+    if (!ready() || !shouldAnimate || prefersReducedMotion()) {
       x.jump(next.x)
       width.jump(next.width)
       setReady(true)
@@ -395,11 +394,3 @@ export function SegmentedControlItem(props: SegmentedControlItemProps) {
     </button>
   )
 }
-
-export const SegmentedControlV2 = SegmentedControl
-
-export const SegmentedControlItemV2 = SegmentedControlItem
-
-export type SegmentedControlV2Props = SegmentedControlProps
-
-export type SegmentedControlItemV2Props = SegmentedControlItemProps

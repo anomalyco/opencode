@@ -3,7 +3,11 @@ title: Policies
 description: Control which configured resources OpenCode may use.
 ---
 
-Policies control whether OpenCode may perform an action on a named resource. This feature is experimental and is configured with the `experimental.policies` array in `opencode.json`.
+:::caution[Requires OpenCode 2]
+Policies are not enforced in OpenCode 1. The examples on this page require OpenCode 2. In OpenCode 1, use [`disabled_providers`](/docs/config#disabled-providers) or [`enabled_providers`](/docs/config#enabled-providers) to control provider availability. See the [OpenCode 2 policies documentation](https://opencode.ai/v2/docs/policies/) for current usage.
+:::
+
+Policies control whether OpenCode may perform an action on a named resource. This OpenCode 2 feature is experimental and is configured with the `experimental.policies` array in `opencode.json`.
 
 Policies are separate from [permissions](/docs/permissions). Permissions control what tools can do during a session, while policies control whether OpenCode may use a resource such as an LLM provider.
 
@@ -107,7 +111,7 @@ Policies may be set in both your global config and project config. If policies f
 
 ## Provider Lists
 
-Use policies instead of the older `disabled_providers` and `enabled_providers` settings when controlling provider access.
+In OpenCode 2, use policies instead of the older `disabled_providers` and `enabled_providers` settings when controlling provider access. Keep using those provider lists in OpenCode 1.
 
 To replace `disabled_providers`:
 

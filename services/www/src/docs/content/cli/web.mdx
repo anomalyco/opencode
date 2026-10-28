@@ -3,7 +3,7 @@ title: "Web"
 description: "Run OpenCode in the browser."
 ---
 
-OpenCode ships with a web ui that is served from the same server that powers the
+OpenCode ships with a web UI that is served from the same server that powers the
 TUI. It's available by default and password protected.
 
 ## Access
@@ -19,7 +19,7 @@ $ opencode pair
 ```
 
 Opening a link in a browser signs it in with a session cookie and loads the web
-ui. Scanning the QR code from the OpenCode app, or pasting the link into its
+UI. Scanning the QR code from the OpenCode app, or pasting the link into its
 server address field, connects the app the same way. Sessions last 30 days;
 changing the server password signs every session out.
 
@@ -38,9 +38,10 @@ platform:
 | Platform              | Default port |
 | --------------------- | ------------ |
 | macOS, Linux, and WSL | 49374        |
-| Windows               | 45278        |
+| Windows               | 28894        |
 
-Windows reserves ports from 49152 up. Print the current address with
+Windows reserves ports from 49152 up, and WSL mirrored networking reserves
+another block below that. Print the current address with
 `opencode service status`:
 
 ```bash
@@ -95,7 +96,7 @@ $ opencode service set cors https://app.example.com,https://other.example.com
 $ opencode service set env OPENCODE_LOG_LEVEL DEBUG
 ```
 
-Changing a setting stops the background server. To apply the new config
+Changing a setting stops the background server. Start it again to apply the new config:
 
 ```bash
 $ opencode service start
@@ -125,4 +126,21 @@ Connect a client to it with `--server`:
 
 ```bash
 $ opencode --server http://127.0.0.1:4096
+```
+
+### Authentication
+
+Set `OPENCODE_PASSWORD` to use a fixed password instead of a generated one. The
+same variable gives the password to `opencode --server`.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Other HTTP clients use Basic auth. The username is always `opencode`, and only
+the password can be changed.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```

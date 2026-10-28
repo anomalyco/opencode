@@ -1,5 +1,7 @@
 import type {
   FormAnswer,
+  FormField,
+  IntegrationCommandConnectOutput,
   IntegrationInfo,
   IntegrationMethod,
   IntegrationOauthConnectOutput,
@@ -12,29 +14,32 @@ import { useData } from "@/runtime/server/current"
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 
-export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" | "external" }>
+export type ProviderConnectMethod = Exclude<IntegrationMethod, { type: "env" }>
 
 type Authorization = IntegrationOauthConnectOutput["data"]
+
+type CommandAttempt = IntegrationCommandConnectOutput["data"]
 
 type Polling = {
   generation: number
   timer?: ReturnType<typeof setTimeout>
   disposed: boolean
   // An attempt the server still considers open; cancelled when the dialog goes away.
-  attempt?: Authorization
+  attempt?: { type: "oauth"; attemptID: string } | { type: "command"; attemptID: string }
 }
 
-// OpenCode Go and OpenCode Zen both bill through the OpenCode Console, so the
-// Console sign-in is the connection method for both providers.
+// The OpenCode Console account is the `opencode` integration. OpenCode Go is its own integration
+// and connects with its own methods, the same as the TUI.
 export const CONSOLE_INTEGRATION = "opencode"
 
-export const CONSOLE_PROVIDERS = new Set(["opencode", "opencode-go"])
-
-export function consoleIntegration(provider: string) {
-  return CONSOLE_PROVIDERS.has(provider) ? CONSOLE_INTEGRATION : provider
+// Same order as the TUI: browser and command sign-ins first, API keys last.
+export function connectMethods(integration: IntegrationInfo) {
+  return integration.methods
+    .filter((method): method is ProviderConnectMethod => method.type !== "env")
+    .toSorted((a, b) => Number(a.type === "key") - Number(b.type === "key"))
 }
 
-export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
+export function providerFormDefaults(fields: ReadonlyArray<FormField> | undefined) {
   return (fields ?? []).reduce<FormAnswer>((answer, field) => {
     if (field.type === "external" || !field.hidden || field.default === undefined) return answer
 
@@ -43,9 +48,7 @@ export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
 
       if (actual === undefined) return false
 
-      const equal = Array.isArray(actual)
-        ? actual.some((item) => item === condition.value)
-        : actual === condition.value
+      const equal = Array.isArray(actual) ? actual.some((item) => item === condition.value) : actual === condition.value
 
       return condition.op === "eq" ? equal : !equal
     })
@@ -58,8 +61,6 @@ export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
 
 export function createProviderConnectionController(options: {
   provider: () => string
-  /** Integration that stores API keys when it differs from the one that lists methods and runs OAuth. */
-  keyProvider?: () => string
   directory: () => string | undefined
   onComplete: () => void
   /** Skips auto-selecting a lone method; the caller starts it. */
@@ -107,19 +108,19 @@ export function createProviderConnectionController(options: {
   )
 
   const methods = createMemo<ProviderConnectMethod[]>(() => {
-    const values = integration.latest?.methods.filter(
-      (method): method is ProviderConnectMethod =>
-        method.type === "key" || method.type === "oauth" || method.type === "external",
-    )
+    const latest = integration.latest
 
-    if (values?.length) return [...values]
+    // An integration the server could not describe can still take an API key; one it describes
+    // without interactive methods (environment only) has nothing to connect here.
+    if (!latest) return [{ type: "key", label: language.t("provider.connect.method.apiKey") }]
 
-    return [{ type: "key", label: language.t("provider.connect.method.apiKey") }]
+    return connectMethods(latest)
   })
 
   const [store, setStore] = createStore<{
     methodIndex?: number
     authorization?: Authorization
+    command?: { attempt: CommandAttempt; output: string }
     formAnswer?: FormAnswer
     // Nothing is in flight until a method is selected; `busy()` reads this, so a truthy initial
     // value would keep multi-method providers on the spinner instead of the method list.
@@ -160,6 +161,7 @@ export function createProviderConnectionController(options: {
     | { type: "auth.answer"; answer: FormAnswer | undefined }
     | { type: "auth.pending" }
     | { type: "auth.waiting"; authorization: Authorization }
+    | { type: "command.waiting"; attempt: CommandAttempt }
     | { type: "auth.error"; error: string }
 
   const dispatch = (action: Action) => {
@@ -168,6 +170,7 @@ export function createProviderConnectionController(options: {
         if (action.type === "method.select" || action.type === "method.reset") {
           draft.methodIndex = action.type === "method.select" ? action.index : undefined
           draft.authorization = undefined
+          draft.command = undefined
           draft.formAnswer = undefined
           draft.state = undefined
           draft.error = undefined
@@ -208,6 +211,14 @@ export function createProviderConnectionController(options: {
           return
         }
 
+        if (action.type === "command.waiting") {
+          draft.state = "waiting"
+          draft.command = { attempt: action.attempt, output: "" }
+          draft.error = undefined
+
+          return
+        }
+
         draft.state = "error"
         draft.error = action.error
       }),
@@ -219,9 +230,15 @@ export function createProviderConnectionController(options: {
     polling.attempt = undefined
 
     if (!attempt) return
-    void serverSDK.api.integration.oauth
-      .cancel({ integrationID: options.provider(), attemptID: attempt.attemptID, location: location() })
-      .catch(() => undefined)
+    const input = { integrationID: options.provider(), attemptID: attempt.attemptID, location: location() }
+
+    if (attempt.type === "command") {
+      void serverSDK.api.integration.command.cancel(input).catch(() => undefined)
+
+      return
+    }
+
+    void serverSDK.api.integration.oauth.cancel(input).catch(() => undefined)
   }
 
   const cancelPolling = () => {
@@ -325,6 +342,42 @@ export function createProviderConnectionController(options: {
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
   }
 
+  const pollCommand = async (attempt: CommandAttempt, generation: number) => {
+    const result = await serverSDK.api.integration.command
+      .status({ integrationID: options.provider(), attemptID: attempt.attemptID, location: location() })
+      .then((response) => ({ ok: true as const, status: response.data }))
+      .catch((error) => ({ ok: false as const, error }))
+
+    if (polling.disposed || generation !== polling.generation) return
+
+    if (!result.ok) {
+      polling.attempt = undefined
+      dispatch({ type: "auth.error", error: formatServerError(result.error, language.t) })
+
+      return
+    }
+
+    if (result.status.status === "pending") {
+      setStore("command", "output", result.status.message ?? "")
+      polling.timer = setTimeout(() => void pollCommand(attempt, generation), 500)
+
+      return
+    }
+
+    polling.attempt = undefined
+
+    if (result.status.status === "complete") {
+      await finish()
+
+      return
+    }
+
+    dispatch({
+      type: "auth.error",
+      error: result.status.status === "failed" ? result.status.message : language.t("provider.connect.command.expired"),
+    })
+  }
+
   const open = async () => {
     const url = store.authorization?.url
 
@@ -350,7 +403,8 @@ export function createProviderConnectionController(options: {
     const generation = polling.generation
     const selected = methods()[index]
     dispatch({ type: "method.select", index })
-    const visible = (selected.form ?? []).some((field) => field.type === "external" || !field.hidden)
+    const form = selected.type === "command" ? undefined : selected.form
+    const visible = (form ?? []).some((field) => field.type === "external" || !field.hidden)
 
     if (visible && !answer) {
       dispatch({ type: "auth.form" })
@@ -358,7 +412,7 @@ export function createProviderConnectionController(options: {
       return
     }
 
-    const merged = { ...providerFormDefaults(selected.form), ...answer }
+    const merged = { ...providerFormDefaults(form), ...answer }
 
     if (selected.type === "key") {
       dispatch({ type: "auth.answer", answer: Object.keys(merged).length ? merged : undefined })
@@ -366,13 +420,35 @@ export function createProviderConnectionController(options: {
       return
     }
 
-    if (selected.form?.some((field) => field.type !== "string")) {
-      dispatch({ type: "auth.error", error: language.t("provider.connect.error.unsupportedFields") })
+    dispatch({ type: "auth.pending" })
+
+    if (selected.type === "command") {
+      const started = await serverSDK.api.integration.command
+        .connect({ integrationID: options.provider(), methodID: selected.id, location: location() })
+        .then((response) => ({ ok: true as const, attempt: response.data }))
+        .catch((error) => ({ ok: false as const, error }))
+
+      if (polling.disposed || generation !== polling.generation) {
+        if (started.ok)
+          void serverSDK.api.integration.command
+            .cancel({ integrationID: options.provider(), attemptID: started.attempt.attemptID, location: location() })
+            .catch(() => undefined)
+
+        return
+      }
+
+      if (!started.ok) {
+        dispatch({ type: "auth.error", error: formatServerError(started.error, language.t) })
+
+        return
+      }
+
+      polling.attempt = { type: "command", attemptID: started.attempt.attemptID }
+      dispatch({ type: "command.waiting", attempt: started.attempt })
+      void pollCommand(started.attempt, generation)
 
       return
     }
-
-    dispatch({ type: "auth.pending" })
 
     if (selected.type === "external") {
       const saved = await serverSDK.api.integration.connect
@@ -442,7 +518,7 @@ export function createProviderConnectionController(options: {
       return
     }
 
-    polling.attempt = result.authorization
+    polling.attempt = { type: "oauth", attemptID: result.authorization.attemptID }
     dispatch({ type: "auth.waiting", authorization: result.authorization })
     // Same as `opencode auth login`: hand the user straight to the browser instead of
     // asking them to click a link and retype a code.
@@ -456,7 +532,7 @@ export function createProviderConnectionController(options: {
     const authorization = store.authorization
 
     if (store.statusFailed && authorization) {
-      polling.attempt = authorization
+      polling.attempt = { type: "oauth", attemptID: authorization.attemptID }
       setStore({ state: "waiting", error: undefined, statusFailed: false })
 
       return poll(authorization, polling.generation)
@@ -477,7 +553,7 @@ export function createProviderConnectionController(options: {
 
   const connectKey = async (key: string) => {
     await serverSDK.api.integration.connect.key({
-      integrationID: options.keyProvider?.() ?? options.provider(),
+      integrationID: options.provider(),
       location: location(),
       key,
       answer: store.formAnswer,
@@ -527,6 +603,7 @@ export function createProviderConnectionController(options: {
     currentMethod,
     methodIndex: () => store.methodIndex,
     authorization: () => store.authorization,
+    command: () => store.command,
     browserFailed: () => store.browserFailed,
     // True while nothing useful can be shown yet: the integration is loading, a method is
     // about to be picked automatically, the authorization request is in flight, or an external
@@ -549,5 +626,3 @@ export function createProviderConnectionController(options: {
     },
   }
 }
-
-export type ProviderConnectionController = ReturnType<typeof createProviderConnectionController>

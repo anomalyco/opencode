@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
@@ -15,6 +15,7 @@ import {
 } from "./options.js"
 import { ProviderID } from "./ids.js"
 import { Media } from "../media.js"
+import { Json } from "../utils/json.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
@@ -119,13 +120,11 @@ export const ToolOutput = withStatics(
   },
 )
 
+const encodeJsonOption = Schema.encodeUnknownOption(Json)
+
 const toolResultText = (value: unknown) => {
   if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
+  return Option.getOrElse(encodeJsonOption(value), () => String(value))
 }
 
 export const ToolCallPart = withStatics(
@@ -396,6 +395,8 @@ const requestSchema = Schema.Struct({
   // Stable cache affinity for protocols that support provider-managed prompt caching.
   promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  /** Emit a `raw` event with each provider frame before the events parsed from it. */
+  includeRaw: Schema.optional(Schema.Boolean),
 })
 
 export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Schema.Class<LLMRequest>("LLM.Request")(
@@ -428,6 +429,7 @@ export namespace LLMRequest {
     cache: request.cache,
     promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
+    includeRaw: request.includeRaw,
   })
 
   export function update<Model extends LanguageModel>(

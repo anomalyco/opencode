@@ -10,7 +10,7 @@ export type HeaderLink = { href: string; label: string }
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  fallbackStars: "208K",
+  fallbackStars: "220K",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -28,6 +28,7 @@ export const getGitHubStars = query(async () => {
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "opencode-stats",
     },
   })
     .then((response) => (response.ok ? response.json() : undefined))

@@ -190,7 +190,6 @@ export const dict = {
   "ui.question.answer.none": "(без отговор)",
   "ui.question.review.notAnswered": "(без отговор)",
   "ui.question.multiHint": "Изберете всички приложими отговори",
-  "ui.question.singleHint": "Изберете един отговор",
   "ui.question.custom.placeholder": "Въведете вашия отговор…",
   "ui.messagePart.context.match.one": "({{count}} съвпадение)",
   "ui.messagePart.context.match.other": "({{count}} съвпадения)",

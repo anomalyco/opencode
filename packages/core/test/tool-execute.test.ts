@@ -23,7 +23,7 @@ test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable; all other external access goes through `tools`.",
+      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
       "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
@@ -153,4 +153,60 @@ test("execute supports callable namespace tools", async () => {
     ],
   })
   expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+})
+
+test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
+  let conversions = 0
+  const echo: Info = {
+    name: "echo",
+    description: "Echo a value",
+    input: {
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value: unknown) => ({ value }),
+        jsonSchema: {
+          input: () => {
+            conversions++
+            return { type: "object", properties: { value: { type: "string" } }, required: ["value"] }
+          },
+          output: () => ({}),
+        },
+      },
+    },
+    execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
+  }
+  const inventory = { tools: new Map([["echo", echo]]) }
+  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context))
+  const run = (id: string) => {
+    const progress: Array<Tool.Metadata> = []
+    return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context))
+      .execute(
+        { code: `return await tools.echo({ value: "${id}" })` },
+        { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
+      )
+      .pipe(Effect.map((result) => ({ output: result.output.output, progress })))
+  }
+
+  expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
+  const results = await Effect.runPromise(Effect.all([run("first"), run("second")], { concurrency: "unbounded" }))
+  expect<unknown>(results).toEqual(
+    ["first", "second"].map((id) => ({
+      output: `${id}:${id}`,
+      progress: [
+        { toolCalls: [{ tool: "echo", status: "running", input: { value: id } }] },
+        { toolCalls: [{ tool: "echo", status: "completed", input: { value: id } }] },
+      ],
+    })),
+  )
+  expect(
+    (await Effect.runPromise(codeMode.execute({ code: 'return await tools.echo({ value: "x" })' }, context))).output
+      .output,
+  ).toBe("call_execute:x")
+  expect(conversions).toBe(1)
+
+  await Effect.runPromise(
+    createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
+  )
+  expect(conversions).toBe(2)
 })

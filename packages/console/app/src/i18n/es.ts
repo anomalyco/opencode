@@ -36,6 +36,7 @@ export const dict = {
   "email.placeholder": "Dirección de correo",
   "email.subscribe": "Suscribirse",
   "email.success": "Casi listo, revisa tu bandeja de entrada y confirma tu correo",
+  "email.error": "No se pudo completar la suscripción. Inténtalo de nuevo.",
 
   "notFound.title": "No encontrado | opencode",
   "notFound.heading": "404 - Página no encontrada",
@@ -58,22 +59,6 @@ export const dict = {
 
   "home.title": "OpenCode | El agente de codificación IA de código abierto",
 
-  "temp.title": "opencode | Agente de codificación IA creado para la terminal",
-  "temp.hero.title": "El agente de codificación IA creado para la terminal",
-  "temp.zen": "opencode zen",
-  "temp.getStarted": "Empezar",
-  "temp.feature.native.title": "TUI Nativa",
-  "temp.feature.native.body": "Una interfaz de terminal responsiva, nativa y personalizable",
-  "temp.feature.zen.beforeLink": "Una lista",
-  "temp.feature.zen.link": "seleccionada de modelos",
-  "temp.feature.zen.afterLink": "proporcionada por opencode",
-  "temp.feature.models.beforeLink": "Soporta más de 75 proveedores de LLM a través de",
-  "temp.feature.models.afterLink": ", incluyendo modelos locales",
-  "temp.screenshot.caption": "opencode TUI con el tema tokyonight",
-  "temp.screenshot.alt": "opencode TUI con tema tokyonight",
-  "temp.logoLightAlt": "logo de opencode claro",
-  "temp.logoDarkAlt": "logo de opencode oscuro",
-
   "home.banner.badge": "Nuevo",
 
   "home.hero.title": "El agente de codificación IA de código abierto",
@@ -85,12 +70,8 @@ export const dict = {
   "home.what.title": "¿Qué es OpenCode?",
   "home.what.body":
     "OpenCode es un agente de código abierto que te ayuda a escribir código en tu terminal, IDE o escritorio.",
-  "home.what.lsp.title": "LSP habilitado",
-  "home.what.lsp.body": "Carga automáticamente los LSPs correctos para el LLM",
   "home.what.multiSession.title": "Multi-sesión",
   "home.what.multiSession.body": "Inicia múltiples agentes en paralelo en el mismo proyecto",
-  "home.what.shareLinks.title": "Compartir enlaces",
-  "home.what.shareLinks.body": "Comparte un enlace a cualquier sesión para referencia o depuración",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Inicia sesión con GitHub para usar tu cuenta de Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -131,8 +112,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Incluso puedes conectar tus",
   "home.faq.a3.p4.localLink": "modelos locales",
   "home.faq.q4": "¿Puedo usar mis suscripciones de IA existentes con OpenCode?",
-  "home.faq.a4.p1":
-    "Sí, OpenCode soporta planes de suscripción de los principales proveedores. Puedes usar tus suscripciones de Claude Pro/Max, ChatGPT Plus/Pro o GitHub Copilot.",
+  "home.faq.a4.p1": "Sí, puedes usar tus suscripciones de ChatGPT Plus/Pro o GitHub Copilot.",
   "home.faq.q5": "¿Solo puedo usar OpenCode en la terminal?",
   "home.faq.a5.beforeDesktop": "¡Ya no! OpenCode ahora está disponible como una aplicación para tu",
   "home.faq.a5.desktop": "escritorio",
@@ -182,7 +162,7 @@ export const dict = {
     "Para cubrir costos, OpenCode añade solo una pequeña tarifa de procesamiento de pagos de $1.23 por cada recarga de saldo de $20.",
   "zen.faq.q5": "¿Qué hay sobre datos y privacidad?",
   "zen.faq.a5.beforeExceptions":
-    "Todos los modelos Zen están alojados en EE. UU. Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
+    "Todos los modelos Zen están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.faq.a5.exceptionsLink": "siguientes excepciones",
   "zen.faq.q6": "¿Puedo establecer límites de gasto?",
   "zen.faq.a6": "Sí, puedes establecer límites de gasto mensuales en tu cuenta.",
@@ -215,13 +195,13 @@ export const dict = {
   "zen.how.step2.link": "paga por solicitud",
   "zen.how.step2.afterLink": "con cero recargos",
   "zen.how.step3.title": "Auto-recarga",
-  "zen.how.step3.body": "cuando tu saldo alcance $5 añadiremos automáticamente $20",
+  "zen.how.step3.body": "activa la recarga automática opcional y elige el umbral de saldo y el importe de la recarga",
   "zen.privacy.title": "Tu privacidad es importante para nosotros",
   "zen.privacy.beforeExceptions":
-    "Todos los modelos Zen están alojados en EE. UU. Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
+    "Todos los modelos Zen están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
-  "go.promo.step5": "Step 5 Preview ya está disponible en Go con 4× de uso por tiempo limitado.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro ya está disponible en Go.",
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
   "go.meta.description":
     "Go cuesta 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
@@ -259,7 +239,6 @@ export const dict = {
   "go.problem.title": "¿Qué problema resuelve Go?",
   "go.problem.body":
     "Nos enfocamos en llevar la experiencia de OpenCode a tantas personas como sea posible. OpenCode Go es una suscripción de bajo coste de 10 $/mes. Proporciona límites generosos y acceso fiable a los modelos de código abierto más capaces.",
-  "go.problem.subtitle": " ",
   "go.problem.item1": "Precios de suscripción de bajo coste",
   "go.problem.item2": "Límites generosos y acceso fiable",
   "go.problem.item3": "Creado para tantos programadores como sea posible",
@@ -304,8 +283,6 @@ export const dict = {
     "Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días.",
   "go.faq.a5.museRetention":
     "Precios de tokens muy reducidos a cambio de permitir que tus prompts y las respuestas generadas se utilicen para entrenar futuros modelos de Meta.",
-  "go.faq.a5.geminiRetention":
-    "Tus prompts y las respuestas generadas pueden utilizarse para entrenar futuros modelos de Google.",
   "go.faq.a5.learnMore": "Más información",
   "go.faq.a5.deepseekRetention":
     "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de octubre de 2026.",
@@ -319,36 +296,10 @@ export const dict = {
 
   "go.faq.q9": "¿Cuál es la diferencia entre los modelos gratuitos y Go?",
   "go.faq.a9":
-    "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento, con una cuota de 200 solicitudes/día. Go ofrece una selección de modelos con cuotas de solicitudes más altas en ventanas móviles: el 20 % de la cuota mensual cada 5 horas, el 50 % por semana y el 100 % por mes. Las cuotas específicas pueden variar según el modelo (la cantidad real de solicitudes varía según el modelo y el uso).",
+    "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento. Go ofrece una selección de modelos con cuotas de solicitudes más altas en ventanas móviles: el 20 % de la cuota mensual cada 5 horas, el 50 % por semana y el 100 % por mes. Las cuotas específicas pueden variar según el modelo (la cantidad real de solicitudes varía según el modelo y el uso).",
   "go.faq.q10": "¿Puedo obtener un reembolso?",
   "go.faq.a10":
     "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado tu cuota de Go durante ese periodo de facturación. {{contact}} para solicitar un reembolso.",
-
-  "black.meta.title": "OpenCode Black | Accede a los mejores modelos de codificación del mundo",
-  "black.meta.description": "Obtén acceso a Claude, GPT, Gemini y más con los planes de suscripción de OpenCode Black.",
-  "black.hero.title": "Accede a los mejores modelos de codificación del mundo",
-  "black.hero.subtitle": "Incluyendo Claude, GPT, Gemini y más",
-  "black.title": "OpenCode Black | Precios",
-  "black.paused": "La inscripción al plan Black está temporalmente pausada.",
-  "black.plan.icon20": "Plan Black 20",
-  "black.plan.icon100": "Plan Black 100",
-  "black.plan.icon200": "Plan Black 200",
-  "black.plan.multiplier100": "5x más uso que Black 20",
-  "black.plan.multiplier200": "20x más uso que Black 20",
-  "black.price.perMonth": "al mes",
-  "black.price.perPersonBilledMonthly": "por persona facturado mensualmente",
-  "black.terms.1": "Tu suscripción no comenzará inmediatamente",
-  "black.terms.2": "Serás añadido a la lista de espera y activado pronto",
-  "black.terms.3": "Tu tarjeta solo se cargará cuando tu suscripción se active",
-  "black.terms.4": "Aplican límites de uso, el uso fuertemente automatizado puede alcanzar los límites antes",
-  "black.terms.5": "Las suscripciones son para individuos, contacta a Enterprise para equipos",
-  "black.terms.6": "Los límites pueden ajustarse y los planes pueden discontinuarse en el futuro",
-  "black.terms.7": "Cancela tu suscripción en cualquier momento",
-  "black.finePrint.beforeTerms": "Los precios mostrados no incluyen impuestos aplicables",
-  "black.finePrint.terms": "Términos de Servicio",
-  "black.workspace.title": "OpenCode Black | Seleccionar Espacio de Trabajo",
-  "black.workspace.selectPlan": "Selecciona un espacio de trabajo para este plan",
-  "black.workspace.name": "Espacio de trabajo {{n}}",
 
   "download.title": "OpenCode | Descargar",
   "download.meta.description": "Descarga OpenCode para macOS, Windows y Linux",
@@ -412,6 +363,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Formato de correo inválido.",
   "enterprise.form.error.invalidInferenceSpend": "Selecciona un rango de gasto en inferencia válido.",
   "enterprise.form.error.internalServer": "Error interno del servidor.",
+  "enterprise.form.error.captcha": "La verificación captcha falló. Inténtalo de nuevo.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "¿Qué es OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -421,7 +373,7 @@ export const dict = {
     "Simplemente empieza con una prueba interna con tu equipo. OpenCode por defecto no almacena tu código ni datos de contexto, haciendo fácil empezar. Luego contáctanos para discutir precios y opciones de implementación.",
   "enterprise.faq.q3": "¿Cómo funciona el precio para empresas?",
   "enterprise.faq.a3":
-    "Ofrecemos precios empresariales por asiento. Si tienes tu propia pasarela de LLM, no cobramos por los tokens usados. Para más detalles, contáctanos para una cotización personalizada basada en las necesidades de tu organización.",
+    "Si tienes tu propia pasarela de LLM, no cobramos por los tokens usados. Para más detalles, contáctanos para una cotización personalizada basada en las necesidades de tu organización.",
   "enterprise.faq.q4": "¿Están mis datos seguros con OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Sí. OpenCode no almacena tu código ni datos de contexto. Todo el procesamiento ocurre localmente o a través de llamadas directas a la API de tu proveedor de IA. Con configuración central y integración SSO, tus datos permanecen seguros dentro de la infraestructura de tu organización.",

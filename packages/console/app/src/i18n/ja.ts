@@ -36,6 +36,7 @@ export const dict = {
   "email.placeholder": "メールアドレス",
   "email.subscribe": "登録",
   "email.success": "ほぼ完了です。受信トレイを確認してメールアドレスを認証してください",
+  "email.error": "登録できませんでした。もう一度お試しください。",
 
   "notFound.title": "見つかりません | OpenCode",
   "notFound.heading": "404 - ページが見つかりません",
@@ -58,22 +59,6 @@ export const dict = {
 
   "home.title": "OpenCode | オープンソースのAIコーディングエージェント",
 
-  "temp.title": "OpenCode | ターミナル向けに構築されたAIコーディングエージェント",
-  "temp.hero.title": "ターミナル向けに構築されたAIコーディングエージェント",
-  "temp.zen": "OpenCode Zen",
-  "temp.getStarted": "はじめる",
-  "temp.feature.native.title": "ネイティブ TUI",
-  "temp.feature.native.body": "レスポンシブでネイティブ、テーマ変更可能なターミナルUI",
-  "temp.feature.zen.beforeLink": "OpenCodeが提供する",
-  "temp.feature.zen.link": "厳選されたモデルリスト",
-  "temp.feature.zen.afterLink": "",
-  "temp.feature.models.beforeLink": "ローカルモデルを含む、",
-  "temp.feature.models.afterLink": "を通じて75以上のLLMプロバイダーをサポート",
-  "temp.screenshot.caption": "tokyonight テーマを使用した OpenCode TUI",
-  "temp.screenshot.alt": "tokyonight テーマの OpenCode TUI",
-  "temp.logoLightAlt": "opencodeのロゴ（ライト）",
-  "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
-
   "home.banner.badge": "新着",
 
   "home.hero.title": "オープンソースのAIコーディングエージェント",
@@ -85,12 +70,8 @@ export const dict = {
   "home.what.title": "OpenCodeとは？",
   "home.what.body":
     "OpenCodeは、ターミナル、IDE、またはデスクトップでのコード作成を支援するオープンソースのエージェントです。",
-  "home.what.lsp.title": "LSP対応",
-  "home.what.lsp.body": "LLMに適したLSPを自動的に読み込みます",
   "home.what.multiSession.title": "マルチセッション",
   "home.what.multiSession.body": "同じプロジェクトで複数のエージェントを並行実行できます",
-  "home.what.shareLinks.title": "共有リンク",
-  "home.what.shareLinks.body": "参照やデバッグのために、任意のセッションへのリンクを共有できます",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "GitHubでログインしてCopilotアカウントを利用できます",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -129,8 +110,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "さらに、",
   "home.faq.a3.p4.localLink": "ローカルモデル",
   "home.faq.q4": "既存のAIサブスクリプションをOpenCodeで使えますか？",
-  "home.faq.a4.p1":
-    "はい、OpenCodeは主要プロバイダーのサブスクリプションプランに対応しています。Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilotのサブスクリプションを利用できます。",
+  "home.faq.a4.p1": "はい、ChatGPT Plus/ProまたはGitHub Copilotのサブスクリプションを利用できます。",
   "home.faq.q5": "ターミナルだけで使えますか？",
   "home.faq.a5.beforeDesktop": "もう違います！OpenCodeは今は",
   "home.faq.a5.desktop": "デスクトップ",
@@ -178,7 +158,7 @@ export const dict = {
   "zen.faq.a4.p3": "コストを賄うために、OpenCodeは$20の残高チャージあたり$1.23の小さな決済手数料のみを追加します。",
   "zen.faq.q5": "データとプライバシーは？",
   "zen.faq.a5.beforeExceptions":
-    "Zenのモデルはすべて米国でホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
+    "Zenのモデルはすべて米国とEUでホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
   "zen.faq.a5.exceptionsLink": "以下の例外",
   "zen.faq.q6": "支出上限を設定できますか？",
   "zen.faq.a6": "はい、アカウントで月次の支出上限を設定できます。",
@@ -212,13 +192,13 @@ export const dict = {
   "zen.how.step2.link": "リクエストごとに支払う",
   "zen.how.step2.afterLink": "（マークアップなし）",
   "zen.how.step3.title": "自動チャージ",
-  "zen.how.step3.body": "残高が$5に達すると、自動的に$20が追加されます",
+  "zen.how.step3.body": "任意で自動チャージを有効にし、残高のしきい値とチャージ額を設定できます",
   "zen.privacy.title": "あなたのプライバシーは私たちにとって重要です",
   "zen.privacy.beforeExceptions":
-    "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
+    "すべてのZenモデルは米国とEUでホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
-  "go.promo.step5": "Step 5 Preview を Go で期間限定・利用枠4倍で提供中です。",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro を Go で提供開始しました。",
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
@@ -256,7 +236,6 @@ export const dict = {
   "go.problem.title": "Goはどのような問題を解決していますか？",
   "go.problem.body":
     "私たちはOpenCodeの体験をできるだけ多くの人に届けることに注力しています。OpenCode Goは月額$10の低価格なサブスクリプションです。ゆとりある上限と、最も高性能なオープンソースモデルへの信頼できるアクセスを提供します。",
-  "go.problem.subtitle": " ",
   "go.problem.item1": "低価格なサブスクリプション料金",
   "go.problem.item2": "十分な制限と安定したアクセス",
   "go.problem.item3": "できるだけ多くのプログラマーのために構築",
@@ -300,7 +279,6 @@ export const dict = {
   "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
   "go.faq.a5.museRetention":
     "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
-  "go.faq.a5.geminiRetention": "プロンプトと生成結果は、将来のGoogleモデルのトレーニングに使用される場合があります。",
   "go.faq.a5.learnMore": "詳しく見る",
   "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年10月31日まで有効です。",
   "go.faq.q6": "クレジットをチャージできますか？",
@@ -313,36 +291,10 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれます。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
   "go.faq.q10": "返金を受けられますか？",
   "go.faq.a10":
     "請求から14日以内で、その請求期間中にGoの利用枠を一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
-
-  "black.meta.title": "OpenCode Black | 世界最高峰のコーディングモデルすべてにアクセス",
-  "black.meta.description": "OpenCode Black サブスクリプションプランで、Claude、GPT、Gemini などにアクセス。",
-  "black.hero.title": "世界最高峰のコーディングモデルすべてにアクセス",
-  "black.hero.subtitle": "Claude、GPT、Gemini などを含む",
-  "black.title": "OpenCode Black | 料金",
-  "black.paused": "Blackプランの登録は一時的に停止しています。",
-  "black.plan.icon20": "Black 20 プラン",
-  "black.plan.icon100": "Black 100 プラン",
-  "black.plan.icon200": "Black 200 プラン",
-  "black.plan.multiplier100": "Black 20 の5倍の利用量",
-  "black.plan.multiplier200": "Black 20 の20倍の利用量",
-  "black.price.perMonth": "/月",
-  "black.price.perPersonBilledMonthly": "1人あたり / 月額請求",
-  "black.terms.1": "サブスクリプションはすぐには開始されません",
-  "black.terms.2": "ウェイトリストに追加され、まもなく有効化されます",
-  "black.terms.3": "サブスクリプションが有効化された時点でのみカードに請求されます",
-  "black.terms.4": "利用制限が適用されます。過度な自動化利用は早く制限に達する可能性があります",
-  "black.terms.5": "サブスクリプションは個人向けです。チーム利用はエンタープライズにお問い合わせください",
-  "black.terms.6": "将来的に制限が調整されたり、プランが廃止される可能性があります",
-  "black.terms.7": "サブスクリプションはいつでもキャンセル可能です",
-  "black.finePrint.beforeTerms": "表示価格には適用される税金は含まれていません",
-  "black.finePrint.terms": "利用規約",
-  "black.workspace.title": "OpenCode Black | ワークスペースの選択",
-  "black.workspace.selectPlan": "このプランのワークスペースを選択してください",
-  "black.workspace.name": "ワークスペース {{n}}",
 
   "download.title": "OpenCode | ダウンロード",
   "download.meta.description": "OpenCode を macOS、Windows、Linux 向けにダウンロード",
@@ -406,6 +358,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
   "enterprise.form.error.invalidInferenceSpend": "有効な推論費用の範囲を選択してください。",
   "enterprise.form.error.internalServer": "内部サーバーエラー。",
+  "enterprise.form.error.captcha": "CAPTCHA認証に失敗しました。もう一度お試しください。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode Enterpriseとは？",
   "enterprise.faq.a1":
@@ -415,7 +368,7 @@ export const dict = {
     "まずはチームでの社内トライアルから始めてください。OpenCodeはデフォルトでコードやコンテキストデータを保存しないため、簡単に始められます。その後、価格や導入オプションについてお問い合わせください。",
   "enterprise.faq.q3": "エンタープライズ価格の仕組みは？",
   "enterprise.faq.a3":
-    "シート単位（ユーザー数）でのエンタープライズ価格を提供します。独自のLLMゲートウェイをお持ちの場合、使用トークンに対する課金はありません。詳細は、組織の要件に基づいた見積もりのためにお問い合わせください。",
+    "独自のLLMゲートウェイをお持ちの場合、使用トークンに対する課金はありません。詳細は、組織の要件に基づいた見積もりのためにお問い合わせください。",
   "enterprise.faq.q4": "OpenCode Enterpriseでデータは安全ですか？",
   "enterprise.faq.a4":
     "はい。OpenCodeはコードやコンテキストデータを保存しません。すべての処理はローカル、またはAIプロバイダーへの直接API呼び出しを通じて行われます。集中設定とSSO統合により、データは組織のインフラ内で安全に保たれます。",

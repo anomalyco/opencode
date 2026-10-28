@@ -36,6 +36,7 @@ export const dict = {
   "email.placeholder": "이메일 주소",
   "email.subscribe": "구독",
   "email.success": "거의 완료되었습니다. 이메일 수신함을 확인하고 주소를 인증해주세요.",
+  "email.error": "구독하지 못했습니다. 다시 시도해주세요.",
 
   "notFound.title": "페이지를 찾을 수 없음 | OpenCode",
   "notFound.heading": "404 - 페이지를 찾을 수 없음",
@@ -58,22 +59,6 @@ export const dict = {
 
   "home.title": "OpenCode | 오픈 소스 AI 코딩 에이전트",
 
-  "temp.title": "OpenCode | 터미널을 위해 만들어진 AI 코딩 에이전트",
-  "temp.hero.title": "터미널을 위해 만들어진 AI 코딩 에이전트",
-  "temp.zen": "OpenCode Zen",
-  "temp.getStarted": "시작하기",
-  "temp.feature.native.title": "네이티브 TUI",
-  "temp.feature.native.body": "반응형, 네이티브, 테마 적용 가능한 터미널 UI",
-  "temp.feature.zen.beforeLink": "OpenCode가 제공하는",
-  "temp.feature.zen.link": "엄선된 모델 목록",
-  "temp.feature.zen.afterLink": "",
-  "temp.feature.models.beforeLink": "로컬 모델을 포함하여",
-  "temp.feature.models.afterLink": "를 통해 75개 이상의 LLM 제공자 지원",
-  "temp.screenshot.caption": "tokyonight 테마가 적용된 OpenCode TUI",
-  "temp.screenshot.alt": "tokyonight 테마가 적용된 OpenCode TUI",
-  "temp.logoLightAlt": "opencode 밝은 로고",
-  "temp.logoDarkAlt": "opencode 어두운 로고",
-
   "home.banner.badge": "신규",
 
   "home.hero.title": "오픈 소스 AI 코딩 에이전트",
@@ -85,12 +70,8 @@ export const dict = {
   "home.what.title": "OpenCode란 무엇인가요?",
   "home.what.body":
     "OpenCode는 터미널, IDE, 또는 데스크톱에서 코드를 작성할 수 있도록 도와주는 오픈 소스 에이전트입니다.",
-  "home.what.lsp.title": "LSP 지원",
-  "home.what.lsp.body": "LLM에 적합한 LSP를 자동으로 로드합니다",
   "home.what.multiSession.title": "멀티 세션",
   "home.what.multiSession.body": "동일한 프로젝트에서 여러 에이전트를 병렬로 실행하세요",
-  "home.what.shareLinks.title": "링크 공유",
-  "home.what.shareLinks.body": "참조나 디버깅을 위해 세션 링크를 공유하세요",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "GitHub로 로그인하여 Copilot 계정을 사용하세요",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -128,8 +109,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "또한",
   "home.faq.a3.p4.localLink": "로컬 모델",
   "home.faq.q4": "기존 AI 구독을 OpenCode에서 사용할 수 있나요?",
-  "home.faq.a4.p1":
-    "네, OpenCode는 모든 주요 제공자의 구독 플랜을 지원합니다. Claude Pro/Max, ChatGPT Plus/Pro, 또는 GitHub Copilot 구독을 사용할 수 있습니다.",
+  "home.faq.a4.p1": "네, ChatGPT Plus/Pro 또는 GitHub Copilot 구독을 사용할 수 있습니다.",
   "home.faq.q5": "OpenCode는 터미널에서만 사용할 수 있나요?",
   "home.faq.a5.beforeDesktop": "이제 아닙니다! OpenCode는 이제",
   "home.faq.a5.desktop": "데스크톱",
@@ -176,7 +156,7 @@ export const dict = {
   "zen.faq.a4.p3": "비용을 충당하기 위해 OpenCode는 $20 잔액 충전 시 $1.23의 소액 결제 처리 수수료만 추가합니다.",
   "zen.faq.q5": "데이터와 프라이버시는 어떤가요?",
   "zen.faq.a5.beforeExceptions":
-    "모든 Zen 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지(zero-retention) 정책을 따르며, 모델 학습에 귀하의 데이터를 사용하지 않습니다. 단,",
+    "모든 Zen 모델은 미국과 EU에서 호스팅됩니다. 제공자들은 데이터 보존 금지(zero-retention) 정책을 따르며, 모델 학습에 귀하의 데이터를 사용하지 않습니다. 단,",
   "zen.faq.a5.exceptionsLink": "다음 예외",
   "zen.faq.q6": "지출 한도를 설정할 수 있나요?",
   "zen.faq.a6": "네, 계정에서 월간 지출 한도를 설정할 수 있습니다.",
@@ -209,13 +189,13 @@ export const dict = {
   "zen.how.step2.link": "요청당 지불",
   "zen.how.step2.afterLink": "(마크업 0)",
   "zen.how.step3.title": "자동 충전",
-  "zen.how.step3.body": "잔액이 $5에 도달하면 자동으로 $20가 충전됩니다",
+  "zen.how.step3.body": "선택적으로 자동 충전을 켜고 잔액 기준과 충전 금액을 설정하세요",
   "zen.privacy.title": "귀하의 프라이버시는 우리에게 중요합니다",
   "zen.privacy.beforeExceptions":
-    "모든 Zen 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
+    "모든 Zen 모델은 미국과 EU에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "zen.privacy.exceptionsLink": "다음 예외",
 
-  "go.promo.step5": "Step 5 Preview를 Go에서 한정 기간 동안 사용량 4배로 이용할 수 있습니다.",
+  "go.promo.kimiK31Pro": "이제 Go에서 Kimi K3.1 Pro를 이용할 수 있습니다.",
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
@@ -252,7 +232,6 @@ export const dict = {
   "go.problem.title": "Go는 어떤 문제를 해결하나요?",
   "go.problem.body":
     "우리는 가능한 많은 사람들에게 OpenCode 경험을 제공하는 데 집중하고 있습니다. OpenCode Go는 월 $10의 저렴한 구독 서비스입니다. 넉넉한 한도와 가장 뛰어난 오픈 소스 모델에 대한 안정적인 액세스를 제공합니다.",
-  "go.problem.subtitle": " ",
   "go.problem.item1": "저렴한 구독 가격",
   "go.problem.item2": "넉넉한 한도와 안정적인 액세스",
   "go.problem.item3": "가능한 한 많은 프로그래머를 위해 제작됨",
@@ -295,7 +274,6 @@ export const dict = {
   "go.faq.a5.gptRetention": "모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보존됩니다.",
   "go.faq.a5.museRetention":
     "향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다.",
-  "go.faq.a5.geminiRetention": "사용자의 프롬프트와 생성 결과는 향후 Google 모델 학습에 사용될 수 있습니다.",
   "go.faq.a5.learnMore": "자세히 알아보기",
   "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 10월 31일까지 유효합니다.",
   "go.faq.q6": "크레딧을 충전할 수 있나요?",
@@ -307,36 +285,10 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
   "go.faq.q10": "환불받을 수 있나요?",
   "go.faq.a10":
     "결제일로부터 14일 이내이며 해당 결제 기간에 Go 사용 한도를 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
-
-  "black.meta.title": "OpenCode Black | 세계 최고의 코딩 모델에 액세스하세요",
-  "black.meta.description": "OpenCode Black 구독 플랜으로 Claude, GPT, Gemini 등에 액세스하세요.",
-  "black.hero.title": "세계 최고의 코딩 모델에 액세스하세요",
-  "black.hero.subtitle": "Claude, GPT, Gemini 등 포함",
-  "black.title": "OpenCode Black | 가격",
-  "black.paused": "Black 플랜 등록이 일시적으로 중단되었습니다.",
-  "black.plan.icon20": "Black 20 플랜",
-  "black.plan.icon100": "Black 100 플랜",
-  "black.plan.icon200": "Black 200 플랜",
-  "black.plan.multiplier100": "Black 20보다 5배 더 많은 사용량",
-  "black.plan.multiplier200": "Black 20보다 20배 더 많은 사용량",
-  "black.price.perMonth": "월",
-  "black.price.perPersonBilledMonthly": "인당 / 월 청구",
-  "black.terms.1": "구독이 즉시 시작되지 않습니다",
-  "black.terms.2": "대기 명단에 추가되며 곧 활성화됩니다",
-  "black.terms.3": "구독이 활성화될 때만 카드가 청구됩니다",
-  "black.terms.4": "사용량 제한이 적용되며, 과도한 자동화 사용 시 제한에 더 빨리 도달할 수 있습니다",
-  "black.terms.5": "구독은 개인용이며, 팀용은 엔터프라이즈에 문의하세요",
-  "black.terms.6": "향후 제한이 조정되거나 플랜이 중단될 수 있습니다",
-  "black.terms.7": "언제든지 구독을 취소할 수 있습니다",
-  "black.finePrint.beforeTerms": "표시된 가격에는 해당 세금이 포함되어 있지 않습니다",
-  "black.finePrint.terms": "서비스 약관",
-  "black.workspace.title": "OpenCode Black | 워크스페이스 선택",
-  "black.workspace.selectPlan": "이 플랜을 사용할 워크스페이스를 선택하세요",
-  "black.workspace.name": "워크스페이스 {{n}}",
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",
@@ -399,6 +351,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "유효하지 않은 이메일 형식입니다.",
   "enterprise.form.error.invalidInferenceSpend": "유효한 추론 비용 범위를 선택하세요.",
   "enterprise.form.error.internalServer": "내부 서버 오류입니다.",
+  "enterprise.form.error.captcha": "캡차 인증에 실패했습니다. 다시 시도해 주세요.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode 엔터프라이즈란 무엇인가요?",
   "enterprise.faq.a1":
@@ -408,7 +361,7 @@ export const dict = {
     "팀과 함께 내부 트라이얼로 간단히 시작해보세요. OpenCode는 기본적으로 코드나 컨텍스트 데이터를 저장하지 않아 시작하기 쉽습니다. 그 후 가격 및 구현 옵션에 대해 문의해주세요.",
   "enterprise.faq.q3": "엔터프라이즈 가격은 어떻게 되나요?",
   "enterprise.faq.a3":
-    "좌석(seat) 당 엔터프라이즈 가격을 제공합니다. 자체 LLM 게이트웨이를 보유한 경우, 사용된 토큰에 대해 비용을 청구하지 않습니다. 자세한 내용은 조직의 요구사항에 따른 맞춤 견적을 위해 문의해주세요.",
+    "자체 LLM 게이트웨이를 보유한 경우, 사용된 토큰에 대해 비용을 청구하지 않습니다. 자세한 내용은 조직의 요구사항에 따른 맞춤 견적을 위해 문의해주세요.",
   "enterprise.faq.q4": "OpenCode 엔터프라이즈에서 데이터는 안전한가요?",
   "enterprise.faq.a4":
     "네. OpenCode는 코드나 컨텍스트 데이터를 저장하지 않습니다. 모든 처리는 로컬에서 이루어지거나 AI 제공자에 대한 직접 API 호출을 통해 이루어집니다. 중앙 설정 및 SSO 통합을 통해 데이터는 조직의 인프라 내에서 안전하게 유지됩니다.",

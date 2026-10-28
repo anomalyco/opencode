@@ -3,7 +3,7 @@ import { ProgressEvent, QueuedEvent } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
 import { SpeechClient, Service } from "./speech-client.js"
 
 // ---------------------------------------------------------------------------
@@ -38,6 +38,7 @@ export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends 
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
+      providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as SpeechRoute,
     })
   }
@@ -76,7 +77,7 @@ export class SpeechRequest extends Schema.Class<SpeechRequest>("Speech.Request")
   language: Schema.optional(Schema.String),
   instructions: Schema.optional(Schema.String),
   timestamps: Schema.optional(Schema.Boolean),
-  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
 }) {
   declare protected readonly _SpeechRequest: void
@@ -111,7 +112,6 @@ export class SpeechResponse extends Schema.Class<SpeechResponse>("Speech.Respons
   audio: Media.AssetSchema,
   timestamps: Schema.optional(Schema.Array(SpeechTimestamp)),
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 
@@ -130,7 +130,6 @@ export const SpeechFinishEvent = Schema.Struct({
   type: Schema.tag("finish"),
   audio: Media.AssetSchema,
   usage: Schema.optional(MediaUsage),
-  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Speech.Event.Finish" })
 
@@ -162,7 +161,6 @@ const collectResponse = (events: ReadonlyArray<SpeechEvent>): Effect.Effect<Spee
       audio: finish.audio,
       timestamps: timestamps.length === 0 ? undefined : timestamps,
       usage: finish.usage,
-      notices: finish.notices,
       providerMetadata: finish.providerMetadata,
     }),
   )

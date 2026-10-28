@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "5067fae0-90ff-4601-82d7-dd050ea9dc8f",
-  "prevIds": ["e98619ef-c334-45e3-8c48-9932ed1ef290"],
+  "id": "44bd8ca5-689a-410e-a46a-958eb5accd97",
+  "prevIds": ["f1f14616-b6a1-483d-87b0-d5b7a9132580"],
   "ddl": [
     {
       "name": "account_state",
@@ -45,6 +45,14 @@
       "entityType": "tables"
     },
     {
+      "name": "blob_ref",
+      "entityType": "tables"
+    },
+    {
+      "name": "blob",
+      "entityType": "tables"
+    },
+    {
       "name": "instruction_blob",
       "entityType": "tables"
     },
@@ -62,10 +70,6 @@
     },
     {
       "name": "session_message",
-      "entityType": "tables"
-    },
-    {
-      "name": "session_pending",
       "entityType": "tables"
     },
     {
@@ -742,6 +746,116 @@
     },
     {
       "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "blob_ref"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "blob_ref"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "hash",
+      "entityType": "columns",
+      "table": "blob_ref"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "seq",
+      "entityType": "columns",
+      "table": "blob_ref"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "hash",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "mime",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "width",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "height",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "blob",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "data",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "blob"
+    },
+    {
+      "type": "text",
       "notNull": false,
       "autoincrement": false,
       "default": null,
@@ -1009,76 +1123,6 @@
       "name": "data",
       "entityType": "columns",
       "table": "session_message"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "session_id",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "type",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "data",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "delivery",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "admitted_seq",
-      "entityType": "columns",
-      "table": "session_pending"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_created",
-      "entityType": "columns",
-      "table": "session_pending"
     },
     {
       "type": "text",
@@ -1581,6 +1625,28 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_blob_ref_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "blob_ref"
+    },
+    {
+      "columns": ["hash"],
+      "tableTo": "blob",
+      "columnsTo": ["hash"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_blob_ref_hash_blob_hash_fk",
+      "entityType": "fks",
+      "table": "blob_ref"
+    },
+    {
+      "columns": ["session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_instruction_entry_session_id_session_v2_id_fk",
       "entityType": "fks",
       "table": "instruction_entry"
@@ -1619,17 +1685,6 @@
       "table": "session_message"
     },
     {
-      "columns": ["session_id"],
-      "tableTo": "session_v2",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "fk_session_pending_session_id_session_v2_id_fk",
-      "entityType": "fks",
-      "table": "session_pending"
-    },
-    {
       "columns": ["project_id"],
       "tableTo": "project",
       "columnsTo": ["id"],
@@ -1664,6 +1719,13 @@
       "name": "project_directory_pk",
       "entityType": "pks",
       "table": "project_directory"
+    },
+    {
+      "columns": ["session_id", "message_id", "hash"],
+      "nameExplicit": false,
+      "name": "blob_ref_pk",
+      "entityType": "pks",
+      "table": "blob_ref"
     },
     {
       "columns": ["session_id", "key"],
@@ -1738,6 +1800,13 @@
     {
       "columns": ["hash"],
       "nameExplicit": false,
+      "name": "blob_pk",
+      "table": "blob",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["hash"],
+      "nameExplicit": false,
       "name": "instruction_blob_pk",
       "table": "instruction_blob",
       "entityType": "pks"
@@ -1761,13 +1830,6 @@
       "nameExplicit": false,
       "name": "session_message_pk",
       "table": "session_message",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_pending_pk",
-      "table": "session_pending",
       "entityType": "pks"
     },
     {
@@ -1845,6 +1907,38 @@
       "name": "permission_project_action_resource_idx",
       "entityType": "indexes",
       "table": "permission"
+    },
+    {
+      "columns": [
+        {
+          "value": "hash",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "blob_ref_hash_idx",
+      "entityType": "indexes",
+      "table": "blob_ref"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "blob_ref_session_seq_idx",
+      "entityType": "indexes",
+      "table": "blob_ref"
     },
     {
       "columns": [
@@ -1961,60 +2055,6 @@
       "name": "session_message_time_created_idx",
       "entityType": "indexes",
       "table": "session_message"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
-          "value": "delivery",
-          "isExpression": false
-        },
-        {
-          "value": "admitted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "session_pending_session_delivery_seq_idx",
-      "entityType": "indexes",
-      "table": "session_pending"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": "\"session_pending\".\"type\" = 'compaction'",
-      "origin": "manual",
-      "name": "session_pending_session_compaction_idx",
-      "entityType": "indexes",
-      "table": "session_pending"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        },
-        {
-          "value": "admitted_seq",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "origin": "manual",
-      "name": "session_pending_session_admitted_seq_idx",
-      "entityType": "indexes",
-      "table": "session_pending"
     },
     {
       "columns": [

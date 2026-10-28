@@ -147,7 +147,7 @@ export function DialogUpdate(props: {
             </Match>
             <Match when={current.type === "installed"}>
               <text fg={theme.text.muted} wrapMode="word">
-                Update successful! A restart is required. Any active sessions will be resumed automatically.
+                Update successful! Restart closes OpenCode, then run opencode to use the new version.
               </text>
             </Match>
             <Match when={current.type === "current"}>

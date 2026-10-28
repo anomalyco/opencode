@@ -152,7 +152,7 @@ Konfigurer agent i din `opencode.json`-konfigurationsfil:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -172,7 +172,7 @@ Konfigurer agent i din `opencode.json`-konfigurationsfil:
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -196,7 +196,7 @@ Du kan også definere agenter ved hjælp af markdown-filer. Placer dem i:
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -367,7 +367,7 @@ Hvis du ikke angiver en model, bruger primære agenter [model konfigureret globa
 }
 ```
 
-Model-id'et i din OpenCode-konfiguration brugerformatet `provider/model-id`. For eksempel, hvis du bruger [OpenCode Zen](https://opencode.ai/v2/docs/console/), vil du bruge `opencode/gpt-5.1-codex` til GPT 5.1 Codex.
+Model-id'et i din OpenCode-konfiguration brugerformatet `provider/model-id`. For eksempel, hvis du bruger [OpenCode Zen](https://opencode.ai/v2/docs/console/), vil du bruge `opencode/gpt-6.1-sol` til GPT-6.1 Sol.
 
 ---
 
@@ -654,7 +654,7 @@ For eksempel, med OpenAIs ræsoneringsmodeller kan du styre ræsonnementindsatse
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -672,19 +672,9 @@ Kør `opencode models` for at se en liste over de tilgængelige modeller.
 
 ## Oprettelse af agent
 
-Du kan oprette nye agenter ved hjælp af følgende kommando:
+Opret en ny agent ved at tilføje en markdown-fil til `.opencode/agents/` for projektet eller `~/.config/opencode/agents/` globalt. Filnavnet bliver agentens navn, og frontmatter konfigurerer dens beskrivelse, tilstand, model og tilladelser. Se [Markdown](#markdown) ovenfor for filformatet.
 
-```bash
-opencode agent create
-```
-
-Denne interaktive kommando vil:
-
-1. Spørg, hvor agenten skal gemmes; globalt eller projektspecifikt.
-2. Beskrivelse af, hvad agenten skal gøre.
-3. Generer en passende systemprompt og identifikator.
-4. Lad dig vælge, hvilke værktøjer agenter har adgang til.
-5. Til sidst skal du oprette en markdown-fil med agentkonfigurationen.
+Kør `opencode agent list` for at se de agenter, som OpenCode har indlæst.
 
 ---
 

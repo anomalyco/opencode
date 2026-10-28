@@ -27,7 +27,7 @@ export const simulationReplacements: (app: {
   function* (app: { readonly version: string }) {
     // ModelsDev dies when its catalog fetch fails, so simulation answers it with
     // an empty catalog; providers come from seeded config instead.
-    const models = SimulationNetwork.json("GET", "https://models.opencode.ai/api.json", {})
+    const models = SimulationNetwork.json("GET", "https://models.opencode.ai/experimental/v2.0/api.json", {})
     const drive = yield* Config.String("OPENCODE_DRIVE").pipe(Config.withDefault(undefined))
     if (!drive) return [httpClient.replace(SimulationNetwork.layer([models]))] satisfies LayerNode.Replacements
 

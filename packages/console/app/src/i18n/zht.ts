@@ -36,6 +36,7 @@ export const dict = {
   "email.placeholder": "電子郵件地址",
   "email.subscribe": "訂閱",
   "email.success": "就差一步，請查收你的信箱並確認電子郵件地址",
+  "email.error": "訂閱失敗，請再試一次。",
 
   "notFound.title": "找不到頁面 | OpenCode",
   "notFound.heading": "404 - 找不到頁面",
@@ -58,22 +59,6 @@ export const dict = {
 
   "home.title": "OpenCode | 開源 AI 編碼代理",
 
-  "temp.title": "OpenCode | 專為終端打造的 AI 編碼代理",
-  "temp.hero.title": "專為終端打造的 AI 編碼代理",
-  "temp.zen": "OpenCode Zen",
-  "temp.getStarted": "開始使用",
-  "temp.feature.native.title": "原生 TUI",
-  "temp.feature.native.body": "響應式、原生、可自訂主題的終端介面",
-  "temp.feature.zen.beforeLink": "",
-  "temp.feature.zen.link": "精選模型列表",
-  "temp.feature.zen.afterLink": "由 OpenCode 提供",
-  "temp.feature.models.beforeLink": "透過",
-  "temp.feature.models.afterLink": "支援 75+ 家 LLM 供應商，包括本地模型",
-  "temp.screenshot.caption": "使用 tokyonight 主題的 OpenCode TUI",
-  "temp.screenshot.alt": "使用 tokyonight 主題的 OpenCode TUI",
-  "temp.logoLightAlt": "opencode 淺色標誌",
-  "temp.logoDarkAlt": "opencode 深色標誌",
-
   "home.banner.badge": "新",
 
   "home.hero.title": "開源 AI 編碼代理",
@@ -84,12 +69,8 @@ export const dict = {
 
   "home.what.title": "什麼是 OpenCode？",
   "home.what.body": "OpenCode 是一個開源代理，幫助你在終端、IDE 或桌面端編寫程式碼。",
-  "home.what.lsp.title": "支援 LSP",
-  "home.what.lsp.body": "為 LLM 自動載入合適的 LSP",
   "home.what.multiSession.title": "多工作階段",
   "home.what.multiSession.body": "在同一專案中平行啟動多個代理",
-  "home.what.shareLinks.title": "分享連結",
-  "home.what.shareLinks.body": "將任意階段的連結分享給他人供參考或除錯",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "使用 GitHub 登入以使用你的 Copilot 帳號",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -126,8 +107,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "你還可以連接你的",
   "home.faq.a3.p4.localLink": "本地模型",
   "home.faq.q4": "可以使用我現有的 AI 訂閱嗎？",
-  "home.faq.a4.p1":
-    "可以。OpenCode 支援主流供應商的訂閱方案，包括 Claude Pro/Max、ChatGPT Plus/Pro 與 GitHub Copilot。",
+  "home.faq.a4.p1": "可以，你可以使用 ChatGPT Plus/Pro 或 GitHub Copilot 訂閱。",
   "home.faq.q5": "OpenCode 只能在終端中使用嗎？",
   "home.faq.a5.beforeDesktop": "不再是了！OpenCode 現在也提供",
   "home.faq.a5.desktop": "桌面端",
@@ -170,7 +150,8 @@ export const dict = {
   "zen.faq.a4.p2.accountLink": "帳戶中設定每月支出上限",
   "zen.faq.a4.p3": "為了覆蓋成本，OpenCode 只會收取很小的支付處理費：每次儲值 $20 會額外收取 $1.23。",
   "zen.faq.q5": "資料與隱私如何？",
-  "zen.faq.a5.beforeExceptions": "所有 Zen 模型都託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
+  "zen.faq.a5.beforeExceptions":
+    "所有 Zen 模型都託管在美國和歐盟。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
   "zen.faq.a5.exceptionsLink": "以下例外",
   "zen.faq.q6": "我可以設定支出上限嗎？",
   "zen.faq.a6": "可以，你可以在帳戶中設定每月支出上限。",
@@ -202,12 +183,13 @@ export const dict = {
   "zen.how.step2.link": "按請求付費",
   "zen.how.step2.afterLink": "零加價",
   "zen.how.step3.title": "自動儲值",
-  "zen.how.step3.body": "當你的餘額達到 $5 時，我們會自動儲值 $20",
+  "zen.how.step3.body": "視需要啟用自動儲值，並設定餘額門檻和儲值金額",
   "zen.privacy.title": "你的隱私對我們很重要",
-  "zen.privacy.beforeExceptions": "所有 Zen 模型均在美國託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
+  "zen.privacy.beforeExceptions":
+    "所有 Zen 模型均在美國和歐盟託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
   "zen.privacy.exceptionsLink": "以下例外情況",
 
-  "go.promo.step5": "Step 5 Preview 現已上線 Go，限時 4 倍用量。",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro 現已上線 Go。",
   "go.title": "OpenCode Go | 低成本全民編碼模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
@@ -244,7 +226,6 @@ export const dict = {
   "go.problem.title": "Go 正在解決什麼問題？",
   "go.problem.body":
     "我們致力於將 OpenCode 體驗帶給盡可能多的人。OpenCode Go 是一款每月 $10 的低成本訂閱服務。它提供充裕的額度，並讓您能可靠地使用最強大的開源模型。",
-  "go.problem.subtitle": " ",
   "go.problem.item1": "低成本訂閱定價",
   "go.problem.item2": "寬裕的限額與穩定存取",
   "go.problem.item3": "專為盡可能多的程式設計師打造",
@@ -285,7 +266,6 @@ export const dict = {
     "ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。",
   "go.faq.a5.museRetention": "以允許使用您的提示詞和生成結果來訓練未來的 Meta 模型為交換，token 價格可享大幅折扣。",
-  "go.faq.a5.geminiRetention": "你的提示詞和模型輸出可能會被用於訓練未來的 Google 模型。",
   "go.faq.a5.learnMore": "了解更多",
   "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 10 月 31 日。",
   "go.faq.q6": "我可以儲值額度嗎？",
@@ -297,36 +277,10 @@ export const dict = {
 
   "go.faq.q9": "免費模型與 Go 有什麼區別？",
   "go.faq.a9":
-    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為每天 200 次請求。Go 提供精選模型陣容，並在滾動視窗內執行較高的請求配額：每 5 小時為每月額度的 20%、每週 50%、每月 100%。具體額度可能因模型而異（實際請求次數因模型和使用情況而異）。",
+    "免費模型包括 Big Pickle 以及當時可用的促銷模型。Go 提供精選模型陣容，並在滾動視窗內執行較高的請求配額：每 5 小時為每月額度的 20%、每週 50%、每月 100%。具體額度可能因模型而異（實際請求次數因模型和使用情況而異）。",
   "go.faq.q10": "我可以退款嗎？",
   "go.faq.a10":
     "若扣款發生在過去 14 天內，且你在該計費期間尚未使用任何 Go 額度，你可能符合退款資格。請{{contact}}申請退款。",
-
-  "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
-  "black.meta.description": "透過 OpenCode Black 訂閱方案存取 Claude、GPT、Gemini 等模型。",
-  "black.hero.title": "存取全球最佳編碼模型",
-  "black.hero.subtitle": "包括 Claude、GPT、Gemini 等",
-  "black.title": "OpenCode Black | 定價",
-  "black.paused": "Black 訂閱暫時暫停註冊。",
-  "black.plan.icon20": "Black 20 方案",
-  "black.plan.icon100": "Black 100 方案",
-  "black.plan.icon200": "Black 200 方案",
-  "black.plan.multiplier100": "比 Black 20 多 5 倍使用量",
-  "black.plan.multiplier200": "比 Black 20 多 20 倍使用量",
-  "black.price.perMonth": "每月",
-  "black.price.perPersonBilledMonthly": "每人每月計費",
-  "black.terms.1": "你的訂閱不會立即開始",
-  "black.terms.2": "你將被加入候補名單並在不久後啟用",
-  "black.terms.3": "你的卡片僅在訂閱啟用時才會扣款",
-  "black.terms.4": "適用使用限制，高度自動化的使用可能會更快達到限制",
-  "black.terms.5": "訂閱僅限個人使用，團隊請聯繫企業版",
-  "black.terms.6": "未來可能會調整限制或終止方案",
-  "black.terms.7": "隨時取消你的訂閱",
-  "black.finePrint.beforeTerms": "顯示價格未包含適用稅項",
-  "black.finePrint.terms": "服務條款",
-  "black.workspace.title": "OpenCode Black | 選擇工作區",
-  "black.workspace.selectPlan": "為此方案選擇一個工作區",
-  "black.workspace.name": "工作區 {{n}}",
 
   "download.title": "OpenCode | 下載",
   "download.meta.description": "下載適用於 macOS、Windows 與 Linux 的 OpenCode",
@@ -388,6 +342,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "無效的電子郵件格式。",
   "enterprise.form.error.invalidInferenceSpend": "請選擇有效的推論支出範圍。",
   "enterprise.form.error.internalServer": "內部伺服器錯誤。",
+  "enterprise.form.error.captcha": "驗證碼驗證失敗，請再試一次。",
   "enterprise.faq.title": "常見問題",
   "enterprise.faq.q1": "什麼是 OpenCode Enterprise？",
   "enterprise.faq.a1":
@@ -397,7 +352,7 @@ export const dict = {
     "只要先以團隊的內部試用開始。OpenCode 預設不會儲存你的程式碼或上下文資料，所以上手非常容易。之後聯絡我們，討論定價與完整實作方案。",
   "enterprise.faq.q3": "企業定價是如何進行的？",
   "enterprise.faq.a3":
-    "我們提供按席位的企業定價。如果你有自己的 LLM 閘道器，我們不會對使用的 token 另外收費。更多詳情，請聯絡我們以獲得依據組織需求的客製報價。",
+    "如果你有自己的 LLM 閘道器，我們不會對使用的 token 另外收費。更多詳情，請聯絡我們以獲得依據組織需求的客製報價。",
   "enterprise.faq.q4": "我的資料在 OpenCode Enterprise 中是安全的嗎？",
   "enterprise.faq.a4":
     "是的。OpenCode 不會儲存你的程式碼或上下文資料。所有處理都會在本地或透過直接呼叫你的 AI 供應商 API 完成。透過中央化設定與 SSO 整合，你的資料會安全保留在組織的基礎設施內部。",

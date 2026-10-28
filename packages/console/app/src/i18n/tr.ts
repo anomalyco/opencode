@@ -36,6 +36,7 @@ export const dict = {
   "email.placeholder": "E-posta adresi",
   "email.subscribe": "Abone ol",
   "email.success": "Neredeyse bitti, gelen kutunuzu kontrol edin ve e-postanızı onaylayın",
+  "email.error": "Abonelik başarısız oldu. Lütfen tekrar deneyin.",
 
   "notFound.title": "Bulunamadı | opencode",
   "notFound.heading": "404 - Sayfa bulunamadı",
@@ -58,22 +59,6 @@ export const dict = {
 
   "home.title": "OpenCode | Açık kaynaklı yapay zeka kodlama ajanı",
 
-  "temp.title": "opencode | Terminal için geliştirilmiş yapay zeka kodlama ajanı",
-  "temp.hero.title": "Terminal için geliştirilmiş yapay zeka kodlama ajanı",
-  "temp.zen": "opencode zen",
-  "temp.getStarted": "Başlayın",
-  "temp.feature.native.title": "Yerel (Native) TUI",
-  "temp.feature.native.body": "Duyarlı, yerel, temalandırılabilir bir terminal arayüzü",
-  "temp.feature.zen.beforeLink": "opencode tarafından sağlanan ",
-  "temp.feature.zen.link": "seçkin modeller listesi",
-  "temp.feature.zen.afterLink": "",
-  "temp.feature.models.beforeLink": "Yerel modeller dahil 75+ LLM sağlayıcısını ",
-  "temp.feature.models.afterLink": " üzerinden destekler",
-  "temp.screenshot.caption": "opencode TUI ve tokyonight teması",
-  "temp.screenshot.alt": "tokyonight temalı opencode TUI",
-  "temp.logoLightAlt": "opencode açık logo",
-  "temp.logoDarkAlt": "opencode koyu logo",
-
   "home.banner.badge": "Yeni",
 
   "home.hero.title": "Açık kaynaklı yapay zeka kodlama ajanı",
@@ -85,12 +70,8 @@ export const dict = {
   "home.what.title": "OpenCode nedir?",
   "home.what.body":
     "OpenCode, terminalinizde, IDE'nizde veya masaüstünde kod yazmanıza yardım eden açık kaynaklı bir ajandır.",
-  "home.what.lsp.title": "LSP etkin",
-  "home.what.lsp.body": "LLM için doğru LSP'leri otomatik olarak yükler",
   "home.what.multiSession.title": "Çoklu oturum",
   "home.what.multiSession.body": "Aynı projede birden fazla ajanı paralel çalıştırın",
-  "home.what.shareLinks.title": "Paylaşım bağlantıları",
-  "home.what.shareLinks.body": "Referans veya hata ayıklama için herhangi bir oturumu bağlantı olarak paylaşın",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Copilot hesabınızı kullanmak için GitHub ile giriş yapın",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -128,8 +109,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Hatta",
   "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
-  "home.faq.a4.p1":
-    "Evet. OpenCode tüm büyük sağlayıcıların aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
+  "home.faq.a4.p1": "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode artık sizin bu cihazlarınıza",
   "home.faq.a5.desktop": "masaüstü",
@@ -179,7 +159,7 @@ export const dict = {
     "Maliyetleri karşılamak için OpenCode, $20 bakiye yüklemesi başına yalnızca $1.23 tutarında küçük bir ödeme işleme ücreti ekler.",
   "zen.faq.q5": "Veri ve gizlilik ne olacak?",
   "zen.faq.a5.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
+    "Tüm Zen modelleri ABD'de ve AB'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.faq.a5.exceptionsLink": "istisnalarla",
   "zen.faq.q6": "Harcama limitleri ayarlayabilir miyim?",
   "zen.faq.a6": "Evet, hesabınızda aylık harcama limitleri ayarlayabilirsiniz.",
@@ -214,13 +194,13 @@ export const dict = {
   "zen.how.step2.link": "istek başına ödeme",
   "zen.how.step2.afterLink": "sıfır işaretlemeyle",
   "zen.how.step3.title": "Otomatik yükleme",
-  "zen.how.step3.body": "bakiyeniz 5$'a ulaştığında otomatik olarak 20$ ekleyeceğiz",
+  "zen.how.step3.body": "isteğe bağlı otomatik yüklemeyi etkinleştirin, bakiye eşiğini ve yükleme tutarını seçin",
   "zen.privacy.title": "Gizliliğiniz bizim için önemlidir",
   "zen.privacy.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
+    "Tüm Zen modelleri ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
-  "go.promo.step5": "Step 5 Preview artık Go'da sınırlı bir süre için 4× kullanımla sunuluyor.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro artık Go'da kullanılabilir.",
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
@@ -258,7 +238,6 @@ export const dict = {
   "go.problem.title": "Go hangi sorunu çözüyor?",
   "go.problem.body":
     "OpenCode deneyimini mümkün olduğunca çok kişiye ulaştırmaya odaklandık. OpenCode Go, ayda 10$ olan düşük maliyetli bir aboneliktir. Cömert limitler ve en yetenekli açık kaynak modellere güvenilir erişim sağlar.",
-  "go.problem.subtitle": " ",
   "go.problem.item1": "Düşük maliyetli abonelik fiyatlandırması",
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
@@ -301,8 +280,6 @@ export const dict = {
     "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
   "go.faq.a5.gptRetention":
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
-  "go.faq.a5.geminiRetention":
-    "İstemleriniz ve tamamlamalarınız gelecekteki Google modellerini eğitmek için kullanılabilir.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
     "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ekim 2026 tarihine kadar geçerlidir.",
@@ -319,36 +296,10 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
   "go.faq.q10": "Para iadesi alabilir miyim?",
   "go.faq.a10":
     "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
-
-  "black.meta.title": "OpenCode Black | Dünyanın en iyi kodlama modellerine erişin",
-  "black.meta.description": "OpenCode Black abonelik planlarıyla Claude, GPT, Gemini ve daha fazlasına erişin.",
-  "black.hero.title": "Dünyanın en iyi kodlama modellerine erişin",
-  "black.hero.subtitle": "Claude, GPT, Gemini ve daha fazlası dahil",
-  "black.title": "OpenCode Black | Fiyatlandırma",
-  "black.paused": "Black plan kaydı geçici olarak duraklatıldı.",
-  "black.plan.icon20": "Black 20 planı",
-  "black.plan.icon100": "Black 100 planı",
-  "black.plan.icon200": "Black 200 planı",
-  "black.plan.multiplier100": "Black 20'den 5 kat daha fazla kullanım",
-  "black.plan.multiplier200": "Black 20'den 20 kat daha fazla kullanım",
-  "black.price.perMonth": "aylık",
-  "black.price.perPersonBilledMonthly": "kişi başı aylık faturalandırılır",
-  "black.terms.1": "Aboneliğiniz hemen başlamayacak",
-  "black.terms.2": "Bekleme listesine ekleneceksiniz ve yakında aktive edileceksiniz",
-  "black.terms.3": "Kartınızdan sadece aboneliğiniz aktive edildiğinde ödeme alınacaktır",
-  "black.terms.4": "Kullanım limitleri geçerlidir, yoğun otomatik kullanım limitlere daha erken ulaşabilir",
-  "black.terms.5": "Abonelikler bireyler içindir, ekipler için Enterprise ile iletişime geçin",
-  "black.terms.6": "Limitler ayarlanabilir ve planlar gelecekte sonlandırılabilir",
-  "black.terms.7": "Aboneliğinizi istediğiniz zaman iptal edin",
-  "black.finePrint.beforeTerms": "Gösterilen fiyatlara geçerli vergiler dahil değildir",
-  "black.finePrint.terms": "Hizmet Şartları",
-  "black.workspace.title": "OpenCode Black | Çalışma Alanı Seç",
-  "black.workspace.selectPlan": "Bu plan için bir çalışma alanı seçin",
-  "black.workspace.name": "Çalışma Alanı {{n}}",
 
   "download.title": "OpenCode | İndir",
   "download.meta.description": "OpenCode'u macOS, Windows ve Linux için indirin",
@@ -412,6 +363,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
   "enterprise.form.error.invalidInferenceSpend": "Geçerli bir çıkarım harcaması aralığı seçin.",
   "enterprise.form.error.internalServer": "İç sunucu hatası.",
+  "enterprise.form.error.captcha": "Captcha doğrulaması başarısız oldu. Lütfen tekrar deneyin.",
   "enterprise.faq.title": "SSS",
   "enterprise.faq.q1": "OpenCode Enterprise nedir?",
   "enterprise.faq.a1":
@@ -421,7 +373,7 @@ export const dict = {
     "Ekibinizle dahili bir deneme ile başlayın. OpenCode varsayılan olarak kodunuzu veya bağlam verilerinizi saklamaz, bu da başlamayı kolaylaştırır. Ardından fiyatlandırma ve uygulama seçeneklerini görüşmek için bize ulaşın.",
   "enterprise.faq.q3": "Kurumsal fiyatlandırma nasıl çalışır?",
   "enterprise.faq.a3":
-    "Kullanıcı başı (per-seat) kurumsal fiyatlandırma sunuyoruz. Kendi LLM geçidiniz varsa, kullanılan tokenlar için ücret almıyoruz. Daha fazla bilgi için, kurumunuzun ihtiyaçlarına göre özel bir teklif için bize ulaşın.",
+    "Kendi LLM geçidiniz varsa, kullanılan tokenlar için ücret almıyoruz. Daha fazla bilgi için, kurumunuzun ihtiyaçlarına göre özel bir teklif için bize ulaşın.",
   "enterprise.faq.q4": "OpenCode Enterprise ile verilerim güvende mi?",
   "enterprise.faq.a4":
     "Evet. OpenCode kodunuzu veya bağlam verilerinizi saklamaz. Tüm işleme yerel olarak ya da AI sağlayıcınıza doğrudan API çağrıları ile gerçekleştirilir. Merkezileştirilmiş konfigürasyon ve SSO entegrasyonu ile verileriniz kurumunuzun altyapısı içinde güvende kalır.",

@@ -5,8 +5,8 @@ mock.module("@solidjs/router", () => ({ query: (fn: unknown) => fn }))
 const { buildModelCatalog } = await import("../src/routes/model-catalog")
 
 const listing = (overrides: Record<string, unknown> = {}) => ({
-  id: "space-bunny-free",
-  name: "Space Bunny Free",
+  id: "exo-free",
+  name: "Exo Free",
   release_date: "2026-09-23",
   modalities: { input: ["text", "image", "video"], output: ["text"] },
   limit: { context: 1048576, input: 524288, output: 524288 },
@@ -19,13 +19,13 @@ describe("stealth model specs", () => {
     const catalog = buildModelCatalog([], {
       opencode: {
         id: "opencode",
-        models: { "space-bunny-free": listing(), "gpt-5-nano": listing({ id: "gpt-5-nano" }) },
+        models: { "exo-free": listing(), "gpt-5-nano": listing({ id: "gpt-5-nano" }) },
       },
-      "nano-gpt": { id: "nano-gpt", models: { "stealth/space-bunny-alpha": listing({ limit: { context: 1 } }) } },
+      "nano-gpt": { id: "nano-gpt", models: { "stealth/exo-alpha": listing({ limit: { context: 1 } }) } },
     })
 
     expect(catalog.stealthSpecs).toEqual({
-      "space-bunny": {
+      "exo": {
         knowledge: undefined,
         releaseDate: "2026-09-23",
         limit: { context: 1048576, output: 524288 },
@@ -36,15 +36,15 @@ describe("stealth model specs", () => {
 
   test("prefers the opencode listing over opencode-go", () => {
     const catalog = buildModelCatalog([], {
-      opencode: { models: { "space-bunny-free": listing() } },
-      "opencode-go": { models: { "space-bunny-free": listing({ release_date: "2026-01-01" }) } },
+      opencode: { models: { "exo-free": listing() } },
+      "opencode-go": { models: { "exo-free": listing({ release_date: "2026-01-01" }) } },
     })
 
-    expect(catalog.stealthSpecs["space-bunny"]?.releaseDate).toBe("2026-09-23")
+    expect(catalog.stealthSpecs["exo"]?.releaseDate).toBe("2026-09-23")
   })
 
   test("leaves stealth models out of the lab catalog", () => {
-    const catalog = buildModelCatalog([], { opencode: { models: { "space-bunny-free": listing() } } })
+    const catalog = buildModelCatalog([], { opencode: { models: { "exo-free": listing() } } })
 
     expect(catalog.models).toEqual([])
     expect(catalog.labs).toEqual([])

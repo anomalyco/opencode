@@ -18,6 +18,7 @@ const failingCredentialNode = makeGlobalNode({
   layer: Layer.succeed(
     Credential.Service,
     Credential.Service.of({
+      lock: () => Effect.die("unused Credential.lock"),
       all: () => Effect.succeed([]),
       list: () => Effect.succeed([]),
       get: () => Effect.undefined,
@@ -187,7 +188,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Work",
-          value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "account" } }),
         }),
       ])
       expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([

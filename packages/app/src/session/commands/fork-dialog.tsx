@@ -1,18 +1,14 @@
-import { Component, createMemo } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { Component, createMemo, For, Show } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
-import { useComposerState } from "@/composer/persistence"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
-import { List } from "@opencode/ui/list"
-import { showToast } from "@/shell/notifications/toast"
+import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { useFilteredList } from "@opencode/ui/hooks"
+import { Icon } from "@opencode/ui/icon"
+import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode/util/encode"
-import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServer } from "@/runtime/server/current"
-import { sessionHref } from "@/shell/routes/session"
+import { useSessionFork } from "@/session/fork"
+import "@/shell/search-list.css"
 
 interface ForkableMessage {
   id: string
@@ -26,14 +22,10 @@ function formatTime(date: Date): string {
 
 export const DialogFork: Component = () => {
   const params = useParams()
-  const navigate = useNavigate()
   const data = useData()
-  const serverSDK = useServerSDK()
-  const location = useWorkspaceLocation()
-  const prompt = useComposerState()
   const dialog = useDialog()
   const language = useLanguage()
-  const server = useServer()
+  const fork = useSessionFork()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -57,61 +49,107 @@ export const DialogFork: Component = () => {
   })
 
   const handleSelect = (item: ForkableMessage | undefined) => {
-    if (!item) return
-
     const sessionID = params.id
 
-    if (!sessionID) return
-    const message = data.session.message.get(sessionID, item.id)
+    if (!item || !sessionID) return
 
-    if (message?.type !== "user") return
-
-    const restored = extractPromptFromMessage(message, {
-      directory: location().directory,
-      attachmentName: language.t("common.attachment"),
+    void fork({ sessionID, messageID: item.id }).then((opened) => {
+      if (opened) dialog.close()
     })
+  }
 
-    const context = extractPromptContext(message, { directory: location().directory })
-    const dir = base64Encode(location().directory)
+  const list = useFilteredList({
+    items: messages,
+    key: (x) => x.id,
+    filterKeys: ["text"],
+    onSelect: handleSelect,
+  })
 
-    serverSDK.api.session
-      .fork({ sessionID, before: item.id })
-      .then((forked) => {
-        data.session.remember(forked)
-        dialog.close()
-        const target = prompt.capture({ dir, id: forked.id })
-        target.set(restored)
-        target.context.replace([...context.comments, ...context.files])
-        navigate(sessionHref(server.key, forked.id))
-      })
-      .catch((cause: unknown) => {
-        const message = cause instanceof Error ? cause.message : String(cause)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
+  let resultsRef: HTMLDivElement | undefined
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    // The pointer leaving the rows clears the highlight, so Enter then forks from the newest match.
+    if (event.key === "Enter" && !event.isComposing && !list.active()) {
+      event.preventDefault()
+      handleSelect(list.flat()[0])
+
+      return
+    }
+
+    list.onKeyDown(event)
+    const active = list.active()
+
+    if (!active) return
+    resultsRef?.querySelector(`[data-option-key="${CSS.escape(active)}"]`)?.scrollIntoView({ block: "nearest" })
   }
 
   return (
-    <Dialog>
+    <Dialog class="search-list-dialog">
       <DialogHeader>
-        <DialogTitle>{language.t("command.session.fork")}</DialogTitle>
+        <DialogTitleGroup
+          title={language.t("command.session.fork")}
+          description={language.t("dialog.fork.description")}
+        />
       </DialogHeader>
-      <DialogBody>
-        <List
-          class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
-          search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
-          emptyMessage={language.t("dialog.fork.empty")}
-          key={(x) => x.id}
-          items={messages}
-          filterKeys={["text"]}
-          onSelect={handleSelect}
-        >
-          {(item) => (
-            <div class="w-full flex items-center gap-2">
-              <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-              <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+      <DialogBody class="search-list-body">
+        <div class="search-list-search">
+          <TextInput
+            type="search"
+            appearance="base"
+            class="!w-full"
+            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            value={list.filter()}
+            onInput={(event) => list.onInput(event.currentTarget.value)}
+            onKeyDown={onKeyDown}
+            placeholder={language.t("common.search.placeholder")}
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+            autofocus
+            aria-label={language.t("common.search.placeholder")}
+            showClearButton={!!list.filter()}
+            clearIcon="circle-xmark"
+            clearLabel={language.t("common.clear")}
+            onClearClick={() => list.clear()}
+          />
+        </div>
+        <div class="search-list-scroll" data-scrollable ref={(el) => (resultsRef = el)}>
+          <Show
+            when={list.flat().length > 0}
+            fallback={
+              <div class="search-list-empty">
+                {language.t(messages().length > 0 ? "dialog.fork.search.empty" : "dialog.fork.empty")}
+              </div>
+            }
+          >
+            <div role="listbox" class="search-list-results">
+              <For each={list.flat()}>
+                {(item) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={list.active() === item.id}
+                    data-option-key={item.id}
+                    data-active={list.active() === item.id ? "" : undefined}
+                    class="search-list-row"
+                    onMouseMove={() => list.setActive(item.id)}
+                    onMouseLeave={() => list.setActive("")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSelect(item)}
+                  >
+                    <span class="search-list-row-text">
+                      <span class="search-list-title" data-weight="regular">
+                        {item.text}
+                      </span>
+                    </span>
+                    <span class="search-list-trailing">{item.time}</span>
+                  </button>
+                )}
+              </For>
             </div>
-          )}
-        </List>
+          </Show>
+        </div>
       </DialogBody>
     </Dialog>
   )

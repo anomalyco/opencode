@@ -29,7 +29,7 @@ export function plan(sources: ConfigDiscovery.Sources) {
       ...directories.map((path) => ({
         path,
         type: "directory" as const,
-        ignore: ["node_modules", ".git", "**/{node_modules,.git}/**"],
+        ignore: FSUtil.ignoreGlobs,
       })),
       ...Array.from(parents, ([parent, files]) => ({
         path: parent,

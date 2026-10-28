@@ -1,6 +1,6 @@
 export * as InstructionState from "./instruction-state.js"
 
-import { eq, inArray, sql } from "drizzle-orm"
+import { and, eq, gte, inArray, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 import type { Database } from "../database/database.js"
 import type { Bus } from "../bus.js"
@@ -153,10 +153,18 @@ export const advanceEpoch = Effect.fn("InstructionState.advanceEpoch")(function*
     .pipe(Effect.orDie)
 })
 
-export const reset = Effect.fn("InstructionState.reset")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+/**
+ * Clears the fold only when a committed revert removed an update or the epoch start. Otherwise the
+ * fold still matches the surviving history, and keeping its baseline keeps the prompt cache.
+ */
+export const rewind = Effect.fn("InstructionState.rewind")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  boundary: number,
+) {
   yield* db
     .delete(InstructionStateTable)
-    .where(eq(InstructionStateTable.session_id, sessionID))
+    .where(and(eq(InstructionStateTable.session_id, sessionID), gte(InstructionStateTable.through_seq, boundary)))
     .run()
     .pipe(Effect.orDie)
 })

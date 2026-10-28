@@ -345,7 +345,7 @@ function terminal(id: number) {
     pid: null,
     title: "test",
     foreground_process: null,
-    group_id: "test",
+    group_id: "ses_test",
     command: ["test"],
     cwd: "/tmp",
     cols: 80,

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, PubSub, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, PlatformError, PubSub, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import fs from "fs/promises"
 import path from "path"
@@ -75,6 +75,15 @@ const start = Effect.fnUntraced(function* (ctx = host()) {
 })
 
 const configured = (instructions: string[]) => new Document({ type: "document", info: new Info({ instructions }) })
+
+const readFailure = (tag: "NotFound" | "Unknown", code: string, file: string) =>
+  PlatformError.systemError({
+    _tag: tag,
+    module: "FileSystem",
+    method: "readFile",
+    pathOrDescriptor: file,
+    cause: Object.assign(new Error(code), { code }),
+  })
 
 const configUpdated = () => ({ id: Event.ID.create(), created: Date.now(), type: "config.updated" as const, data: {} })
 
@@ -293,18 +302,23 @@ describe("ConfigInstructionPlugin.Plugin", () => {
         const second = path.join(project, "rules", "b.md")
         const absolute = path.join(tmp.path, "absolute.md")
         const homeFile = path.join(tmp.path, "home.md")
+        const noteTop = path.join(tmp.path, "notes", "guide.md")
+        const noteNested = path.join(tmp.path, "notes", "projects", "memory.md")
         const remote = "https://example.test/instructions.md"
         const requests: string[] = []
         return Effect.gen(function* () {
           yield* Effect.promise(async () => {
             await fs.mkdir(path.dirname(first), { recursive: true })
             await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.dirname(noteNested), { recursive: true })
             await Promise.all([
               fs.writeFile(agents, "agents"),
               fs.writeFile(first, "first"),
               fs.writeFile(second, "second"),
               fs.writeFile(absolute, "absolute"),
               fs.writeFile(homeFile, "home"),
+              fs.writeFile(noteTop, "note top"),
+              fs.writeFile(noteNested, "note nested"),
             ])
           })
 
@@ -318,6 +332,8 @@ describe("ConfigInstructionPlugin.Plugin", () => {
               `Instructions from: ${second}\nsecond`,
               `Instructions from: ${absolute}\nabsolute`,
               `Instructions from: ${homeFile}\nhome`,
+              `Instructions from: ${noteTop}\nnote top`,
+              `Instructions from: ${noteNested}\nnote nested`,
               `Instructions from: ${remote}\nremote`,
             ].join("\n\n"),
           )
@@ -338,6 +354,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
                 "rules/*.md",
                 absolute,
                 "~/home.md",
+                "~/notes/**/*.md",
                 remote,
                 "missing.md",
                 "https://example.test/missing.md",
@@ -607,7 +624,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           FSUtil.Service.of({
             ...fs,
             up: () => Effect.succeed([discovered]),
-            readFileStringSafe: () => Effect.undefined,
+            readFileString: (file) => Effect.fail(readFailure("NotFound", "ENOENT", file)),
           }),
         ),
       ),
@@ -627,6 +644,38 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           locationServiceLayer: Layer.succeed(
             Location.Service,
             Location.Service.of(location({ directory: AbsolutePath.make("/repo") })),
+          ),
+        }),
+      ),
+    )
+  })
+
+  it.effect("skips discovered files a sandbox denies and keeps the rest available", () => {
+    const denied = path.resolve("/repo/AGENTS.md")
+    const readable = path.resolve("/repo/packages/AGENTS.md")
+    const sandboxedFS = Layer.effect(
+      FSUtil.Service,
+      FSUtil.Service.pipe(
+        Effect.map((fs) =>
+          FSUtil.Service.of({
+            ...fs,
+            up: () => Effect.succeed([readable, denied]),
+            readFileString: (file) =>
+              file === denied ? Effect.fail(readFailure("Unknown", "EPERM", file)) : Effect.succeed("package"),
+          }),
+        ),
+      ),
+    ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+    return Effect.gen(function* () {
+      const discovery = yield* start()
+      expect((yield* readInitial(yield* discovery.load())).text).toBe(`Instructions from: ${readable}\npackage`)
+    }).pipe(
+      Effect.provide(
+        instructionLayer({
+          filesystemLayer: sandboxedFS,
+          locationServiceLayer: Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make("/repo/packages") })),
           ),
         }),
       ),

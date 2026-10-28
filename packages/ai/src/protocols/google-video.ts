@@ -17,7 +17,7 @@ const FILE_RETENTION = Duration.days(2)
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native `parameters`. Common fields (`aspectRatio`, `resolution`, `durationSeconds`, `seed`) live on the request. */
+/** Provider-native `parameters`. Common fields (`aspect`, `resolution`, `durationSeconds`, `seed`) live on the request. */
 export type GoogleVideoOptions = {
   readonly personGeneration?: OpenString<"allow_all" | "allow_adult" | "dont_allow">
 } & Record<string, unknown>
@@ -115,7 +115,7 @@ const fromRequest = Effect.fn("GoogleVideo.fromRequest")(function* (request: Req
         ],
         parameters: mergeJsonRecords(
           {
-            aspectRatio: request.aspectRatio,
+            aspectRatio: request.aspect,
             resolution: request.resolution,
             durationSeconds: request.durationSeconds,
             negativePrompt: request.negativePrompt,
@@ -181,11 +181,6 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
       }),
   )
   const reasons = generated?.raiMediaFilteredReasons ?? []
-  const notices = reasons.map((reason) => ({
-    type: "filtered" as const,
-    message: `${route.name} filtered media: ${reason}`,
-    providerMetadata: { google: { raiMediaFilteredReason: reason } },
-  }))
   if (videos.length === 0 && (reasons.length > 0 || (generated?.raiMediaFilteredCount ?? 0) > 0))
     return yield* output.contentPolicy(
       `${route.name} filtered every video${reasons.length === 0 ? "" : `: ${reasons.join("; ")}`}`,
@@ -193,11 +188,11 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
   if (videos.length === 0) return yield* output.invalid(`${route.name} operation completed without any video`)
   return new VideoResponse({
     videos,
-    notices: notices.length === 0 ? undefined : notices,
     providerMetadata: {
       google: {
         operation: context.token.operation,
         raiMediaFilteredCount: generated?.raiMediaFilteredCount,
+        raiMediaFilteredReasons: generated?.raiMediaFilteredReasons,
         metadata: operation.metadata,
       },
     },

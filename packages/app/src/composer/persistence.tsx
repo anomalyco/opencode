@@ -18,28 +18,7 @@ import {
   type ComposerState,
 } from "./state"
 
-export {
-  createComposerReady,
-  createComposerState,
-  createMemoryComposerState,
-  DEFAULT_PROMPT,
-  isCommentItem,
-} from "./state"
-
-export type {
-  AgentPart,
-  ContentPart,
-  ContextItem,
-  FileAttachmentPart,
-  FileContextItem,
-  ImageAttachmentPart,
-  Prompt,
-  PromptModel,
-  ComposerStore,
-  PromptScope,
-  ComposerState,
-  TextPart,
-} from "./state"
+export type { ComposerState } from "./state"
 
 const WORKSPACE_KEY = "__workspace__"
 

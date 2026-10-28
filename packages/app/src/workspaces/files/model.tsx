@@ -7,9 +7,12 @@ import { useParams } from "@solidjs/router"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { createPathHelpers } from "./path"
-import { fileContentFromBytes } from "./artifact"
+import { artifactKind } from "@opencode/util/artifact"
+import { usePlatform } from "@/runtime/platform/platform"
+import { fileStreamUrl } from "@/runtime/server/api"
+import { fileContentFromBytes, streamedFileContent, streamedKinds } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
@@ -23,15 +26,9 @@ import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
-import {
-  selectionFromLines,
-  type FileState,
-  type FileSelection,
-  type FileViewState,
-  type SelectedLineRange,
-} from "./types"
+import { selectionFromLines, type FileState, type FileSelection, type SelectedLineRange } from "./types"
 
-export type { FileSelection, SelectedLineRange, FileViewState, FileState }
+export type { FileSelection, SelectedLineRange, FileState }
 
 export { selectionFromLines }
 
@@ -42,8 +39,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const sdk = useWorkspaceLocation()
     const params = useParams()
     const serverSDK = useServerSDK()
+    const platform = usePlatform()
     const language = useLanguage()
-    const extensions = useExtensionAttachment()
+    const attachment = usePluginAttachment()
 
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
@@ -155,13 +153,29 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         }),
       )
 
-      if (silent || (notFound && extensions.files.opened().includes(file))) return
+      if (silent || (notFound && attachment.files.opened().includes(file))) return
 
       showToast({
         variant: "error",
         title: language.t("toast.file.loadFailed.title"),
         description: message,
       })
+    }
+
+    // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. A failed HEAD has no
+    // body; the full read that follows reports the server's error.
+    const read = (file: string, request: { path: string; location: { directory: string } }) => {
+      const download = () => serverSDK.api.file.read(request).then((data) => fileContentFromBytes(file, data))
+
+      const url = streamedKinds.has(artifactKind(file))
+        ? fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
+        : undefined
+
+      if (!url) return download()
+
+      return (platform.fetch ?? fetch)(url, { method: "HEAD" }).then((response) =>
+        response.ok ? streamedFileContent(file, url, response) : download(),
+      )
     }
 
     const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {
@@ -199,11 +213,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         promise: Promise.resolve(),
       }
 
-      entry.promise = serverSDK.api.file
-        .read(request)
-        .then((data) => {
+      entry.promise = read(file, request)
+        .then((content) => {
           if (scope() !== directory) return
-          const content = fileContentFromBytes(file, data)
           setLoaded(file, content)
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
@@ -265,7 +277,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         invalidateFromWatcher(event, {
           normalize: path.normalize,
           hasFile: (file) => Boolean(store.file[file]),
-          isOpen: (file) => extensions.files.opened().includes(file),
+          isOpen: (file) => attachment.files.opened().includes(file),
           loadFile: (file) => {
             void load(file, { force: true, silent: true })
           },
@@ -276,6 +288,28 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           },
         })
       })
+
+      onCleanup(stop)
+    })
+
+    // The server watches a file for 24 hours from the latest request, so file tabs ask when they open or are shown,
+    // and the open tabs ask again on reconnect (a restarted server forgets its watches). Older servers lack the route.
+    const watch = (input: string) => {
+      const file = path.normalize(input)
+
+      if (!file || path.absolute(file)) return
+      void serverSDK.api.file.watch({ path: file, location: { directory: scope() } }).catch(() => {})
+    }
+
+    const unwatch = (input: string) => {
+      const file = path.normalize(input)
+
+      if (!file || path.absolute(file)) return
+      void serverSDK.api.file.unwatch({ path: file, location: { directory: scope() } }).catch(() => {})
+    }
+
+    createEffect(() => {
+      const stop = serverSDK.event.on("server.connected", () => attachment.files.opened().forEach(watch))
 
       onCleanup(stop)
     })
@@ -330,6 +364,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       get,
       notFound: (input: string) => store.file[path.normalize(input)]?.notFound ?? false,
       load,
+      watch,
+      unwatch,
       exists,
       scrollTop,
       scrollLeft,

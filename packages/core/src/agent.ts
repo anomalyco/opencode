@@ -30,8 +30,8 @@ type Data = {
 }
 
 export type Editor = {
-  list: () => readonly Info[]
-  get: (id: ID) => Info | undefined
+  list: () => readonly Types.DeepMutable<Info>[]
+  get: (id: ID) => Types.DeepMutable<Info> | undefined
   default: (id: ID | undefined) => void
   update: (id: ID, fn: (agent: Types.DeepMutable<Info>) => void) => void
   remove: (id: ID) => void
@@ -40,7 +40,7 @@ export type Editor = {
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
-  readonly select: (id?: ID | string) => Effect.Effect<Selection>
+  readonly select: (id?: ID) => Effect.Effect<Selection>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -50,11 +50,29 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const selectable = (agent: Info | undefined) =>
+      agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
+    const selectedDefault = (data: Data) => {
+      const configured = data.default ? selectable(data.agents.get(data.default)) : undefined
+      if (configured) return configured
+      const build = selectable(data.agents.get(defaultID))
+      if (build) return build
+      for (const agent of data.agents.values()) {
+        const fallback = selectable(agent)
+        if (fallback) return fallback
+      }
+    }
+    const list = (data: Data) => {
+      const agents = Array.fromIterable(data.agents.values())
+      const selected = selectedDefault(data)
+      if (!selected) return agents
+      return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
+    }
     const state = State.create<Data, Editor>({
       name: "agent",
       initial: () => ({ agents: new Map() }),
       editor: (editor) => ({
-        list: () => Array.fromIterable(editor.agents.values()) as Info[],
+        list: () => Array.fromIterable(editor.agents.values()),
         get: (id) => editor.agents.get(id),
         default: (id) => {
           editor.default = id
@@ -69,21 +87,8 @@ const layer = Layer.effect(
           editor.agents.delete(id)
         },
       }),
-      notify: () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(list, () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid)),
     })
-    const selectable = (agent: Info | undefined) =>
-      agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
-    const selectedDefault = () => {
-      const data = state.get()
-      const configured = data.default ? selectable(data.agents.get(data.default)) : undefined
-      if (configured) return configured
-      const build = selectable(data.agents.get(ID.make("build")))
-      if (build) return build
-      for (const agent of data.agents.values()) {
-        const fallback = selectable(agent)
-        if (fallback) return fallback
-      }
-    }
 
     return Service.of({
       transform: state.transform,
@@ -93,21 +98,15 @@ const layer = Layer.effect(
       }),
       resolve: Effect.fnUntraced(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id))
-        return selectedDefault()
+        return selectedDefault(state.get())
       }),
       select: Effect.fn("Agent.select")(function* (id) {
-        if (id !== undefined) {
-          const selected = ID.make(id)
-          return { id: selected, info: state.get().agents.get(selected) }
-        }
-        const info = selectedDefault()
+        if (id !== undefined) return { id, info: state.get().agents.get(id) }
+        const info = selectedDefault(state.get())
         return { id: info?.id ?? defaultID, info }
       }),
       list: Effect.fn("Agent.list")(function* () {
-        const agents = Array.fromIterable(state.get().agents.values())
-        const selected = selectedDefault()
-        if (!selected) return agents
-        return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
+        return list(state.get())
       }),
     })
   }),

@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("keeps the comment options button pressed while its menu is open", async ({ mount, page }) => {
   const component = await mount("ui-line-comment--display")

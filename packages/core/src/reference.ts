@@ -48,8 +48,8 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
-    const list = (): Info[] =>
-      Array.from(state.get().sources).flatMap(([name, source]) => {
+    const list = (data: Data = state.get()): Info[] =>
+      Array.from(data.sources).flatMap(([name, source]) => {
         const info = {
           name,
           source,
@@ -101,11 +101,12 @@ const layer = Layer.effect(
         list: () => Array.from(editor.sources),
         get: (name) => editor.sources.get(name),
       }),
-      notify: () =>
+      notify: State.changes(list, () =>
         Effect.gen(function* () {
           yield* refresh().pipe(Effect.forkIn(scope))
           yield* bus.publish(Reference.Event.Updated, {})
         }),
+      ),
     })
 
     // Check independently of session activity; the shared cache throttles Git work daily.

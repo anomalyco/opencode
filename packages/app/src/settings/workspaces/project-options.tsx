@@ -17,7 +17,6 @@ export const ProjectOptions: Component<{
   onOpenChange?: (open: boolean) => void
   onEdit?: () => void
   onRename?: () => void
-  onClose?: () => void
   class?: string
   size?: "small" | "normal" | "large"
 }> = (props) => {
@@ -34,11 +33,6 @@ export const ProjectOptions: Component<{
   const clearNotifications = () => {
     const notification = context().notification
     directories().forEach((directory) => notification.project.markViewed(directory))
-  }
-
-  const close = () => {
-    context().projects.close(props.project.worktree)
-    props.onClose?.()
   }
 
   return (
@@ -71,8 +65,6 @@ export const ProjectOptions: Component<{
           <Menu.Item disabled={!hasUnread()} onSelect={clearNotifications}>
             {language.t("sidebar.project.clearNotifications")}
           </Menu.Item>
-          <Menu.Separator />
-          <Menu.Item onSelect={close}>{language.t("common.close")}</Menu.Item>
         </Menu.Content>
       </Menu.Portal>
     </Menu>
