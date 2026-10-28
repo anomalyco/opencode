@@ -232,4 +232,48 @@ describe("extractPromptFromMessage", () => {
       },
     ])
   })
+
+  test("only restores valid positive integer line ranges from file URLs", () => {
+    const message = {
+      id: "msg_1",
+      type: "user",
+      text: "@a.ts @b.ts @c.ts",
+      files: [
+        {
+          data: "",
+          mime: "text/plain",
+          source: { type: "uri", uri: "file:///repo/a.ts?start=4&end=8#L4" },
+          mention: { text: "@a.ts", start: 0, end: 5 },
+        },
+        {
+          data: "",
+          mime: "text/plain",
+          source: { type: "uri", uri: "file:///repo/b.ts?v=1" },
+          mention: { text: "@b.ts", start: 6, end: 11 },
+        },
+        {
+          data: "",
+          mime: "text/plain",
+          source: { type: "uri", uri: "file:///repo/c.ts?start=10" },
+          mention: { text: "@c.ts", start: 12, end: 17 },
+        },
+        { data: "", mime: "text/plain", source: { type: "uri", uri: "file:///repo/d.ts?start=0&end=0" } },
+        { data: "", mime: "text/plain", source: { type: "uri", uri: "file:///repo/e.ts?start=8&end=4" } },
+        { data: "", mime: "text/plain", source: { type: "uri", uri: "file:///repo/f.ts?start=&end=" } },
+      ],
+      time: { created: 1 },
+    } satisfies SessionMessageUser
+
+    const parts = extractPromptFromMessage(message, { directory: "/repo" }).filter((part) => part.type === "file")
+    expect(parts.map((part) => [part.path, part.selection])).toEqual([
+      ["a.ts", { startLine: 4, endLine: 8, startChar: 0, endChar: 0 }],
+      ["b.ts", undefined],
+      ["c.ts", undefined],
+    ])
+    expect(extractPromptContext(message, { directory: "/repo" }).files).toEqual([
+      { type: "file", path: "d.ts", selection: undefined, name: undefined, description: undefined },
+      { type: "file", path: "e.ts", selection: undefined, name: undefined, description: undefined },
+      { type: "file", path: "f.ts", selection: undefined, name: undefined, description: undefined },
+    ])
+  })
 })

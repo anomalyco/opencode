@@ -44,15 +44,22 @@ type Inline =
       name: Skill.Name
     }
 
+function positiveInt(value: string | null) {
+  if (!value) return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
 function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["selection"] {
   const queryIndex = url.indexOf("?")
 
   if (queryIndex === -1) return undefined
-  const params = new URLSearchParams(url.slice(queryIndex + 1))
-  const startLine = Number(params.get("start"))
-  const endLine = Number(params.get("end"))
+  const hashIndex = url.indexOf("#", queryIndex)
+  const params = new URLSearchParams(url.slice(queryIndex + 1, hashIndex === -1 ? undefined : hashIndex))
+  const startLine = positiveInt(params.get("start"))
+  const endLine = positiveInt(params.get("end"))
 
-  if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) return undefined
+  if (startLine === undefined || endLine === undefined || endLine < startLine) return undefined
 
   return {
     startLine,
