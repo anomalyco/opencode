@@ -25,8 +25,10 @@ import {
   maxScale,
   panBy,
   viewBox,
+  wheelPixels,
   wheelZoomFactor,
   zoomAt,
+  zoomShortcut,
   type ZoomView,
 } from "./image-zoom"
 
@@ -516,7 +518,9 @@ export function ImagePreview(props: ImagePreviewProps) {
       const current = view()
 
       if (zoom) {
-        follow(zoomAt(current, current.scale * wheelZoomFactor(pixels(event, event.deltaY)), point(event), bounds()))
+        follow(
+          zoomAt(current, current.scale * wheelZoomFactor(wheelPixels(event, event.deltaY)), point(event), bounds()),
+        )
 
         return
       }
@@ -526,8 +530,8 @@ export function ImagePreview(props: ImagePreviewProps) {
         panBy(
           current,
           {
-            x: -pixels(event, horizontal ? event.deltaY : event.deltaX),
-            y: horizontal ? 0 : -pixels(event, event.deltaY),
+            x: -wheelPixels(event, horizontal ? event.deltaY : event.deltaX),
+            y: horizontal ? 0 : -wheelPixels(event, event.deltaY),
           },
           bounds(),
         ),
@@ -552,7 +556,7 @@ export function ImagePreview(props: ImagePreviewProps) {
         return props.video.pause()
       }
 
-      const action = bare ? (event.key === "0" ? "fit" : undefined) : event.altKey ? undefined : shortcut(event.key)
+      const action = bare ? (event.key === "0" ? "fit" : undefined) : event.altKey ? undefined : zoomShortcut(event.key)
 
       if (!action) return
       event.preventDefault()
@@ -761,20 +765,4 @@ function layout(element: HTMLElement, frame: Box, radius: number) {
     height: `${frame.height}px`,
     borderRadius: `${radius}px`,
   })
-}
-
-function shortcut(key: string) {
-  if (key === "=" || key === "+") return "in"
-
-  if (key === "-" || key === "_") return "out"
-
-  if (key === "0") return "fit"
-}
-
-function pixels(event: WheelEvent, delta: number) {
-  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16
-
-  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * window.innerHeight
-
-  return delta
 }

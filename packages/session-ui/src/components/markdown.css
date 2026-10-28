@@ -27,6 +27,23 @@
   font-family: var(--font-family-mono);
 }
 
+/* Pele colors a diagram from these, in a message and maximized. */
+:is([data-component="markdown-mermaid"], [data-component="diagram-preview"]) {
+  --pele-bg: var(--v2-background-bg-layer-02);
+  --pele-fg: var(--v2-text-text-base);
+  --pele-muted: var(--v2-text-text-muted);
+  --pele-line: var(--v2-icon-icon-muted);
+  --pele-surface: var(--v2-background-bg-base);
+  --pele-surface-alt: var(--v2-background-bg-layer-03);
+  --pele-border: var(--v2-border-border-strong);
+  --pele-accent: var(--v2-text-text-accent);
+  --pele-critical: var(--v2-state-fg-danger);
+  --pele-error: var(--v2-state-fg-danger);
+  --pele-font: var(--font-family-sans);
+  --pele-font-mono: var(--font-family-mono);
+  --pele-radius: 6px;
+}
+
 [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-text-text-code-path);
   --markdown-inline-code-color: var(--v2-text-text-code-accent);
@@ -292,19 +309,6 @@
   }
 
   [data-component="markdown-mermaid"] {
-    --pele-bg: var(--v2-background-bg-layer-02);
-    --pele-fg: var(--v2-text-text-base);
-    --pele-muted: var(--v2-text-text-muted);
-    --pele-line: var(--v2-icon-icon-muted);
-    --pele-surface: var(--v2-background-bg-base);
-    --pele-surface-alt: var(--v2-background-bg-layer-03);
-    --pele-border: var(--v2-border-border-strong);
-    --pele-accent: var(--v2-text-text-accent);
-    --pele-critical: var(--v2-state-fg-danger);
-    --pele-error: var(--v2-state-fg-danger);
-    --pele-font: var(--font-family-sans);
-    --pele-font-mono: var(--font-family-mono);
-    --pele-radius: 6px;
     min-height: 96px;
     margin: 12px 0 24px;
     padding: 16px;
@@ -321,6 +325,28 @@
     max-width: 100%;
     height: auto;
     margin: 0 auto;
+  }
+
+  [data-slot="markdown-mermaid-maximize"] {
+    display: none;
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 4px;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
+  }
+
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-mermaid-maximize"] {
+    display: block;
+  }
+
+  [data-component="markdown-code"]:hover > [data-slot="markdown-mermaid-maximize"],
+  [data-slot="markdown-mermaid-maximize"]:focus-within {
+    opacity: 1;
   }
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,

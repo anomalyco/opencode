@@ -204,6 +204,8 @@ const source = {
   "ui.imagePreview.zoomIn": "Zoom in",
   "ui.imagePreview.zoomOut": "Zoom out",
   "ui.imagePreview.zoomToFit": "Zoom to fit",
+  "ui.diagramPreview.label": "Diagram",
+  "ui.diagramPreview.open": "Maximize diagram",
   "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",
