@@ -14,6 +14,7 @@ import { readLocalImage } from "@/runtime/server/image"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { createTurnDiffCache } from "@/session/timeline/turn-diffs"
+import { useSettings } from "@/settings/model"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -27,6 +28,7 @@ export function SessionUIProvider(
   const serverSDK = useServerSDK()
   const tabs = useTabs()
   const language = useLanguage()
+  const settings = useSettings()
   const directory = () => props.directory
 
   const readImage = createMemo<ReadMarkdownImage>(() => {
@@ -63,6 +65,12 @@ export function SessionUIProvider(
 
     data.session.remember(session)
     tabs.select(tabs.addSessionTab({ server: props.server, sessionId: session.id }))
+  }
+
+  const sessionTitle = (id: string) => {
+    const session = data.session.get(id)
+
+    return session && !session.time.archived ? session.title || language.t("command.session.new") : undefined
   }
 
   const providers = useProviders(directory)
@@ -120,23 +128,26 @@ export function SessionUIProvider(
   }))
 
   return (
-    <DataProvider
-      data={sessionUIData()}
-      directory={directory()}
-      sessionID={params.id}
-      shellRunning={(id) => !!data.shell.get(id)}
-      shellOutput={(input) => serverSDK.api.shell.output(input)}
-      turnDiff={{
-        get: (input) => turnDiffs()?.get(input),
-        load: (input) => turnDiffs()?.load(input, () => serverSDK.api.session.diff(input)),
-      }}
-      onNavigateToSession={navigateToSession}
-      onSessionHref={href}
-      backgroundCompaction={backgroundCompaction()}
-    >
-      <MarkdownProvider readImage={readImage()} openSession={openReferencedSession}>
-        <LocalProvider>{props.children}</LocalProvider>
-      </MarkdownProvider>
-    </DataProvider>
+    <LocalProvider>
+      <DataProvider
+        data={sessionUIData()}
+        directory={directory()}
+        sessionID={params.id}
+        agents={settings.visibility.customAgents()}
+        shellRunning={(id) => !!data.shell.get(id)}
+        shellOutput={(input) => serverSDK.api.shell.output(input)}
+        turnDiff={{
+          get: (input) => turnDiffs()?.get(input),
+          load: (input) => turnDiffs()?.load(input, () => serverSDK.api.session.diff(input)),
+        }}
+        onNavigateToSession={navigateToSession}
+        onSessionHref={href}
+        backgroundCompaction={backgroundCompaction()}
+      >
+        <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
+          {props.children}
+        </MarkdownProvider>
+      </DataProvider>
+    </LocalProvider>
   )
 }

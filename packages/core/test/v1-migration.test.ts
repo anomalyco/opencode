@@ -949,7 +949,7 @@ describe("V1Migration database workflow", () => {
       Effect.runPromise(
         effect.pipe(
           Effect.provide(
-            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
+            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node, Global.node]), [
               Database.node.replace(Database.configured({ path: path.join(tmp.path, "opencode.db") })),
               Global.node.replace(Layer.succeed(Global.Service, Global.make({ data: tmp.path }))),
             ]),

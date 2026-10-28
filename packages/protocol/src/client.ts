@@ -68,11 +68,18 @@ export const groupNames = {
   "server.config": "config",
 } as const
 
-export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect", "mcp.client"])
-export const effectOmitEndpoints = new Set([
-  "fs.read",
-  "fs.write",
+export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "generate.textLegacy",
+])
+export const effectOmitEndpoints = new Set([
+  "fs.read",
+  "fs.write",
+  "media.get",
+  "pty.connect",
+  "persistentPty.connect",
+  "mcp.client",
+  "generate.textLegacy",
 ])

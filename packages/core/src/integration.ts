@@ -385,6 +385,16 @@ const layer = Layer.effect(
       ),
     })
 
+    const sorted = new WeakMap<Map<ID, Entry>, Entry[]>()
+    const sortedEntries = () => {
+      const integrations = state.get().integrations
+      const cached = sorted.get(integrations)
+      if (cached) return cached
+      const entries = Array.from(integrations.values()).toSorted((a, b) => a.ref.name.localeCompare(b.ref.name))
+      sorted.set(integrations, entries)
+      return entries
+    }
+
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
       if (input.label !== undefined) return yield* credentials.create(input)
       const name = state.get().integrations.get(input.integrationID)?.ref.name ?? input.integrationID
@@ -540,10 +550,10 @@ const layer = Layer.effect(
       const now = yield* Clock.currentTimeMillis
       const expired = yield* SynchronizedRef.modify(attempts, (current) => {
         const next = new Map(current)
-        const scopes: Scope.Closeable[] = []
+        const closed: { attemptID: AttemptID; integrationID: ID; scope: Scope.Closeable }[] = []
         for (const [id, attempt] of current) {
           if (attempt.status === "pending" && !attempt.persisting && attempt.time.expires <= now) {
-            scopes.push(attempt.scope)
+            closed.push({ attemptID: id, integrationID: attempt.integrationID, scope: attempt.scope })
             next.set(id, {
               status: "expired",
               integrationID: attempt.integrationID,
@@ -554,9 +564,18 @@ const layer = Layer.effect(
           }
           if (attempt.status !== "pending" && attempt.removeAt <= now) next.delete(id)
         }
-        return [scopes, next]
+        return [closed, next]
       })
-      yield* Effect.forEach(expired, close, { discard: true })
+      yield* Effect.forEach(
+        expired,
+        (attempt) =>
+          Effect.logInfo("integration oauth attempt closed", {
+            integrationID: attempt.integrationID,
+            attemptID: attempt.attemptID,
+            reason: "expired",
+          }).pipe(Effect.andThen(close(attempt.scope))),
+        { discard: true },
+      )
     })
 
     const scrubCommands = Effect.fnUntraced(function* () {
@@ -714,9 +733,7 @@ const layer = Layer.effect(
       }),
       list: Effect.fn("Integration.list")(function* () {
         const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
-        return Array.from(state.get().integrations.values(), (entry) =>
-          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
-        ).toSorted((a, b) => a.name.localeCompare(b.name))
+        return sortedEntries().map((entry) => project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])))
       }),
       connection: {
         active: Effect.fn("Integration.connection.active")(function* (id) {
@@ -731,16 +748,29 @@ const layer = Layer.effect(
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
           if (credential.value.type !== "oauth") return credential.value
-          const implementation = state
+          const refresh = state
             .get()
             .integrations.get(credential.integrationID)
-            ?.implementations.get(credential.value.methodID)
-          if (!implementation?.refresh) return credential.value
-          const now = yield* Clock.currentTimeMillis
-          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
-          yield* credentials.update(credential.id, { value })
-          return value
+            ?.implementations.get(credential.value.methodID)?.refresh
+          const expiring = (value: Credential.OAuth) =>
+            Clock.currentTimeMillis.pipe(
+              Effect.map((now) => value.expires <= now + Duration.toMillis(Duration.minutes(5))),
+            )
+          if (!refresh || !(yield* expiring(credential.value))) return credential.value
+          return yield* authorize(
+            credentials.lock(
+              credential.id,
+              Effect.gen(function* () {
+                // Another Location may have refreshed while this caller waited.
+                const current = yield* credentials.get(credential.id)
+                if (!current || current.value.type !== "oauth") return undefined
+                if (!(yield* expiring(current.value))) return current.value
+                const value = yield* refresh(current.value).pipe(Effect.timeout("30 seconds"))
+                yield* credentials.update(current.id, { value })
+                return value
+              }),
+            ),
+          )
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -846,7 +876,13 @@ const layer = Layer.effect(
             next.delete(input.attemptID)
             return [match, next]
           })
-          if (attempt) yield* Scope.close(attempt.scope, Exit.void)
+          if (!attempt) return
+          yield* Effect.logInfo("integration oauth attempt closed", {
+            integrationID: input.integrationID,
+            attemptID: input.attemptID,
+            reason: "cancelled",
+          })
+          yield* Scope.close(attempt.scope, Exit.void)
         }),
       },
       command: {

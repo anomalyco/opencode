@@ -1,6 +1,5 @@
-import type { ToolDefinition } from "@opencode/ai/effect"
-import { emptyInputJsonSchema } from "@opencode/ai/tool"
-import { isRecord } from "@opencode/ai/utils/record"
+import { emptyInputJsonSchema, type ToolDefinition } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"

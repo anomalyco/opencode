@@ -2,7 +2,15 @@ import { Effect, Schema } from "effect"
 import { DecisionClient, Service, type Execute } from "./decision-client.js"
 import { Media } from "./media.js"
 import { tryRequest } from "./media-model.js"
-import { AIError, HttpOptions, ModelID, ProviderID, ProviderMetadata, ProviderOptions, Usage } from "./schema/index.js"
+import {
+  AIError,
+  HttpOptions,
+  ModelID,
+  ProviderID,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+} from "./schema/index.js"
 
 // ---------------------------------------------------------------------------
 // Input
@@ -100,11 +108,16 @@ export const ScoreAnswer = Schema.Struct({
 })
 export type ScoreAnswer = Schema.Schema.Type<typeof ScoreAnswer>
 
-/** The host declined this one question; the other answers still came back. */
+/** Why a question has no answer; hosts may report reasons beyond these. */
+export type ErrorReason = OpenString<"refusal">
+export const ErrorReason: Schema.Codec<ErrorReason> = Schema.Union([Schema.Literal("refusal"), Schema.String])
+
+/** This one question has no answer; the other answers still came back. */
 export const ErrorAnswer = Schema.Struct({
   name: Schema.String,
   type: Schema.Literal("error"),
-  reason: Schema.Literal("refusal"),
+  reason: ErrorReason,
+  message: Schema.optional(Schema.String),
 })
 export type ErrorAnswer = Schema.Schema.Type<typeof ErrorAnswer>
 
@@ -155,10 +168,11 @@ export interface DecisionModelRoute<Options extends DecisionOptions = DecisionOp
 export class DecisionModelCompatibility extends Schema.Class<DecisionModelCompatibility>("Decision.ModelCompatibility")(
   {
     /**
-     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.image_input`:
-     * `assets` (TypeSafe's assets map), `images` (top-level lists) or `state` (items inside a state list).
+     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.media_input`, named after
+     * where the media goes in the body: `assets` (TypeSafe's assets map, referenced from the state), `state` (items
+     * inside a state list) or `root` (one top-level list per kind: `images`, `audio`, `videos`).
      */
-    imageInput: Schema.optional(Schema.Literals(["assets", "images", "state"])),
+    mediaInput: Schema.optional(Schema.Literals(["assets", "state", "root"])),
   },
 ) {}
 
@@ -176,6 +190,8 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
   readonly route: DecisionModelRoute<Options>
   readonly http?: HttpOptions
   readonly compatibility?: DecisionModelCompatibility
+  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
+  readonly providerOptions?: ProviderOptions
 
   constructor(input: DecisionModel.Input<Options>) {
     this.id = input.id
@@ -183,6 +199,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
     this.route = input.route
     this.http = input.http
     this.compatibility = input.compatibility
+    this.providerOptions = input.providerOptions
   }
 
   static make<Options extends DecisionOptions = DecisionOptions>(input: DecisionModel.MakeInput<Options>) {
@@ -201,6 +218,7 @@ export namespace DecisionModel {
     readonly route: DecisionModelRoute<Options>
     readonly http?: HttpOptions
     readonly compatibility?: DecisionModelCompatibility
+    readonly providerOptions?: ProviderOptions
   }
 
   export interface MakeInput<Options extends DecisionOptions = DecisionOptions>
@@ -250,9 +268,18 @@ export type DecisionRequestInput<
   readonly http?: HttpOptions.Input
 }
 
+/** What decision hosts report; their raw usage stays in the response's `providerMetadata`. */
+export class DecisionUsage extends Schema.Class<DecisionUsage>("Decision.Usage")({
+  inputTokens: Schema.optional(Schema.Number),
+  outputTokens: Schema.optional(Schema.Number),
+  totalTokens: Schema.optional(Schema.Number),
+  /** USD the host says it charged for this request. */
+  cost: Schema.optional(Schema.Number),
+}) {}
+
 export class DecisionResponse extends Schema.Class<DecisionResponse>("Decision.Response")({
   answers: Schema.Array(DecisionAnswer),
-  usage: Schema.optional(Usage),
+  usage: Schema.optional(DecisionUsage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 

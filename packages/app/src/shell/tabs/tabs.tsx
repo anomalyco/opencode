@@ -4,7 +4,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { useExtensionServers } from "@/runtime/extension/servers"
+import { usePluginServers } from "@/runtime/plugin/servers"
 import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -38,9 +38,9 @@ export type PendingSession = {
 
 export type TabInfo = typeof TabStorage.Info.Type
 
-export type TabRegion = "dock" | "side"
+export type TabRegion = "side" | "bottom"
 
-export type TabRegionSize = "dockHeight" | "sessionWidth"
+export type TabRegionSize = "sessionWidth" | "bottomHeight" | "splitRatio"
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
@@ -72,7 +72,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   gate: false,
   init: () => {
     const servers = useServers()
-    const extensions = useExtensionServers()
+    const pluginServers = usePluginServers()
     const platform = usePlatform()
     const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
 
@@ -150,9 +150,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     onCleanup(memory.dispose)
 
-    // A contributed server that is unlisted or whose extension is down is still known: only its removal drops its tabs.
+    // A contributed server that is unlisted or whose plugin is down is still known: only its removal drops its tabs.
     const known = () =>
-      new Set<string>([...servers.list.map(ServerConnection.key), ...extensions.entries().map((item) => item.key)])
+      new Set<string>([...servers.list.map(ServerConnection.key), ...pluginServers.entries().map((item) => item.key)])
 
     createEffect(() => {
       if (!ready() || !recentReady()) return
@@ -597,10 +597,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       stateValue<T>(tab: Tab, name: string) {
         return memory.get<T>(tabKey(tab), name)
       },
-      region(tab: Tab | undefined, region: TabRegion) {
-        if (!tab) return false
+      region(tab: Tab | undefined, region: TabRegion, fallback = false) {
+        if (!tab) return fallback
 
-        return regions[tabKey(tab)]?.[region] ?? false
+        return regions[tabKey(tab)]?.[region] ?? fallback
       },
       setRegion(tab: Tab | undefined, region: TabRegion, opened: boolean) {
         if (!tab) return

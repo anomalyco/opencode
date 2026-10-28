@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { DecisionResponse, type DecisionAnswer, type DecisionPart, type DecisionRequestFor } from "../decision.js"
+import { DecisionResponse, DecisionUsage, type DecisionAnswer, type DecisionPart, type DecisionRequestFor } from "../decision.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -41,7 +41,7 @@ const Answer = Schema.Union([
     probabilities: Schema.Array(Schema.Struct({ value: Schema.Int, label: Schema.String, probability: Probability })),
     confidence: Probability,
   }),
-  Schema.Struct({ type: Schema.Literal("refusal"), name: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("refusal"), name: Schema.String, message: Schema.optional(Schema.String) }),
 ])
 const Response = Schema.Struct({
   model: Schema.String,
@@ -111,14 +111,35 @@ export const protocol = DecisionRoute.protocol({
       const output = yield* decodeDocument(response)
       const answers = output.value.answers.map(
         (answer): DecisionAnswer =>
-          answer.type === "refusal" ? { name: answer.name, type: "error", reason: "refusal" } : answer,
+          answer.type === "refusal"
+            ? {
+                name: answer.name,
+                type: "error",
+                reason: "refusal",
+                ...(answer.message === undefined ? {} : { message: answer.message }),
+              }
+            : answer,
       )
       const byName = new Map(answers.map((answer) => [answer.name, answer]))
       const ordered = context.request.questions.flatMap((question) => byName.get(question.name) ?? [])
+      const usage = OpenResponses.mapUsage(output.value.usage, context.providerMetadataKey)
       return new DecisionResponse({
         answers: ordered.length === answers.length ? ordered : answers,
-        usage: OpenResponses.mapUsage(output.value.usage, context.providerMetadataKey),
-        providerMetadata: { [context.providerMetadataKey]: { model: output.value.model } },
+        usage:
+          usage === undefined
+            ? undefined
+            : new DecisionUsage({
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+                cost: usage.cost,
+              }),
+        providerMetadata: {
+          [context.providerMetadataKey]: {
+            model: output.value.model,
+            ...(output.value.usage === undefined ? {} : { usage: output.value.usage }),
+          },
+        },
       })
     }),
   },

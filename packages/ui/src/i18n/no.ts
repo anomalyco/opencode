@@ -215,7 +215,6 @@ export const dict: Record<Keys, string> = {
   "ui.question.answer.none": "(ingen svar)",
   "ui.question.review.notAnswered": "(ikke besvart)",
   "ui.question.multiHint": "Velg alle som gjelder",
-  "ui.question.singleHint": "Velg ett svar",
   "ui.question.custom.placeholder": "Skriv svaret ditt…",
 
   "ui.fileSearch.placeholder": "Finn",

@@ -7,6 +7,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -15,6 +16,7 @@ import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
 import { ResponsesCheckpoint } from "./utils/responses-checkpoint.js"
+import * as Cache from "./utils/cache.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -116,6 +118,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  prompt_cache_retention: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(Schema.Struct({ ttl: Schema.optional(Schema.String) })),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   reasoning: Schema.optional(
@@ -226,6 +230,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   return {
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...generation,
+    ...Cache.openAIRequestTTL(requestTTL(request)),
     ...(generation.reasoning || reasoning.reasoningMode || reasoning.reasoningContext
       ? {
           reasoning: {

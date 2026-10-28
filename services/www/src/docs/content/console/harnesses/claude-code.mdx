@@ -3,8 +3,9 @@ title: "Claude Code"
 description: "Use Console and Go models from Claude Code."
 ---
 
-Claude Code speaks the Anthropic Messages API. Point it at Console with two environment variables and use any model
-that accepts Anthropic Messages.
+Claude Code speaks the Anthropic Messages API. Point it at Console with two environment variables and use any paid or Go
+model, including GPT, Gemini, and open models. Console translates the request for models that don't accept Anthropic
+Messages.
 
 ```bash
 export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
@@ -56,29 +57,11 @@ Use the Go base URL and a key from a workspace with a [Go](/console/go) subscrip
 
 ## Models
 
-Claude Code can only use models that accept Anthropic Messages.
+Use any model ID from the [Console](/console/models#endpoints) or [Go](/console/go#endpoints) table. Switch models in a
+session with `/model`, or pick one for a single run.
 
-| Plan          | Models                                                              |
-| ------------- | ------------------------------------------------------------------- |
-| Pay-as-you-go | Claude models and most Qwen models                                  |
-| Go            | Claude Haiku 5.5, Kimi K3, DeepSeek V4, MiniMax M3, and Qwen models |
-
-GPT, Gemini, and most open models are not available in Claude Code yet. Use [Pi](/console/harnesses/pi) or
-[Hermes](/console/harnesses/hermes) for them in the meantime.
-
-<Callout>Support for every model in every harness is coming soon.</Callout>
-
-### Non-Claude models
-
-Claude Code sends Claude-specific request options to every model. If a non-Claude model rejects a request with a
-`400` error, turn off experimental betas.
-
-```json title="~/.claude/settings.json"
-{
-  "env": {
-    "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1"
-  }
-}
+```bash
+claude --model gpt-6.1-sol
 ```
 
 ## Console MCP

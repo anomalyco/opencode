@@ -5,7 +5,7 @@ import { MainConfigFactory } from "electron-vite"
 import { build } from "vite"
 import createConfig from "./electron.vite.config"
 import pkg from "./package.json"
-import { CLI_BINARIES, nodePtyPackage } from "./scripts/utils"
+import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
 
 const load = async (command: "build" | "serve") => ({
   config: await createConfig({ command, mode: command === "build" ? "production" : "development" }),
@@ -16,7 +16,7 @@ const bundled = ["effect", "@effect/platform-node", "@effect/platform-node-share
 
 test("minifies only builds, previews onboarding only in development, and ships sourcemaps and public assets", async () => {
   const previous = process.env.OPENCODE_TEST_ONBOARDING
-  const previousTarget = process.env.OPENCODE_CLI_TARGET
+  const previousTarget = process.env.OPENCODE_TARGET
 
   try {
     process.env.OPENCODE_TEST_ONBOARDING = "1"
@@ -36,7 +36,7 @@ test("minifies only builds, previews onboarding only in development, and ships s
     expect(serve.config.renderer?.define?.["import.meta.env.OPENCODE_TEST_ONBOARDING"]).toBe("false")
 
     for (const item of CLI_BINARIES) {
-      process.env.OPENCODE_CLI_TARGET = item.target
+      process.env.OPENCODE_TARGET = item.target
       const main = (await load("build")).config.main
       expect(main?.build?.externalizeDeps).toEqual({
         exclude: bundled,
@@ -45,11 +45,11 @@ test("minifies only builds, previews onboarding only in development, and ships s
     }
   } finally {
     delete process.env.OPENCODE_TEST_ONBOARDING
-    delete process.env.OPENCODE_CLI_TARGET
+    delete process.env.OPENCODE_TARGET
 
     if (previous !== undefined) process.env.OPENCODE_TEST_ONBOARDING = previous
 
-    if (previousTarget !== undefined) process.env.OPENCODE_CLI_TARGET = previousTarget
+    if (previousTarget !== undefined) process.env.OPENCODE_TARGET = previousTarget
   }
 
   const renderer = (await load("build")).config.renderer
@@ -77,13 +77,13 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
     "@lydell/node-pty-win32-x64",
   ])
 
-  const previousTarget = process.env.OPENCODE_CLI_TARGET
+  const previousTarget = process.env.OPENCODE_TARGET
   // Build against the opposite architecture to prove cross-packaging resolves the target's native package, not the host's.
-  const crossTarget = process.arch === "arm64" ? "x86_64-pc-windows-msvc" : "aarch64-pc-windows-msvc"
+  const crossTarget = process.arch === "arm64" ? "windows-x64" : "windows-arm64"
   const crossNodePty = nodePtyPackage(crossTarget)
 
   try {
-    process.env.OPENCODE_CLI_TARGET = crossTarget
+    process.env.OPENCODE_TARGET = crossTarget
     const result = await load("build")
 
     if (!result.config.main) throw new Error("Missing main-process build configuration")
@@ -124,8 +124,8 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
     expect(modules.some((id) => id.includes("/node_modules/msgpackr"))).toBe(false)
     expect(chunks.some((chunk) => chunk.code.includes("msgpackr"))).toBe(false)
   } finally {
-    delete process.env.OPENCODE_CLI_TARGET
+    delete process.env.OPENCODE_TARGET
 
-    if (previousTarget !== undefined) process.env.OPENCODE_CLI_TARGET = previousTarget
+    if (previousTarget !== undefined) process.env.OPENCODE_TARGET = previousTarget
   }
 }, 30_000)

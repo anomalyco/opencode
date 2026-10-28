@@ -1,6 +1,6 @@
 # @opencode/ai
 
-Schema-first APIs for text, images, video, speech, and transcription, built with Effect.
+Schema-first APIs for text, images, video, speech, transcription, and decisions, built with Effect.
 
 `@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
 and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
@@ -50,6 +50,70 @@ Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`
 `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+### Tool loop
+
+`stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
+after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
+them. `AI.tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
+`signal` aborts when the loop is interrupted.
+`Tool.make` from `@opencode/ai/effect` is the Effect form, with a validated `success` schema:
+
+```ts
+import { readFile } from "node:fs/promises"
+import { Schema } from "effect"
+import { AI } from "@opencode/ai"
+
+const read_file = AI.tool({
+  description: "Read a UTF-8 file.",
+  parameters: Schema.Struct({ path: Schema.String }),
+  execute: ({ path }, { signal }) => readFile(path, { encoding: "utf8", signal }),
+})
+
+const events = ai.llm.loop({
+  model,
+  prompt: "Summarize package.json.",
+  tools: { read_file },
+  until: ({ steps }) => steps.length >= 8,
+})
+for await (const event of events) {
+  if (event.type === "text-delta") process.stdout.write(event.text)
+}
+```
+
+### Structured output
+
+`generateObject` forces a tool call and decodes its input against `schema`; pass `jsonSchema` instead for an
+unvalidated `unknown` object:
+
+```ts
+const { object } = await ai.llm.generateObject({
+  model,
+  prompt: "Pick a city.",
+  schema: Schema.Struct({ city: Schema.String }),
+})
+```
+
+### Raw provider events
+
+Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
+before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
+are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+
+```ts
+import { Stream } from "effect"
+import { LLM, LLMEvent } from "@opencode/ai/effect"
+
+const flagged = (data: unknown) =>
+  typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
+
+const events = LLM.stream({ model, prompt: "Say hello.", includeRaw: true }).pipe(
+  Stream.map((event) =>
+    event.type === "raw" && flagged(event.data) ? LLMEvent.providerError({ message: "Flagged by moderation" }) : event,
+  ),
+)
+```
+
 ### Google Interactions
 
 `Google.configure({ apiKey }).interactions(modelID)` selects the Interactions API; `.model(modelID)` still selects
@@ -62,13 +126,11 @@ live under `providerMetadata.vertex`. The default is still full-history replay w
 
 ```ts
 const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
-const response =
-  yield *
-  LLM.generate({
-    model,
-    prompt: "Say hello.",
-    providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
-  })
+const response = yield* LLM.generate({
+  model,
+  prompt: "Say hello.",
+  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+})
 ```
 
 Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
@@ -93,7 +155,8 @@ const image = Effect.gen(function* () {
   const response = yield* Image.generate({
     model: openai.image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
-    size: "1024x1024",
+    aspect: "1:1",
+    resolution: "1K",
     providerOptions: { quality: "high" }, // typed per image model
   })
   yield* Media.write(response.image, "./garden.png")
@@ -192,7 +255,10 @@ const [refund, department] = response.answers
 ```
 
 `input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
-A question the host declines is `{ name, type: "error", reason: "refusal" }`; the other answers still come back.
+A question the host declines is `{ name, type: "error", reason, message? }`, with `reason` such as `"refusal"`; the
+other answers still come back.
+`response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;
+the host's raw usage stays in `providerMetadata`.
 Media goes wherever the host reads it, and a kind the host has no place for fails the call. Host-specific fields go in
 `providerOptions`, typed by the selected model (OpenAI `promptCacheKey` and `safetyIdentifier`, OpenRouter
 `provider` routing, Baseten `max_len`).
@@ -221,6 +287,38 @@ CloudflareAIGateway.configure({ accountId }).decision("typesafe/jev")
 
 OpenAI and Vercel AI Gateway use OpenAI's `/v1/decisions` API. TypeSafe, OpenCode, OpenRouter, Baseten and
 DigitalOcean use System One (`/systemone`), and Cloudflare sends the System One body through `/ai/run`.
+
+### Extraction (experimental)
+
+Extraction models read typed values out of text instead of answering questions with probabilities. A field of type
+`text`, `number`, `date`, `time`, `datetime`, `duration`, `list`, `estimate` or `forecast` gets an answer typed to
+match; other types are sent and answered as-is. Only Cloudflare's Clairic serves it today, so it lives under
+`@opencode/ai/experimental`.
+
+```ts
+import { ai } from "@opencode/ai"
+import { Extraction } from "@opencode/ai/experimental"
+import { CloudflareWorkersAI } from "@opencode/ai/providers"
+
+const response = await ai.run(
+  Extraction.generate({
+    model: CloudflareWorkersAI.configure({ accountId }).experimental.extraction("@cf/cloudflare/clairic"),
+    input: "Invoice INV-2291, issued 2026-09-02, net 30. Total $1,080.00. Contact: Dana Ruiz, Priya Shah.",
+    fields: {
+      invoiceNumber: { type: "text" },
+      dueDate: { type: "date", instructions: "Issue date plus the net payment days" },
+      total: { type: "number", decimals: 2, unit: "USD" },
+      contacts: { type: "list", items: "text" },
+    },
+  }),
+)
+response.answers.total.value // 1080, or null when the input does not say
+```
+
+Value answers carry `guess`, `nullProbability` and `confidence`; text answers carry a `span` into `input`. Estimates and
+forecasts return `median`, `p10` and `p90`. Field options other than `type`, `instructions` and `nullThreshold` go to
+Clairic as written. Effect users provide `RequestExecutor.fetchLayer` (or `AIClient.layer`). Images are not supported
+yet.
 
 ## Alibaba Cloud Model Studio
 
@@ -297,10 +395,11 @@ is unit-tested for all six regions.
 ### Images
 
 `alibaba.image(...)` uses the native multimodal generation API (`/api/v1/services/aigc/multimodal-generation/generation`)
-for Qwen-Image (`qwen-image-2.0`, `qwen-image-2.0-pro`) and Wan (`wan2.7-image`, `wan2.7-image-pro`). `size` lowers to
-`W*H`, and `images` are sent as URLs or data URLs for editing. Native `parameters` include `negativePrompt`,
-`promptExtend`, `watermark`, `thinkingMode`, and `enableSequential`; raw keys such as `bbox_list` or `size: "2K"`
-pass through. Results are URLs that Model Studio keeps for 24 hours. A complete `baseURL` for images includes `/api/v1`.
+for Qwen-Image (`qwen-image-2.0`, `qwen-image-2.0-pro`) and Wan (`wan2.7-image`, `wan2.7-image-pro`). `aspect` and
+`resolution` lower to a `W*H` size, `providerOptions.size` sets it exactly, and `images` are sent as URLs or data URLs
+for editing. Native `parameters` include `size`, `seed`, `negativePrompt`, `promptExtend`, `watermark`, `thinkingMode`,
+and `enableSequential`; raw keys such as `bbox_list` pass through. Results are URLs that Model Studio keeps for 24
+hours. A complete `baseURL` for images includes `/api/v1`.
 
 ## Z.AI
 
@@ -532,7 +631,7 @@ const edit = Image.generate({
 
 The default image format is WEBP; `outputFormat` also accepts PNG/JPEG and `responseFormat: "url"`
 returns a signed URL. `aspect` lowers to Meta's `size`, which is only an aspect-ratio hint: Meta renders about 2.5
-megapixels whatever you ask, so `resolution` is ignored with a notice. For conversational images, select
+megapixels whatever you ask, so `resolution` is ignored. For conversational images, select
 `meta.responses("muse-image-1.0")` with `tools: [Meta.imageGeneration({ reasoningStrength: "low" })]`.
 Generated images are provider-executed tool results with file content. Retain `response.message` to
 replay the signed image handle on the next request. Muse Image accepts only the `image_generation` tool.
@@ -572,16 +671,16 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Common fields are portable in shape, not in support. A route that has to approximate `aspect` or `resolution`
-returns what it used in `response.notices`; one that cannot honor them fails with a typed `AIError` before any network
-call rather than dropping them, so check this table before swapping only the `model`:
+Common fields are portable in shape, not in support. Some routes approximate `aspect` or `resolution` with the nearest
+size they offer; others fail with a typed `AIError` before any network call rather than dropping them, so check this
+table before swapping only the `model`:
 
 | Provider              | `n` | `aspect`             | `resolution`          | `images`                         | Moved to `providerOptions`                         |
 | --------------------- | --- | -------------------- | --------------------- | -------------------------------- | -------------------------------------------------- |
-| OpenAI                | ✓¹  | nearest size, notice | nearest size, notice  | ✓                                | `size`, `outputFormat`, `mask`                     |
+| OpenAI                | ✓¹  | nearest size         | nearest size          | ✓                                | `size`, `outputFormat`, `mask`                     |
 | Google (Gemini)       | 1   | ✓                    | ✓ (`imageSize`)       | ✓ (no public URLs)               | `seed`                                             |
-| xAI                   | ✓   | ✓                    | `1k`/`2k`, notice     | ✓                                | none                                               |
-| Meta                  | ✓   | ✓ (hint)             | ignored, notice       | ✓                                | `size`, `outputFormat`                             |
+| xAI                   | ✓   | ✓                    | `1k`/`2k`             | ✓                                | none                                               |
+| Meta                  | ✓   | ✓ (hint)             | ignored               | ✓                                | `size`, `outputFormat`                             |
 | Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
 | Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
 | Black Forest Labs     | 1   | per model            | width × height models | per model (1–8)                  | `width`, `height`, `seed`, `output_format`, `mask` |
@@ -867,8 +966,9 @@ failures (rate limits, provider 5xx, network errors) with backoff that honors `r
 `poll.timeout`; submits and cancels never retry. Interrupting a wait (or aborting its `signal`) does not cancel the
 provider job, which keeps running and billing: call `cancel()` to stop it. Failed,
 cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
-outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) surface as `notices` when
-a video is still returned and as a `ContentPolicy` reason when nothing is.
+outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) fail with a
+`ContentPolicy` reason when no video comes back; when one still does, Veo and xAI keep the raw outcome in
+`providerMetadata`.
 
 Provider notes:
 
@@ -1060,6 +1160,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
+- **`LLM.loop`** — stream model calls, running `Tool.make(...)` tools between them until the model stops calling tools.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
@@ -1070,8 +1171,10 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Video.request` / `generate` / `stream` / `start` / `resume`** — queued video generation through a provider-neutral request; `VideoClient` is its Effect service and layer.
 - **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
 - **`Transcription.request` / `generate` / `stream` / `start` / `resume`** — speech-to-text over inline, streaming, and queued routes; `TranscriptionClient` is its Effect service and layer.
+- **`Decision.request` / `Decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, and `transcription` as Promise / `AsyncIterable` APIs, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
+- **`@opencode/ai`** (Promise root) — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, `transcription`, and `decision` as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
+- **`@opencode/ai/experimental`** — APIs that may still change: `Extraction` (typed values read out of text) and `Realtime` (`Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or a short-lived WebSocket URL and token).
 
 ## Testing
 
@@ -1290,13 +1393,33 @@ cache: {
   tools?: boolean,
   system?: boolean,
   messages?: "latest-user-message" | "latest-assistant" | { tail: number },
-  ttlSeconds?: number,         // ≥ 3600 → 1h on Anthropic/Bedrock; else 5m
+  ttl?: CacheTTL,              // "5m", "30m", "1h", "12h", "24h", ...
 }
 ```
 
+An object with placement fields places exactly those breakpoints. An object with only `ttl` keeps automatic placement.
+
+### Cache lifetime
+
+`ttl` is a duration in models.dev's format (`<number>` followed by `ms`, `s`, `m`, `h` or `d`). It is sent to the provider as given, so use one the provider accepts. Leaving it unset keeps the provider default.
+
+```ts
+LLM.request({ model, system, prompt, cache: { ttl: "1h" } })
+```
+
+| Protocol                                                                  | How `ttl` is sent                                                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Anthropic Messages family, Meta Messages                                  | `ttl` on every `cache_control` marker                                                      |
+| Bedrock Converse                                                          | `ttl` on every `cachePoint`; older Claude releases that only cache for 5m drop `"1h"`      |
+| OpenRouter, DigitalOcean, Alibaba Chat markers                            | `ttl` on every `cache_control` marker                                                      |
+| OpenAI Responses (OpenAI, Azure, Cloudflare AI Gateway)                   | `"24h"` → `prompt_cache_retention: "24h"`; anything else → `prompt_cache_options: { ttl }` |
+| Chat Completions without markers (OpenAI-compatible, Moonshot, DeepInfra) | same mapping as OpenAI Responses                                                           |
+
+OpenAI's two fields cover different models: `prompt_cache_retention` (`"in_memory"` or `"24h"`) is the only control before GPT-5.6, and GPT-5.6+ reads `prompt_cache_options.ttl` (`"30m"` or `"12h"`). Sending `prompt_cache_options` to an older model returns a 400. `"in_memory"` is not a duration; send it with an HTTP body overlay.
+
 ### Manual hints
 
-Inline `CacheHint` on any text / system / tool / tool-result part overrides automatic placement. The auto policy preserves manual hints, counts them against Anthropic and Bedrock's four-breakpoint limit, and only fills the remaining slots.
+Inline `CacheHint` (`{ type: "ephemeral", ttl? }`) on any text / system / tool / tool-result part overrides automatic placement. The auto policy preserves manual hints, counts them against Anthropic and Bedrock's four-breakpoint limit, and only fills the remaining slots.
 
 ```ts
 LLM.request({
@@ -1329,12 +1452,12 @@ import { OpenAI, CloudflareAIGateway } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
 const gateway = CloudflareAIGateway.configure({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  accountId,
   gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN,
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, Vercel AI Gateway, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock (Converse and Mantle), Azure OpenAI, Alibaba, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, DigitalOcean, Fireworks, Groq, Meta, MiniMax, Mistral, Moonshot, OpenRouter, TogetherAI, Venice, Vercel AI Gateway, xAI, Z.ai, and Z.ai Coding Plan. TypeSafe AI and OpenCode expose decision models only. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 
@@ -1444,5 +1567,5 @@ This package is built on Effect. Public methods in `@opencode/ai/effect` return 
 ## See also
 
 - `AGENTS.md` — architecture, route construction, contributor guide
-- `example/tutorial.ts` — runnable end-to-end walkthrough
+- `example/tutorial.ts` — runnable end-to-end walkthrough (`bun example/tutorial.ts <example>`)
 - `test/provider/*.test.ts` — fixture-first protocol tests; `*.recorded.test.ts` files cover live cassettes

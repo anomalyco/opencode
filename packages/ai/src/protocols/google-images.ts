@@ -3,7 +3,7 @@ import type { HttpClientResponse } from "effect/http"
 import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { mergeJsonRecords, tokenUsage, type OpenString } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { MediaInput } from "./utils/media-input.js"
@@ -188,55 +188,26 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
     const finishReasons = candidates.flatMap((candidate) =>
       candidate.finishReason === undefined ? [] : [candidate.finishReason],
     )
+    // Safety and recitation stops are Google refusing the prompt, not a malformed response.
+    if (finishReasons.some(GeminiGenerateContent.contentFiltered))
+      return yield* output.contentPolicy(
+        `${route.name} withheld its images (finish reasons: ${finishReasons.join(", ")})`,
+      )
     return yield* output.invalid(
       `${route.name} returned no final images${
         finishReasons.length === 0 ? "" : ` (finish reasons: ${finishReasons.join(", ")})`
       }; inspect body for prompt feedback and candidate details`,
     )
   }
-  // Candidates that stopped for a safety or policy reason are partial results, not a silent drop.
-  const notices = [
-    ...(decoded.promptFeedback === undefined
-      ? []
-      : [
-          {
-            type: "filtered" as const,
-            message: `${route.name} reported prompt feedback`,
-            providerMetadata: { google: { promptFeedback: decoded.promptFeedback } },
-          },
-        ]),
-    ...candidates.flatMap((candidate, index) =>
-      candidate.finishReason === undefined || candidate.finishReason === "STOP"
-        ? []
-        : [
-            {
-              type: "filtered" as const,
-              message: `${route.name} candidate ${candidate.index ?? index} finished with ${candidate.finishReason}${
-                candidate.finishMessage === undefined ? "" : `: ${candidate.finishMessage}`
-              }`,
-              providerMetadata: {
-                google: {
-                  candidateIndex: candidate.index ?? index,
-                  finishReason: candidate.finishReason,
-                  finishMessage: candidate.finishMessage,
-                  safetyRatings: candidate.safetyRatings,
-                },
-              },
-            },
-          ],
-    ),
-  ]
   const usage = decoded.usageMetadata
   const outputTokens =
     usage?.candidatesTokenCount === undefined ? undefined : usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0)
   return new ImageResponse({
     images,
-    notices: notices.length === 0 ? undefined : notices,
     usage:
       usage === undefined
         ? undefined
-        : {
-            type: "tokens",
+        : tokenUsage({
             input: usage.promptTokenCount,
             output: outputTokens,
             total: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
@@ -245,7 +216,7 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
               cacheReadInputTokens: usage.cachedContentTokenCount,
               google: usage,
             },
-          },
+          }),
     providerMetadata: {
       google: {
         modelVersion: decoded.modelVersion,

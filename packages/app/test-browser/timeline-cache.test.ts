@@ -71,6 +71,7 @@ function setup() {
         return element
       },
       () => state.visible,
+      (id) => state.messages[id] ?? [],
     )
 
     return { state, setState, cache, views, disposed, dispose }
@@ -103,6 +104,29 @@ test("reuses a session view and refreshes its own history when selected again", 
   }
 
   expect(input.disposed.sort()).toEqual(["ses_a", "ses_b"])
+})
+
+test("disposes a detached view once its transcript is evicted, but never the selected one", async () => {
+  const input = setup()
+
+  try {
+    const first = input.cache()
+    input.setState("messages", "ses_a", [])
+    await Promise.resolve()
+    expect(input.disposed).toEqual([])
+
+    input.setState("messages", "ses_a", [{ id: "msg_a", type: "user", text: "Reloaded", time: { created: 1 } }])
+    input.setState("id", "ses_b")
+    input.cache()
+    input.setState("messages", "ses_a", [])
+    await Promise.resolve()
+    expect(input.disposed).toEqual(["ses_a"])
+
+    input.setState("id", "ses_a")
+    expect(input.cache()).not.toBe(first)
+  } finally {
+    input.dispose()
+  }
 })
 
 test("suspends a detached mobile view and reuses it when the conversation returns", () => {

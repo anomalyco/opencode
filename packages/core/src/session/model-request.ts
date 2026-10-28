@@ -138,9 +138,10 @@ const unsupportedMedia = (
   return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${unsupported} input). Inform the user.`
 }
 
+// The inline budget counts base64 characters, which are ASCII, so a string's length is its size without scanning it.
 // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
 const mediaBytes = (media: Media.Asset) => {
-  if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
+  if (media.source.type === "base64") return media.source.data.length
   if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
   return 0
 }
@@ -160,7 +161,7 @@ const replaceMedia = (
       const result = part.result
       const value = result.value.map((item): Content => {
         if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
+        const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
         return text === undefined ? item : { type: "text", text }
       })
       return value.every((item, index) => item === result.value[index])
@@ -185,7 +186,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
       if (part.type === "media") return isImage(part.media.mediaType) ? [mediaBytes(part.media)] : []
       if (part.type !== "tool-result" || part.result.type !== "content") return []
       return part.result.value.flatMap((item: Content) =>
-        item.type === "file" && isImage(item.mime) ? [Buffer.byteLength(item.uri)] : [],
+        item.type === "file" && isImage(item.mime) ? [item.uri.length] : [],
       )
     }),
   )
@@ -290,6 +291,7 @@ export const layer = Layer.effect(
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
+        cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),

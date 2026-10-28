@@ -1,7 +1,7 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { isRecord } from "@opencode/ai/utils/record"
+import { isRecord } from "@opencode/util/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"

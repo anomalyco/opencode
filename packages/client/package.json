@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/client",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -27,8 +27,9 @@
     "./mcp": "./src/mcp.ts"
   },
   "scripts": {
-    "build": "bun run script/build-package.ts",
-    "generate": "bun run script/build.ts",
+    "build": "bun run script/build.ts",
+    "pack": "bun run script/pack.ts",
+    "generate": "bun run script/generate.ts",
     "check:generated": "bun run generate && git diff --exit-code -- src/promise/generated src/effect/generated src/effect/api",
     "test": "bun test --timeout 5000",
     "typecheck": "bun check --no-script",

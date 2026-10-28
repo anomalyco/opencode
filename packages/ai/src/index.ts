@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime, Stream } from "effect"
+import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import { AIClient } from "./ai-client.js"
 import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
@@ -7,7 +7,13 @@ import { LLM } from "./effect.js"
 import { Media } from "./media.js"
 import { RequestExecutor } from "./route/executor.js"
 import { AIError, InvalidRequestError, LanguageModel, type LLMRequest } from "./schema/index.js"
-import type { RequestInput } from "./llm.js"
+import type {
+  GenerateObjectDynamicOptions,
+  GenerateObjectOptions,
+  GenerateObjectResponse,
+  LoopInput,
+  RequestInput,
+} from "./llm.js"
 import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
   Transcription,
@@ -15,6 +21,7 @@ import {
   type TranscriptionRequest,
   type TranscriptionRequestInput,
 } from "./transcription.js"
+import { Tool, ToolFailure, type ToolExecuteContext, type ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -83,6 +90,21 @@ export const make = (options: Options = {}) => {
       ),
     )
 
+  function generateObject<const Model extends LanguageModel, S extends ToolSchema<any>>(
+    input: GenerateObjectOptions<S, Model>,
+    options?: RunOptions,
+  ): Promise<GenerateObjectResponse<Schema.Schema.Type<S>>>
+  function generateObject<const Model extends LanguageModel>(
+    input: GenerateObjectDynamicOptions<Model>,
+    options?: RunOptions,
+  ): Promise<GenerateObjectResponse<unknown>>
+  function generateObject(
+    input: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions,
+    options?: RunOptions,
+  ) {
+    return run("schema" in input ? LLM.generateObject(input) : LLM.generateObject(input), options)
+  }
+
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
     ...generation.snapshot,
     token: generation.token,
@@ -137,6 +159,11 @@ export const make = (options: Options = {}) => {
         run(LLM.generate(input), options),
       stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
         iterate(LLM.stream(input), options),
+      /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
+      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: RunOptions) =>
+        iterate(LLM.loop(input), options),
+      /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated) like `LLM.generateObject`. */
+      generateObject,
     },
     image: {
       request: Image.request,
@@ -211,6 +238,29 @@ export type Client = ReturnType<typeof make>
 
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
+
+/**
+ * Promise counterpart of `Tool.make` for `ai.llm.loop`. A throw or rejection becomes the error result the model sees, the
+ * returned value is sent unvalidated (`undefined` as `null`), and `signal` aborts when the loop is interrupted.
+ */
+export const tool = <Parameters extends ToolSchema<any>>(config: {
+  readonly description: string
+  readonly parameters: Parameters
+  readonly execute: (
+    params: Schema.Schema.Type<Parameters>,
+    context: Partial<ToolExecuteContext> & { readonly signal: AbortSignal },
+  ) => unknown
+}) =>
+  Tool.make({
+    description: config.description,
+    parameters: config.parameters,
+    success: Schema.Unknown,
+    execute: (params, context) =>
+      Effect.tryPromise({
+        try: async (signal) => (await config.execute(params, { ...context, signal })) ?? null,
+        catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
+      }),
+  })
 
 /** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
 export const ai = make()

@@ -36,6 +36,8 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
@@ -54,12 +56,16 @@ import {
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
-  executeToolFailed,
+  executeToolCallArgs,
+  executeToolCalls,
+  executeToolSubtitle,
   readImagePath,
+  type ExecuteToolCall,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
 import { stripAnsi } from "./ansi"
 import { followShellOutput } from "./shell-output"
+import { LinkedText } from "../components/linked-text"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -101,7 +107,8 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
 }
 
 // Tool input and metadata are open records shared by every tool. Each field decodes on its own,
-// so a malformed value drops only that field.
+// so a malformed value drops only that field. Plugin tools are untyped at runtime, so a record that
+// is not an object reads as empty instead of failing the render.
 function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
   const field = Schema.optional(schema)
 
@@ -127,7 +134,7 @@ const toolInput = Schema.decodeUnknownSync(
     id: optional(Schema.String),
     name: optional(Schema.String),
     questions: optional(Schema.Array(Schema.Unknown)),
-  }),
+  }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
 )
 
 const toolMetadata = Schema.decodeUnknownSync(
@@ -145,7 +152,7 @@ const toolMetadata = Schema.decodeUnknownSync(
     loaded: optional(Schema.Array(Schema.Unknown)),
     answers: optional(Schema.Array(Schema.Unknown)),
     diagnostics: optional(Schema.Record(Schema.String, Schema.Array(Schema.Unknown))),
-  }),
+  }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
 )
 
 type ToolInput = ReturnType<typeof toolInput>
@@ -229,83 +236,14 @@ function displayDirectory(path: string | undefined) {
 
 import { resolveFileDiff } from "../components/session-diff"
 
-const agentTones = new Map([
-  ["ask", "var(--icon-agent-ask-base)"],
-  ["build", "var(--icon-agent-build-base)"],
-  ["docs", "var(--icon-agent-docs-base)"],
-  ["plan", "var(--icon-agent-plan-base)"],
-])
-
-const v2AgentTones = new Map([
-  ["build", "var(--v2-agent-build-solid)"],
-  ["explore", "var(--v2-agent-explore-solid)"],
-  ["plan", "var(--v2-agent-plan-solid)"],
-  ["review", "var(--v2-agent-review-solid)"],
-  ["writer", "var(--v2-agent-writer-solid)"],
-])
-
-const agentThemeColors = new Map([
-  ["primary", "var(--text-interactive-base)"],
-  ["secondary", "var(--text-base)"],
-  ["accent", "var(--icon-info-base)"],
-  ["success", "var(--icon-success-base)"],
-  ["warning", "var(--icon-warning-base)"],
-  ["error", "var(--icon-critical-base)"],
-  ["info", "var(--icon-info-base)"],
-])
-
-const v2AgentThemeColors = new Map([
-  ["primary", "var(--v2-text-text-accent)"],
-  ["secondary", "var(--v2-text-text-muted)"],
-  ["accent", "var(--v2-icon-icon-accent)"],
-  ["success", "var(--v2-state-fg-success)"],
-  ["warning", "var(--v2-state-fg-warning)"],
-  ["error", "var(--v2-state-fg-danger)"],
-  ["info", "var(--v2-state-fg-info)"],
-])
-
-const agentPalette = [
-  "var(--icon-agent-ask-base)",
-  "var(--icon-agent-build-base)",
-  "var(--icon-agent-docs-base)",
-  "var(--icon-agent-plan-base)",
-  "var(--syntax-info)",
-  "var(--syntax-success)",
-  "var(--syntax-warning)",
-  "var(--syntax-property)",
-  "var(--syntax-constant)",
-  "var(--text-diff-add-base)",
-  "var(--text-diff-delete-base)",
-  "var(--icon-warning-base)",
-]
-
-function tone(name: string) {
-  let hash = 0
-
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-
-  return agentPalette[hash % agentPalette.length]
-}
-
-function taskAgent(raw: string | undefined, list?: readonly { name: string; color?: string }[]) {
-  if (!raw) return {}
+export function taskAgentName(raw: string | undefined, list?: readonly { name: string }[]) {
+  if (!raw) return undefined
   const key = raw.toLowerCase()
-  const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
-  const v2Tone = item?.color ? undefined : v2AgentTones.get(key)
-  const color = agentColor(item?.color, agentThemeColors) ?? agentTones.get(key) ?? tone(key)
-  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone ?? color
 
-  return {
-    name: item?.name ?? `${raw[0].toUpperCase()}${raw.slice(1)}`,
-    color,
-    v2Color,
-  }
-}
-
-function agentColor(value: string | undefined, themeColors: ReadonlyMap<string, string>) {
-  if (!value) return undefined
-
-  return themeColors.get(value) ?? value
+  return (
+    list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)?.name ??
+    `${raw[0].toUpperCase()}${raw.slice(1)}`
+  )
 }
 
 const webSearchProviderNames = new Map([
@@ -460,7 +398,7 @@ function ExaOutput(props: { output?: string }) {
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "shell"; id: string; render: () => JSX.Element }
+  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -497,8 +435,48 @@ export function CurrentContextToolGroup(props: {
     ]),
   )
 
+  const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
+  // Thoughts alone are not finished work yet, so the live group reads as Thinking, in place of Working, rather than
+  // "Used 1 Thought".
+  const thinking = createMemo(() => props.busy && reasoning().length > 0 && reasoning().length === props.parts.length)
+  const [now, setNow] = createSignal(Date.now())
+
+  createEffect(() => {
+    if (!thinking()) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const elapsed = createMemo(() => {
+    const started = reasoning()[0]?.time?.created
+
+    if (!thinking() || started === undefined) return ""
+    const total = Math.max(0, Math.floor((now() - started) / 1000))
+    const numfmt = new Intl.NumberFormat(i18n.locale())
+
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
+
+    if (total < 3600)
+      return i18n.t("ui.message.duration.minutesSeconds", {
+        minutes: numfmt.format(Math.floor(total / 60)),
+        seconds: numfmt.format(total % 60),
+      })
+
+    return i18n.t("ui.message.duration.hoursMinutes", {
+      hours: numfmt.format(Math.floor(total / 3600)),
+      minutes: numfmt.format(Math.floor(total / 60) % 60),
+    })
+  })
+
   const label = createMemo(() => {
-    const thoughts = props.parts.filter((part) => part.type === "reasoning").length
+    const thoughts = reasoning().length
+
+    if (thinking()) {
+      const text = i18n.t("ui.sessionTurn.status.thinking")
+
+      return { text, title: text, before: "", count: undefined, between: "", after: "" }
+    }
 
     if (!names() && !thoughts) {
       const text = i18n.t("ui.messagePart.context.updates")
@@ -634,7 +612,16 @@ export function CurrentContextToolGroup(props: {
                   </Show>
                 </span>
               </Show>
-              <Show when={label().title}>{(title) => <span data-slot="basic-tool-tool-title">{title()}</span>}</Show>
+              <Show when={label().title}>
+                {(title) => (
+                  <span data-slot="basic-tool-tool-title">
+                    <Show when={thinking()} fallback={title()}>
+                      <TextShimmer text={title()} active />
+                    </Show>
+                  </span>
+                )}
+              </Show>
+              <Show when={elapsed()}>{(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}</Show>
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>
@@ -660,7 +647,10 @@ export function CurrentContextToolGroup(props: {
               const callback = createMemo(() => {
                 const value = item()
 
-                return !Array.isArray(value) && (value.type === "notice" || value.type === "shell") ? value : undefined
+                return !Array.isArray(value) &&
+                  (value.type === "notice" || value.type === "shell" || value.type === "text")
+                  ? value
+                  : undefined
               })
 
               return (
@@ -681,7 +671,8 @@ export function CurrentContextToolGroup(props: {
                             id={part().id}
                             content={part()}
                             streaming={part().streaming ?? false}
-                            defaultOpen={props.reasoningDefaultOpen}
+                            // The group already reads as Thinking, so opening it shows the thoughts themselves.
+                            defaultOpen={thinking() || props.reasoningDefaultOpen}
                             open={props.reasoningOpen?.(part().id)}
                             onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
                             onContentRendered={props.onSizeChange}
@@ -1127,6 +1118,7 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 export interface ToolProps {
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
+  error?: string
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   metadata: Record<string, unknown>
   tool: string
@@ -1148,7 +1140,7 @@ export interface ToolProps {
   locked?: boolean
 }
 
-export type ToolComponent = Component<ToolProps>
+type ToolComponent = Component<ToolProps>
 
 const state: Record<
   string,
@@ -1158,13 +1150,13 @@ const state: Record<
   }
 > = {}
 
-export function registerTool(input: { name: string; render?: ToolComponent }) {
+function registerTool(input: { name: string; render?: ToolComponent }) {
   state[input.name] = input
 
   return input
 }
 
-export function getTool(name: string) {
+function getTool(name: string) {
   return state[name]?.render
 }
 
@@ -1372,7 +1364,7 @@ export function ToolDisplay(
   })
 
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
-  const error = createMemo(() => toolDisplayError(props, i18n.t("ui.toolErrorCard.failed")))
+  const error = createMemo(() => toolDisplayError(props))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
   return (
@@ -1386,7 +1378,7 @@ export function ToolDisplay(
               if (props.tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
-                    <span class="text-13-regular text-text-weak cursor-default">
+                    <span class="text-13-regular text-v2-text-text-faint cursor-default">
                       {i18n.t("ui.messagePart.questions.dismissed")}
                     </span>
                   </div>
@@ -1438,8 +1430,6 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 
   if (props.tool === "shell") return input.command || metadata.command || undefined
 
-  if (props.tool === "execute") return input.code || undefined
-
   if (props.tool === "read" || props.tool === "edit" || props.tool === "write") return getFilename(input.path ?? "")
 
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
@@ -1470,14 +1460,13 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   return undefined
 }
 
-function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {
+function toolDisplayError(props: ToolProps & { error?: string }) {
+  // Code Mode failures render inline in the execution's call list.
+  if (props.tool === "execute") return undefined
+
   if (props.status === "error") return props.error
 
-  if (props.tool !== "execute") return undefined
-
-  if (!executeToolFailed(props.metadata)) return undefined
-
-  return props.output || fallback
+  return undefined
 }
 
 ToolRegistry.register({
@@ -1757,10 +1746,7 @@ ToolRegistry.register({
       () => metadata().sessionID || taskSession(input().description, data.sessionID, data.store.session),
     )
 
-    const agent = createMemo(() => taskAgent(input().agent, data.store.agent))
-    const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
-    const tone = createMemo(() => agent().color)
-    const v2Tone = createMemo(() => agent().v2Color)
+    const title = createMemo(() => taskAgentName(input().agent, data.store.agent) ?? i18n.t("ui.tool.agent.default"))
 
     const background = createMemo(() => {
       return metadata().background === true || (props.status === "completed" && metadata().status === "running")
@@ -1812,29 +1798,12 @@ ToolRegistry.register({
     }
 
     const trigger = () => (
-      <div
-        data-component="task-tool-card"
-        style={{
-          "--task-agent-color": v2Tone(),
-          "--task-agent-color-fallback": tone(),
-        }}
-      >
+      <div data-component="task-tool-card">
         <div data-component="task-tool-surface">
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <Show
-                when={running()}
-                fallback={
-                  <span data-component="task-tool-icon">
-                    <Icon name="subagent" size="normal" />
-                  </span>
-                }
-              >
-                <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                  <SessionProgressIndicatorV2
-                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
-                  />
-                </span>
+              <Show when={running()}>
+                <SessionProgressIndicatorV2 />
               </Show>
               <span data-component="task-tool-title">{title()}</span>
               <Show when={subtitle()}>
@@ -1870,17 +1839,17 @@ ToolRegistry.register({
       >
         <div
           data-component="task-tool-delegating"
-          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
+          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 px-3 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base"
         >
-          <Icon name="subagent" size="normal" class="shrink-0 text-v2-icon-icon-faint" />
-          <TextShimmer text={i18n.t("ui.tool.agent.delegating")} class="min-w-0 truncate" />
+          <SessionProgressIndicatorV2 />
+          <span class="min-w-0 truncate">{i18n.t("ui.tool.agent.delegating")}</span>
         </div>
       </Show>
     )
   },
 })
 
-function ConsoleOutput(props: { command: string; output: string }) {
+function ConsoleOutput(props: { command?: string; output: string }) {
   const i18n = useI18n()
 
   return (
@@ -1892,18 +1861,24 @@ function ConsoleOutput(props: { command: string; output: string }) {
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
       >
-        <div data-slot="bash-command">
-          <ConsoleCopy text={props.command} label={i18n.t("ui.message.copy")} />
-          <pre data-slot="bash-pre">
-            <code>{props.command}</code>
-          </pre>
-        </div>
+        <Show when={props.command}>
+          {(command) => (
+            <div data-slot="bash-command">
+              <ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />
+              <pre data-slot="bash-pre">
+                <code>{command()}</code>
+              </pre>
+            </div>
+          )}
+        </Show>
         <Show when={props.output}>
           {(output) => (
             <div data-slot="bash-result">
               <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
               <pre data-slot="bash-pre">
-                <code>{output()}</code>
+                <code>
+                  <LinkedText text={output()} />
+                </code>
               </pre>
             </div>
           )}
@@ -1947,17 +1922,48 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
+    const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
-    const code = createMemo(() => toolInput(props.input).code ?? "")
-    const output = () => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
+    const calls = createMemo(() => executeToolCalls(props.metadata))
+    const subtitle = createMemo(() => executeToolSubtitle(calls()))
+    const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
+
+    // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
+    const error = createMemo(() => {
+      if (props.status !== "error" && props.metadata.error !== true) return undefined
+      const fallback = i18n.t("ui.toolErrorCard.failed")
+      const text = stripAnsi((props.status === "error" ? props.error : undefined) || props.output || fallback)
+
+      return text.replace(/^Error:\s*/, "").trim() || fallback
+    })
+
+    const output = createMemo(() =>
+      error()
+        ? ""
+        : stripAnsi(props.output ?? "")
+            .replace(/\r\n?/g, "\n")
+            .trim(),
+    )
+
+    // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
+    const owner = createMemo(() => calls().findLastIndex((call) => call.status === "error"))
+
     const sawPending = pending()
+
+    // The script is complete once the call leaves streaming, so the dialog can show it while it runs.
+    const viewable = () => props.status !== "streaming" && !!code()
+
+    const openDetails = () =>
+      dialog.show(() => (
+        <ExecuteDetails code={code()} output={output()} error={error()} calls={calls().length} status={props.status} />
+      ))
 
     return (
       <BasicTool
         {...props}
         icon="console"
         rail={false}
-        hasContent
+        hasContent={calls().length > 0 || !!error() || !!output()}
         compact
         allowOpenWhilePending
         trigger={(open) => (
@@ -1966,18 +1972,278 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
               </span>
-              <Show when={!open() && code()}>
-                <ShellSubmessage text={code().split("\n", 1)[0]} animate={sawPending} />
+              <Show when={!open() && subtitle()}>
+                {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
               </Show>
             </div>
           </div>
         )}
+        action={
+          viewable() ? (
+            <Tooltip value={i18n.t("ui.tool.execute.viewCode")} placement="top">
+              <IconButton
+                icon={<Icon name="code-slash" size="small" />}
+                size="normal"
+                variant="ghost"
+                aria-label={i18n.t("ui.tool.execute.viewCode")}
+                aria-haspopup="dialog"
+                onClick={openDetails}
+              />
+            </Tooltip>
+          ) : undefined
+        }
       >
-        <ConsoleOutput command={code()} output={output()} />
+        <div data-component="execute-tool-calls">
+          <Index each={calls()}>
+            {(call, index) => <ExecuteCallRow call={call()} error={index === owner() ? error() : undefined} />}
+          </Index>
+          <Show when={owner() === -1 && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
+          <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
+        </div>
       </BasicTool>
     )
   },
 })
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
+  const i18n = useI18n()
+  const fileComponent = useFileComponent()
+  const lineCount = (text: string) => text.split("\n").length
+  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
+
+  // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
+  const numberDigits = () =>
+    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
+
+  return (
+    <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
+      <DialogHeader>
+        <div data-slot="execute-details-title">
+          <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>
+          <span data-slot="execute-details-status" data-status={props.error ? "error" : props.status}>
+            {props.error
+              ? i18n.t("ui.toolErrorCard.failed")
+              : props.status === "running"
+                ? i18n.t("ui.tool.execute.running")
+                : i18n.t("ui.tool.execute.completed")}
+          </span>
+          <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
+        </div>
+      </DialogHeader>
+      <DialogBody class="min-h-0 flex-none overflow-y-auto">
+        <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
+          <ExecuteDetailsSection
+            label={i18n.t("ui.tool.execute.code")}
+            meta={lines(props.code)}
+            copy={props.code}
+            copyLabel={i18n.t("ui.tool.execute.copyCode")}
+          >
+            <Dynamic
+              component={fileComponent}
+              mode="text"
+              file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
+              overflow="wrap"
+            />
+          </ExecuteDetailsSection>
+          <Show
+            when={props.error}
+            fallback={
+              <Show when={props.output}>
+                {(output) => (
+                  <ExecuteDetailsSection
+                    label={i18n.t("ui.tool.execute.output")}
+                    meta={lines(output())}
+                    copy={output()}
+                    copyLabel={i18n.t("ui.tool.execute.copyOutput")}
+                  >
+                    <Dynamic
+                      component={fileComponent}
+                      mode="text"
+                      file={{
+                        // Code Mode returns structured results as JSON; highlight those, leave anything else plain.
+                        name: Option.isSome(decodeJson(output())) ? "output.json" : "output.txt",
+                        contents: output(),
+                        cacheKey: checksum(output()),
+                      }}
+                      overflow="wrap"
+                    />
+                  </ExecuteDetailsSection>
+                )}
+              </Show>
+            }
+          >
+            {(error) => (
+              <ExecuteDetailsSection
+                label={i18n.t("ui.tool.execute.error")}
+                copy={error()}
+                copyLabel={i18n.t("ui.toolErrorCard.copyError")}
+              >
+                <pre data-slot="execute-details-error">{error()}</pre>
+              </ExecuteDetailsSection>
+            )}
+          </Show>
+        </div>
+      </DialogBody>
+    </Dialog>
+  )
+}
+
+function ExecuteDetailsSection(props: {
+  label: string
+  meta?: string
+  copy: string
+  copyLabel: string
+  children: JSX.Element
+}) {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+
+  const copy = async () => {
+    if (!(await writeClipboard(props.copy))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <section data-slot="execute-details-section">
+      <header data-slot="execute-details-section-header">
+        <span data-slot="execute-details-section-label">{props.label}</span>
+        <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
+        <Tooltip value={copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+          <IconButton
+            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+            size="normal"
+            variant="ghost-muted"
+            aria-label={copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+            onClick={copy}
+          />
+        </Tooltip>
+      </header>
+      <div data-slot="execute-details-source">{props.children}</div>
+    </section>
+  )
+}
+
+function ExecuteOutputRow(props: { output: string }) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(false)
+
+  const toggle = () => {
+    if (window.getSelection()?.toString()) return
+    setOpen((value) => !value)
+  }
+
+  return (
+    <div data-slot="execute-tool-call-item">
+      <div
+        data-slot="execute-tool-call"
+        data-kind="output"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open()}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          toggle()
+        }}
+      >
+        <span data-slot="execute-tool-call-marker">
+          <span data-slot="execute-tool-call-arrow">›</span>
+        </span>
+        <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
+        <span data-slot="execute-tool-call-args">
+          {i18n.plural("ui.tool.execute.lines", props.output.split("\n").length)}
+        </span>
+      </div>
+      <Show when={open()}>
+        <div data-slot="execute-tool-output">
+          <ConsoleOutput output={props.output} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
+  const [open, setOpen] = createSignal(false)
+  const args = createMemo(() => (props.call ? executeToolCallArgs(props.call) : []))
+  const input = createMemo(() => Object.entries(props.call?.input ?? {}))
+  const failed = () => !props.call || props.call.status === "error"
+  const expandable = () => input().length > 0 || !!props.error
+  const summary = () => (props.call ? args().join(", ") : props.error?.split("\n", 1)[0])
+
+  const toggle = () => {
+    if (!expandable() || window.getSelection()?.toString()) return
+    setOpen((value) => !value)
+  }
+
+  return (
+    <div data-slot="execute-tool-call-item">
+      <div
+        data-slot="execute-tool-call"
+        data-status={failed() ? "error" : props.call?.status}
+        data-expanded={open() ? "true" : undefined}
+        dir="ltr"
+        role={expandable() ? "button" : undefined}
+        tabIndex={expandable() ? 0 : undefined}
+        aria-expanded={expandable() ? open() : undefined}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          toggle()
+        }}
+      >
+        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
+          <span data-slot="execute-tool-call-marker">
+            <Icon name="outline-hexagonal-warning" size="small" />
+          </span>
+        </Show>
+        <Show when={props.call}>
+          {(call) => (
+            <span data-slot="execute-tool-call-name">
+              <TextShimmer text={call().tool} active={call().status === "running"} />
+            </span>
+          )}
+        </Show>
+        <Show when={!open() && summary()}>
+          {(text) => (
+            <span data-slot="execute-tool-call-args" title={text()}>
+              {props.call ? `[${text()}]` : text()}
+            </span>
+          )}
+        </Show>
+        <Show when={props.error}>
+          <span data-slot="execute-tool-call-arrow">›</span>
+        </Show>
+      </div>
+      <Show when={open()}>
+        <Show when={input().length > 0}>
+          <dl data-slot="execute-tool-call-input" dir="ltr">
+            <For each={input()}>
+              {([key, value]) => (
+                <div data-slot="execute-tool-call-input-entry">
+                  <dt>{key}:</dt>
+                  <dd>{Option.getOrElse(decodeString(value), () => JSON.stringify(value, null, 2))}</dd>
+                </div>
+              )}
+            </For>
+          </dl>
+        </Show>
+        <Show when={props.error}>
+          {(error) => (
+            <div data-slot="execute-tool-error" dir="ltr">
+              <LinkedText text={error()} />
+            </div>
+          )}
+        </Show>
+      </Show>
+    </div>
+  )
+}
 
 ToolRegistry.register({
   name: "shell",
