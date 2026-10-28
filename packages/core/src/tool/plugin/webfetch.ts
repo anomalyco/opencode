@@ -50,9 +50,9 @@ const acceptHeader = (format: Format) => {
   }
 }
 
-const headers = (format: Format, userAgent: string) => ({
+const headers = (url: string, format: Format, userAgent: string) => ({
   "User-Agent": userAgent,
-  Accept: acceptHeader(format),
+  Accept: new URL(url).pathname.toLowerCase().endsWith(".md") ? "*/*" : acceptHeader(format),
   "Accept-Language": "en-US,en;q=0.9",
 })
 
@@ -66,7 +66,7 @@ const isCloudflareChallenge = (error: unknown) => {
 }
 
 const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
-  HttpClientRequest.get(url).pipe(HttpClientRequest.setHeaders(headers(format, userAgent)))
+  HttpClientRequest.get(url).pipe(HttpClientRequest.setHeaders(headers(url, format, userAgent)))
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
