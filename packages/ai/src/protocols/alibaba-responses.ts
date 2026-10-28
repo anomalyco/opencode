@@ -4,6 +4,7 @@ import { OpenResponses } from "./open-responses.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
+import { MediaInput } from "./utils/media-input.js"
 
 const Options = Schema.Struct({
   reasoningEffort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
@@ -33,6 +34,17 @@ const Body = Schema.Struct({
 const adapter = {
   id: "alibaba-responses",
   name: "Alibaba Responses",
+  lowerMedia: Effect.fnUntraced(function* ({ part }) {
+    if (part.media.kind !== "audio") return undefined
+    const url = ProviderShared.mediaUrl(part.media)
+    const format = MediaInput.audioFormat(part.media.mediaType)
+    if (url) return { type: "input_audio" as const, audio_url: url, format }
+    return {
+      type: "input_audio" as const,
+      data: (yield* ProviderShared.requireInlineMedia("Alibaba Responses", part.media)).dataUrl,
+      format,
+    }
+  }),
   nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.alibaba),
   restoreHostedToolItem: (item: unknown) => (Schema.is(WebExtractorItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
@@ -49,9 +61,35 @@ export const protocol = Protocol.make({
     from: Effect.fn("AlibabaResponses.fromRequest")(function* (req) {
       const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
       const body = yield* OpenResponses.fromRequestWithAdapter(req, adapter)
+      // Model Studio accepts audio only in user messages, not function outputs.
+      const input: (typeof body.input)[number][] = []
+      const attachments: OpenResponses.MediaInput[] = []
+      const flushAttachments = () => {
+        if (attachments.length > 0) input.push({ type: "message", role: "user", content: attachments.splice(0) })
+      }
+      for (const item of body.input) {
+        if (!isFunctionCallOutput(item)) {
+          flushAttachments()
+          input.push(item)
+          continue
+        }
+        if (typeof item.output === "string") {
+          input.push(item)
+          continue
+        }
+        const content = item.output.filter((part) => part.type !== "input_audio")
+        attachments.push(...item.output.filter((part) => part.type === "input_audio"))
+        input.push({
+          ...item,
+          output:
+            content.length === 0 && item.output.length > 0 ? "Audio attached in the following user message." : content,
+        })
+      }
+      flushAttachments()
       const choice = body.tool_choice
       return {
         ...body,
+        input,
         enable_thinking: opts.enableThinking,
         previous_response_id: opts.previousResponseId,
         conversation: opts.conversation,
@@ -92,5 +130,10 @@ export const protocol = Protocol.make({
     terminal: OpenResponses.terminal,
   },
 })
+
+type InputItem = OpenResponses.OpenResponsesBody["input"][number]
+
+const isFunctionCallOutput = (item: InputItem): item is Extract<InputItem, { type: "function_call_output" }> =>
+  item.type === "function_call_output"
 
 export * as AlibabaResponses from "./alibaba-responses.js"

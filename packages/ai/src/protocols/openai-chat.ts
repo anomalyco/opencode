@@ -30,6 +30,7 @@ import { resolveParallelToolCalls } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { MediaInput } from "./utils/media-input.js"
 
 const ADAPTER = "openai-chat"
 const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
@@ -126,6 +127,10 @@ type OpenAIChatTextContent = Schema.Schema.Type<typeof OpenAIChatTextContent>
 
 const OpenAIChatUserContent = Schema.Union([
   OpenAIChatTextContent,
+  Schema.Struct({
+    type: Schema.Literal("input_audio"),
+    input_audio: Schema.Struct({ data: Schema.String, format: Schema.String }),
+  }),
   Schema.Struct({
     type: Schema.Literal("image_url"),
     image_url: Schema.Struct({ url: Schema.String }),
@@ -338,6 +343,7 @@ export interface ParserState {
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
 interface LoweringOptions {
+  readonly lowerAudio?: (part: MediaPart) => Effect.Effect<OpenAIChatUserContent, AIError>
   readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
   readonly toolCallID?: (id: string) => string
   /** Project provider-specific fields from the exact source, even when other messages are dropped during lowering. */
@@ -376,7 +382,17 @@ const lowerToolCall = (
   extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
 })
 
-const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, options: LoweringOptions) {
+  if (part.media.kind === "audio") {
+    if (options.lowerAudio) return yield* options.lowerAudio(part)
+    return {
+      type: "input_audio" as const,
+      input_audio: {
+        data: (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).base64,
+        format: MediaInput.audioFormat(part.media.mediaType),
+      },
+    }
+  }
   // Chat Completions accepts PDFs, and no other documents, as inline `file` parts; file URLs are not supported.
   if (part.media.mediaType.toLowerCase() === "application/pdf")
     return {
@@ -434,7 +450,7 @@ const lowerUserMessage = Effect.fnUntraced(function* (
       continue
     }
     if (part.type === "media") {
-      content.push(yield* lowerMedia(part))
+      content.push(yield* lowerMedia(part, options))
       continue
     }
     return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
@@ -537,7 +553,9 @@ const lowerToolMessages = Effect.fnUntraced(function* (
       toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
     )
     const files = content.filter((item) => item.type === "file")
-    attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
+    attachments.push(
+      ...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item), options))),
+    )
   }
   return { messages, attachments }
 })

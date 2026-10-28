@@ -60,7 +60,28 @@ const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
   video_url: Schema.String,
 })
-const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile, OpenResponsesInputVideo])
+const OpenResponsesInputAudio = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("input_audio"),
+    input_audio: Schema.Struct({ data: Schema.String, format: Schema.String }),
+  }),
+  Schema.Struct({
+    type: Schema.tag("input_audio"),
+    data: Schema.String,
+    format: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.tag("input_audio"),
+    audio_url: Schema.String,
+    format: Schema.String,
+  }),
+])
+const MediaInput = Schema.Union([
+  OpenResponsesInputImage,
+  OpenResponsesInputFile,
+  OpenResponsesInputVideo,
+  OpenResponsesInputAudio,
+])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
 
@@ -158,6 +179,7 @@ const OpenResponsesFunctionCallOutputContent = Schema.Union([
   OpenResponsesInputImage,
   OpenResponsesInputFile,
   OpenResponsesInputVideo,
+  OpenResponsesInputAudio,
 ])
 
 const OpenResponsesFunctionCallOutput = Schema.Union([
@@ -407,7 +429,7 @@ export interface ProviderAdapter {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
     readonly request: LLMRequest
-  }) => MediaInput | undefined
+  }) => Effect.Effect<MediaInput | undefined, AIError>
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
 }
 
@@ -515,7 +537,7 @@ const decodeMessageMetadata = ProviderShared.validateWith(Schema.decodeUnknownEf
 
 const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
   const media = part.media.inline()
-  const providerMedia = adapter.lowerMedia?.({ part, media, request })
+  const providerMedia = adapter.lowerMedia ? yield* adapter.lowerMedia({ part, media, request }) : undefined
   if (providerMedia) return providerMedia
   const rawDetail = part.providerMetadata?.[metadataKey(request.model)]?.detail
   const detail = rawDetail === undefined ? undefined : yield* decodeImageDetail(rawDetail)

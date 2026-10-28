@@ -6,6 +6,7 @@ import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { detectMediaType } from "../utils/media-type.js"
+import { MediaInput } from "./utils/media-input.js"
 
 const ADAPTER = "meta-responses"
 const NAME = "Meta Responses"
@@ -55,6 +56,16 @@ interface ParserState extends OpenResponses.ParserState {
 const adapter = {
   id: ADAPTER,
   name: NAME,
+  lowerMedia: Effect.fnUntraced(function* ({ part }) {
+    if (part.media.kind !== "audio") return undefined
+    return {
+      type: "input_audio" as const,
+      input_audio: {
+        data: (yield* ProviderShared.requireInlineMedia(NAME, part.media)).base64,
+        format: MediaInput.audioFormat(part.media.mediaType),
+      },
+    }
+  }),
   nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.meta),
   restoreHostedToolItem: (item: unknown) => (Schema.is(ImageItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
@@ -89,15 +100,15 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
     }),
     adapter,
   )
-  // Meta cannot see video nested in tool results; attach it after the complete result batch.
+  // Meta cannot consume audio/video nested in tool results; attach it after the complete result batch.
   const input: InputItem[] = []
-  const videos: OpenResponses.MediaInput[] = []
-  const flushVideos = () => {
-    if (videos.length > 0) input.push({ type: "message", role: "user", content: videos.splice(0) })
+  const attachments: OpenResponses.MediaInput[] = []
+  const flushAttachments = () => {
+    if (attachments.length > 0) input.push({ type: "message", role: "user", content: attachments.splice(0) })
   }
   for (const item of body.input) {
     if (!isFunctionCallOutput(item)) {
-      flushVideos()
+      flushAttachments()
       input.push(item)
       continue
     }
@@ -105,15 +116,15 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
       input.push(item)
       continue
     }
-    const content = item.output.filter((part) => part.type !== "input_video")
-    videos.push(...item.output.filter((part) => part.type === "input_video"))
+    const content = item.output.filter((part) => part.type !== "input_video" && part.type !== "input_audio")
+    attachments.push(...item.output.filter((part) => part.type === "input_video" || part.type === "input_audio"))
     input.push({
       ...item,
       output:
-        content.length === 0 && item.output.length > 0 ? "Video attached in the following user message." : content,
+        content.length === 0 && item.output.length > 0 ? "Media attached in the following user message." : content,
     })
   }
-  flushVideos()
+  flushAttachments()
   return { ...body, input }
 })
 

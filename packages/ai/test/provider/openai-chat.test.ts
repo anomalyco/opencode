@@ -933,15 +933,31 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("rejects non-image media that cannot be lowered", () =>
+  it.effect("lowers user and tool audio with MIME formats normalized", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.user({ type: "media", media: Media.base64("AAECAw==", "audio/mpeg") })],
+          messages: [
+            Message.user({ type: "media", media: Media.base64("AAECAw==", "audio/mpeg") }),
+            Message.assistant({ type: "tool-call", id: "call_audio", name: "read_audio", input: {} }),
+            Message.tool({
+              id: "call_audio",
+              name: "read_audio",
+              resultType: "content",
+              result: [{ type: "file", mime: "audio/x-wav", uri: "data:audio/x-wav;base64,AAECAw==" }],
+            }),
+          ],
         }),
-      ).pipe(Effect.flip)
-      expect(error.message).toContain("OpenAI Chat does not support media type audio/mpeg")
+      )
+      expect(prepared.body.messages[0]).toEqual({
+        role: "user",
+        content: [{ type: "input_audio", input_audio: { data: "AAECAw==", format: "mp3" } }],
+      })
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [{ type: "input_audio", input_audio: { data: "AAECAw==", format: "wav" } }],
+      })
     }),
   )
 

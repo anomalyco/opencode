@@ -4,7 +4,11 @@ import { Media } from "../../media.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
 import { mergeJsonRecords, type AIError, type ProviderID } from "../../schema/index.js"
 import { encodeJson } from "../../utils/json.js"
+import { mediaTypeExtension } from "../../utils/media-type.js"
 import { ProviderShared } from "../shared.js"
+
+export const audioFormat = (mediaType: string) =>
+  mediaTypeExtension(mediaType) ?? mediaType.split(";", 1)[0].trim().toLowerCase().slice("audio/".length)
 
 /** Owned bytes for multipart uploads; decodes `base64` sources and rejects remote sources. */
 export const inlineBytes = (route: string, asset: Media.Asset): Effect.Effect<Uint8Array, AIError> => {
