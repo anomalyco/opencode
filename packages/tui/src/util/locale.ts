@@ -73,7 +73,9 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
   const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
   const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  // A slice offset of zero returns the whole string, so skip the tail when nothing is kept.
+  const tail = keepEnd > 0 ? str.slice(-keepEnd) : ""
+  return str.slice(0, keepStart) + ellipsis + tail
 }
 
 export * as Locale from "./locale"

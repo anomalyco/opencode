@@ -27,7 +27,9 @@ export function truncateMiddle(text: string, maxLength = 20) {
   const available = maxLength - 1
   const start = Math.ceil(available / 2)
   const end = Math.floor(available / 2)
-  return text.slice(0, start) + "…" + text.slice(-end)
+  // A slice offset of zero returns the whole string, so skip the tail when nothing is kept.
+  const tail = end > 0 ? text.slice(-end) : ""
+  return text.slice(0, start) + "…" + tail
 }
 
 const isDrive = (value: string) => {
