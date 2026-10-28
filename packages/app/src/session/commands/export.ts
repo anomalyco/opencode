@@ -13,18 +13,21 @@ export async function fetchSessionExport(input: {
 }): Promise<SessionExportData> {
   const [info, first] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
-    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }),
+    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }, { mediaRefs: false }),
   ])
 
   const pages = [first]
 
   while (pages.at(-1)?.cursor.next) {
     pages.push(
-      await input.api.message.list({
-        sessionID: input.sessionID,
-        limit: 200,
-        cursor: pages.at(-1)!.cursor.next ?? undefined,
-      }),
+      await input.api.message.list(
+        {
+          sessionID: input.sessionID,
+          limit: 200,
+          cursor: pages.at(-1)!.cursor.next ?? undefined,
+        },
+        { mediaRefs: false },
+      ),
     )
   }
 

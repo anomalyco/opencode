@@ -111,7 +111,7 @@ export function extractPromptFromMessage(
     const fileUri = "uri" in file ? file.uri : undefined
     const fileData = "data" in file ? file.data : undefined
     const uri =
-      source?.type === "uri"
+      source.type === "uri"
         ? source.uri
         : fileUri !== undefined
           ? fileUri
@@ -136,14 +136,14 @@ export function extractPromptFromMessage(
     }
 
     // A file reference returns as a context chip through extractPromptContext.
-    if (source?.type === "uri" && source.uri.startsWith("file:")) continue
+    if (source.type === "uri" && source.uri.startsWith("file:")) continue
 
-    // Stored files carry their bytes or media URI, and an empty file has empty data; only a local handoff row
+    // Stored files carry their bytes or a media ref, and an empty file has empty data; only a local handoff row
     // leaves data empty because its bytes live at a blob URL.
-    const stored = (!source || source.type === "inline") && (fileUri !== undefined || fileData !== undefined)
+    const stored = source.type === "inline" || !!fileData
 
     const dataUrl =
-      source?.type === "uri" && source.uri.startsWith("data:")
+      source.type === "uri" && source.uri.startsWith("data:")
         ? source.uri
         : (fileUri ?? (stored ? `data:${file.mime};base64,${fileData ?? ""}` : undefined))
 
@@ -210,7 +210,7 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
 
   const files = (message.files ?? []).flatMap((file): FileContextItem[] => {
     const source = file.source
-    if (file.mention || source?.type !== "uri" || !source.uri.startsWith("file:")) return []
+    if (file.mention || source.type !== "uri" || !source.uri.startsWith("file:")) return []
 
     if (regenerated.has(source.uri)) return []
 

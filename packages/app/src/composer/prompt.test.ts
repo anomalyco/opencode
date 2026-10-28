@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { extractPromptContext, extractPromptFromMessage, type PromptSource } from "./prompt"
 import { buildPromptRequest } from "./request"
-import { contextItemKey } from "./schema"
+import { contextItemKey, Prompt } from "./schema"
 
 describe("extractPromptFromMessage", () => {
   test("restores a renamed session and preserves file offsets when resubmitted", () => {
@@ -85,6 +86,30 @@ describe("extractPromptFromMessage", () => {
       comments: [{ type: "file", path: "src/app.ts", comment: "check this", commentOrigin: "review" }],
       files: [],
     })
+  })
+
+  test("restores a URI-sourced attachment from its inline bytes, and skips a handoff row with none", () => {
+    const message = {
+      id: "msg_uri",
+      type: "user",
+      text: "",
+      files: [
+        { data: "AAA", mime: "image/png", source: { type: "uri", uri: "https://example.com/a.png" }, name: "a.png" },
+        { data: "", mime: "image/png", source: { type: "uri", uri: "blob:http://app/handoff" }, name: "b.png" },
+      ],
+      time: { created: 1 },
+    } satisfies SessionMessageUser
+
+    expect(extractPromptFromMessage(message)).toEqual([
+      { type: "text", content: "", start: 0, end: 0 },
+      {
+        type: "image",
+        id: "msg_uri:file:0",
+        filename: "a.png",
+        mime: "image/png",
+        blob: { id: "data:image/png;base64,AAA", url: "data:image/png;base64,AAA" },
+      },
+    ])
   })
 
   test("keeps the directory of a file mention without an at-sign", () => {
@@ -282,9 +307,11 @@ describe("extractPromptFromMessage", () => {
         type: "image",
         filename: "screen.png",
         mime: "image/png",
-        blob: { id: `media:${imageHash}`, url: `media:${imageHash}` },
+        blob: { id: `media:${imageHash}`, url: "" },
       },
     ])
+    // Revert, fork and recall put this prompt into a persisted draft, so it must encode.
+    expect(() => Schema.encodeSync(Prompt)(extractPromptFromMessage(message, { directory: "/repo" }))).not.toThrow()
 
     expect(extractPromptContext(message, { directory: "/repo" }).files).toEqual([
       { type: "file", path: "src/context.ts", name: "context.ts" },

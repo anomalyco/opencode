@@ -45,7 +45,7 @@ describe("readLocalImage", () => {
     expect([...requests[0].url.searchParams]).toEqual([["location[directory]", directory]])
     expect(requests[0].init?.method).toBe("GET")
     expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(`Basic ${btoa("opencode:secret")}`)
-    expect(new Headers(requests[0].init?.headers).get("x-opencode-capabilities")).toBe("experimental-media-uri")
+    expect(new Headers(requests[0].init?.headers).has("x-opencode-capabilities")).toBe(false)
     expect(requests[0].init?.signal).toBe(signal)
   })
 

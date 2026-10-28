@@ -646,6 +646,8 @@ export async function pinMediaBlob(blob: BlobReference): Promise<BlobReference> 
   return createBlobReference(data)
 }
 
+// A `media:<hash>` ref is no URL a renderer can load, so it keeps the empty URL a draft-store id has and resolves
+// through `resolveBlobUrl`; drafts saved this way stay readable by versions that predate media refs.
 export function createLegacyBlobReference(dataUrl: string): BlobReference {
-  return { id: dataUrl, url: dataUrl }
+  return { id: dataUrl, url: mediaHashFromUri(dataUrl) ? "" : dataUrl }
 }

@@ -15,7 +15,7 @@ describe("sessionExportFilename", () => {
 })
 
 describe("fetchSessionExport", () => {
-  test("fetches every native message page without exporting cursors", async () => {
+  test("fetches every native message page with inline media and without exporting cursors", async () => {
     const info = { id: "ses_1", title: "Test Session" } as SessionInfo
     const first = { id: "msg_1", type: "model-selected" } as unknown as SessionMessageInfo
     const second = { id: "msg_2", type: "user" } as SessionMessageInfo
@@ -24,8 +24,8 @@ describe("fetchSessionExport", () => {
     const api = {
       session: { get: async () => info },
       message: {
-        list: async (input: { cursor?: string }) => {
-          calls.push(input)
+        list: async (input: { cursor?: string }, options: unknown) => {
+          calls.push([input, options])
 
           if (!input.cursor) return { data: [first], cursor: { next: "page-2" } }
 
@@ -39,8 +39,8 @@ describe("fetchSessionExport", () => {
     expect(result).toEqual({ info, messages: [first, second] })
     expect(result).not.toHaveProperty("cursor")
     expect(calls).toEqual([
-      { sessionID: "ses_1", limit: 200, order: "asc" },
-      { sessionID: "ses_1", limit: 200, cursor: "page-2" },
+      [{ sessionID: "ses_1", limit: 200, order: "asc" }, { mediaRefs: false }],
+      [{ sessionID: "ses_1", limit: 200, cursor: "page-2" }, { mediaRefs: false }],
     ])
   })
 })

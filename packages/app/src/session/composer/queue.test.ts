@@ -159,7 +159,7 @@ describe("queuedPromptAttachments", () => {
     })
 
     expect(extracted.find((part) => part.type === "image")).toMatchObject({
-      blob: { id: `media:${hash}`, url: `media:${hash}` },
+      blob: { id: `media:${hash}`, url: "" },
     })
     expect(JSON.stringify(extracted)).not.toContain("/api/")
 
