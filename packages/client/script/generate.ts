@@ -1,6 +1,12 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode/httpapi-codegen"
-import { ClientApi, effectOmitEndpoints, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
+import {
+  ClientApi,
+  clientNamespace,
+  effectOmitEndpoints,
+  groupNames,
+  promiseOmitEndpoints,
+} from "@opencode/protocol/client"
 import { Agent } from "@opencode/schema/agent"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
@@ -44,8 +50,18 @@ import { Workspace } from "@opencode/schema/workspace"
 import { Effect, Schema } from "effect"
 import { fileURLToPath } from "url"
 
-const promiseContract = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints })
-const effectContract = compile(ClientApi, { groupNames, omitEndpoints: effectOmitEndpoints })
+const promiseContract = compile(ClientApi, {
+  groupNames,
+  omitEndpoints: promiseOmitEndpoints,
+  namespace: clientNamespace,
+  aliases: true,
+})
+const effectContract = compile(ClientApi, {
+  groupNames,
+  omitEndpoints: effectOmitEndpoints,
+  namespace: clientNamespace,
+  aliases: true,
+})
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
   ...namespaceTypes("Command", "@opencode/schema/command", Command),

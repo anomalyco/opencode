@@ -926,7 +926,7 @@ for (const row of [
     expect((await listed).ok()).toBe(true)
     const composer = page.locator('[data-component="composer"]')
     const send = composer.getByRole("button", { name: "Send", exact: true })
-    await expect(composer.locator('[data-action="composer-model"]')).toHaveText("OpenCode / Accent Model")
+    await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Accent Model")
     await view.editor.fill("Inspect this fixture workspace.")
     await expect(send).toBeEnabled()
     await expectBackground(send, "icon-button-contrast")

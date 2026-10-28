@@ -64,7 +64,7 @@ const Settings = {
 }
 
 const OpenAIImageResponse = Schema.Struct({
-  // `response_format` picks `b64_json` or `url`; DALL·E and many compatible hosts default to `url`.
+  // GPT Image models always return `b64_json`; compatible hosts that default to `url` can return either.
   data: Schema.Array(Schema.Struct({ b64_json: optionalNull(Schema.String), url: optionalNull(Schema.String) })),
   ...Settings,
   usage: Schema.optional(Usage),
@@ -141,7 +141,13 @@ const RESERVED_FORM_FIELDS = new Set(["model", "prompt", "image", "image[]", "im
 const nativeOptions = (options: OpenAIImageOptions | undefined) => {
   if (!options) return undefined
   const { outputCompression, outputFormat, partialImages: _, mask: __, ...native } = options
-  return { output_compression: outputCompression, output_format: outputFormat, ...native }
+  // `response_format: null` drops a provider's default, for hosts that reject the field.
+  return {
+    output_compression: outputCompression,
+    output_format: outputFormat,
+    ...native,
+    response_format: native.response_format ?? undefined,
+  }
 }
 
 /**

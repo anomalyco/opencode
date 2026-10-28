@@ -3561,8 +3561,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(100_000 - 50_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 200)
+    // 1% of the window stays unused, since strict providers reject a request that overshoots it by a few tokens.
+    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(99_000 - 50_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(99_000 - 50_000 - 200)
   })
 
   scenario("caps the output limit a large model advertises", function* (s) {

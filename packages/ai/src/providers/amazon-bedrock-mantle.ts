@@ -19,6 +19,12 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> & {
   readonly apiKey?: string
   /** `sigv4` ignores `apiKey` fallbacks from the environment; `bearer` requires a token. */
   readonly auth?: "bearer" | "sigv4"
+  /**
+   * Mantle serves each model under one path prefix and rejects it on the others. Responses and Chat default to
+   * `https://bedrock-mantle.<region>.api.aws/v1`, which serves open-weight models such as `openai.gpt-oss-120b`.
+   * Others, including GPT models such as `openai.gpt-5.4`, need `.../openai/v1`; each AWS model card lists the base
+   * URL under Programmatic Access. Messages defaults to `.../anthropic/v1`.
+   */
   readonly baseURL?: string
   /** Static SigV4 credentials. When omitted the AWS default credential chain resolves them per request. */
   readonly credentials?: Credentials
@@ -32,6 +38,7 @@ export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Set
   Options & {
     readonly apiKey?: string
     readonly auth?: "bearer" | "sigv4"
+    /** See {@link Config.baseURL}: GPT models such as `openai.gpt-5.4` need `https://bedrock-mantle.<region>.api.aws/openai/v1`. */
     readonly baseURL?: string
     readonly credentials?: Credentials
     readonly profile?: string

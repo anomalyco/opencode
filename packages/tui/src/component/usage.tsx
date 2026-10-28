@@ -7,7 +7,7 @@ import { useLocal } from "../context/local"
 import { useLocation } from "../context/location"
 import { useTheme } from "../context/theme"
 import { SplitBorder } from "../ui/border"
-import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
+import { DIALOG_LIST_INSET, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
 import {
@@ -106,9 +106,11 @@ export function DialogUsage() {
             }))}
             onMove={(option) => setActive(option.value)}
             emptyView={
-              <text fg={theme.text.muted} wrapMode="word">
-                No limits apply to your models. Paid models stop only if the workspace runs out of credits.
-              </text>
+              <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
+                <text fg={theme.text.muted} wrapMode="word">
+                  No limits apply to your models. Paid models stop only if the workspace runs out of credits.
+                </text>
+              </box>
             }
           />
         )}

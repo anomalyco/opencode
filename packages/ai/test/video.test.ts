@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Media, Video, VideoClient, type GenerationEvent, type VideoEvent } from "../src/effect.js"
-import { Fal, Google, Runway, XAI } from "../src/providers.js"
+import { Google, Runway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"
 
@@ -435,203 +435,6 @@ describe("Video / xAI", () => {
           ),
       )
       expect(tags).toEqual(["UnsupportedOperation", "UnsupportedOperation", "UnsupportedOperation"])
-    }).pipe(Effect.provide(layer(() => Effect.die("unsupported input reached the network")))),
-  )
-})
-
-// ---------------------------------------------------------------------------
-// fal
-// ---------------------------------------------------------------------------
-
-describe("Video / fal", () => {
-  const fal = Fal.configure({ apiKey: "test", baseURL: "https://queue.fal.test" })
-  const model = fal.video("fal-ai/veo3.1")
-  const urls = {
-    status: "https://queue.fal.test/fal-ai/veo3.1/requests/r1/status",
-    response: "https://queue.fal.test/fal-ai/veo3.1/requests/r1",
-    cancel: "https://queue.fal.test/fal-ai/veo3.1/requests/r1/cancel",
-  }
-  const submitted = {
-    request_id: "r1",
-    status_url: urls.status,
-    response_url: urls.response,
-    cancel_url: urls.cancel,
-    queue_position: 2,
-  }
-
-  it.effect("submits to the queue and follows the provider's status, response, and cancel URLs", () =>
-    Effect.gen(function* () {
-      const calls: Array<Call> = []
-      const program = Effect.gen(function* () {
-        const generation = yield* Video.start({
-          model,
-          prompt: "Two person street interview",
-          frames: { first: Media.url("https://example.test/first.png") },
-          negativePrompt: "blur",
-          seed: 7,
-          aspect: "9:16",
-          resolution: "1080p",
-          audio: true,
-          providerOptions: { duration: "8s", safety_tolerance: "4" },
-        })
-        expect(generation.status).toBe("queued")
-        expect(generation.position).toBe(2)
-        expect(generation.token).toEqual({
-          requestID: "r1",
-          statusURL: urls.status,
-          responseURL: urls.response,
-          cancelURL: urls.cancel,
-        })
-        const queued = yield* generation.refresh()
-        expect(queued.status).toBe("queued")
-        expect(queued.position).toBe(1)
-        const response = yield* generation.await({ poll: { interval: "1 second" } })
-        yield* generation.cancel()
-        return response
-      })
-      const response = yield* settle(program, 3).pipe(
-        Effect.provide(
-          layer((input) =>
-            Effect.gen(function* () {
-              const { call, nth } = yield* observe(calls, input)
-              expect(call.headers.get("authorization")).toBe("Key test")
-              if (call.method === "POST") {
-                expect(call.url).toBe("https://queue.fal.test/fal-ai/veo3.1")
-                expect(JSON.parse(call.body)).toEqual({
-                  prompt: "Two person street interview",
-                  negative_prompt: "blur",
-                  seed: 7,
-                  aspect_ratio: "9:16",
-                  resolution: "1080p",
-                  generate_audio: true,
-                  image_url: "https://example.test/first.png",
-                  duration: "8s",
-                  safety_tolerance: "4",
-                })
-                return json(input, submitted)
-              }
-              if (call.method === "PUT") {
-                expect(call.url).toBe(urls.cancel)
-                return json(input, { status: "CANCELLATION_REQUESTED" }, { status: 202 })
-              }
-              if (call.url === urls.response)
-                return json(input, {
-                  video: {
-                    url: "https://v3.fal.media/out.mp4",
-                    content_type: "video/mp4",
-                    file_name: "out.mp4",
-                    file_size: 10,
-                  },
-                  seed: 7,
-                  has_nsfw_concepts: [false],
-                })
-              expect(call.url).toBe(urls.status)
-              if (nth === 1) return json(input, { status: "IN_QUEUE", queue_position: 1 })
-              if (nth === 2) return json(input, { status: "IN_QUEUE", queue_position: 0 })
-              if (nth === 3) return json(input, { status: "IN_PROGRESS", logs: [{ message: "Generating..." }] })
-              return json(input, { status: "COMPLETED", metrics: { inference_time: 3.2 } })
-            }),
-          ),
-        ),
-      )
-      expect(response.video.source).toEqual({
-        type: "url",
-        url: "https://v3.fal.media/out.mp4",
-        mediaType: "video/mp4",
-      })
-      expect(response.providerMetadata).toEqual({
-        fal: { requestId: "r1", seed: 7, fileName: "out.mp4", fileSize: 10, has_nsfw_concepts: [false] },
-      })
-      expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
-        "POST https://queue.fal.test/fal-ai/veo3.1",
-        `GET ${urls.status}`,
-        `GET ${urls.status}`,
-        `GET ${urls.status}`,
-        `GET ${urls.status}`,
-        `GET ${urls.response}`,
-        `PUT ${urls.cancel}`,
-      ])
-    }),
-  )
-
-  it.effect("treats a COMPLETED status carrying an error as failed", () =>
-    Effect.gen(function* () {
-      const generation = yield* Video.start({ model, prompt: "x" })
-      const failed = yield* generation.refresh()
-      expect(failed.status).toBe("failed")
-    }).pipe(
-      Effect.provide(
-        layer((input) =>
-          Effect.succeed(
-            input.request.method === "POST"
-              ? json(input, submitted)
-              : json(input, { status: "COMPLETED", error: "Invalid input", error_type: "ValidationError" }),
-          ),
-        ),
-      ),
-    ),
-  )
-
-  for (const failure of [
-    {
-      name: "a COMPLETED status carrying an error",
-      status: { status: "COMPLETED", error: "Invalid input", error_type: "ValidationError" },
-      result: { status: 422, body: { detail: [{ loc: ["body", "prompt"], msg: "Invalid input" }] } },
-      tag: "InvalidRequest",
-    },
-    {
-      name: "a failing response_url",
-      status: { status: "COMPLETED" },
-      result: { status: 500, body: { detail: "Internal error" } },
-      tag: "ProviderInternal",
-    },
-  ]) {
-    it.effect(`fails await for ${failure.name} with the response_url body and HTTP context`, () =>
-      Effect.gen(function* () {
-        // A transient 500 on the result fetch is retried first; the body and HTTP context survive the final failure.
-        const fiber = yield* Effect.forkChild(Video.generate({ model, prompt: "x" }).pipe(Effect.flip))
-        yield* TestClock.adjust("5 minutes")
-        const error = yield* Fiber.join(fiber)
-        expect(error.reason._tag).toBe(failure.tag)
-        expect(error.reason.body).toBe(JSON.stringify(failure.result.body))
-        expect(error.reason.http).toMatchObject({ url: urls.response, status: failure.result.status })
-      }).pipe(
-        Effect.provide(
-          layer((input) =>
-            Effect.succeed(
-              input.request.method === "POST"
-                ? json(input, submitted)
-                : input.request.url === urls.response
-                  ? json(input, failure.result.body, { status: failure.result.status })
-                  : json(input, failure.status),
-            ),
-          ),
-        ),
-      ),
-    )
-  }
-
-  it.effect("rejects model-specific common fields and points at providerOptions", () =>
-    Effect.gen(function* () {
-      const errors = yield* Effect.forEach(
-        [
-          Video.generate({ model, prompt: "x", durationSeconds: 8 }),
-          Video.generate({ model, prompt: "x", frames: { last: Media.url("https://example.test/last.png") } }),
-          Video.generate({ model, prompt: "x", references: [Media.url("https://example.test/ref.png")] }),
-          Video.generate({ model, prompt: "x", n: 2 }),
-          Video.generate({ model, prompt: "x", frames: { first: Media.ref("fal", "handle") } }),
-        ],
-        (program) => program.pipe(Effect.flip),
-      )
-      expect(errors.map((error) => error.reason._tag)).toEqual([
-        "UnsupportedOperation",
-        "UnsupportedOperation",
-        "UnsupportedOperation",
-        "UnsupportedOperation",
-        "InvalidRequest",
-      ])
-      expect(errors[1].message).toContain("end_image_url")
-      expect(errors[4].message).toContain("; got fal:handle")
     }).pipe(Effect.provide(layer(() => Effect.die("unsupported input reached the network")))),
   )
 })
@@ -1149,11 +952,6 @@ describe("Video / queued result", () => {
   }
 
   const veoOperation = "models/veo-3.1/operations/op_1"
-  const falURLs = {
-    status: "https://queue.fal.test/fal-ai/veo3.1/requests/r1/status",
-    response: "https://queue.fal.test/fal-ai/veo3.1/requests/r1",
-    cancel: "https://queue.fal.test/fal-ai/veo3.1/requests/r1/cancel",
-  }
   for (const queued of [
     {
       model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
@@ -1168,7 +966,6 @@ describe("Video / queued result", () => {
         done: true,
         response: { generateVideoResponse: { generatedSamples: [{ video: { uri: "https://google.test/out.mp4" } }] } },
       },
-      result: undefined,
       url: "https://google.test/out.mp4",
     },
     {
@@ -1180,25 +977,7 @@ describe("Video / queued result", () => {
       resultURL: "https://xai.test/v1/videos/req_1",
       running: { status: "pending", progress: 40 },
       done: { status: "done", video: { url: "https://vidgen.x.ai/out.mp4", respect_moderation: true } },
-      result: undefined,
       url: "https://vidgen.x.ai/out.mp4",
-    },
-    {
-      model: Fal.configure({ apiKey: "test", baseURL: "https://queue.fal.test" }).video("fal-ai/veo3.1"),
-      submitted: {
-        request_id: "r1",
-        status_url: falURLs.status,
-        response_url: falURLs.response,
-        cancel_url: falURLs.cancel,
-      },
-      token: { requestID: "r1", statusURL: falURLs.status, responseURL: falURLs.response, cancelURL: falURLs.cancel },
-      submitURL: "https://queue.fal.test/fal-ai/veo3.1",
-      statusURL: falURLs.status,
-      resultURL: falURLs.response,
-      running: { status: "IN_PROGRESS" },
-      done: { status: "COMPLETED" },
-      result: { video: { url: "https://v3.fal.media/out.mp4" } },
-      url: "https://v3.fal.media/out.mp4",
     },
   ]) {
     it.effect(`resumes a ${queued.model.provider} generation from a JSON round-tripped token`, () =>
@@ -1216,7 +995,6 @@ describe("Video / queued result", () => {
               Effect.gen(function* () {
                 const { call, nth } = yield* observe(calls, input)
                 if (call.method === "POST") return json(input, queued.submitted)
-                if (call.url === queued.resultURL && queued.result !== undefined) return json(input, queued.result)
                 return json(input, nth === 1 ? queued.running : queued.done)
               }),
             ),
