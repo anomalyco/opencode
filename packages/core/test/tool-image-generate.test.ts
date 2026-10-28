@@ -119,7 +119,7 @@ describe("image_generate", () => {
       const { run, directory, session } = yield* setup()
       yield* Effect.promise(() => fs.writeFile(path.join(directory, "in.png"), Buffer.from(PNG, "base64")))
 
-      const result = yield* run({ prompt: "make it blue", images: ["in.png"], aspect: "16:9", path: "out.png" })
+      const result = yield* run({ prompt: "make it blue", images: ["in.png"], path: "out.png" })
       const file = path.join(directory, "out.png")
       expect(result.output).toEqual({ path: file, model: "test/painter", width: 1, height: 1 })
       expect(result.content?.[0]).toEqual({
@@ -134,7 +134,6 @@ describe("image_generate", () => {
           prompt: "make it blue",
           n: 1,
           images: [{ data: PNG, mime: "image/png", name: "in.png" }],
-          aspect: "16:9",
         },
       ])
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([

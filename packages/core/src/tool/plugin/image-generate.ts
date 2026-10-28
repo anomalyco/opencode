@@ -31,7 +31,7 @@ const EXTENSIONS: Record<string, string> = {
 const PREFERRED_FAMILIES = ["gpt-image", "gemini-flash", "gemini-pro", "grok", "flux"]
 
 export const description =
-  'Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default; to choose one, find image models with the models tool and type: "image". The result is saved as a PNG and shown to you; mention its path to the user. Each call costs money, so don\'t regenerate unless asked or the result is clearly wrong.'
+  'Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default; to choose one, find image models with the models tool and type: "image". The result is saved as an image file and shown to you; mention its path to the user. Each call costs money, so don\'t regenerate unless asked or the result is clearly wrong.'
 
 export const Input = Schema.Struct({
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -44,21 +44,13 @@ export const Input = Schema.Struct({
     description:
       "Images to edit or use as references, in order. Local file paths (relative to the session directory or absolute) or https URLs. Omit to create a new image.",
   }),
-  aspect: Schema.optionalKey(Schema.Literals(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"])).annotate({
-    description:
-      "Shape of the image. 1:1 for icons and avatars, 16:9 for banners and screenshots, 9:16 for phone screens, 3:2 or 2:3 for photos. Defaults to the model's choice.",
-  }),
-  resolution: Schema.optionalKey(Schema.Literals(["1K", "2K"])).annotate({
-    description:
-      "Size tier. 1K is about 1024x1024 pixels. Use 2K only when small text or fine detail matters; it is slower and costs more. Defaults to the model's choice.",
-  }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
       'NEVER set this unless the user asks for a particular image model. Written as "providerID/modelID". Do not guess the ID: look it up with the models tool using type: "image".',
   }),
   path: Schema.optionalKey(Schema.String).annotate({
     description:
-      "Where to save the PNG, relative to the session directory or absolute. Never overwrites. Defaults to a new file in the session's temp folder.",
+      "Where to save the image, relative to the session directory or absolute. Never overwrites. Defaults to a new file in the session's temp folder.",
   }),
 })
 
@@ -238,8 +230,6 @@ export const Plugin = {
                   prompt: input.prompt,
                   n: 1,
                   ...(images ? { images } : {}),
-                  ...(input.aspect ? { aspect: input.aspect } : {}),
-                  ...(input.resolution ? { resolution: input.resolution } : {}),
                 })
                 .pipe(
                   Effect.mapError(
