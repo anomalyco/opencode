@@ -198,7 +198,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "experimental.session.import",
           summary: "Import session",
           description:
-            "Import a projected session transcript at the requested location. Accepts V2 session exports only; OpenCode 1 export files are not supported. If parentID is supplied, the parent session must already exist; import parents before children.",
+            "Import a projected session transcript at the requested location. Accepts transcripts exported by OpenCode 2 releases, including earlier versions; OpenCode 1 export files are not supported. If parentID is supplied, the parent session must already exist; import parents before children.",
         }),
       ),
     )
