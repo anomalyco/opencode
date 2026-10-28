@@ -390,7 +390,7 @@ const makeTransport = <Request extends MediaRequest>(
     }),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, http: HttpOptions | undefined, execute: Execute) => {
-      // Provider-issued absolute URLs (fal `status_url`) are used as-is; everything else resolves against the base.
+      // Provider-issued absolute URLs are used as-is; everything else resolves against the base.
       const url = withQuery(/^https?:\/\//.test(path) ? new URL(path) : baseURL(path), http?.query)
       for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
       return send({ method, url, headers: Headers.fromInput(http?.headers), request: { http } }, execute)
