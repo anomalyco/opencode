@@ -943,11 +943,17 @@ describe("V1Migration database workflow", () => {
 
   test("commits event cleanup batches and resumes after reopening a failed migration", async () => {
     await using tmp = await tmpdir()
-    const boot = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service>) =>
+    const boot = <A, E>(
+      effect: Effect.Effect<A, E, Database.Service | Global.Service | Project.Service | FSUtil.Service>,
+    ) =>
       Effect.runPromise(
         effect.pipe(
-          Effect.provide(Database.layer({ path: path.join(tmp.path, "opencode.db") })),
-          Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
+              Database.node.replace(Database.configured({ path: path.join(tmp.path, "opencode.db") })),
+              Global.node.replace(Layer.succeed(Global.Service, Global.make({ data: tmp.path }))),
+            ]),
+          ),
           Effect.scoped,
         ),
       )
