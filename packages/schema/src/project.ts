@@ -59,4 +59,5 @@ export const UpdateInput = Schema.Struct({
 export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}
 
 const Updated = ephemeral({ type: "project.updated", schema: Info.fields })
-export const Event = { Updated, Definitions: inventory(Updated) }
+const Removed = ephemeral({ type: "project.removed", schema: { projectID: ID } })
+export const Event = { Updated, Removed, Definitions: inventory(Updated, Removed) }

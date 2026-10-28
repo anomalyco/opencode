@@ -248,6 +248,12 @@ export type SessionRemoveInput = { readonly sessionID: Session.ID }
 export type SessionRemoveOutput = void
 export type SessionRemoveOperation<E = never> = (input: SessionRemoveInput) => Effect.Effect<SessionRemoveOutput, E>
 
+export type SessionRemoveProjectInput = { readonly projectID: Project.ID }
+export type SessionRemoveProjectOutput = void
+export type SessionRemoveProjectOperation<E = never> = (
+  input: SessionRemoveProjectInput,
+) => Effect.Effect<SessionRemoveProjectOutput, E>
+
 export type SessionForkInput = { readonly sessionID: Session.ID; readonly before?: SessionMessage.ID | undefined }
 export type SessionForkOutput = Session.Info
 export type SessionForkOperation<E = never> = (input: SessionForkInput) => Effect.Effect<SessionForkOutput, E>
@@ -1332,6 +1338,7 @@ export interface SessionApi<E = never> {
   readonly active: SessionActiveOperation<E>
   readonly get: SessionGetOperation<E>
   readonly remove: SessionRemoveOperation<E>
+  readonly removeProject: SessionRemoveProjectOperation<E>
   readonly fork: SessionForkOperation<E>
   readonly switchAgent: SessionSwitchAgentOperation<E>
   readonly switchModel: SessionSwitchModelOperation<E>
@@ -1769,9 +1776,14 @@ export type ProjectUpdateInput = {
 export type ProjectUpdateOutput = Project.Info
 export type ProjectUpdateOperation<E = never> = (input: ProjectUpdateInput) => Effect.Effect<ProjectUpdateOutput, E>
 
+export type ProjectRemoveInput = { readonly projectID: Project.ID }
+export type ProjectRemoveOutput = void
+export type ProjectRemoveOperation<E = never> = (input: ProjectRemoveInput) => Effect.Effect<ProjectRemoveOutput, E>
+
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
   readonly update: ProjectUpdateOperation<E>
+  readonly remove: ProjectRemoveOperation<E>
 }
 
 export type FormListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -1994,6 +2006,7 @@ export type EventSubscribeInput = {
         | "permission.replied"
         | "plugin.updated"
         | "project.updated"
+        | "project.removed"
         | "worktree.updated"
         | "worktree.resolved"
         | "command.updated"

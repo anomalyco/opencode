@@ -704,6 +704,15 @@ export function createData(config: CreateDataInput) {
       case "project.updated":
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
+      case "project.removed":
+        setStore(
+          "project",
+          produce((draft) => {
+            delete draft.info[event.data.projectID]
+          }),
+        )
+        sync.invalidate("project")
+        return
       case "session.created":
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)

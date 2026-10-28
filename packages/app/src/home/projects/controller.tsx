@@ -10,6 +10,8 @@ import { errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Button } from "@opencode/ui/button"
 import { createResource } from "solid-js"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -163,6 +165,45 @@ export function createHomeProjectsController(home: HomeController) {
         choose(conn)
       },
       hide: (conn: ServerConnection.Any, project: LocalProject) => home.server.context(conn).projects.hide(project),
+      remove: (conn: ServerConnection.Any, project: LocalProject) => {
+        const name = project.name ?? project.worktree
+
+        dialog.show(() => (
+          <Dialog fit>
+            <DialogHeader hideClose>
+              <DialogTitleGroup
+                title={language.t("dialog.project.delete.title")}
+                description={language.t("dialog.project.delete.confirm", { name })}
+              />
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+                {language.t("common.cancel")}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  dialog.close()
+                  void home
+                    .server
+                    .context(conn)
+                    .sdk.api.project.remove({ projectID: project.id! })
+                    .then(() => home.server.context(conn).projects.hide(project))
+                    .catch((cause: unknown) =>
+                      showToast({
+                        variant: "error",
+                        title: language.t("toast.project.delete.failed.title"),
+                        description: errorMessage(cause, language.t("toast.project.delete.failed.title")),
+                      }),
+                    )
+                }}
+              >
+                {language.t("dialog.project.delete.button")}
+              </Button>
+            </DialogFooter>
+          </Dialog>
+        ))
+      },
       canReveal: revealProject.available,
       reveal: revealProject.reveal,
     },

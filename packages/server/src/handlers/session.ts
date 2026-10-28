@@ -190,6 +190,13 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.removeProject",
+        Effect.fn(function* (ctx) {
+          yield* session.removeProject(ctx.payload.projectID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.environment",
         Effect.fn(function* (ctx) {
           yield* session

@@ -33,6 +33,8 @@ import type {
   SessionGetOutput,
   SessionRemoveInput,
   SessionRemoveOutput,
+  SessionRemoveProjectInput,
+  SessionRemoveProjectOutput,
   SessionForkInput,
   SessionForkOutput,
   SessionSwitchAgentInput,
@@ -173,6 +175,8 @@ import type {
   ProjectListOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
+  ProjectRemoveInput,
+  ProjectRemoveOutput,
   FormListInput,
   FormListOutput,
   PermissionRequestListInput,
@@ -684,6 +688,18 @@ export function make(options: ClientOptions) {
           {
             method: "DELETE",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      removeProject: (input: SessionRemoveProjectInput, requestOptions?: RequestOptions) =>
+        request<SessionRemoveProjectOutput>(
+          {
+            method: "POST",
+            path: `/api/session/remove-project`,
+            body: { projectID: input["projectID"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -1613,6 +1629,17 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,
+          },
+          requestOptions,
+        ),
+      remove: (input: ProjectRemoveInput, requestOptions?: RequestOptions) =>
+        request<ProjectRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/project/${encodeURIComponent(input.projectID)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
           },
           requestOptions,
         ),
