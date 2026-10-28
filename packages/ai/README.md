@@ -707,11 +707,6 @@ table before swapping only the `model`:
 | Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
 | Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
 | MiniMax               | ✓   | preset or w × h⁴     | preset or w × h⁴      | 1 (portrait subject)             | `aspect_ratio`, `width`, `height`, `seed`          |
-| Black Forest Labs     | 1   | per model            | width × height models | per model (1–8)                  | `width`, `height`, `seed`, `output_format`, `mask` |
-| fal                   | ✓   | per model            | per model             | 1 (several on `/edit`, `/multi`) | `image_size`, `seed`, `output_format`, `mask`      |
-| Replicate             | ✗   | ✗                    | ✗                     | ✗ (use `providerOptions`)        | everything                                         |
-| Stability `image`     | 1   | ✓                    | ✗                     | 1 (not on `core`)                | `seed`, `output_format`                            |
-| Stability `upscale()` | ✗   | ✗                    | ✗                     | exactly 1 (required)             | `seed`, `output_format`                            |
 | Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
 | Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
 
@@ -756,7 +751,7 @@ returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design
 image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images` uses text-to-image generation; a
 non-empty array selects the provider's edit behavior (see the table above for routes that limit the count). OpenAI
 uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. Inpainting is a
-provider option on the routes that support it (OpenAI, fal, and BFL `flux-pro-1.0-fill`):
+provider option on the routes that support it (OpenAI):
 
 ```ts
 const inpainted = Image.generate({
@@ -890,49 +885,6 @@ const previews = Image.stream({
 
 The provider may send fewer previews than requested when the final image is ready first.
 
-### Queued image providers
-
-Black Forest Labs, fal, Replicate, and Stability's creative upscaler are submit-then-poll routes. `Image.generate`
-and `Image.stream` poll for you (pass `{ poll }` to tune the interval and timeout); `Image.start` returns a
-`Generation` whose `token` is serializable JSON for `Image.resume` in another process:
-
-```ts
-import { BlackForestLabs, Stability } from "@opencode/ai/providers"
-
-const bfl = BlackForestLabs.configure({ apiKey: process.env.BFL_API_KEY })
-
-const submit = Effect.gen(function* () {
-  const generation = yield* Image.start({ model: bfl.image("flux-2-pro"), prompt, aspect: "4:3" })
-  persist({ provider: "black-forest-labs", modelID: "flux-2-pro", token: generation.token })
-})
-
-const finish = Effect.gen(function* () {
-  const saved = load()
-  const resumed = yield* Image.resume(bfl.image(saved.modelID), saved.token)
-  return yield* resumed.await({ poll: { interval: "2 seconds" } })
-})
-```
-
-The token carries no route identity, so persist the provider and model ID alongside it: `resume` needs the model.
-
-- **Black Forest Labs** — results are downloaded before returning, because `result.sample` expires in 10 minutes.
-- **Replicate** — inputs are model-defined, so only `prompt` lowers: sizing, count, seed, format, and files go in
-  `providerOptions` under the model's names, with files as `Media.Asset` (data URLs up to 256 KB, larger by URL).
-  Outputs are removed an hour after the prediction completes. `Prefer: wait=60` in `headers` or `http.headers` holds
-  the submission open so a fast prediction costs one result read.
-- **Stability** — `stability.image(id)` generates inline; `stability.upscale()` is the creative upscaler, queued:
-
-```ts
-const stability = Stability.configure({ apiKey: process.env.STABILITY_API_KEY })
-const upscaled = Effect.gen(function* () {
-  const small = yield* Media.file("./small.png")
-  return yield* Image.generate(
-    { model: stability.upscale(), prompt: "A lighthouse", images: [small] },
-    { poll: { interval: "5 seconds" } },
-  )
-})
-```
-
 Imagen is not available: Google shut it down on the Gemini API, and Vertex discontinued the Imagen 4 models on
 2026-06-30. `Google.image(...)` uses Gemini-native image models.
 
@@ -957,7 +909,7 @@ The hosted result is represented as a provider-executed tool call and a tool res
 ## Video generation
 
 Video mirrors `Image` with one difference: every provider is asynchronous, so the route is a submit-then-poll
-`Generation`. Models come from `.video(...)` selectors on the `Google` (Veo), `XAI`, `Fal`, and `Runway` facades.
+`Generation`. Models come from `.video(...)` selectors on the `Google` (Veo), `XAI`, and `Runway` facades.
 Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`, `resolution`, `audio`, `n`, `seed`,
 `negativePrompt`) lower natively or fail with a typed `AIError` before any network call; provider-native controls live
 under `providerOptions`, inferred from the selected model.
@@ -992,7 +944,7 @@ const controlled = Effect.gen(function* () {
   const generation = yield* Video.start({ model: google.video("veo-3.1-generate-preview"), prompt })
   generation.id // provider operation / task / request id
   generation.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
-  generation.token // route-owned JSON: `{ operation }`, `{ requestID }`, `{ taskID }`, or fal's follow-up URLs
+  generation.token // route-owned JSON: `{ operation }`, `{ requestID }`, or `{ taskID }`
   // The token carries no route identity: persist the provider and model ID alongside it, since `resume` needs the model.
   const saved = JSON.stringify(generation.token)
 
@@ -1022,9 +974,6 @@ Provider notes:
   download, which the returned asset holds transiently (see above).
 - **xAI** sends a `video` input to `/videos/edits`, or `/videos/extensions` with `providerOptions.mode: "extend"`.
   `seed` and `negativePrompt` are not supported.
-- **fal** endpoints are model-specific: `durationSeconds`, `references`, and `frames.last` fail typed and belong in
-  `providerOptions` under the model's own names (`duration: "8s"`, `end_image_url`, …). Auth is
-  `Authorization: Key <FAL_KEY>`.
 - **Runway** expects pixel ratios in `aspect` for most models (`"1280:720"`), pins `X-Runway-Version`, reports
   `usage: { type: "credits" }`, and its output URLs expire after 24–48 hours.
 

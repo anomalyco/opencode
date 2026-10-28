@@ -7,7 +7,7 @@ import { HttpClientRequest } from "effect/http"
 import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/effect.js"
 import { RequestExecutor } from "../src/route.js"
 import { AI } from "../src/index.js"
-import { AssemblyAI, OpenAI, Replicate, Runway } from "../src/providers.js"
+import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
@@ -50,13 +50,6 @@ const executor = (seen: Array<string>) =>
               : input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }], output_format: "png" }), {
                   headers: { "content-type": "application/json" },
                 })
-          if (web.url.startsWith("https://replicate.test"))
-            return json(input, {
-              id: "p_1",
-              status: "succeeded",
-              output: "https://replicate.test/a.webp",
-              urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
-            })
           if (web.url.startsWith("https://slow.test"))
             return input.respond(
               new ReadableStream({
@@ -173,11 +166,6 @@ describe("AI promise client", () => {
       "https://openai.test/v1/images/generations",
     ])
 
-    const generation = await ai.image.start({
-      model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
-      prompt: "A lighthouse",
-    })
-    expect((await generation.await()).image.source).toMatchObject({ url: "https://replicate.test/a.webp" })
     await ai.dispose()
   })
 

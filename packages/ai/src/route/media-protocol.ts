@@ -91,19 +91,17 @@ export interface Started<Token> {
 
 /**
  * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download (Veo). `materialize` downloads an output through the
- * route's executor, for URLs that expire too soon to hand back (BFL).
+ * to output URLs that require the same credentials to download (Veo).
  */
 export interface PollContext<Token> {
   readonly token: Token
   readonly auth: Record<string, string>
-  readonly materialize: (asset: Media.Asset) => Effect.Effect<Media.Asset, AIError>
 }
 
 /**
  * Submit, then poll. `start` posts the body to the route endpoint; `status`, `result`, and `cancel` are follow-up
  * calls addressed by the token. Paths are relative to the route base URL unless the provider hands back absolute
- * URLs (fal `status_url`), in which case they are used verbatim. `result` is always its own GET: providers that
+ * URLs, in which case they are used verbatim. `result` is always its own GET: providers that
  * return the output inside the status body (Veo, xAI, Runway) point `result.path` at the status path and decode the
  * same document, so `Generation.await` and `Video.resume(...).await()` behave identically everywhere.
  */

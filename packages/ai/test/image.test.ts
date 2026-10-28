@@ -3,13 +3,9 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { Image, ImageClient, Media } from "../src/effect.js"
 import {
-  BlackForestLabs,
-  Fal,
   Google,
   OpenAI,
   OpenAICompatible,
-  Replicate,
-  Stability,
   VercelAIGateway,
   XAI,
   ZAI,
@@ -912,233 +908,21 @@ describe("Image", () => {
   it.effect("rejects what a route cannot honor before sending anything", () =>
     Effect.gen(function* () {
       const openai = OpenAI.configure({ apiKey: "test" })
-      const replicate = Replicate.configure({ apiKey: "test" }).image("black-forest-labs/flux-schnell")
       const prompt = "A lighthouse"
       const errors = yield* Effect.all(
         [
           Image.start({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt }),
           Image.generate({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt, n: 2 }),
-          Image.start({
-            model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
-            prompt,
-            resolution: "4K",
-          }),
-          Image.start({
-            model: Fal.configure({ apiKey: "test" }).image("fal-ai/flux-pro/kontext"),
-            prompt,
-            resolution: "2K",
-          }),
           Stream.runCollect(Image.stream({ model: openai.image("gpt-image-2"), prompt, n: 2 })),
-          Image.start({ model: replicate, prompt, aspect: "1:1" }),
-          Image.start({
-            model: replicate,
-            prompt,
-            providerOptions: { image: Media.bytes(new Uint8Array(300 * 1024), "image/png") },
-          }),
-          Image.start({ model: Stability.configure({ apiKey: "test" }).upscale(), prompt }),
         ].map((effect) => Effect.flip(effect)),
       )
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
         [
           ["UnsupportedOperation", "image.start"],
           ["UnsupportedOperation", "media.n"],
-          ["UnsupportedOperation", "media.resolution"],
-          ["UnsupportedOperation", "media.resolution"],
           ["UnsupportedOperation", "media.n"],
-          ["UnsupportedOperation", "media.aspect"],
-          ["InvalidRequest", false],
-          ["InvalidRequest", false],
         ],
       )
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
-  )
-
-  const falToken = {
-    requestID: "r1",
-    statusURL: "https://queue.fal.test/fal-ai/flux/requests/r1/status",
-    responseURL: "https://queue.fal.test/fal-ai/flux/requests/r1",
-    cancelURL: "https://queue.fal.test/fal-ai/flux/requests/r1/cancel",
-  }
-  const falSubmitted = {
-    request_id: falToken.requestID,
-    status_url: falToken.statusURL,
-    response_url: falToken.responseURL,
-    cancel_url: falToken.cancelURL,
-  }
-  const bodies: Array<unknown> = []
-  it.effect("sizes fal Kontext by aspect ratio and sends several images to /multi", () =>
-    Effect.gen(function* () {
-      const fal = Fal.configure({ apiKey: "test", baseURL: "https://queue.fal.test" })
-      const images = [Media.url("https://example.test/a.png"), Media.url("https://example.test/b.png")]
-      const rejected = yield* Image.start({
-        model: fal.image("fal-ai/flux-pro/kontext"),
-        prompt: "A lighthouse",
-        resolution: "2K",
-      }).pipe(Effect.flip)
-      yield* Image.start({
-        model: fal.image("fal-ai/flux-pro/kontext"),
-        prompt: "A lighthouse",
-        images: images.slice(0, 1),
-        aspect: "16:9",
-      })
-      yield* Image.start({
-        model: fal.image("fal-ai/flux-pro/kontext/max/multi"),
-        prompt: "A lighthouse",
-        images,
-        providerOptions: { sync_mode: false },
-      })
-
-      expect(rejected.reason).toMatchObject({ _tag: "UnsupportedOperation", operation: "media.resolution" })
-      expect(bodies).toEqual([
-        { prompt: "A lighthouse", aspect_ratio: "16:9", image_url: "https://example.test/a.png", sync_mode: true },
-        {
-          prompt: "A lighthouse",
-          image_urls: ["https://example.test/a.png", "https://example.test/b.png"],
-          sync_mode: false,
-        },
-      ])
-    }).pipe(
-      Effect.provide(
-        layer((input) => {
-          bodies.push(JSON.parse(input.text))
-          return Effect.succeed(json(input, falSubmitted))
-        }),
-      ),
-    ),
-  )
-
-  it.effect("decodes fal sync_mode data URIs as inline images", () =>
-    Effect.gen(function* () {
-      const generation = yield* Image.resume(Fal.configure({ apiKey: "test" }).image("fal-ai/flux/schnell"), falToken)
-      const response = yield* generation.await()
-
-      expect(response.images.map((image) => image.source)).toEqual([
-        { type: "base64", data: "AQID", mediaType: "image/png" },
-        { type: "url", url: "https://v3.fal.media/out.jpg", mediaType: "image/jpeg" },
-      ])
-      expect(response.image.info).toEqual({ width: 512, height: 512 })
-      expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
-    }).pipe(
-      Effect.provide(
-        layer((input) =>
-          Effect.succeed(
-            input.request.url === falToken.statusURL
-              ? json(input, { status: "COMPLETED" })
-              : json(input, {
-                  images: [
-                    { url: "data:image/png;base64,AQID", width: 512, height: 512, content_type: "image/png" },
-                    { url: "https://v3.fal.media/out.jpg", width: 512, height: 512, content_type: "image/jpeg" },
-                  ],
-                }),
-          ),
-        ),
-      ),
-    ),
-  )
-
-  const falDetail = { detail: [{ loc: ["body", "prompt"], msg: "Invalid input", type: "value_error" }] }
-  it.effect(
-    "fails a fal await whose COMPLETED status carries an error with the response_url body and HTTP context",
-    () =>
-      Effect.gen(function* () {
-        const generation = yield* Image.resume(Fal.configure({ apiKey: "test" }).image("fal-ai/flux/schnell"), falToken)
-        expect(generation.status).toBe("failed")
-        const error = yield* generation.await().pipe(Effect.flip)
-        expect(error.reason._tag).toBe("InvalidRequest")
-        expect(error.reason.body).toBe(JSON.stringify(falDetail))
-        expect(error.reason.http).toMatchObject({ url: falToken.responseURL, status: 422 })
-      }).pipe(
-        Effect.provide(
-          layer((input) =>
-            Effect.succeed(
-              input.request.url === falToken.statusURL
-                ? json(input, { status: "COMPLETED", error: "Invalid input", error_type: "ValidationError" })
-                : json(input, falDetail, { status: 422 }),
-            ),
-          ),
-        ),
-      ),
-  )
-
-  const moderated = { id: "req_1", status: "Content Moderated" }
-  const prediction = {
-    id: "p_1",
-    status: "succeeded",
-    output: { text: "not an image" },
-    urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
-  }
-  for (const pending of [
-    {
-      model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
-      token: { id: "req_1", pollingURL: "https://bfl.test/v1/get_result?id=req_1" },
-      status: 200,
-      body: { id: "req_1", status: "Pending" },
-      message: "Black Forest Labs generation req_1",
-    },
-    {
-      model: Replicate.configure({ apiKey: "test" }).image("owner/model"),
-      token: { id: "p_1", getURL: "https://replicate.test/p_1", cancelURL: "https://replicate.test/p_1/cancel" },
-      status: 200,
-      body: {
-        id: "p_1",
-        status: "processing",
-        urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
-      },
-      message: "Replicate generation p_1",
-    },
-    {
-      model: Stability.configure({ apiKey: "test", baseURL: "https://stability.test" }).upscale(),
-      token: { id: "up_1" },
-      status: 202,
-      body: { id: "up_1", status: "in-progress" },
-      message: "Stability AI generation up_1",
-    },
-  ]) {
-    it.effect(`rejects reading a ${pending.model.provider} result before the generation finishes`, () =>
-      Effect.gen(function* () {
-        const generation = yield* Image.resume(pending.model, pending.token)
-        const error = yield* generation.result().pipe(Effect.flip)
-        expect(error.reason._tag).toBe("InvalidRequest")
-        expect(error.message).toBe(`${pending.message} has not finished; await it before reading the result`)
-        expect(error.reason.body).toBe(JSON.stringify(pending.body))
-        expect(error.reason.http?.status).toBe(pending.status)
-      }).pipe(
-        Effect.provide(
-          layer((input) =>
-            Effect.succeed(
-              input.respond(JSON.stringify(pending.body), {
-                status: pending.status,
-                headers: { "content-type": "application/json" },
-              }),
-            ),
-          ),
-        ),
-      ),
-    )
-  }
-
-  it.effect("classifies terminal outcomes the recordings never saw", () =>
-    Effect.gen(function* () {
-      const bfl = yield* Image.resume(BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"), {
-        id: "req_1",
-        pollingURL: "https://bfl.test/v1/get_result?id=req_1",
-      }).pipe(
-        Effect.flatMap((generation) => generation.await()),
-        Effect.flip,
-      )
-      const replicate = yield* Image.generate({
-        model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
-        prompt: "A lighthouse",
-      }).pipe(Effect.flip)
-
-      expect(bfl.reason).toMatchObject({ _tag: "ContentPolicy", body: JSON.stringify(moderated) })
-      expect(replicate.reason).toMatchObject({ _tag: "InvalidProviderOutput", body: JSON.stringify(prediction) })
-    }).pipe(
-      Effect.provide(
-        layer((input) =>
-          Effect.succeed(json(input, input.request.url.startsWith("https://bfl.test") ? moderated : prediction)),
-        ),
-      ),
-    ),
   )
 })
