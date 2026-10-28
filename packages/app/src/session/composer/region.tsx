@@ -463,7 +463,7 @@ export function ActiveSessionComposerRegion(props: {
 
     if (item.sessionID) return openRoute(current, item.sessionID)
 
-    // Shells and starting subagent calls live in this timeline.
+    // A starting subagent call has no session yet, so it lives in this timeline.
     props.onReveal(item.target)
   }
 
