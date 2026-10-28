@@ -915,8 +915,30 @@ test("lists slash commands in their built-in order", async ({ page }) => {
     "/mcp",
     "/model",
     "/connect",
+    "/reload",
     "/btw",
   ])
+})
+
+test("/reload reloads the server's configuration once and reports it", async ({ page }) => {
+  const { editor } = await openSession(page, { name: "ComposerReload", provider: NO_PROVIDER })
+  const reloaded = Promise.withResolvers<void>()
+  let reloads = 0
+  await page.route(/\/api\/location\/reload$/, async (route) => {
+    reloads++
+    await reloaded.promise
+    await route.fulfill({ status: 204 })
+  })
+
+  await editor.fill("/reload")
+  await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toBeVisible()
+  reloaded.resolve()
+  await expect(page.getByText("Configuration reloaded", { exact: true })).toBeVisible()
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()
+  await expect(editor).toBeEmpty()
+  expect(reloads).toBe(1)
 })
 
 const followUp = "Add follow-up, / for commands, @ for context…"
