@@ -51,7 +51,12 @@ export const ModelsInput = Schema.Struct({
     description: "Provider ID or name to filter by. Try your own provider first.",
   }),
   type: Schema.optionalKey(Schema.Literals(["chat", "image", "decision"])).annotate({
-    description: 'Kind of model to list: "chat" for language models (the default), "image" for image generation, or "decision".',
+    description: [
+      'Which kind of model to list. Defaults to "chat".',
+      '"chat": a language model (LLM). Powers sessions, agents and subagents, and can call tools.',
+      '"image": generates or edits images from a prompt. It can\'t chat or call tools.',
+      '"decision": a fast classifier, not an LLM. Given some input and a set of questions, it returns structured answers (a label, a score, or yes/no). It can\'t chat, call tools, or run a subagent.',
+    ].join("\n"),
   }),
   all: Schema.optionalKey(Schema.Boolean).annotate({
     description: "Include older versions of each model family. By default only the newest version is listed.",
@@ -222,7 +227,7 @@ export const Plugin = {
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference before running a subagent on it. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
