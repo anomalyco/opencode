@@ -76,6 +76,7 @@ story("treats the reachable end as the end under page zoom", async ({ page }) =>
   const controls = root.getByTestId("timeline-controls")
   await viewport.dispatchEvent("wheel", { deltaY: -1 })
   await expect(controls).toHaveAttribute("data-pinned", "false")
+
   for (const top of [40, Number.MAX_SAFE_INTEGER])
     await viewport.evaluate(
       (element, top) =>
