@@ -167,7 +167,10 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
       if (selected || layout.narrow())
         layout.open(`file:${selected ?? OPEN}`, session, { tab: "preview", background: options?.background })
-      else layout.open(`file:${OPEN}:${crypto.randomUUID()}`, session, { tab: "select" })
+      else
+        layout.open(`file:${OPEN}:${crypto.randomUUID?.() ?? Math.random().toString(16).slice(2)}`, session, {
+          tab: "select",
+        })
 
       if (!options?.background && layout.narrow() && !layout.side.opened(session)) layout.side.toggle(session)
     })

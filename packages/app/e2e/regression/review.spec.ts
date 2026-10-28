@@ -124,6 +124,21 @@ test("a rejected Git init releases its session's button without showing an error
   await expect(init).toBeEnabled()
 })
 
+test("opens the file picker when randomUUID is unavailable", async ({ page }) => {
+  await page.addInitScript(() => {
+    // SAFETY: a non-localhost HTTP origin exposes crypto but not crypto.randomUUID.
+    Object.defineProperty(globalThis.crypto, "randomUUID", { configurable: true, value: undefined })
+  })
+
+  await openSession(page, { name: "ReviewOpenFileInsecure" })
+  await page.getByRole("button", { name: "Toggle review" }).click()
+
+  const panel = page.locator("#review-panel")
+  await openFileLauncher(panel)
+  await expect(panel.getByRole("tab", { name: "Open file", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByRole("combobox", { name: "Filter files" })).toBeVisible()
+})
+
 test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
   const searches: { query: string; dirs?: string; limit?: number; directory: string }[] = []
   const directory = "C:/OpenCode/ReviewOpenFile"
