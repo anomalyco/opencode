@@ -503,6 +503,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
+      if (own(experimental, "subagent_concurrency")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.subagent_concurrency,
+          experimental.subagent_concurrency,
+          ["experimental", "subagent_concurrency"],
+          diagnostics,
+        )
+        if (value !== undefined) result.subagent_concurrency = value
+      }
       if (own(experimental, "location_idle_timeout")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.location_idle_timeout,

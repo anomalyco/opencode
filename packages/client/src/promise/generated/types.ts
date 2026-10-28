@@ -2426,6 +2426,7 @@ export type ConfigEntry =
           background_compaction?: boolean
           media_blob?: boolean
           subagent_depth?: number
+          subagent_concurrency?: number
           location_idle_timeout?: string | false
           policies?: Array<{
             action: "provider.use" | "tool.use" | "integration.use"
