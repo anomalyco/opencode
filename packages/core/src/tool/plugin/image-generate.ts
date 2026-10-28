@@ -35,7 +35,7 @@ const EXTENSIONS: Record<string, string> = {
 const PREFERRED_FAMILIES = ["gpt-image", "gemini-flash", "gemini-pro", "grok", "flux"]
 
 export const description =
-  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default. Runs in the background: the call returns right away and you are notified when the image is saved; then use the read tool on its path to view it, and mention the path to the user. Don't poll or wait for it. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
+  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default. Runs in the background: the call returns right away and you are notified automatically when the image is saved or fails. DO NOT sleep, poll, or check whether the file exists while it runs; continue with other work or end your response. After the notice, use the read tool on the path to view the image and mention the path to the user. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
 
 export const Input = Schema.Struct({
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -336,7 +336,12 @@ export const Plugin = {
               yield* notifyWhenDone(context.sessionID, job.id, requested)
               return {
                 output: { path: requested, model: ref },
-                content: `Image request started in the background with ${ref}. Output path: ${requested}. You will be notified when it finishes or fails. Do not poll; use the read tool on the path after completion.${resolved.note ?? ""}`,
+                content: [
+                  `Image request started in the background with ${ref}. It will be saved to: ${requested}${resolved.note ?? ""}`,
+                  "You will be notified automatically when it finishes or fails.",
+                  "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
+                  "Work on other tasks, or briefly tell the user what you started and end your response.",
+                ].join("\n"),
                 metadata: { path: requested, model: ref, jobID: job.id },
               }
             }).pipe(

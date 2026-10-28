@@ -229,7 +229,12 @@ describe("image_generate", () => {
       expect(result.content).toEqual([
         {
           type: "text",
-          text: `Image request started in the background with test/painter. Output path: ${file}. You will be notified when it finishes or fails. Do not poll; use the read tool on the path after completion.`,
+          text: [
+            `Image request started in the background with test/painter. It will be saved to: ${file}`,
+            "You will be notified automatically when it finishes or fails.",
+            "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
+            "Work on other tasks, or briefly tell the user what you started and end your response.",
+          ].join("\n"),
         },
       ])
       expect(yield* notice(result)).toBe(
