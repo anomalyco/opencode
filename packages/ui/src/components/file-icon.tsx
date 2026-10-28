@@ -1,6 +1,5 @@
 import type { Component, JSX } from "solid-js"
-import { createMemo, createUniqueId, splitProps, Show } from "solid-js"
-import sprite from "./file-icons/sprite.svg"
+import { createEffect, createMemo, createUniqueId, splitProps, Show } from "solid-js"
 import type { IconName } from "./file-icons/types"
 
 export type FileIconProps = JSX.GSVGAttributes<SVGSVGElement> & {
@@ -13,6 +12,7 @@ export const FileIcon: Component<FileIconProps> = (props) => {
   const [local, rest] = splitProps(props, ["node", "class", "classList", "expanded", "mono"])
   const name = createMemo(() => chooseIconName(local.node.path, local.node.type, local.expanded || false))
   const id = `file-icon-mono-${createUniqueId()}`
+  createEffect(() => loadSymbol(name()))
 
   return (
     <svg
@@ -23,16 +23,85 @@ export const FileIcon: Component<FileIconProps> = (props) => {
         [local.class ?? ""]: !!local.class,
       }}
     >
-      <Show when={local.mono} fallback={<use href={`${sprite}#${name()}`} />}>
+      <Show when={local.mono} fallback={<use href={`#${symbolID(name())}`} />}>
         <defs>
           <mask id={id} mask-type="alpha">
-            <use href={`${sprite}#${name()}`} />
+            <use href={`#${symbolID(name())}`} />
           </mask>
         </defs>
         <rect width="100%" height="100%" fill="currentColor" mask={`url(#${id})`} />
       </Show>
     </svg>
   )
+}
+
+// Chromium parses an external `<use href="sprite.svg#id">` target as a whole isolated SVG document, so the full
+// sprite cost several MB per copy. Each icon is instead a lazy chunk, copied once into a hidden in-document sprite.
+const spriteID = "file-icon-sprite"
+
+const symbolID = (name: IconName) => `file-icon-${name}`
+
+const requested = new Set<IconName>()
+
+let sources: Partial<Record<IconName, () => Promise<string>>> | undefined
+
+function loadSymbol(name: IconName) {
+  if (requested.has(name)) return
+  requested.add(name)
+  sources ??= Object.fromEntries(
+    Object.entries(
+      import.meta.glob<string>("../assets/icons/file-types/*.svg", { query: "?raw", import: "default" }),
+    ).map(([path, load]) => [toIconName(path), load]),
+  )
+  sources[name]?.()
+    .then((text) => insertSymbol(name, text))
+    .catch(() => requested.delete(name))
+}
+
+// Mirrors the file name to icon name rule of the spritesheet generator that writes `file-icons/types.ts`.
+function toIconName(path: string) {
+  return path
+    .slice(path.lastIndexOf("/") + 1, -".svg".length)
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join("")
+}
+
+function insertSymbol(name: IconName, text: string) {
+  const id = symbolID(name)
+  // Icons share the document now, so scope their internal ids (gradients, clip paths) and drop their unstyled
+  // classes, which app CSS such as Tailwind utilities would otherwise match.
+  const scoped = text
+    .replace(/\sclass="[^"]*"/g, "")
+    .replace(/\sid="([^"]*)"/g, ` id="${id}-$1"`)
+    .replace(/url\(#([^)]*)\)/g, `url(#${id}-$1)`)
+    .replace(/href="#([^"]*)"/g, `href="#${id}-$1"`)
+  const svg = new DOMParser().parseFromString(scoped, "image/svg+xml").documentElement
+  const symbol = document.createElementNS("http://www.w3.org/2000/svg", "symbol")
+  Array.from(svg.attributes)
+    .filter((attr) => !attr.name.startsWith("xmlns") && !["version", "width", "height"].includes(attr.name))
+    .forEach((attr) => symbol.setAttributeNS(attr.namespaceURI, attr.name, attr.value))
+  symbol.id = id
+  symbol.append(...Array.from(svg.childNodes, (node) => document.importNode(node, true)))
+  // Hot reload keeps the DOM sprite, so replace a symbol an older module inserted.
+  document.getElementById(id)?.remove()
+  sprite().append(symbol)
+}
+
+function sprite() {
+  const existing = document.getElementById(spriteID)
+
+  if (existing) return existing
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+  svg.id = spriteID
+  svg.setAttribute("aria-hidden", "true")
+  svg.setAttribute("width", "0")
+  svg.setAttribute("height", "0")
+  svg.style.position = "absolute"
+  svg.style.overflow = "hidden"
+  document.body.insertBefore(svg, document.body.firstChild)
+
+  return svg
 }
 
 type IconMaps = {

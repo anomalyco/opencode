@@ -20,6 +20,11 @@ export const experiments: Experiment[] = [
     title: "New designs",
     description: "Preview the new TUI designs",
   },
+  {
+    id: "client-mcp",
+    title: "TUI tools",
+    description: "Let the agent open terminals in this TUI (requires server support)",
+  },
 ]
 
 export function DialogExperiments() {

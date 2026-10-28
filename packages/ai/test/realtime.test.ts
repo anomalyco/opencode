@@ -107,7 +107,7 @@ describe("experimental Realtime", () => {
             if (req.url === "https://api.openai.com/v1/realtime/client_secrets") {
               expect(req.headers.get("authorization")).toBe("Bearer sk-openai")
               expect(JSON.parse(input.text)).toEqual({
-                expires_after: { seconds: 60 },
+                expires_after: { anchor: "created_at", seconds: 60 },
                 session: { type: "realtime", instructions: "Brief.", model: "gpt-realtime-2.1" },
               })
               return input.respond(JSON.stringify({ value: "ek_1", expires_at: 1760000060 }))
@@ -138,6 +138,9 @@ describe("experimental Realtime", () => {
   )
 
   test("routes bare and versioned model names to their engine", () => {
+    expect(Realtime.engines.map((item) => Realtime.engine(item.model)?.id)).toEqual(
+      Realtime.engines.map((item) => item.id),
+    )
     expect(
       [
         "gpt-realtime",

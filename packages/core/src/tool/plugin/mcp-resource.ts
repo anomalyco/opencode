@@ -1,10 +1,11 @@
 export * as McpResourceTools from "./mcp-resource.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Mcp } from "../../mcp/index.js"
 import { Permission } from "../../permission.js"
+import { ReadToolFileSystem } from "../read-filesystem.js"
 
 export const Plugin = {
   id: "opencode.tools.mcp-resources",
@@ -79,7 +80,9 @@ export const Plugin = {
               return {
                 output: resource,
                 content: resource.contents.flatMap((part) =>
-                  part.type === "blob" && (part.mimeType?.startsWith("image/") || part.mimeType === "application/pdf")
+                  part.type === "blob" &&
+                  part.mimeType !== undefined &&
+                  ReadToolFileSystem.MEDIA_MIMES.has(part.mimeType)
                     ? [{ type: "file" as const, uri: `data:${part.mimeType};base64,${part.blob}`, mime: part.mimeType }]
                     : [],
                 ),

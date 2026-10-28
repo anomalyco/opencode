@@ -192,7 +192,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(কোন উত্তর নেই)",
   "ui.question.review.notAnswered": "(উত্তর দেওয়া হয়নি)",
   "ui.question.multiHint": "প্রযোজ্য সমস্ত উত্তর নির্বাচন করুন",
-  "ui.question.singleHint": "একটি উত্তর নির্বাচন করুন",
   "ui.question.custom.placeholder": "আপনার উত্তর টাইপ করুন…",
   "ui.messagePart.context.match.one": "({{count}}টি মিল)",
   "ui.messagePart.context.match.other": "({{count}}টি মিল)",

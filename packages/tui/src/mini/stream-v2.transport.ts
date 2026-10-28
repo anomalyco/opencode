@@ -1298,7 +1298,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         id: event.data.id,
         name: current?.part.name ?? "tool",
         executed: event.data.executed,
-        providerState: event.data.state,
+        native: event.data.native,
         state: { status: "running", input: event.data.input, metadata: {} },
         time: { created: current?.part.time.created ?? event.created, ran: event.created },
       }
@@ -1315,7 +1315,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         id: event.data.id,
         name: part?.name ?? "tool",
         executed: part?.executed,
-        providerState: part?.providerState,
+        native: part?.native,
         state: {
           status: "running",
           input: part && part.state.status !== "streaming" ? part.state.input : {},
@@ -1334,8 +1334,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         id: event.data.id,
         name: part?.name ?? "tool",
         executed: event.data.executed,
-        providerState: part?.providerState,
-        providerResultState: event.data.resultState,
+        native: event.data.native ? { ...part?.native, ...event.data.native } : part?.native,
         state: failed
           ? {
               status: "error",

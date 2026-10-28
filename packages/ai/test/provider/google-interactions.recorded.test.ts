@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { LLM, LLMEvent, Message } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient, RequestExecutor } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"

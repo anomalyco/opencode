@@ -39,8 +39,8 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     (skill) => skill.id,
     (before, after) => before.name !== after.name || before.description !== after.description,
   )
-  // Additions and removals render as small deltas; anything else restates the full list.
-  if (diff.changed.length > 0 || (diff.added.length === 0 && diff.removed.length === 0))
+  // Added, changed, and removed skills render as deltas; the full list is restated only when no entry differs.
+  if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
     return [
       "The available skills have changed. This list supersedes the previous available skills list.",
       render(current),
@@ -49,6 +49,12 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
     ...(diff.added.length === 0
       ? []
       : ["New skills are available in addition to those previously listed:", ...entries(diff.added)]),
+    ...(diff.changed.length === 0
+      ? []
+      : [
+          "The following skills have changed. Each entry replaces the previously listed skill with the same ID:",
+          ...entries(diff.changed.map((change) => change.current)),
+        ]),
     ...(diff.removed.length === 0
       ? []
       : [

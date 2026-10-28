@@ -29,7 +29,6 @@ import { Reference } from "./reference.js"
 import { ServerEvent } from "./server-event.js"
 import { Shell } from "./shell.js"
 import { Skill } from "./skill.js"
-import { SessionCompactionEvent } from "./session-compaction-event.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionStatusEvent } from "./session-status-event.js"
 import { TuiEvent } from "./tui-event.js"
@@ -93,7 +92,6 @@ export const Definitions = Event.inventory(
   ...LegacyEventV1.Definitions,
   ...FileSystemV1.Event.Definitions,
   ...SessionStatusEvent.Definitions,
-  ...SessionCompactionEvent.Definitions,
   ...VcsEvent.Definitions,
   ...WorkspaceEvent.Definitions,
   ...WorktreeEvent.Definitions,

@@ -28,7 +28,7 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 
 ### 外部ディレクトリ
 
-`external_directory` を使用して、OpenCode が開始された作業ディレクトリの外部のパスに触れるツール呼び出しを許可します。これは、パスを入力として受け取るすべてのツール (`read`、`edit`、`glob`、`grep`、および多くの `shell` コマンドなど) に適用されます。
+`external_directory` を使用して、OpenCode が開始された作業ディレクトリの外部のパスに触れるツール呼び出しを許可します。これは、パスを入力として受け取るすべてのツール (`read`、`edit`、`glob`、`grep`、および多くの `bash` コマンドなど) に適用されます。
 
 ホーム展開 (`~/...` など) は、パターンの記述方法にのみ影響します。外部パスは現在のワークスペースの一部にはならないため、作業ディレクトリの外部のパスも `external_directory` 経由で許可する必要があります。
 
@@ -121,7 +121,7 @@ OpenCode は `permission` 設定を使用して、特定のアクションを自
 }
 ```
 
-信頼できるパスに重点を置いたリストを維持し、他のツール (`shell` など) の必要に応じて追加の許可または拒否ルールを追加します。
+信頼できるパスに重点を置いたリストを維持し、他のツール (`bash` など) の必要に応じて追加の許可または拒否ルールを追加します。
 
 ---
 
@@ -133,7 +133,7 @@ OpenCode の権限は、ツール名に加えて、いくつかの安全対策�
 - `edit` — すべてのファイル変更 (`edit`、`write`、`patch` をカバー)
 - `glob` — ファイルのグロビング (グロブパターンと一致)
 - `grep` — コンテンツ検索 (正規表現パターンと一致)
-- `shell` — シェルコマンドの実行 (`git status --porcelain` などの解析されたコマンドと一致します)
+- `bash` — シェルコマンドの実行 (`git status --porcelain` などの解析されたコマンドと一致します)
 - `task` — サブエージェントの起動 (サブエージェントのタイプと一致)
 - `skill` — スキルをロードしています（スキル名と一致します）
 - `lsp` — LSP クエリの実行 (現在は非細分性)
@@ -175,7 +175,7 @@ OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つ�
 - `always` — 提案されたパターンに一致する今後のリクエストを承認します（現在の OpenCode セッションの残りの部分）
 - `reject` — リクエストを拒否します
 
-`always` が承認するパターンのセットは、ツールによって提供されます (たとえば、shell の承認では通常、`git status*` のような安全なコマンドプレフィックスがホワイトリストに登録されます)。
+`always` が承認するパターンのセットは、ツールによって提供されます (たとえば、bash の承認では通常、`git status*` のような安全なコマンドプレフィックスがホワイトリストに登録されます)。
 
 ---
 
@@ -191,7 +191,7 @@ OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つ�
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つ�
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 
@@ -238,7 +238,7 @@ Only analyze code and suggest changes.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -249,7 +249,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -270,7 +270,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

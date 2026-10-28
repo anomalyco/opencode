@@ -198,7 +198,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(nav atbildes)",
   "ui.question.review.notAnswered": "(nav atbildēts)",
   "ui.question.multiHint": "Izvēlies visas atbilstošās atbildes",
-  "ui.question.singleHint": "Izvēlies vienu atbildi",
   "ui.question.custom.placeholder": "Ieraksti savu atbildi…",
   "ui.tool.loadedFile": "Ielādēts {{path}}",
   "ui.tool.loadedSkill": "Ielādēta prasme {{name}}",

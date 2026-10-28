@@ -49,7 +49,7 @@ function setup(rules: Permission.Ruleset = [], sessionID = Session.ID.make("ses_
         directory: "/project",
         title: "test",
         version: "test",
-        agent: "test",
+        agent: Agent.ID.make("test"),
       })
       .onConflictDoNothing()
       .run()
@@ -145,6 +145,17 @@ describe("Permission", () => {
       const blocked = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(blocked).toBeInstanceOf(Permission.BlockedError)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("checks for a deny without asking", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const service = yield* Permission.Service
+      yield* service.assertNotDenied(assertion())
+      expect(yield* service.list()).toEqual([])
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* service.assertNotDenied(assertion()).pipe(Effect.flip)).toBeInstanceOf(Permission.BlockedError)
     }),
   )
 

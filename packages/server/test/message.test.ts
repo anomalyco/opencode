@@ -24,7 +24,6 @@ const messages: SessionMessageInfo[] = [
     status: "completed",
     reason: "manual",
     summary: "Conversation summary",
-    recent: "",
     time: { created: 700 },
   },
   { id: "msg_x", type: "user", text: "Third request", time: { created: 600 } },

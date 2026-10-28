@@ -379,7 +379,7 @@ export const ProjectSettingsExtensions: Component<{
                 kind="skills"
                 empty={projectSkills().length === 0}
                 action={
-                  <ExternalLink class="settings-extension-link" href="https://opencode.ai/docs/skills/">
+                  <ExternalLink class="settings-extension-link" href="https://opencode.ai/v2/docs/skills">
                     {language.t("settings.extensions.addSkills")}
                   </ExternalLink>
                 }

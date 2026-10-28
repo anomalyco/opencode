@@ -1,6 +1,20 @@
-import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
+import {
+  DiffLineAnnotation,
+  FileContents,
+  FileDiffOptions,
+  registerCustomTheme,
+  type SelectedLineRange,
+} from "@pierre/diffs"
+import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
 import { ComponentProps } from "solid-js"
 import { lineCommentStyles } from "../components/line-comment-styles"
+import quoteHighlightStyles from "../components/quote-highlight.css?inline"
+
+// Pierre resolves themes on the main thread and hands them to its workers, so register before any viewer renders.
+registerCustomTheme(OpenCodeTheme.name, () => Promise.resolve(OpenCodeTheme), "zed")
+
+// Viewers and worker pools must agree: the pool's options win whenever it renders.
+export const highlightOptions = { theme: OpenCodeTheme.name, preferredHighlighter: "highlights" } as const
 
 export type DiffProps<T = {}> = FileDiffOptions<T, undefined> & {
   before: FileContents
@@ -55,12 +69,11 @@ const unsafeCSS = `
   /* Use explicit alpha instead of color-mix(..., transparent) to avoid Safari's non-premultiplied interpolation bugs. */
   --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--diffs-selection-base) r g b / 0.2));
   --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, var(--diffs-bg-selection));
-  --diffs-bg-selection-text: rgb(from var(--diffs-selection-base) r g b / 0.2);
 }
 
 [data-diff] ::selection,
 [data-file] ::selection {
-  background-color: var(--diffs-bg-selection-text);
+  background-color: var(--timeline-quote-background);
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
@@ -126,6 +139,13 @@ const unsafeCSS = `
 
 ::highlight(opencode-find) {
   background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+}
+
+[data-diff] ::highlight(timeline-quote-source),
+[data-file] ::highlight(timeline-quote-source),
+[data-diff] ::highlight(timeline-quote-source-active),
+[data-file] ::highlight(timeline-quote-source-active) {
+  background-color: var(--timeline-quote-background);
 }
 
 ::highlight(opencode-find-current) {
@@ -221,6 +241,11 @@ const unsafeCSS = `
   );
 }
 
+/* Pierre insets line numbers by 2ch to leave room for diff change bars; compact file viewers can tighten it. */
+[data-file]:not([data-disable-line-numbers]) :is([data-column-number], [data-gutter-buffer]) {
+  padding-left: var(--opencode-diffs-number-inset, 2ch);
+}
+
 [data-diff-header],
 [data-diff],
 [data-file] {
@@ -245,12 +270,13 @@ const unsafeCSS = `
 }
 
 ${lineCommentStyles}
+${quoteHighlightStyles}
 
 `
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T, undefined>["diffStyle"]) {
   return {
-    theme: "OpenCode",
+    ...highlightOptions,
     themeType: "system",
     disableLineNumbers: false,
     overflow: "wrap",

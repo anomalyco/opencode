@@ -9,7 +9,7 @@ import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 export const id = ProviderID.make("deepinfra")
 const baseURL = "https://api.deepinfra.com/v1/openai"
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
@@ -32,7 +32,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const root = endpoint?.replace(/\/+$/, "")
   const configured = route.with({
@@ -50,7 +50,6 @@ export const configure = (input: LanguageModelOptions = {}) => {
         compatibility: {
           maxTokensField: "max_tokens",
           reasoningField: "reasoning_content",
-          supportsStore: false,
           supportsPromptCacheKey: true,
         },
       }),
@@ -60,9 +59,9 @@ export const configure = (input: LanguageModelOptions = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
+  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
   configure({
     apiKey,

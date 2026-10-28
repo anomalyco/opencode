@@ -1,5 +1,6 @@
 import { Resource } from "@opencode/console-resource"
 
+export const ENTERPRISE_SPAM_URL = "https://opencode.ai/inference/systemone/v1/systemone"
 export const ENTERPRISE_SPAM_MODEL = "jev-1.13"
 // Drop only submissions Jev is confident about; anything less reaches sales as before.
 export const ENTERPRISE_SPAM_THRESHOLD = 0.9
@@ -22,20 +23,13 @@ export async function enterpriseSpamProbability(
   input: { name: string; role: string; company?: string; email: string; message: string },
   options: {
     fetch?: (request: Request) => Promise<Response>
-    inferenceUrl?: string
     apiKey?: string
     timeoutMs?: number
   } = {},
 ): Promise<number | undefined> {
   try {
-    // Preview stages have no inference URL; skip scoring quietly instead of logging every submission.
-    const inferenceUrl = options.inferenceUrl ?? Resource.ConsoleMigration.inferenceUrl
-    if (!inferenceUrl) return undefined
-    const url = new URL(inferenceUrl)
-    url.pathname = `${url.pathname.replace(/\/$/, "")}/systemone/v1/systemone`
-    const send = options.fetch ?? ((request: Request) => (Resource.INFERENCE as { fetch: typeof fetch }).fetch(request))
-    const response = await send(
-      new Request(url, {
+    const response = await (options.fetch ?? fetch)(
+      new Request(ENTERPRISE_SPAM_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${options.apiKey ?? Resource.ENTERPRISE_SPAM_API_KEY.value}`,

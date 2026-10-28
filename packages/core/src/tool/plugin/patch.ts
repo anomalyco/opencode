@@ -2,7 +2,7 @@ export * as PatchTool from "./patch.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
@@ -113,7 +113,7 @@ export const Plugin = {
                 return yield* new ToolFailure({ message: "patch rejected: empty patch" })
               }
               const prepared: Prepared[] = []
-              const updates = new Map<string, string>()
+              const updates = new Map<string, string | null>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
@@ -136,21 +136,37 @@ export const Plugin = {
                       before: "",
                       after: Bom.split(content).text,
                     })
+                    updates.set(target.absolute, content)
                     return
                   }
                   if (hunk.type === "delete") {
-                    const content = yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new ToolFailure({
-                            message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
-                          }),
-                      ),
-                    )
-                    prepared.push({ ...hunk, target, before: content.text, after: "" })
+                    const previous = updates.get(target.absolute)
+                    if (previous === null) {
+                      return yield* new ToolFailure({
+                        message: `patch verification failed: Failed to delete ${target.resource}: file does not exist`,
+                      })
+                    }
+                    const before =
+                      previous !== undefined
+                        ? Bom.split(previous).text
+                        : (yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                            Effect.mapError(
+                              (error) =>
+                                new ToolFailure({
+                                  message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
+                                }),
+                            ),
+                          )).text
+                    prepared.push({ ...hunk, target, before, after: "" })
+                    updates.set(target.absolute, null)
                     return
                   }
                   const previous = updates.get(target.absolute)
+                  if (previous === null) {
+                    return yield* new ToolFailure({
+                      message: `patch verification failed: Failed to read file to update ${target.absolute}: file does not exist`,
+                    })
+                  }
                   const original =
                     previous ??
                     (yield* Effect.gen(function* () {
@@ -169,16 +185,23 @@ export const Plugin = {
                     try: () => Patch.derive(hunk.path, hunk.chunks, original),
                     catch: (error) => new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                   })
-                  const moveTarget = hunk.movePath ? yield* resolveTarget(hunk.movePath) : undefined
+                  const move = hunk.movePath ? yield* resolveTarget(hunk.movePath) : undefined
+                  const moveTarget = move && move.absolute !== target.absolute ? move : undefined
+                  const next = Patch.joinBom(update.content, update.bom)
                   prepared.push({
                     ...hunk,
                     target,
-                    content: Patch.joinBom(update.content, update.bom),
+                    content: next,
                     before,
                     after: update.content,
                     moveTarget,
                   })
-                  if (!moveTarget) updates.set(target.absolute, Patch.joinBom(update.content, update.bom))
+                  if (moveTarget) {
+                    updates.set(target.absolute, null)
+                    updates.set(moveTarget.absolute, next)
+                  } else {
+                    updates.set(target.absolute, next)
+                  }
                 }).pipe(
                   Effect.mapError((error) =>
                     error instanceof ToolFailure
@@ -254,7 +277,7 @@ export const Plugin = {
               )
               const formatted = new Map<string, string>()
               yield* Effect.forEach(
-                [...new Set(applied.filter((item) => item.type !== "delete").map((item) => item.target))],
+                [...updates.entries()].flatMap(([target, value]) => (value === null ? [] : [target])),
                 (target) =>
                   Effect.gen(function* () {
                     const current = yield* FileMutation.readText(environment.files, target).pipe(

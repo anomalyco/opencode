@@ -1,0 +1,320 @@
+name: Process daemon release
+
+# Publishes the opencode-pty binaries and the @opencode-ai/pty npm packages from packages/process-daemon.
+# Only process-daemon-v<version> tags publish; pull requests that touch the release pipeline build and pack
+# without publishing.
+
+on:
+  push:
+    tags:
+      - "process-daemon-v*"
+  pull_request:
+    paths:
+      - .github/workflows/release-process-daemon.yml
+      - packages/process-daemon/build.rs
+      - packages/process-daemon/npm/**
+      - packages/process-daemon/script/npm-packages.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: packages/process-daemon
+
+env:
+  CARGO_TERM_COLOR: always
+  PROTOCOL_VERSION: 7
+  ZIG_VERSION: 0.16.0
+  GNU_GLIBC_VERSION: "2.30"
+  CARGO_ZIGBUILD_VERSION: 0.23.2
+
+jobs:
+  checks:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Configure baseline Zig builds
+        run: |
+          chmod +x "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin/zig"
+          echo "OPENCODE_REAL_ZIG=$(command -v zig)" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin" >> "$GITHUB_PATH"
+      - name: Install Rust
+        run: rustup toolchain install 1.90.0 --profile minimal --component clippy --component rustfmt
+      - name: Validate tag
+        run: |
+          package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "opencode-pty") | .version')"
+          npm_version="$(node -p 'require("./npm/package.json").version')"
+          test "$package_version" = "$npm_version"
+          node -e 'const pkg = require("./npm/package.json"); if (Object.values(pkg.optionalDependencies).some(version => version !== pkg.version)) process.exit(1)'
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            [[ "$GITHUB_REF_NAME" =~ ^process-daemon-v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]
+            test "${GITHUB_REF_NAME#process-daemon-v}" = "$package_version"
+          fi
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  build:
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            musl: true
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-musl
+            musl: true
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: ${{ matrix.target }}
+      - name: Configure baseline Zig builds
+        run: |
+          chmod +x "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin/zig"
+          echo "OPENCODE_REAL_ZIG=$(command -v zig)" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin" >> "$GITHUB_PATH"
+      - name: Install musl toolchain
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install Rust target
+        run: rustup toolchain install 1.90.0 --profile minimal --target "${{ matrix.target }}"
+      - name: Install glibc baseline linker
+        if: endsWith(matrix.target, '-linux-gnu')
+        run: cargo install cargo-zigbuild --locked --version "$CARGO_ZIGBUILD_VERSION"
+      - name: Test service
+        run: cargo test --locked --target "${{ matrix.target }}" --lib --test service --test ownership
+      - name: Test CLI integration
+        if: runner.os != 'macOS'
+        run: cargo test --locked --target "${{ matrix.target }}" --test playground
+      - name: Build
+        run: |
+          if [[ "${{ matrix.target }}" == *-linux-gnu ]]; then
+            cargo zigbuild --locked --release --target "${{ matrix.target }}.$GNU_GLIBC_VERSION"
+          else
+            cargo build --locked --release --target "${{ matrix.target }}"
+          fi
+      - name: Verify glibc baseline
+        if: endsWith(matrix.target, '-linux-gnu')
+        run: |
+          binary="target/${{ matrix.target }}/release/opencode-pty"
+          required="$(readelf --version-info "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/GLIBC_//' | sort -V | tail -n 1)"
+          echo "Highest required glibc version: $required"
+          test "$(printf '%s\n' "$required" "$GNU_GLIBC_VERSION" | sort -V | tail -n 1)" = "$GNU_GLIBC_VERSION"
+      - name: Smoke test
+        run: |
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "opencode-pty") | .version')"
+          binary="target/${{ matrix.target }}/release/opencode-pty"
+          output="$("$binary" --version)"
+          test "$output" = "opencode-pty $version (protocol $PROTOCOL_VERSION)"
+          runtime="$RUNNER_TEMP/opencode-pty-release-smoke"
+          rm -rf "$runtime"
+          printf 'new /bin/sh -c "printf release-smoke; sleep 1"\nwait 250\nquit\n' \
+            | "$binary" play --runtime-dir "$runtime" --name smoke > "$RUNNER_TEMP/opencode-pty-release-smoke.log"
+          grep -q 'release-smoke' "$RUNNER_TEMP/opencode-pty-release-smoke.log"
+          grep -q 'checkpoint' "$RUNNER_TEMP/opencode-pty-release-smoke.log"
+          test ! -e "$runtime/smoke"
+      - name: Package
+        run: |
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "opencode-pty") | .version')"
+          name="opencode-pty-${version}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/opencode-pty" "dist/$name/"
+          cp LICENSE README.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-pty-${{ matrix.target }}
+          path: packages/process-daemon/dist/*.tar.gz
+          if-no-files-found: error
+
+  build-windows:
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            arch: x64
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: packages/process-daemon
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      RUSTUP_TOOLCHAIN: 1.90.0-x86_64-pc-windows-msvc
+      # Portable CPU for Ghostty (see build.rs) and no Visual C++ runtime dependency.
+      OPENCODE_ZIG_CPU: baseline
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Enable long dependency paths
+        run: git config --global core.longpaths true
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        if: matrix.arch == 'x64'
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: release-${{ matrix.target }}
+      # Zig 0.16 crashes when building Ghostty on the native ARM64 host, so use
+      # the x64-hosted compiler there (matching check-process-daemon.yml).
+      - name: Install x64 Zig for ARM64 cross-compilation
+        if: matrix.arch == 'arm64'
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'zig-x64.zip'
+          Invoke-WebRequest 'https://ziglang.org/download/0.16.0/zig-x86_64-windows-0.16.0.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e') { throw 'Zig archive checksum mismatch' }
+          Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
+          Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0' >> $env:GITHUB_PATH
+      - name: Fix Zig 0.16 ARM64 function-pointer alignment
+        if: matrix.arch == 'arm64'
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0/lib/std/debug/SelfInfo/Windows.zig'
+          $source = [System.IO.File]::ReadAllText($file)
+          $old = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
+          if (!$source.Contains($old)) { throw 'Zig alignment workaround no longer matches; re-evaluate it' }
+          [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
+      - name: Install Rust toolchain and target
+        run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --target $env:CARGO_BUILD_TARGET
+      - name: Build
+        run: cargo build --locked --release
+      - name: Smoke test
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = ($metadata.packages | Where-Object name -eq 'opencode-pty').version
+          $binary = "target/$env:CARGO_BUILD_TARGET/release/opencode-pty.exe"
+          $output = & $binary --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($output -ne "opencode-pty $version (protocol $env:PROTOCOL_VERSION)") { throw "Unexpected version output: $output" }
+          # Start a real daemon over a named pipe; it stops when nobody claims it.
+          $runtime = Join-Path $env:RUNNER_TEMP 'opencode-pty-release-smoke'
+          $daemon = Start-Process $binary -ArgumentList @('daemon', '--runtime-dir', $runtime, '--name', 'smoke') -PassThru -NoNewWindow
+          $deadline = (Get-Date).AddSeconds(10)
+          while (!(Test-Path (Join-Path $runtime 'smoke/service.json'))) {
+            if ($daemon.HasExited -or (Get-Date) -gt $deadline) { throw 'daemon did not register' }
+            Start-Sleep -Milliseconds 50
+          }
+          if (!$daemon.WaitForExit(15000)) { $daemon.Kill(); throw 'unclaimed daemon did not stop' }
+          if (Test-Path (Join-Path $runtime 'smoke')) { throw 'runtime directory was not removed' }
+      - name: Package
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = ($metadata.packages | Where-Object name -eq 'opencode-pty').version
+          $name = "opencode-pty-$version-$env:CARGO_BUILD_TARGET"
+          New-Item -ItemType Directory -Force "dist/$name" | Out-Null
+          Copy-Item "target/$env:CARGO_BUILD_TARGET/release/opencode-pty.exe" "dist/$name/"
+          Copy-Item LICENSE, README.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" $name
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-pty-${{ matrix.target }}
+          path: packages/process-daemon/dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [build, build-windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@^11.5.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: packages/process-daemon/dist
+          pattern: opencode-pty-*
+          merge-multiple: true
+      - name: Create checksums and manifest
+        working-directory: packages/process-daemon/dist
+        run: |
+          version="$(node -p 'require("../npm/package.json").version')"
+          sha256sum opencode-pty-*.tar.gz > SHA256SUMS
+          artifacts='[]'
+          while read -r sha256 archive; do
+            target="${archive#opencode-pty-${version}-}"
+            target="${target%.tar.gz}"
+            artifacts="$(jq --arg target "$target" --arg archive "$archive" --arg sha256 "$sha256" '. + [{target: $target, archive: $archive, sha256: $sha256}]' <<<"$artifacts")"
+          done < SHA256SUMS
+          jq -n \
+            --arg version "$version" \
+            --argjson protocol "$PROTOCOL_VERSION" \
+            --argjson artifacts "$artifacts" \
+            '{schema: 1, version: $version, protocol: $protocol, artifacts: $artifacts}' \
+            > release-manifest.json
+          sha256sum release-manifest.json >> SHA256SUMS
+      - name: Prepare npm packages
+        run: node script/npm-packages.mjs dist
+      - name: Validate npm packages
+        run: |
+          for package in dist/npm/*; do
+            npm pack --dry-run "$package" >/dev/null
+          done
+          temporary="$(mktemp -d)"
+          npm pack --pack-destination "$temporary" dist/npm/opencode-pty-linux-x64-gnu dist/npm/opencode-pty >/dev/null
+          npm install --prefix "$temporary" --ignore-scripts --no-package-lock --no-audit --no-fund "$temporary"/*.tgz
+          test "$("$temporary/node_modules/.bin/opencode-pty" --version)" = "opencode-pty $(node -p 'require("./npm/package.json").version') (protocol $PROTOCOL_VERSION)"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        if: startsWith(github.ref, 'refs/tags/process-daemon-v')
+        with:
+          subject-checksums: packages/process-daemon/dist/SHA256SUMS
+      # The monorepo's Latest release drives OpenCode's own update paths, so this release must never become
+      # Latest. It is drafted first because immutable releases lock assets once published.
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/process-daemon-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#process-daemon-v}"
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --latest=false \
+              --title "process-daemon v$version" \
+              --notes "opencode-pty $version (protocol $PROTOCOL_VERSION) from packages/process-daemon, published to npm as @opencode-ai/pty@$version."
+          gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS dist/release-manifest.json --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false --repo "$GITHUB_REPOSITORY"
+      - name: Publish npm packages
+        if: startsWith(github.ref, 'refs/tags/process-daemon-v')
+        run: |
+          version="${GITHUB_REF_NAME#process-daemon-v}"
+          for package in dist/npm/opencode-pty-*; do
+            name="$(node -p 'require(process.argv[1]).name' "$(realpath "$package/package.json")")"
+            if ! npm view "$name@$version" version >/dev/null 2>&1; then
+              npm publish "$package" --access public --provenance
+            fi
+          done
+          name="@opencode-ai/pty"
+          if ! npm view "$name@$version" version >/dev/null 2>&1; then
+            npm publish dist/npm/opencode-pty --access public --provenance
+          fi

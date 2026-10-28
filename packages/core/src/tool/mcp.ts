@@ -1,14 +1,20 @@
 export * as McpTool from "./mcp.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
-import { Context, Effect, Fiber, type JsonSchema, Layer, PubSub, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { extension } from "mime-types"
 import { Bus } from "../bus.js"
 
 import { Mcp } from "../mcp/index.js"
+import { Mime } from "../mime.js"
 import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
+import { ToolOutput } from "../tool-output.js"
+import { ReadToolFileSystem } from "./read-filesystem.js"
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 /**
  * Registry namespace and permission action names for MCP tools.
@@ -30,6 +36,7 @@ export const layer = Layer.effect(
     const tools = yield* Tool.Service
     const bus = yield* Bus.Service
     const permission = yield* Permission.Service
+    const toolOutput = yield* ToolOutput.Service
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
 
@@ -83,25 +90,14 @@ export const layer = Layer.effect(
                             .join("\n")
                             .trim() || "MCP tool returned an error",
                       })
-                    const content = result.content.map((part) =>
-                      part.type === "text"
-                        ? { type: "text" as const, text: part.text }
-                        : {
-                            type: "file" as const,
-                            uri: `data:${part.mimeType};base64,${part.data}`,
-                            mime: part.mimeType,
-                          },
-                    )
+                    const content = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
                     const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                     const output = () => {
                       if (result.structured !== undefined) return result.structured
                       if (text === "") return null
                       // Agents assume JSON returned as text is already an object, so parse it when the server declares no schema.
-                      if (tool.outputSchema === undefined && (text.startsWith("{") || text.startsWith("["))) {
-                        try {
-                          return JSON.parse(text)
-                        } catch {}
-                      }
+                      if (tool.outputSchema === undefined && (text.startsWith("{") || text.startsWith("[")))
+                        return Option.getOrElse(decodeJson(text), () => text)
                       return text
                     }
                     return {
@@ -145,8 +141,26 @@ export const layer = Layer.effect(
   }),
 )
 
+// Only media the read tool also accepts is sent inline; other types would fail request lowering on every later turn.
+const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, toolOutput: ToolOutput.Interface) {
+  if (part.type === "text") return { type: "text" as const, text: part.text }
+  const mime = part.mimeType.split(";", 1)[0].trim().toLowerCase()
+  if (ReadToolFileSystem.MEDIA_MIMES.has(mime))
+    return { type: "file" as const, uri: `data:${part.mimeType};base64,${part.data}`, mime: part.mimeType }
+  const bytes = Buffer.from(part.data, "base64")
+  const label = part.uri ?? "content"
+  if (Mime.isTextual(mime))
+    return { type: "text" as const, text: `[Resource ${label} (${part.mimeType})]\n${bytes.toString("utf8")}` }
+  const ext = extension(mime)
+  const file = yield* toolOutput.save(bytes, ext ? `.${ext}` : "")
+  return {
+    type: "text" as const,
+    text: `[Binary resource ${label} (${part.mimeType}, ${bytes.byteLength} bytes) saved to ${file}]`,
+  }
+})
+
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Tool.node, Mcp.node, Bus.node, Permission.node],
+  deps: [Tool.node, Mcp.node, Bus.node, Permission.node, ToolOutput.node],
 })
