@@ -45,7 +45,7 @@ for (const target of targets) {
           version: manifest.version,
           description: `OpenCode persistent PTY service for ${suffix}`,
           license: "MIT",
-          repository: manifest.repository,
+          repository: { ...manifest.repository, directory: "packages/process-daemon" },
           os: [target.platform],
           cpu: [target.arch],
           ...(target.libc ? { libc: [target.libc] } : {}),

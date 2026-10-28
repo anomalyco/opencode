@@ -76,22 +76,20 @@ pub(super) fn runtime(directory: &Path, now: SystemTime) -> Result<()> {
             }
             Some(lock)
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let Some(registration) = fs::read(registration_path(directory))
-                .ok()
-                .and_then(|data| serde_json::from_slice::<Registration>(&data).ok())
-            else {
-                return Ok(());
-            };
-            if platform::process_exists(registration.pid) {
-                return Ok(());
-            }
-            None
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
+    let registration = fs::read(registration_path(directory))
+        .ok()
+        .and_then(|data| serde_json::from_slice::<Registration>(&data).ok());
+    if lock.is_none() {
+        match &registration {
+            Some(registration) if !platform::process_exists(registration.pid) => {}
+            _ => return Ok(()),
+        }
+    }
 
-    platform::remove_stale_endpoint(&fs::canonicalize(directory)?)?;
+    platform::remove_stale_endpoint(&fs::canonicalize(directory)?, registration.as_ref())?;
     // Remove the lock last so a racing daemon cannot claim a half-removed directory.
     files.sort_by_key(|file| file.ends_with(LOCK_FILE));
     for file in files {

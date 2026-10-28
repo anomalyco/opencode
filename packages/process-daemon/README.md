@@ -44,10 +44,17 @@ directory, `${XDG_STATE_HOME:-~/.local/state}/opencode/pty`. Names are a single
 path component of letters, digits, `.`, `_`, or `-`. The registration
 (`service.json`) and lock (`service.lock`) live in that directory. They only
 default to a temporary directory when no home directory exists, because macOS deletes unaccessed regular files
-there after three days. The socket stays under `/tmp/opencode-pty-<uid>/` to fit
+there after three days. The socket defaults to `/tmp/opencode-pty-<uid>/` to fit
 socket path limits; temporary cleaners skip sockets. A stopping daemon removes
 its own files and runtime directory, and a starting daemon removes abandoned
 sibling runtime directories older than ten minutes.
+
+On Unix, set `OPENCODE_PTY_SOCKET_DIR` to use a different socket directory. The
+value must be an absolute path without `..` components. Sockets go in an
+`opencode-pty-<uid>` child of that directory, which gets the existing ownership
+and symlink checks and mode `0700`; the directory itself is left unchanged.
+Socket path length limits still apply. Registration and lock files continue to
+use the runtime directory.
 
 ### Local transport boundary
 
@@ -58,6 +65,10 @@ daemon; runtime-directory/registration wiring is platform-specific. The Unix
 backend preserves half-close when completing subscriptions so queued final
 frames are not discarded on macOS. Shutdown cancellation is a separate operation
 that wakes partial requests and blocked subscription writes before joining.
+On Unix the daemon loop sleeps in `poll(2)` on the listener and a private wake
+socket pair until a connection arrives, a stop or ownership change wakes it, an
+ownership deadline is due, or a two-second safety net elapses. Windows still
+polls every 25 ms.
 
 The Windows named-pipe backend keeps protocol 7 and the registration fields
 `instance_id`, `pid`, `protocol`, `socket`, and `token`. Treat `socket` as an opaque
@@ -321,7 +332,7 @@ coverage on their own.
 On Windows, normal root-child exit hands the ConPTY master to the existing
 child-wait worker for closing. The actor and reader continue draining until the
 real output-pipe EOF; only then is the final exit event published. The worker
-checks the root's wait handle at 10 ms intervals. After the master is handed
+checks the root's wait handle at 25 ms intervals. After the master is handed
 off, Windows input and resize requests fail with a child-exited error; final
 snapshots, rows, and replay remain readable until the terminal is removed.
 Unix post-exit PTY operations retain their existing behavior.
@@ -345,18 +356,31 @@ gh run view RUN_ID --repo anomalyco/opencode --log-failed
 
 ## Releases
 
-The release workflow has not moved to the monorepo yet; until it does, the
-process below describes releases from anomalyco/opencode-pty.
+Releases are built by
+[`.github/workflows/release-process-daemon.yml`](../../.github/workflows/release-process-daemon.yml)
+in anomalyco/opencode. To release version `X.Y.Z`:
 
-Pushing a `vX.Y.Z` tag matching the version in `Cargo.toml` creates an unsigned
-GitHub release. The release contains x86-64 and arm64 binaries for Linux GNU,
-Linux musl, macOS, and Windows (MSVC, statically linked C runtime), plus
-`SHA256SUMS`, a machine-readable
-`release-manifest.json`, and GitHub build-provenance attestations. Release
-builds force Ghostty's Zig code generation to its baseline CPU target so
-artifacts do not inherit instruction-set extensions from CI runners (Windows
-builds set `OPENCODE_ZIG_CPU=baseline`, since the Unix Zig wrapper is a shell
-script). Linux GNU artifacts support glibc 2.30 and newer.
+1. Bump `version` in `Cargo.toml` (and `Cargo.lock`), and `version` plus every
+   `optionalDependencies` entry in `npm/package.json`, to `X.Y.Z`. The workflow
+   fails if any of them disagree.
+2. Merge the bump to `dev`.
+3. Push a `process-daemon-vX.Y.Z` tag at the merged commit:
+
+```sh
+git tag process-daemon-vX.Y.Z
+git push origin process-daemon-vX.Y.Z
+```
+
+The tag creates an unsigned GitHub release titled `process-daemon vX.Y.Z`. It
+is never marked Latest, because the monorepo's Latest release drives
+OpenCode's own update paths. The release contains x86-64 and arm64 binaries
+for Linux GNU, Linux musl, macOS, and Windows (MSVC, statically linked C
+runtime), plus `SHA256SUMS`, a machine-readable `release-manifest.json`, and
+GitHub build-provenance attestations. Release builds force Ghostty's Zig code
+generation to its baseline CPU target so artifacts do not inherit
+instruction-set extensions from CI runners (Windows builds set
+`OPENCODE_ZIG_CPU=baseline`, since the Unix Zig wrapper is a shell script).
+Linux GNU artifacts support glibc 2.30 and newer.
 
 Tagged releases also publish `@opencode-ai/pty` to npm with optional,
 platform-specific binary packages. Installing the npm package selects the native
@@ -367,10 +391,13 @@ its path as `binaryPath`:
 import { binaryPath } from "@opencode-ai/pty"
 ```
 
-```sh
-git tag v0.1.0
-push origin v0.1.0
-```
+npm publishing uses trusted publishing with provenance. Each of the nine
+packages (`@opencode-ai/pty` and the eight `@opencode-ai/pty-<platform>`
+packages) must list anomalyco/opencode with workflow
+`release-process-daemon.yml` as its trusted publisher.
+
+Pull requests that change the release pipeline run the same build and npm
+packing without publishing anything.
 
 Platform signing will be added later.
 

@@ -415,8 +415,8 @@ export class Interpreter<R> {
   }
 
   /** Await: suspends the innermost async body until `value` settles. */
-  *awaitValue(value: Value): Eval<Value> {
-    return (yield new Await(value)) as Value
+  *awaitValue(value: Value, node?: AstNode): Eval<Value> {
+    return (yield new Await(value, node)) as Value
   }
 
   iterate(value: Value) {
@@ -510,8 +510,8 @@ class Frame<R> {
     )) as Value
   }
 
-  awaitValue(value: Value): Eval<Value> {
-    return this.ctx.awaitValue(value)
+  awaitValue(value: Value, node?: AstNode): Eval<Value> {
+    return this.ctx.awaitValue(value, node)
   }
 
   private *evaluateStatement(node: Statement | ModuleDeclaration): Eval<StatementResult> {
@@ -581,7 +581,7 @@ class Frame<R> {
     const evaluated = this.evaluate(argumentNode)
     const value = isEval(evaluated) ? yield* evaluated : evaluated
     // An async generator awaits what it returns, as it awaits what it yields.
-    return { kind: "return", value: this.generatorAsync ? yield* this.awaitValue(value) : value }
+    return { kind: "return", value: this.generatorAsync ? yield* this.awaitValue(value, node) : value }
   }
 
   private *evaluateBlock(node: BlockStatement): Eval<StatementResult> {
@@ -1063,7 +1063,7 @@ class Frame<R> {
   private *nextIteratorResult(iterator: CustomIterator, node: AstNode | undefined): Eval<Step> {
     const called = yield* this.call(iterator.next, iterator.iterator, [], node)
     const object = this.requireIteratorObject(
-      iterator.asynchronous ? yield* this.awaitValue(called) : called,
+      iterator.asynchronous ? yield* this.awaitValue(called, node) : called,
       "Iterator next() result",
       node,
     )
@@ -1076,7 +1076,7 @@ class Frame<R> {
     const method = this.requireIteratorMethod(close, "Iterator return", node)
     const called = yield* this.call(method, iterator.iterator, [], node)
     this.requireIteratorObject(
-      iterator.asynchronous ? yield* this.awaitValue(called) : called,
+      iterator.asynchronous ? yield* this.awaitValue(called, node) : called,
       "Iterator return() result",
       node,
     )
@@ -1533,7 +1533,7 @@ class Frame<R> {
 
   private *evaluateAwaitExpression(node: AwaitExpression): Eval<Value> {
     // Await always suspends, including for plain values.
-    return yield* this.awaitValue(yield* this.evaluateExpression(node.argument))
+    return yield* this.awaitValue(yield* this.evaluateExpression(node.argument), node)
   }
 
   private *evaluateNewExpression(node: NewExpression): Eval<Value> {
@@ -2026,7 +2026,7 @@ class Frame<R> {
     if (!this.generator) throw typeError("yield is only valid inside a generator.", node)
     const value = argument ? yield* this.evaluateExpression(argument) : undefined
     if (node.delegate) return yield* this.delegateYield(value, node)
-    return yield* this.suspendGenerator(this.generatorAsync ? yield* this.awaitValue(value) : value)
+    return yield* this.suspendGenerator(this.generatorAsync ? yield* this.awaitValue(value, node) : value)
   }
 
   // Yield `value` and continue with the request that resumes the body: `next` supplies the value of the `yield`,
@@ -2069,7 +2069,8 @@ class Frame<R> {
     while (true) {
       const method = kind === "next" ? iterator.next : get(iterator.iterator, kind)
       if (method === undefined || method === null) {
-        if (kind === "return") throw new GeneratorReturn(this.generatorAsync ? yield* this.awaitValue(input) : input)
+        if (kind === "return")
+          throw new GeneratorReturn(this.generatorAsync ? yield* this.awaitValue(input, node) : input)
         yield* this.closeIterator(iterator, node)
         throw typeError("The delegated iterator does not provide a throw() method.", node)
       }
@@ -2080,7 +2081,7 @@ class Frame<R> {
         node,
       )
       const result = this.requireIteratorObject(
-        iterator.asynchronous ? yield* this.awaitValue(called) : called,
+        iterator.asynchronous ? yield* this.awaitValue(called, node) : called,
         `Iterator ${kind}() result`,
         node,
       )
