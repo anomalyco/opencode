@@ -1163,7 +1163,7 @@ describe("SessionRunnerLLM", () => {
       function* (s) {
         const hooks = yield* PluginHooks.Service
         const idles: Session.ID[] = []
-        yield* hooks.register("session", "idle", (event) =>
+        yield* hooks.register("session", "experimental.idle", (event) =>
           Effect.gen(function* () {
             idles.push(event.sessionID)
             if (idles.length > 1) return
@@ -1201,7 +1201,7 @@ describe("SessionRunnerLLM", () => {
   scenario("runs the session idle hook only once the session would go idle", function* (s) {
     const hooks = yield* PluginHooks.Service
     const idles: number[] = []
-    yield* hooks.register("session", "idle", () => Effect.sync(() => idles.push(s.requests.length)))
+    yield* hooks.register("session", "experimental.idle", () => Effect.sync(() => idles.push(s.requests.length)))
     yield* s.admit("First")
     yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-done"))
 
@@ -1242,8 +1242,8 @@ describe("SessionRunnerLLM", () => {
       recovery: { kind: "shell", sessionID, shellID: "shell-blocking", command: "sleep 10" },
       run: Effect.never,
     })
-    const events: SessionHooks["idle"][] = []
-    yield* hooks.register("session", "idle", (event) => Effect.sync(() => events.push(event)))
+    const events: SessionHooks["experimental.idle"][] = []
+    yield* hooks.register("session", "experimental.idle", (event) => Effect.sync(() => events.push(event)))
     yield* s.llm.push(TestLLM.text("Waiting on background work", "text-waiting"))
 
     yield* s.runPrompt("Start")
@@ -1268,7 +1268,9 @@ describe("SessionRunnerLLM", () => {
     })
     yield* jobs.background("shell-own")
     const background: number[] = []
-    yield* hooks.register("session", "idle", (event) => Effect.sync(() => background.push(event.background.length)))
+    yield* hooks.register("session", "experimental.idle", (event) =>
+      Effect.sync(() => background.push(event.background.length)),
+    )
     yield* s.llm.push(
       TestLLM.text("Waiting for the tests", "text-waiting"),
       TestLLM.text("Tests passed", "text-passed"),
@@ -1289,7 +1291,7 @@ describe("SessionRunnerLLM", () => {
     const runner = yield* SessionRunner.Service
     const hooks = yield* PluginHooks.Service
     const idles: Session.ID[] = []
-    yield* hooks.register("session", "idle", (event) => Effect.sync(() => idles.push(event.sessionID)))
+    yield* hooks.register("session", "experimental.idle", (event) => Effect.sync(() => idles.push(event.sessionID)))
     yield* s.admit("Before moving")
     yield* s.llm.push(TestLLM.text("Done", "text-done"))
     const stream = yield* s.llm.gate()
@@ -1324,7 +1326,7 @@ describe("SessionRunnerLLM", () => {
   scenario("keeps idle hook input pending across a compaction admitted with it", function* (s) {
     const hooks = yield* PluginHooks.Service
     const idles: Session.ID[] = []
-    yield* hooks.register("session", "idle", (event) =>
+    yield* hooks.register("session", "experimental.idle", (event) =>
       Effect.gen(function* () {
         idles.push(event.sessionID)
         if (idles.length > 1) return
@@ -1351,7 +1353,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("First")
     const hooks = yield* PluginHooks.Service
     const idles: Session.ID[] = []
-    yield* hooks.register("session", "idle", (event) => Effect.sync(() => idles.push(event.sessionID)))
+    yield* hooks.register("session", "experimental.idle", (event) => Effect.sync(() => idles.push(event.sessionID)))
     yield* s.llm.push(TestLLM.text("## Objective\n- summary", "idle-summary"))
 
     yield* s.session.compact({ sessionID })

@@ -125,9 +125,10 @@ yield *
   )
 ```
 
-When a Session finishes model work with no pending input, the `idle` hook runs just before it goes idle. It does not
-run after interruption, failure, or control-only work such as a manual compaction. Input the hook admits runs in the
-same execution instead of the Session going idle, so a plugin that always admits input must bound its own loop.
+When a Session finishes model work with no pending input, the `experimental.idle` hook runs just before it goes idle.
+It is experimental: its name and shape may still change. It does not run after interruption, failure, or control-only
+work such as a manual compaction. Input the hook admits runs in the same execution instead of the Session going idle,
+so a plugin that always admits input must bound its own loop.
 
 `event.background` lists background shells and subagents still running for the Session or its descendants. When one of
 the Session's own shells or subagents finishes, its notice wakes the Session and the hook runs again, so a plugin that
@@ -137,7 +138,7 @@ recovered after a restart, wait for the next wake instead:
 
 ```ts
 yield *
-  ctx.session.hook("idle", (event) =>
+  ctx.session.hook("experimental.idle", (event) =>
     event.background.some((work) => work.kind === "subagent" && work.sessionID === event.sessionID)
       ? Effect.void
       : ctx.session

@@ -165,7 +165,7 @@ export type SessionIdleBackground =
  * its notice wakes the Session and the hook runs again, so a plugin that waits for that work can
  * simply return. Work a descendant owns, such as a shell a subagent left running, wakes that
  * descendant instead, so it is listed for information only. Notices admitted with `resume: false`,
- * such as those recovered after a restart, wait for the next wake.
+ * such as those recovered after a restart, wait for the next wake. Experimental.
  */
 export interface SessionIdle {
   readonly sessionID: Session.ID
@@ -185,7 +185,7 @@ export interface SessionHooks {
   readonly "experimental.ws.send": SessionWebSocketSend
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
-  readonly idle: SessionIdle
+  readonly "experimental.idle": SessionIdle
 }
 
 export type SessionDomain = Pick<

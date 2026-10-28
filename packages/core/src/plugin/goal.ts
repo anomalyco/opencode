@@ -199,7 +199,7 @@ export const Plugin = define({
       })
     })
 
-    yield* ctx.session.hook("idle", (event) =>
+    yield* ctx.session.hook("experimental.idle", (event) =>
       idle(event.sessionID, event.background).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
