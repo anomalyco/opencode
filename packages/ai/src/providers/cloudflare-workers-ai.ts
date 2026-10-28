@@ -18,13 +18,11 @@ type WorkersAIURL = AtLeastOne<{
   readonly baseURL: string
 }>
 
-export type LanguageModelOptions = WorkersAIURL &
+export type Config = WorkersAIURL &
   Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput &
@@ -66,7 +64,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const configure = (input: LanguageModelOptions) => {
+export const configure = (input: Config) => {
   const { accountId: _accountId, apiKey: _apiKey, auth: _auth, baseURL: _baseURL, ...defaults } = input
   const auth = AuthOptions.bearer(input, authEnvVars)
   const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })

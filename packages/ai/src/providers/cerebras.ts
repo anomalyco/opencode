@@ -9,13 +9,11 @@ import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 export const id = ProviderID.make("cerebras")
 const baseURL = "https://api.cerebras.ai/v1"
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
@@ -34,7 +32,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = route.with({
     ...defaults,

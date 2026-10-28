@@ -25,7 +25,7 @@ const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 // (helper builds the URL) or `baseURL` directly.
 type AzureURL = AtLeastOne<{ readonly resourceName: string; readonly baseURL: string }>
 
-export type LanguageModelOptions = AzureURL &
+export type Config = AzureURL &
   RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
@@ -33,7 +33,6 @@ export type LanguageModelOptions = AzureURL &
     readonly useDeploymentBasedUrls?: boolean
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput &

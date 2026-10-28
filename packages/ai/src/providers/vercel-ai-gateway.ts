@@ -98,13 +98,11 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
     readonly cacheAnchorItems?: number
   }
 
-export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
   }
-
-export type Config = Options
 
 export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
 
@@ -213,7 +211,7 @@ const chatRoute = route({
 
 export const routes = [messagesRoute, responsesRoute, chatRoute]
 
-export const configure = (input: Options = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = {
     ...defaults,

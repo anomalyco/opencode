@@ -27,12 +27,11 @@ Anthropic.model("claude-sonnet-4-6", { apiKey: "key" })
 OpenAICompatible.model("model")
 
 const groqConfig: Groq.Config = { apiKey: "key" }
-const groqOptions: Groq.LanguageModelOptions = groqConfig
 const xaiConfig: XAI.Config = { apiKey: "key" }
 const gatewayConfig: VercelAIGateway.Config = { apiKey: "key" }
 const compatibleConfig: OpenAICompatible.Config = { baseURL: "https://example.com/v1" }
 
-Groq.configure(groqOptions)
+Groq.configure(groqConfig)
 XAI.configure(xaiConfig)
 VercelAIGateway.configure(gatewayConfig)
 OpenAICompatible.configure(compatibleConfig)

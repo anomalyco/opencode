@@ -74,13 +74,11 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
   }
-
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptionsInput & {
@@ -120,7 +118,7 @@ const messagesRoute = Route.make({
 
 export const routes = [responsesRoute, chatRoute, messagesRoute]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const options = {
     ...defaults,

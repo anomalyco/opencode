@@ -14,13 +14,11 @@ import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 export const id = ProviderID.make("digitalocean")
 const baseURL = "https://inference.do-ai.run/v1"
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings & OpenAIProviderOptionsInput & { readonly apiKey?: string }
 
@@ -44,7 +42,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, ["DIGITALOCEAN_ACCESS_TOKEN", "DIGITALOCEAN_API_KEY", "DO_INFERENCE_API_KEY"])
   const configured = route.with({

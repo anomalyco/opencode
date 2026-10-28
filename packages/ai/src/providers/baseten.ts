@@ -12,14 +12,11 @@ import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 export const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-
-export type Config = LanguageModelOptions
-
 export interface BasetenDecisionOptions {
   readonly [key: string]: unknown
   readonly max_len?: number
@@ -55,7 +52,7 @@ const decisionProtocol = DecisionRoute.protocol({
   },
 })
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, "BASETEN_API_KEY")
   const configured = route.with({

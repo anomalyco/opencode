@@ -80,13 +80,11 @@ export interface OpenRouterDecisionOptions {
   readonly user?: string
 }
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenRouterProviderOptionsInput
   }
-
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   OpenRouterProviderOptionsInput & {
@@ -187,7 +185,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-const configuredRoute = (input: LanguageModelOptions) => {
+const configuredRoute = (input: Config) => {
   const { apiKey: _, auth: _auth, baseURL: endpoint, ...rest } = input
   return route.with({
     ...rest,
@@ -196,7 +194,7 @@ const configuredRoute = (input: LanguageModelOptions) => {
   })
 }
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   const auth = AuthOptions.bearer(input, "OPENROUTER_API_KEY")
   const decisionRoute = SystemOne.route.with({

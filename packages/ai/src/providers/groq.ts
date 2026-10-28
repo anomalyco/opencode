@@ -20,13 +20,11 @@ export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"
   readonly user?: string
 }
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptions
   }
-
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptions & {
@@ -73,7 +71,7 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = route.with({
     ...defaults,
